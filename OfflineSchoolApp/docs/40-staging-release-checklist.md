@@ -79,10 +79,28 @@ has an owner:
     together. The previous code ignores the `intelligenceanalysisruns`
     collection, which can be left or dropped; no other collection changed.
     The four `ANALYSIS_*` variables are ignored (docs/38 §11, Rollback).
-  - **Agreed calculation: decided by the project owner, 2026-10-16.** Rollback is a restore from backup. There is no code-only rollback.
-    - If no result has been reprocessed under the new calculation yet: revert backend and web together. Nothing needs restoring. The previous code ignores the per-year bars and refuses format 2 cohort files.
-    - If results have been reprocessed: restore the backup from 1.3, or the latest daily backup from 1.6, then revert backend and web together. Marks and changes entered after that backup are lost and must be entered again. Tell the school before restoring.
-    - This is why the whole server is backed up every day of the first week (1.6).
+  - **Agreed calculation: decided by the project owner, 2026-10-16.**
+    - Nothing published under the new calculation: revert backend and web
+      together, then run the cleanup with the latest manifest, --dry-run
+      first. No restore; nothing entered is lost.
+    - Something published under the new calculation: either restore the
+      backup from 1.3 or the latest daily backup from 1.6, or, after the
+      revert, unpublish those results, run the cleanup, reprocess and
+      publish again. Cards already issued from the new figures must be
+      reissued. Tell the schools before either.
+    - The manifest must exist: it is recorded every day of the first week
+      (1.6) and again immediately before any revert. If the last recording
+      was missed, use the latest daily one, and check by hand the exams
+      reprocessed since it.
+
+    The commands, from `backend/`:
+    - record the manifest (read-only):
+      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest-YYYY-MM-DD.json>`;
+    - the cleanup, after the revert:
+      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --manifest <manifest.json> --dry-run`,
+      then the same without `--dry-run`. It sets `academicYear` and `term`
+      back to null on exactly the recorded rows, where they still hold the
+      recorded values and are unpublished; it counts the rest.
 
     The reasons, from the code:
     - **Sequence results:** results computed after the release are stamped
@@ -120,34 +138,6 @@ has an owner:
       its `calcVersion` is `exam-process/1` again. Only the ids recorded
       before the revert say which rows this branch wrote.
 
-  - **Proposed, awaiting the project owner** (not decided; the decision
-    above stands until then):
-    - **Before reverting, always:** record which sequence results this
-      branch wrote (read-only):
-      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest.json>`.
-    - **If nothing has been published under the new calculation:** revert
-      backend and web together, then run the cleanup, first with
-      `--dry-run` to read the counts:
-      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --manifest <manifest.json> [--dry-run]`.
-      It sets `academicYear` and `term` back to null on exactly the
-      recorded rows, and only where they still hold the recorded values.
-      No restore: no marks or later changes are lost. Results reprocessed
-      under the new calculation keep its figures until the school processes
-      them again under the previous code.
-    - **If anything has been published under the new calculation:** the
-      cleanup leaves published rows alone, and the previous code then
-      behaves differently in two ways. Its process route rewrites a
-      published result's figures in place, still published, with no
-      warning. And its promotion run still finds those published results
-      by their year. So either:
-      - restore the backup from 1.3, or the latest daily backup from 1.6,
-        as decided above; or
-      - after the revert, unpublish those results, run the cleanup,
-        reprocess, and publish again. The results then match the previous
-        code's own, and so do its promotion proposals (tested). Cards
-        already printed or sent from the new figures stay as they were
-        issued, and parents may hold them; the school must reissue them.
-        Tell the school before either.
   - **On the shared server, a restore affects every school.** Restoring
     the shared database puts every school back to that backup, and every
     school loses what it entered after it, not only the school whose
@@ -237,24 +227,24 @@ has an owner:
   - **Back up the whole server every day for the first week**, on top of
     the backup before the deploy (1.3). Keep each one, dated, until the
     release is accepted.
+  - **Record the manifest every day, beside the backup:**
+    `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest-YYYY-MM-DD.json>`
+    (read-only). Keep it, dated, with that day's backup. The cleanup in a
+    rollback needs it (1.4).
+  - **Ask schools not to publish results for the first 5 school days**, so
+    that rollback stays a revert plus cleanup (1.4). The request is in the
+    message (6).
   - **Prefer the break between terms.** Release when schools are not
     entering marks or processing results, so that fewer results are
     reprocessed in the first days, and a restore (1.4) loses as little as
     possible.
-- **Not included, pending the 1.4 proposal: asking schools not to publish
-  for the first days.** A code revert alone is not enough once results are
-  reprocessed: they keep their year, and the previous promotion run reads
-  them (1.4, tested). Under the decision as it stands, rollback after any
-  reprocessing is a restore, so the request would not help. If the project
-  owner adopts the 1.4 proposal (revert plus cleanup while nothing is
-  published), the request would keep rollback free of a restore for those
-  days. Then add it here and to §6.
-- **Expected:** every head's acceptance of their dry run, a backup for each
-  day of the first week, no failed analysis runs (7), and no result
-  changes a school cannot match to its dry run.
-- **If it fails:** decide with the developer whether to roll back (1.4). A
-  rollback after reprocessing is a restore of the whole server, for every
-  school: tell every school first.
+- **Expected:** every head's acceptance of their dry run, a backup and a
+  manifest for each day of the first week, nothing published in the first
+  5 school days, no failed analysis runs (7), and no result changes a
+  school cannot match to its dry run.
+- **If it fails:** decide with the developer whether to roll back, as 1.4
+  says. Record the manifest again immediately before the revert. Tell
+  every school first.
 - **Considered, not chosen: a separate instance for the first school.** A
   second copy of the stack with a copy of one school's data, so that a
   restore touches that school alone. Its costs:
@@ -445,6 +435,7 @@ Send to every school before the release: it reaches them all at once (1.6). Engl
 > - Promotion bars are now set for each year, out of 20, on Promotion →
 >   Progression. Please confirm a bar for each class. Old bars (0–100) are
 >   shown there but are not used.
+> - Please do not publish results until [date].
 > - The first Intelligence review after the change may take a few minutes to
 >   prepare.
 
@@ -468,6 +459,7 @@ Send to every school before the release: it reaches them all at once (1.6). Engl
 > - Les seuils de passage se fixent désormais par année, sur 20, dans
 >   Promotion → Progression. Merci de confirmer un seuil pour chaque classe.
 >   Les anciens seuils (0–100) y sont affichés mais ne sont pas utilisés.
+> - Merci de ne pas publier de résultats avant le [date].
 > - La première revue Intelligence après le changement peut prendre quelques
 >   minutes à se préparer.
 
@@ -485,6 +477,7 @@ Send to every school before the release: it reaches them all at once (1.6). Engl
 | Worker memory | host memory during runs (`docker stats`) | memory near the host's limit: lower `ANALYSIS_CONCURRENCY` |
 | 409 `PUBLISHED_RESULTS` volume | backend access log (morgan, `combined` in production): 409 answers to `/process`, `/term-results/compute`, `/annual-results/compute` and `/reportcard/calculate` | many from one school: that school needs the "unpublish first" step explained (6) |
 | Support questions about promotion bars | support channel | the same question twice: add it to the message in 6 |
+| Manifest recorded (1.6) | that day's `--record` line: "Recorded N sequence result(s) stamped exam-process/3 (M published) …"; note N and M with the day's backup | no manifest for the day: record it now; M above 0 in the first 5 school days: a school published, so rollback is no longer a revert plus cleanup for it (1.4) |
 
 **7.1 Before each school's first promotion run: classes with no confirmed bar** — *operator, then the school head*
 - **Do:** list, for every school, the classes with no confirmed bar for the

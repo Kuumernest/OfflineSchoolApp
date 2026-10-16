@@ -2825,6 +2825,21 @@ Checked against docs/37:
       run, cleanup, a missing argument) on an in-memory database;
     - desktop, mobile and web: no file changed; not rerun.
 
+- **Rollback decided: revert plus cleanup (2026-10-16).** The project owner
+  adopted the docs/40 1.4 proposal:
+  - nothing published under the new calculation: revert backend and web,
+    then the cleanup with the latest manifest (`--dry-run` first); no
+    restore;
+  - something published: restore a backup (1.3 or the latest daily one), or
+    unpublish, clean up, reprocess and republish, and reissue cards issued
+    from the new figures;
+  - the manifest is recorded every day of the first week and again just
+    before any revert.
+
+  docs/40 1.6 adds the daily manifest and asks schools not to publish for
+  the first 5 school days; §6 carries the request in both languages, and
+  §7 a daily row for the manifest. Docs only; no code changed.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
