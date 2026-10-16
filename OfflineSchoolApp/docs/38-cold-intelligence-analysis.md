@@ -463,7 +463,8 @@ step of `check:intel`), on an in-memory MongoDB with the real router:
    heaps.
 6. Restart the server while an analysis is running and confirm the scope
    answers 202 and then recovers within about a minute (§5, Shutdown).
-7. Decide the rollback path (§11) before the first deploy.
+7. Decide the rollback path (§11) before the first deploy. Decided: see
+   [docs/40](40-staging-release-checklist.md) step 1.4 (2026-10-16).
 
 ## 11. Deployment prerequisites and rollback
 

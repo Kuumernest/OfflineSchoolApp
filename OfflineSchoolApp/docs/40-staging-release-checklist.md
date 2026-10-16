@@ -113,8 +113,6 @@ has an owner:
       previous code.
     - **Pilots:** learning integration goes back to 1.0.0, so pilots drift
       again.
-    - Restoring the 1.3 backup is the clean path if results were
-      reprocessed.
     - **A code revert leaves the year on every reprocessed sequence result
       (tested).** The new code writes `academicYear` and `term` on each
       sequence result. The previous route's update does not set them, so

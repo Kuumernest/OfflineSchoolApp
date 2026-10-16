@@ -78,7 +78,8 @@ result means.
   lifecycle). Ranking settings (`AcademicStructure.ranking`) were not built.
 - **Still open** (decisions, not code):
   - the term/annual card and QR lifecycle;
-  - a bulk-decision control on the promotion screen.
+  - a bulk-decision control on the promotion screen;
+  - a retention rule for analysis run records (docs/40 §8).
 - **Untested paths** are listed at the end of the "Agreed calculation" and
   "Follow-up" entries in §20.0.
 - **Never run:** anything on a device, in Electron or in a browser; anything
