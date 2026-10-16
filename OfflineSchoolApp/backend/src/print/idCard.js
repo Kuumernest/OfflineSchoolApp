@@ -126,7 +126,7 @@ const CARD_CSS = `
   /* ── Header ────────────────────────────────────────────────────────────── */
   .card__head {
     background: ${NAVY};
-    height: 11.5mm;
+    height: 12.4mm;
     display: flex; align-items: center; gap: 2.4mm;
     padding: 0 3mm;
     border-bottom: 0.35mm solid #5a4b31;
@@ -163,6 +163,13 @@ const CARD_CSS = `
     font-size: 5.4pt;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   }
+  /* The school's address and phone, one line under the card's title. */
+  .card__contact {
+    font-family: ${F_LABEL};
+    font-size: 3.9pt; color: ${CREAM}; opacity: 0.85;
+    margin-top: 0.3mm;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .card__kind {
     font-family: ${F_HEADER};
     font-weight: 500;
@@ -176,8 +183,8 @@ const CARD_CSS = `
   /* ── Body ──────────────────────────────────────────────────────────────── */
   .card__body {
     flex: 1; min-height: 0;
-    display: flex; align-items: center; gap: 2.6mm;
-    padding: 2mm 3mm 1mm;
+    display: flex; align-items: center; gap: 2.4mm;
+    padding: 1.4mm 3mm 0.6mm;
     position: relative;
   }
 
@@ -214,16 +221,23 @@ const CARD_CSS = `
     font-family: ${F_LABEL}; font-weight: 500;
   }
 
-  .fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.1mm;
+  .fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.7mm;
             position: relative; }
+  /* Two fields side by side (matricule | class, sex | date of birth). */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4mm; min-width: 0; }
+  .pair > div { min-width: 0; }
+  /* A label never wraps or spills: French labels run a quarter longer
+     ("DATE DE NAISSANCE"), and in half a column they end in an ellipsis. */
   .label {
     font-family: ${F_LABEL};
     font-weight: 600;
-    font-size: 4.2pt;
-    letter-spacing: 0.14em;
+    font-size: 4pt;
+    letter-spacing: 0.1em;
     color: ${GOLD};
     text-transform: uppercase;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .value--small { font-size: 6.2pt; }
   .value {
     font-family: ${F_VALUE};
     font-weight: 600;
@@ -272,8 +286,10 @@ const CARD_CSS = `
   }
   .sig { display: flex; flex-direction: column; width: 22mm; }
   .sig--right { align-items: flex-end; text-align: right; }
-  .sig__script {
-    font-family: ${F_SCRIPT};
+  /* The head's signature and the school's stamp go here by hand: a clean
+     space above the line (no placeholder text), the head's title below it. */
+  .sig__space { height: 5.4mm; width: 100%; }
+
     font-size: 10pt; color: ${GOLD};
     line-height: 0.75;
     margin-bottom: -0.2mm;
@@ -347,9 +363,18 @@ const nameTier = (name) => {
 /** The faint repeating crest along the bottom edge. */
 const STRIP_MARKS = Array.from({ length: 22 }, () => "<span>&#10022;</span>").join("");
 
-const renderCard = ({ student, school, labels, origin, academicYear }) => {
+/** A stored date of birth (YYYY-MM-DD, or as typed) as DD/MM/YYYY. */
+const dayOf = (value) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (value ? String(value) : null);
+};
+
+const renderCard = ({ student, school, labels, origin, academicYear, validUntil }) => {
   const logo  = absoluteLogo(school.logo, origin);
   const photo = absoluteLogo(student.photoUrl, origin);
+  const contact = [school.address, school.phone].filter(Boolean).join(" · ");
+  const sex = student.gender ? (labels.sexValues?.[student.gender] ?? null) : null;
+  const emergency = [student.guardianName, student.guardianPhone].filter(Boolean).join(" · ");
 
   return `
     <div class="card">
@@ -362,6 +387,7 @@ const renderCard = ({ student, school, labels, origin, academicYear }) => {
           <div style="min-width:0">
             <div class="card__school ${schoolTier(school.name)}">${orDash(school.name)}</div>
             <div class="card__kind">${esc(labels.idCard)}</div>
+            ${contact ? `<div class="card__contact">${esc(contact)}</div>` : ""}
           </div>
         </div>
 
@@ -379,13 +405,29 @@ const renderCard = ({ student, school, labels, origin, academicYear }) => {
               <div class="label">${esc(labels.student)}</div>
               <div class="value value--name ${nameTier(student.name)}">${orDash(student.name)}</div>
             </div>
-            <div>
-              <div class="label">${esc(labels.admissionNo)}</div>
-              <div class="value">${orDash(student.enrollmentNo)}</div>
+            <div class="pair">
+              <div>
+                <div class="label">${esc(labels.admissionNo)}</div>
+                <div class="value value--small">${orDash(student.enrollmentNo)}</div>
+              </div>
+              <div>
+                <div class="label">${esc(labels.class)}</div>
+                <div class="value value--small">${orDash(student.className)}</div>
+              </div>
+            </div>
+            <div class="pair">
+              <div>
+                <div class="label">${esc(labels.gender)}</div>
+                <div class="value value--small">${orDash(sex)}</div>
+              </div>
+              <div>
+                <div class="label">${esc(labels.dateOfBirth)}</div>
+                <div class="value value--small">${orDash(dayOf(student.dateOfBirth))}</div>
+              </div>
             </div>
             <div>
-              <div class="label">${esc(labels.class)}</div>
-              <div class="value">${orDash(student.className)}</div>
+              <div class="label">${esc(labels.emergencyContact)}</div>
+              <div class="value value--small">${orDash(emergency || null)}</div>
             </div>
           </div>
 
@@ -401,10 +443,11 @@ const renderCard = ({ student, school, labels, origin, academicYear }) => {
           <div class="validity">
             <div class="validity__label">${esc(labels.academicYear)}</div>
             <div class="validity__date">${orDash(academicYear)}</div>
+            ${validUntil ? `<div class="validity__label">${esc(labels.validUntil)} ${esc(validUntil)}</div>` : ""}
           </div>
 
           <div class="sig sig--right">
-            <div class="sig__script">${esc(labels.headTeacher)}</div>
+            <div class="sig__space"></div>
             <div class="sig__line"></div>
             <div class="sig__label">${esc(labels.headTeacher)}</div>
           </div>
@@ -416,8 +459,8 @@ const renderCard = ({ student, school, labels, origin, academicYear }) => {
   `;
 };
 
-const buildIdCardsHtml = ({ data, labels, printedOn, origin }) => {
-  const { school, students, academicYear } = data;
+const buildIdCardsHtml = ({ data, labels, printedOn, origin, lang }) => {
+  const { school, students, academicYear, validUntil } = data;
 
   // Chunked into sheets rather than left to flow, so a page break can only
   // land between cards. A card split across two pages is scrap paper.
@@ -426,7 +469,7 @@ const buildIdCardsHtml = ({ data, labels, printedOn, origin }) => {
     sheets.push(`
       <div class="sheet">
         ${students.slice(i, i + PER_SHEET)
-          .map((student) => renderCard({ student, school, labels, origin, academicYear }))
+          .map((student) => renderCard({ student, school, labels, origin, academicYear, validUntil }))
           .join("")}
       </div>
     `);
@@ -439,6 +482,7 @@ const buildIdCardsHtml = ({ data, labels, printedOn, origin }) => {
   return buildDocument({
     title: `${labels.idCard} — ${data.class?.name ?? ""}`,
     body,
+    lang,
     // No page footer: it would print across the cards on the bottom row.
   }).replace(
     // The shared shell carries the A4 document stylesheet. Cards need their own

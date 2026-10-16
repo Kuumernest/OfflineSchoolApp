@@ -12,9 +12,9 @@ together on branch `academic-agreed-calculation`:
 
 Nothing below has been done on a real server, a real school's data, a
 browser or a device. Tests at this version (2026-10-16, database URI and
-provider keys blanked): backend `check:all`, every suite one by one, 110
-suites, 6,437 checks, 0 failed; `check-revert-previous.js` (1.4), 41 passed
-against each of `origin/master` and `097de9c`; desktop 275 and mobile 719
+provider keys blanked): backend `check:all`, every suite one by one, 111
+suites, 6,454 checks, 0 failed; `check-revert-previous.js` (1.4), 41 passed
+against each of `origin/master` and `097de9c`; desktop 275 and mobile 721
 passed, 0 failed; web build, lint, `i18n:check` and `check:l10n` pass. The
 detail check before release, and what it left open, is
 [docs/41](41-detail-check.md). Each step is something to do, not a result. Every step
@@ -394,6 +394,7 @@ production school.
 | 3.19 | Mobile admin exams list, in a school with more than 50 exams | school head | Every exam is listed, the older ones included, and the list scrolls smoothly. | docs/41 §6 |
 | 3.20 | Mobile thread after the phone was offline while more than 50 messages arrived | teacher | Every message is there in order, none missing between the newest and the ones seen before going offline. | docs/41 §6 |
 | 3.21 | A new year's academic structure, for a school whose language is French | school head | Its terms and sequences are named "1er trimestre", "Séquence 1" and so on; an existing year keeps its names. | docs/41 §6 |
+| 3.22 | Pupil ID cards for a class, printed from the web console and from the mobile app, for a school set to English and again set to French | school head | The head's signature space is clean (no placeholder text) for a signature and the school's stamp, with the head's title ("Principal" / "Chef d'établissement") as the label under the line. The card shows the school's name, logo, address and phone; the pupil's photo (or the framed "affix photo" blank), full name, matricule, class, sex and date of birth; the academic year and "valid until"; an emergency contact (guardian's name and phone); the gate QR. Labels are in the school's language whoever prints it. A long name and a long French label stay on the card (no text cut off at the edge or overlapping); no health information is printed. | docs/41 §6 |
 
 For each: **if it fails**, note the screen, the account and what was seen,
 and give it to the developer. Do not accept the release with a failing

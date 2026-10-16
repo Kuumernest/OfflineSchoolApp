@@ -68,10 +68,10 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 110 suites, 6,437 checks, 0 failed;
+- **Tests:** backend `check:all`: 111 suites, 6,454 checks, 0 failed;
   `check-revert-previous.js` 41 against each of `origin/master` and
-  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 719, 0 failed;
-  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (90)
+  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 721, 0 failed;
+  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (93)
   pass.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
   open assessment types.
@@ -1331,7 +1331,7 @@ calculation"):* `annual_average_at_least` for every school, with no choice.
 - A final-year pupil: the run graduates them, and since the follow-up pass
   the annual row and the annual card say "graduated" too, never "promoted"
   or "repeated". Average, grade and place are unchanged; a French card prints
-  DIPLOMÉ(E) (`annualGrading.service.js:153-164`; `check:agreedfollowup`).
+  DIPLÔMÉ(E) (`annualGrading.service.js:153-164`; `check:agreedfollowup`).
   Until then the annual row compared them with the bar like any other
   pupil.
 
@@ -3028,6 +3028,51 @@ Checked against docs/37:
     with `--ref 097de9c`. No other file changed, so the other suites stand
     at the pass above (backend 6,437; desktop 275; mobile 719; web).
 
+- **The head's title, and the pupil ID card (2026-10-16).** Same branch.
+  No calculation, engine, threshold, version constant, published row or
+  recorded decision changed.
+  - **DIPLÔMÉ(E):** §14 corrected; §20.0 history entries left as written.
+  - **The head's title:** French says "Chef d'établissement" wherever it
+    names the head — web `settings.principal`, `platform.schools.principal`,
+    `academic.principalRemark`, `builder.principalRemark`,
+    `builder.vars.principalName/principalComment`, two notes; mobile
+    `settings.principal`, `adminSettings.principal/principalPh`,
+    `academic.principalRemark`, `builder.principalRemark`,
+    `portal.principalRemark`, `templateBuilder.*`; printed documents'
+    `labels.fr.headTeacher` (class lists, transcripts). English unchanged:
+    the card ("Principal's Remark") and the settings field ("Principal")
+    already agree.
+  - **The pupil ID card** (`GET /api/documents/id-cards/:classId`,
+    `print/idCard.js`, labels in `print/labels.js`; printed from the web
+    documents page, from mobile through `document.service.js`, and from the
+    desktop through the web console, the server's route):
+    - removed the "Principal" placeholder printed in script in the head's
+      signature space: a clean space for a signature and stamp above the
+      line; the head's title stays as the label under it ("Principal",
+      French "Chef d'établissement"). No signature or stamp image exists in
+      the data model.
+    - added the school's address and phone, the pupil's sex and date of
+      birth, the validity date (the school's own or the end of the academic
+      year, `expiryFor`) and an emergency contact (guardian's name and
+      phone); already there: school name and logo, photo (or the framed
+      blank), full name, matricule, class, academic year, the gate QR. No
+      health information (the model's `bloodGroup` is left off).
+    - printed in `School.defaultLanguage`, like the report cards; labels in
+      both languages; `<html lang>` set.
+    - every field but the name held to one line with an ellipsis; the name
+      steps down a size; the card stays 85.6 × 54 mm.
+    - `check:idcard` (new, 17).
+  - docs/40 §3.22 (the ID card on staging, web and mobile, both languages).
+    docs/41 §6 rows added.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 111 suites, 6,454 checks, 0 failed;
+    - `check-revert-previous.js`: 41 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 721
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 93 passed.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3248,11 +3293,11 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the rollback-order pass after
-`02ccab8`): backend `check:all`, 110 suites, 6,437 checks, 0 failed;
+branch `academic-agreed-calculation`, the ID-card pass after `f8926ed`):
+backend `check:all`, 111 suites, 6,454 checks, 0 failed;
 `check-revert-previous.js` 41 passed against `origin/master` and `097de9c`;
-desktop `npm run check`, 275 passed; mobile `npm run check`, 719 passed; web
-build and lint, 0 errors; web `i18n:check` and `check:l10n` (90) pass.
+desktop `npm run check`, 275 passed; mobile `npm run check`, 721 passed; web
+build and lint, 0 errors; web `i18n:check` and `check:l10n` (93) pass.
 
 ## Appendix B. Files read (principal)
 

@@ -9,7 +9,7 @@
  *      or "repeated" — as the promotion run proposes; average, grade and
  *      place are unchanged. A pupil of another class is unchanged. The
  *      annual card agrees with the run, in English and in French
- *      (DIPLOMÉ(E)); a published row keeps what it says.
+ *      (DIPLÔMÉ(E)); a published row keeps what it says.
  *   B. "Calculate & save" (POST /api/results/:examId/student/:studentId/
  *      reportcard/calculate) runs the decided calculation on the stored
  *      marks — the numbers in the body are not read — stamps exam-process/3,

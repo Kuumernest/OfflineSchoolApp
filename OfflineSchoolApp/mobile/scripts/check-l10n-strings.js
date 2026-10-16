@@ -155,5 +155,15 @@ check("messages: a failed send is retried by a tap, a read-only thread says so, 
   [T("en", "msgMobile.failedNote"), T("fr", "msgMobile.failedNote"), T("fr", "msgMobile.readOnlyNote"), T("fr", "msgMobile.delivered")],
   ["Not sent — tap to retry", "Non envoyé — touchez pour réessayer", "Cette conversation est en lecture seule.", "Distribué"]);
 
+// The head's title (decided 2026-10-16): "Chef d'établissement" in French.
+check("fr: the head is 'Chef d'établissement' in settings and the template builder",
+  [T("fr", "adminSettings.principal"), T("fr", "adminSettings.principalPh"), T("fr", "settings.principal"), T("fr", "templateBuilder.starter.principalRemark")],
+  ["Chef d'établissement", "Nom complet du chef d'établissement", "Chef d'établissement", "APPRÉCIATION DU CHEF D'ÉTABLISSEMENT"]);
+{
+  const flat = {}; (function walk(o, p = "") { for (const [k, v] of Object.entries(o)) { const key = p ? `${p}.${k}` : k; if (v && typeof v === "object") walk(v, key); else flat[key] = v; } })(fr);
+  check("fr: no string left naming the head 'principal'",
+    Object.entries(flat).filter(([, v]) => typeof v === "string" && /\bprincipal\b/i.test(v) && !/professeur principal|coût principal|téléphone principal/i.test(v)).map(([k]) => k), []);
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -11,9 +11,9 @@ Every fix has a test that failed before it and passes after, or, for text,
 the exact before and after. The project owner's answers to §7 (same day)
 are recorded there and closed the rows they cover in §6; a follow-up pass
 closed four more (marked "follow-up"). Totals after it: backend
-`check:all` 110 suites, 6,437 checks, 0 failed; `check-revert-previous.js`
-41 against each of `origin/master` and `097de9c`; desktop 275, mobile 719,
-0 failed; web build, lint, `i18n:check` and `check:l10n` (90) pass. Nothing here ran on a device, in Electron or in
+`check:all` 111 suites, 6,454 checks, 0 failed; `check-revert-previous.js`
+41 against each of `origin/master` and `097de9c`; desktop 275, mobile 721,
+0 failed; web build, lint, `i18n:check` and `check:l10n` (93) pass. Nothing here ran on a device, in Electron or in
 a browser: no browser is installed in this environment, and the phone app
 has no component renderer (jest is not installed). Screen fixes were read in
 code and are held by source checks (`mobile/scripts/check-screen-details.js`,
@@ -267,6 +267,10 @@ Severity: **B** blocks release, **S** should fix, **N** nice to have.
 | Clients | Inert structure fields offered and sent | `web/src/pages/settings/AcademicStructureSection.tsx:500-540` | S | yes (§7.4) | `check:agreedfollowup` (no copy onto annual rows); screen and payload changed |
 | Messaging | Thread silently misses messages past 50 while offline | `message.service.js:270-276` | S | yes (follow-up) | mobile `check:outbox`: 120 messages offline, no gap, three pages and stop |
 | Mobile | Exams list page 1 only | `app/admin/exams/index.js:274` | S | yes (follow-up) | mobile `check:outbox` (120 exams, two pages); `check-screen-details` (FlatList) |
+| l10n | "DIPLOMÉ(E)" without the circumflex in docs/39 §14 (current state) | `docs/39` §14 | N | yes (follow-up) | "a French card prints DIPLOMÉ(E)" → "DIPLÔMÉ(E)"; §20.0 history left as written |
+| l10n | The head called "Principal" in French in settings, lists, the template builder and printed documents, while the card says "chef d'établissement" | web/mobile `fr.json`; `backend/src/print/labels.js` | S | yes (follow-up) | web/mobile `check:l10n`; `check:idcard`. English unchanged: the card and the settings field both say "Principal" |
+| ID card | Printed a "Principal" placeholder in script in the head's signature space (removed; the title stays as the label under the line); lacked sex, date of birth, validity date, emergency contact and the school's address and phone; printed in the viewer's language | `backend/src/print/idCard.js`, `routes/documents.routes.js` | S | yes (follow-up) | `check:idcard` (both languages, long name, missing photo, the route in the school's language) |
+| ID card | No signature or stamp image in the data model; no health fields printed (the model's `bloodGroup` left off) | `School`, `Student` models | — | not added (by decision) | for the project owner if wanted |
 | Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, beside step Q; 41 vs `origin/master` and `097de9c` |
 | Clients | After one class of an exam was unpublished while another stayed published, the exam still said "published": the web hid Publish, so that class could not be published back, and offered no Unpublish for the rest | `unpublish.service.js`; `web/src/pages/exams/[id]/index.tsx` | S | yes (follow-up) | `check:unpublish` (an exam of two classes); web `check:l10n` |
 | Speed | Both locales preloaded (160 kB gzip) | `web/src/i18n/index.ts` | N | no | lazy-load the other |

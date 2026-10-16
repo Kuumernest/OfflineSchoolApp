@@ -310,6 +310,15 @@ check("no hand-rolled English plural remains", handRolled, []);
   check("the school's report card language is set on the settings screen, and sent with the school's details",
     [/value=\{form\.defaultLanguage\}/.test(settings), /defaultLanguage: +"en"/.test(settings), /\.\.\.form,/.test(settings)], [true, true, true]);
   check("en/fr: the setting's label", [T("en", "settings.cardLanguage"), T("fr", "settings.cardLanguage")], ["Report card language", "Langue des bulletins"]);
+  // The head's title, as the card prints it (decided 2026-10-16): no French
+  // string names the head "Principal" (not "professeur principal", nor
+  // "principal" meaning main).
+  check("fr: the head is 'Chef d'établissement' in settings, lists and the template builder",
+    [T("fr", "settings.principal"), T("fr", "platform.schools.principal"), T("fr", "builder.vars.principalName"), T("fr", "academic.principalRemark")],
+    ["Chef d'établissement", "Chef d'établissement", "Nom du chef d'établissement", "Appréciation du chef d'établissement"]);
+  check("fr: no string left naming the head 'principal'",
+    Object.entries(frFlatAll()).filter(([, v]) => typeof v === "string" && /\bprincipal\b/i.test(v) && !/professeur principal|coût principal|téléphone principal/i.test(v)).map(([k]) => k), []);
+  check("en: the head is 'Principal' on the settings field, as on the card ('Principal's Remark')", T("en", "settings.principal"), "Principal");
   check("no stray English after the reports blurb", /\{t\("reports\.blurb"\)\}\s*\n\s*from it\./.test(read("src/pages/reports/index.tsx")), false);
 }
 
