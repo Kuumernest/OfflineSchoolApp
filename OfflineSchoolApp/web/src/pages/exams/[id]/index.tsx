@@ -1675,13 +1675,16 @@ const ResultsTab = ({
                   : t("exams.step3Todo")}
               </p>
               {/* Unpublishing: one class at a time, with a reason (docs/41 §7). */}
-              {resultsPublished && (
+              {/* Whenever any class's results are out: after one class is
+                  unpublished the exam is no longer "published", but the
+                  others may still be. */}
+              {results.some((r) => r.isPublished) && (
                 <div className="mt-2">
                   <UnpublishButton
                     layer="sequence"
                     examId={examId}
                     classOptions={[...new Map(results
-                      .filter((r) => r.classId)
+                      .filter((r) => r.classId && r.isPublished)
                       .map((r) => [String(r.classId), { id: String(r.classId), name: r.className ?? String(r.classId) }])).values()]}
                   />
                 </div>

@@ -9,11 +9,11 @@ version constant, published row or recorded decision changed.
 
 Every fix has a test that failed before it and passes after, or, for text,
 the exact before and after. The project owner's answers to §7 (same day)
-are recorded there and closed the rows they cover in §6. Totals after
-both passes: backend `check:all` 110 suites, 6,430 checks, 0 failed;
-`check-revert-previous.js` 33 against each of `origin/master` and
-`097de9c`; desktop 275, mobile 714, 0 failed; web build, lint, `i18n:check`
-and `check:l10n` (89) pass. Nothing here ran on a device, in Electron or in
+are recorded there and closed the rows they cover in §6; a follow-up pass
+closed four more (marked "follow-up"). Totals after it: backend
+`check:all` 110 suites, 6,437 checks, 0 failed; `check-revert-previous.js`
+37 against each of `origin/master` and `097de9c`; desktop 275, mobile 719,
+0 failed; web build, lint, `i18n:check` and `check:l10n` (90) pass. Nothing here ran on a device, in Electron or in
 a browser: no browser is installed in this environment, and the phone app
 has no component renderer (jest is not installed). Screen fixes were read in
 code and are held by source checks (`mobile/scripts/check-screen-details.js`,
@@ -77,10 +77,11 @@ load; not done (it changes how a language switch behaves).
 ### Mobile lists
 
 The message lists are FlatLists. Not virtualised, or loading a whole list:
-`admin/exams/index.js:274` loads page 1 only (limit 50) into a ScrollView,
-so a school past 50 exams loses the older ones online; `admin/subjects`
-renders every subject of every class (200–400 cards) in a ScrollView. Not
-fixed (should fix).
+`admin/exams/index.js:274` loaded page 1 only (limit 50) into a ScrollView,
+so a school past 50 exams lost the older ones online. **Fixed** (follow-up
+pass): every page is loaded (`getAllExams`) into a FlatList; tested with
+120 exams. `admin/subjects` renders every subject of every class (200–400
+cards) in a ScrollView: not fixed (nice to have).
 
 ## 2. Storage
 
@@ -158,7 +159,10 @@ elsewhere.
   class or section carries a language of its own in the data model, so
   none is used. **Not fixed:** the six emails are English only. About 476 English server messages remain
   (clients now translate the coded ones). The academic structure's seeded
-  names ("1st Term", "Sequence 1") show in English in the French interface.
+  names ("1st Term", "Sequence 1") showed in English in the French
+  interface; **fixed for new years** (follow-up pass): a structure is now
+  created with names in the school's language ("1er trimestre", "Séquence
+  1", "Évaluation 1"); existing structures keep theirs.
 
 ## 4. Clients against the backend
 
@@ -207,7 +211,7 @@ separate module.
 | Guardian thread kept an old load error after later loads succeeded | fixed |
 | Portal's six tabs wrap mid-word at 360 px; notice header overflows | fixed |
 | Web messages unusable at 360 px (288 px list beside the thread) | fixed: list and thread in turn below md |
-| Thread sync fetches only the newest 50: more than 50 while offline leaves a silent gap | not fixed (should fix) |
+| Thread sync fetches only the newest 50: more than 50 while offline leaves a silent gap | fixed (follow-up pass): pages back until it reaches the newest message the phone holds; tested with 120 arriving offline |
 | Ordering across a failure (a later message can overtake one retried) | not fixed (nice to have) |
 | KeyboardAvoidingView `padding` on Android | to verify on a device |
 | No day separators; header says "Conversation" | design |
@@ -256,13 +260,15 @@ Severity: **B** blocks release, **S** should fix, **N** nice to have.
 | l10n | French: "Envoyé" for delivered; "attachment" literal; hard-coded "participants" | mobile/web | N | yes | "Distribué"; keys |
 | l10n | Report card language: viewer's UI language on web, English from mobile and after reissue | `web/src/pages/reports/cards.tsx:319`, `results.controller.js:1104` | S | yes (§7.3) | `check:unpublish` (cards and reissue in the school's language); `check:schoolctx` (the setting) |
 | l10n | Emails English only | `backend/src/services/email.service.js` | S | no | large |
-| l10n | Seeded structure names English in French UI | `AcademicStructure.js:65-82` | S | no | decision on how |
+| l10n | Seeded structure names English in French UI | `AcademicStructure.js:65-82` | S | yes, for new years (follow-up) | `check:periodshapes`: a French school's new year (GET or PUT) in French; existing unchanged |
 | l10n | 87 mobile / 92 web hard-coded strings | lists: mobile baseline; web (scanner) | S | partly | mobile check guards new ones |
 | Clients | Recompute banner counts published stale rows | `resultStaleness.service.js:146` | S | no | needs a server count |
 | Clients | Mobile calculate & save on a locked exam: no reason asked | `reportCardCalc.service.js`, `[studentId].js` | S | no | — |
 | Clients | Inert structure fields offered and sent | `web/src/pages/settings/AcademicStructureSection.tsx:500-540` | S | yes (§7.4) | `check:agreedfollowup` (no copy onto annual rows); screen and payload changed |
-| Messaging | Thread silently misses messages past 50 while offline | `message.service.js:270-276` | S | no | paging |
-| Mobile | Exams list page 1 only | `app/admin/exams/index.js:274` | S | no | — |
+| Messaging | Thread silently misses messages past 50 while offline | `message.service.js:270-276` | S | yes (follow-up) | mobile `check:outbox`: 120 messages offline, no gap, three pages and stop |
+| Mobile | Exams list page 1 only | `app/admin/exams/index.js:274` | S | yes (follow-up) | mobile `check:outbox` (120 exams, two pages); `check-screen-details` (FlatList) |
+| Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, 37 vs `origin/master` and `097de9c` |
+| Clients | After one class of an exam was unpublished while another stayed published, the exam still said "published": the web hid Publish, so that class could not be published back, and offered no Unpublish for the rest | `unpublish.service.js`; `web/src/pages/exams/[id]/index.tsx` | S | yes (follow-up) | `check:unpublish` (an exam of two classes); web `check:l10n` |
 | Speed | Both locales preloaded (160 kB gzip) | `web/src/i18n/index.ts` | N | no | lazy-load the other |
 | Speed | +1 query per class in whole-school term/annual compute | `termGrading`, `annualGrading` | N | no | batch the published check |
 | Storage | GeneratedReport, analysis runs, logs: no retention | models | N | no | decision |

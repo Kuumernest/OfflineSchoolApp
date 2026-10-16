@@ -13,8 +13,8 @@ together on branch `academic-agreed-calculation`:
 Nothing below has been done on a real server, a real school's data, a
 browser or a device. Tests at this version (2026-10-16, database URI and
 provider keys blanked): backend `check:all`, every suite one by one, 110
-suites, 6,430 checks, 0 failed; `check-revert-previous.js` (1.4), 33 passed
-against each of `origin/master` and `097de9c`; desktop 275 and mobile 714
+suites, 6,437 checks, 0 failed; `check-revert-previous.js` (1.4), 37 passed
+against each of `origin/master` and `097de9c`; desktop 275 and mobile 719
 passed, 0 failed; web build, lint, `i18n:check` and `check:l10n` pass. The
 detail check before release, and what it left open, is
 [docs/41](41-detail-check.md). Each step is something to do, not a result. Every step
@@ -87,10 +87,21 @@ has an owner:
       together, then run the cleanup with the latest manifest, --dry-run
       first. No restore; nothing entered is lost.
     - Something published under the new calculation: either restore the
-      backup from 1.3 or the latest daily backup from 1.6, or, after the
-      revert, unpublish those results, run the cleanup, reprocess and
-      publish again. Cards already issued from the new figures must be
-      reissued. Tell the schools before either.
+      backup from 1.3 or the latest daily backup from 1.6, or, in this
+      order (the class-wide unpublish routes exist only in the new code, so
+      unpublishing comes before the revert):
+      1. record the manifest;
+      2. unpublish the affected sequence, term and annual results with the
+         new routes (Unpublish on the exam, term results and annual results
+         pages, with a reason; a year is refused while its promotion run is
+         a draft or committed: discard or reverse it first);
+      3. revert backend and web together;
+      4. run the cleanup with that manifest, --dry-run first;
+      5. reprocess the sequences, terms and years;
+      6. publish again;
+      7. reissue the cards issued from the new figures.
+
+      Tell the schools before either.
     - The manifest must exist: it is recorded every day of the first week
       (1.6) and again immediately before any revert. If the last recording
       was missed, use the latest daily one, and check by hand the exams
@@ -152,14 +163,12 @@ has an owner:
   promotion. It covers the cleanup: dry run first, then cleanup, with and
   without the previous code reprocessing in between; an older row with a
   year, as "Calculate & save" writes one, is left alone. It also covers
-  results published under the new code, and published then unpublished.
-  After a revert the class-wide unpublish routes are gone with the new
-  code: the previous code unpublishes one sequence result at a time
-  (`PUT /api/results/summary/:id/publish` with `publish: false`), which the
-  test uses; it has no route for term or annual results, and does not
-  refuse to recompute them when published.
+  results published under the new code, and the published path above in
+  its order: manifest, unpublish with the new routes, revert, cleanup (dry
+  run first), reprocess, publish, reissue a card issued from the new
+  figures (the reissued card carries the previous code's figure).
   After the cleanup, the previous promotion run proposes exactly what it
-  proposed before this branch existed, and nothing else changed. 33
+  proposed before this branch existed, and nothing else changed. 37
   passed, 0 failed against `origin/master` (`99d59f4`) and against
   `097de9c` (this branch just before the agreed calculation).
 - **Expected:** the rollback decision above, read and understood by the
@@ -378,6 +387,10 @@ production school.
 | 3.15 | Unpublish, on the exam page, the term results and the annual results | school head | Beside Publish, "Unpublish…" opens a dialog: a class (when the page shows more than one), a reason of at least 4 characters, and the note that issued cards stay as issued. Confirming unpublishes that class only; its figures do not change; Process / Compute is then allowed. A teacher has no Unpublish. In English and French ("Annuler la publication"). | docs/41 §7 |
 | 3.16 | Unpublishing a year while a promotion run for it exists | school head | With a draft or committed run for the year, unpublishing the year's results is refused, naming the run's state; once the draft is discarded or the run reversed, it is allowed. | docs/41 §7 |
 | 3.17 | Settings → school details: Report card language; then any card from web, mobile and a reissue | school head | The setting offers English and Français. With Français chosen, every sequence, term and annual card prints in French, whoever opens it, including a reissue; with English, in English. | docs/41 §7 |
+| 3.18 | An exam sat by two classes, both published; unpublish one | school head | The exam is no longer shown as published, so Publish is offered again (and publishes the class back). Unpublish is still offered for the class whose results are out. | docs/41 §6 (exam state) |
+| 3.19 | Mobile admin exams list, in a school with more than 50 exams | school head | Every exam is listed, the older ones included, and the list scrolls smoothly. | docs/41 §6 |
+| 3.20 | Mobile thread after the phone was offline while more than 50 messages arrived | teacher | Every message is there in order, none missing between the newest and the ones seen before going offline. | docs/41 §6 |
+| 3.21 | A new year's academic structure, for a school whose language is French | school head | Its terms and sequences are named "1er trimestre", "Séquence 1" and so on; an existing year keeps its names. | docs/41 §6 |
 
 For each: **if it fails**, note the screen, the account and what was seen,
 and give it to the developer. Do not accept the release with a failing

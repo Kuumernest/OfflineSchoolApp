@@ -67,16 +67,20 @@ async function unpublishSequence(req, { schoolId, examId, classId, reason }) {
     { $set: { isPublished: false, publishedAt: null } }
   );
 
-  // The exam says whether any of its results are out: when this was the last
-  // class published, the exam is back to completed, so it can be published
-  // again from the exam screen.
+  // The exam agrees with its results. "published" is every result out, so
+  // once any class is unpublished the exam is back to completed and the
+  // exam screen offers Publish again (which publishes the class back).
+  // resultsPublished says whether any result is still out.
   const still = await ResultSummary.countDocuments({ examId: String(examId), schoolId, deletedAt: null, isPublished: true });
-  if (still === 0) {
+  if (modifiedCount > 0) {
     await Exam.updateOne(
       { _id: String(examId), schoolId, status: "published" },
-      { $set: { status: "completed", resultsPublished: false, resultsPublishedAt: null } }
+      { $set: { status: "completed" } }
     );
-    await Exam.updateOne({ _id: String(examId), schoolId }, { $set: { resultsPublished: false } });
+    await Exam.updateOne(
+      { _id: String(examId), schoolId },
+      { $set: still > 0 ? { resultsPublished: true } : { resultsPublished: false, resultsPublishedAt: null } }
+    );
   }
 
   const actor = { id: req.user?._id ? String(req.user._id) : null, name: req.user?.name || null, role: req.user?.role || null };

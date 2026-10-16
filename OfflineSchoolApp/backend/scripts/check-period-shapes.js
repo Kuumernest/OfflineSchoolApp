@@ -128,6 +128,25 @@ const main = async () => {
   check("promotion exams the year no longer has are dropped", s.promotionExams, [3, 6]);
   r = await put({ passMark: 11 });
   check("a write without terms is unaffected by the shape rules", [r.status, (await stored()).passMark], [200, 11]);
+  // A new year's seeded names in the school's language (decided 2026-10-16,
+  // docs/41 §7); an existing year is not changed.
+  {
+    const get = (y) => fetch(`${API}/academic-structure/${S}/${encodeURIComponent(y)}`, { headers: { Authorization: `Bearer ${tok}` } }).then((r) => r.json());
+    const putY = (y, body) => fetch(`${API}/academic-structure/${S}/${encodeURIComponent(y)}`, {
+      method: "PUT", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    const names = (st) => [st?.terms?.[0]?.name, st?.terms?.[0]?.sequences?.[0]?.name, st?.terms?.[0]?.sequences?.[0]?.assessment?.label, st?.terms?.[2]?.name];
+    const existingBefore = JSON.stringify((await stored()).terms.map((t) => t.name));
+    await M("School").updateOne({ _id: S }, { $set: { defaultLanguage: "fr" } });
+    const viaGet = await get("2031/2032");
+    const viaPut = await putY("2032/2033", { passMark: 10 });
+    check("a French school's new year, created by GET or by PUT, is seeded in French",
+      [names(viaGet.structure), names(viaPut.structure)],
+      [["1er trimestre", "Séquence 1", "Évaluation 1", "3e trimestre"], ["1er trimestre", "Séquence 1", "Évaluation 1", "3e trimestre"]]);
+    check("an existing year is not changed", JSON.stringify((await stored()).terms.map((t) => t.name)), existingBefore);
+    await M("School").updateOne({ _id: S }, { $set: { defaultLanguage: "en" } });
+    check("an English school's new year in English", names((await get("2033/2034")).structure), ["1st Term", "Sequence 1", "Test 1", "3rd Term"]);
+  }
+
   server.close();
 
   // ═══════════════════════════════════════════════════════════════════════

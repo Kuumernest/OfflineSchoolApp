@@ -48,6 +48,13 @@ const canManage   = requirePermission("settings.manage");
  * is the latest year before this one that has a structure; the year strings
  * are "YYYY/YYYY", which sort as years. Nothing else is copied.
  */
+/** A new year's terms, named in the school's language (School.defaultLanguage). */
+const seededTerms = async (schoolId) => {
+  const school = await require("../db/models/School").findOne({ _id: String(schoolId) })
+    .select("defaultLanguage").lean().catch(() => null);
+  return AcademicStructure.defaultTermsFor(school?.defaultLanguage === "fr" ? "fr" : "en");
+};
+
 const barsFromPreviousYear = async (schoolId, academicYear) => {
   const prev = await AcademicStructure.findOne({
     schoolId, academicYear: { $lt: String(academicYear) }, deletedAt: null,
@@ -83,7 +90,7 @@ router.get(
 
       if (!(await permissions.can(req.user, "settings.view"))) {
         // The default year, unsaved, when the school has not set one up.
-        const shown = structure ?? new AcademicStructure({ schoolId, academicYear: year }).toObject();
+        const shown = structure ?? new AcademicStructure({ schoolId, academicYear: year, terms: await seededTerms(schoolId) }).toObject();
         return res.json({ success: true, structure: shapeOf(shown) });
       }
 
@@ -94,6 +101,7 @@ router.get(
         const doc = await AcademicStructure.create({
           schoolId,
           academicYear: year,
+          terms: await seededTerms(schoolId),
           ...(seeded ? { rules: seeded.rules } : {}),
           createdBy: req.user?._id ?? null,
         });
@@ -174,7 +182,10 @@ router.put(
 
       const structure = await AcademicStructure.findOneAndUpdate(
         { schoolId, academicYear: year, deletedAt: null },
-        { $set: sets, ...(seeded ? { $setOnInsert: { rules: seeded.rules } } : {}) },
+        { $set: sets, ...(exists ? {} : { $setOnInsert: {
+          ...(seeded ? { rules: seeded.rules } : {}),
+          ...(sets.terms === undefined ? { terms: await seededTerms(schoolId) } : {}),
+        } }) },
         { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
       );
 

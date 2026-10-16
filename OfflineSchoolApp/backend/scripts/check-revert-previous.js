@@ -26,8 +26,9 @@
  *   G  this branch → record → the previous code reprocesses → cleanup → run;
  *   P  this branch, then PUBLISHED → record → the previous code reprocesses
  *      → cleanup → run (what publishing under the new code leaves);
- *   Q  as P, but after the revert the school unpublishes first, then cleanup,
- *      reprocess, publish, run.
+ *   R  as P, in docs/40 1.4's order: record, unpublish with the new routes
+ *      (before the revert), revert, cleanup (dry run first), reprocess,
+ *      publish, reissue a card issued from the new figures.
  *
  * Every database also holds one older summary with a year and a term, as the
  * previous code's "Calculate & save" creates them (cyr, exam x1, 15/20,
@@ -184,29 +185,48 @@ const phase = async ({ code, mode, uri, out }) => {
     await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: true } });
   }
 
-  if (mode === "unpublish") {
-    // The previous code's own routed unpublish, as a head would use it after
-    // the revert: PUT /api/results/summary/:id/publish { publish: false },
-    // one sequence result at a time (the new code's class-wide unpublish
-    // routes go with the revert).
+  // This tree's routes over HTTP, as a head would use them.
+  const http = (mounts) => {
     const express = r("node_modules/express"), jwt = r("node_modules/jsonwebtoken");
     const app = express(); app.use(express.json());
-    app.use("/api/results", r("middleware/auth").authenticate, r("src/routes/results.routes"));
+    for (const [at, file] of mounts) app.use(at, r("middleware/auth").authenticate, r(file));
     app.use((err, _q, s2, _n) => s2.status(err.statusCode || 500).json({ message: err.message }));
     const server = app.listen(0);
     const token = jwt.sign({ id: "adm", role: "school_admin", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const call = (method, url, body) => fetch(`http://127.0.0.1:${server.address().port}${url}`, { method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined })
+      .then((x) => x.status);
+    return { call, close: () => server.close() };
+  };
+  const issuedAverage = async () => (await M("GeneratedReport").findOne({ examId: "s1", studentId: "ama" }).lean())?.variablePayload?.summary?.average ?? null;
+
+  if (mode === "issuecard") {
+    // A card issued from the new figures (frozen at first issue).
+    const h = http([["/api/results", "src/routes/results.routes"]]);
+    res.status = await h.call("GET", "/api/results/s1/student/ama/reportcard/html");
+    h.close();
+    await new Promise((ok) => setTimeout(ok, 500));   // the archive is written after the answer
+    res.issued = await issuedAverage();
+  }
+
+  if (mode === "unpublishnew") {
+    // Before the revert, with the new code's class-wide routes (they go with it).
+    const h = http([["/api/results", "src/routes/results.routes"], ["/api/term-results", "src/routes/termResults.routes"], ["/api/annual-results", "src/routes/annualResults.routes"]]);
     res.unpublishStatuses = [];
-    for (const row of await M("ResultSummary").find({ schoolId: S, examId: { $in: ["s1", "s2"] }, isPublished: true }).sort({ _id: 1 }).lean()) {
-      const x = await fetch(`http://127.0.0.1:${server.address().port}/api/results/summary/${row._id}/publish`, { method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ publish: false }) });
-      res.unpublishStatuses.push(x.status);
+    for (const classId of classesOf) {
+      for (const examId of ["s1", "s2"]) res.unpublishStatuses.push(await h.call("POST", `/api/results/${examId}/unpublish`, { classId, reason: "Revert of the agreed calculation" }));
+      res.unpublishStatuses.push(await h.call("POST", "/api/term-results/unpublish", { academicYear: YEAR, term: 1, classId, reason: "Revert of the agreed calculation" }));
+      res.unpublishStatuses.push(await h.call("POST", "/api/annual-results/unpublish", { academicYear: YEAR, classId, reason: "Revert of the agreed calculation" }));
     }
-    server.close();
-    // The previous code has no route for term and annual results, and does
-    // not refuse to recompute them when published; set back for the rows'
-    // comparison only.
-    await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
-    await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
+    h.close();
+  }
+
+  if (mode === "reissue") {
+    // After the revert, reprocessing and publishing: the previous code's reissue.
+    const h = http([["/api/results", "src/routes/results.routes"]]);
+    res.status = await h.call("POST", "/api/results/s1/student/ama/reportcard/reissue", { reason: "Recalculated after the revert" });
+    h.close();
+    res.reissued = await issuedAverage();
   }
 
   if (mode === "record" || mode === "cleanup" || mode === "cleanupdry") {
@@ -395,17 +415,28 @@ const main = async () => {
     console.log(`       promotion run: ${JSON.stringify(promP.decisions)}`);
     check("what it leaves: the previous run still finds the published results, and differs", JSON.stringify(promP.decisions) === JSON.stringify(promC.decisions), false);
 
-    console.log("--- 7. published, then unpublished after the revert (Q) ---");
-    await step(HEAD, "seed", "Q"); await step(HEAD, "newcalc", "Q"); await step(HEAD, "publishnew", "Q"); await step(HEAD, "record", "Q");
-    const unQ = await step(PREV, "unpublish", "Q");
-    check("the previous code's routed unpublish answers for each of the six", unQ.unpublishStatuses, [200, 200, 200, 200, 200, 200]);
-    check("after unpublishing, cleanup clears the six", (await step(PREV, "cleanup", "Q")).cleanup.counts.cleared, 6);
-    await step(PREV, "reprocess", "Q");
-    const Q = await step(PREV, "rows", "Q");
-    // Its routed unpublish clears publishedAt too, so no trace is left.
-    check("then every row is the previous code's own", rowDiffs(Q, C).map((d) => d.slice(0, 160)), []);
-    const promQ = await step(PREV, "promote", "Q");
-    check("and the previous run proposes what it did before this branch", promQ.decisions, promC.decisions);
+    console.log("--- 7. published: the docs/40 1.4 order (R) ---");
+    // Published under the new code, a card issued from its figures; then:
+    // record, unpublish with the new routes, revert, cleanup (dry run
+    // first), reprocess, publish, reissue.
+    await step(HEAD, "seed", "R"); await step(HEAD, "newcalc", "R"); await step(HEAD, "publishnew", "R");
+    const issued = await step(HEAD, "issuecard", "R");
+    check("a card issued under the new code carries its figure (ama, S1: 14)", [issued.status, issued.issued], [200, 14]);
+    check("1. record the manifest: the six sequence results, published", (await step(HEAD, "record", "R")).recorded, 6);
+    const unR = await step(HEAD, "unpublishnew", "R");
+    check("2. unpublish with the new routes, before the revert: sequences, term and year, each class",
+      unR.unpublishStatuses, [200, 200, 200, 200, 200, 200, 200, 200]);
+    const dryR = await step(PREV, "cleanupdry", "R");
+    check("3-4. after the revert, the cleanup's dry run: six to clear, none left as published",
+      [dryR.cleanup.counts.toClear, dryR.cleanup.counts.published, dryR.cleanup.counts.cleared], [6, 0, 0]);
+    check("   then the cleanup clears the six", (await step(PREV, "cleanup", "R")).cleanup.counts.cleared, 6);
+    await step(PREV, "reprocess", "R");
+    check("5. reprocessed: every row is the previous code's own",
+      rowDiffs(await step(PREV, "rows", "R"), C).map((d) => d.slice(0, 160)), []);
+    const promR = await step(PREV, "promote", "R");
+    check("6. published again: the previous run proposes what it did before this branch", promR.decisions, promC.decisions);
+    const re = await step(PREV, "reissue", "R");
+    check("7. the card is reissued with the previous code's figure (ama, S1: 12)", [re.status, re.reissued], [200, 12]);
   } finally {
     await mem.stop().catch(() => {});
     try { execFileSync("git", ["worktree", "remove", "--force", tree], { cwd: repo, stdio: "ignore" }); } catch { /* left for git worktree prune */ }

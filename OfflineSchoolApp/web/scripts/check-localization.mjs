@@ -298,6 +298,8 @@ check("no hand-rolled English plural remains", handRolled, []);
   const pages = ["src/pages/exams/[id]/index.tsx", "src/pages/exams/term-results/index.tsx", "src/pages/exams/annual-results/index.tsx"];
   check("an Unpublish action beside Publish for sequences, terms and years",
     pages.map((f) => (read(f).match(/<UnpublishButton\s+layer="(sequence|term|annual)"/) || [])[1] ?? null), ["sequence", "term", "annual"]);
+  check("the exam page offers Unpublish while any class's results are out, for those classes",
+    /results\.some\(\(r\) => r\.isPublished\) && \(/.test(read("src/pages/exams/[id]/index.tsx")) && /r\.classId && r\.isPublished/.test(read("src/pages/exams/[id]/index.tsx")), true);
   const btn = read("src/components/results/UnpublishButton.tsx");
   check("the dialog asks for a reason (4+ characters) and says issued cards stay as issued",
     [/reason\.trim\(\)\.length >= 4/.test(btn), /unpublish\.issuedStay/.test(btn)], [true, true]);

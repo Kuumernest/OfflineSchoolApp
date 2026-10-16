@@ -270,13 +270,35 @@ export async function listMessages(conversationId, { limit = 50 } = {}) {
 export async function syncMessages(conversationId, myId) {
   await ensureSchema();
   try {
-    const res  = await api.get(
-      `/messages/conversations/${conversationId}/messages`,
-      { timeout: 10000 }
-    );
-    const list = res.data?.messages ?? [];
-    const participantReads = res.data?.participantReads ?? [];
     const db   = await getDatabase();
+
+    // The newest message this phone already holds. The server answers a
+    // page of the newest messages, newest first; when more than a page
+    // arrived while the phone was offline, the page ends above that, and
+    // the messages between were never fetched: a silent gap. So page back
+    // (beforeSeq) until the page reaches it, or the thread's start. A thread
+    // never opened here has nothing to fill: its newest page is enough.
+    const held = await db.getFirstAsync(
+      `SELECT MAX(seq) AS seq FROM ${MESSAGES} WHERE conversation_id = ? AND seq IS NOT NULL`,
+      [String(conversationId)]
+    ).catch(() => null);
+    const heldSeq = held?.seq != null ? Number(held.seq) : null;
+
+    const PAGE = 50, MAX_PAGES = 60;   // at most 3,000 messages in one sync
+    const url  = `/messages/conversations/${conversationId}/messages`;
+    const res  = await api.get(url, { params: { limit: PAGE }, timeout: 10000 });
+    const list = [...(res.data?.messages ?? [])];
+    const participantReads = res.data?.participantReads ?? [];
+
+    let page = list;
+    for (let n = 1; heldSeq != null && n < MAX_PAGES && page.length >= PAGE; n++) {
+      const seqsOfPage = page.map((m) => Number(m.seq)).filter(Number.isFinite);
+      const oldest = seqsOfPage.length ? Math.min(...seqsOfPage) : null;
+      if (oldest == null || oldest <= heldSeq + 1) break;   // reached what the phone has
+      const more = await api.get(url, { params: { limit: PAGE, beforeSeq: oldest }, timeout: 10000 });
+      page = more.data?.messages ?? [];
+      list.push(...page);
+    }
 
     for (const m of list) await upsertMessage(db, conversationId, m, "sent");
 

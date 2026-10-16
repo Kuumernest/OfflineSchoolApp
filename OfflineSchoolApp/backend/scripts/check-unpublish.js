@@ -107,6 +107,28 @@ const check = (label, actual, expected) => {
   await call("PATCH", "/exams/s1/status", { status: "published" });
   check("and it is republished", await M("ResultSummary").countDocuments({ examId: "s1", isPublished: true }), 3);
 
+  // ── An exam of two classes: its own state agrees with its results ───────
+  console.log("--- an exam of two classes, one unpublished ---");
+  await M("Class").create({ _id: "g1", schoolId: S, name: "Form 1B", nextClassId: "f2" });
+  await M("Student").create({ _id: "dee", userId: "u-dee", schoolId: S, classId: "g1", className: "Form 1B", studentName: "Synthetic dee", enrollmentNo: "dee", isActive: true, status: "approved" });
+  await M("Exam").create({ _id: "m1", schoolId: S, name: "Mock", type: "test", academicYear: YEAR, term: 1, status: "completed", classId: "f1", classIds: ["f1", "g1"], totalMarks: 20, passMark: 10, startDate: "2026-11-10" });
+  for (const cls of ["f1", "g1"]) {
+    await M("ExamSubject").create({ _id: `m1-${cls}`, examId: "m1", subjectId: "sub0", subjectName: "Subject 0", classId: cls, schoolId: S, maxScore: 20, passMark: 10, weight: 100 });
+    for (const p of cls === "f1" ? pupils : ["dee"]) await M("StudentScore").create({ examId: "m1", examSubjectId: `m1-${cls}`, studentId: p, subjectId: "sub0", classId: cls, schoolId: S, maxScore: 20, score: 12, isAbsent: false });
+    await call("POST", "/exams/m1/process", { classId: cls });
+  }
+  await call("PATCH", "/exams/m1/status", { status: "published" });
+  const examState = async () => { const e = await M("Exam").findById("m1").lean(); return [e.status, e.resultsPublished]; };
+  check("published: the exam is published", await examState(), ["published", true]);
+  await call("POST", "/results/m1/unpublish", { classId: "f1", reason: "Correcting Form 1" });
+  check("one class unpublished, the other still published: the exam is not 'published' (so Publish is offered again), but some results are out",
+    [...await examState(), await M("ResultSummary").countDocuments({ examId: "m1", isPublished: true })], ["completed", true, 1]);
+  await call("PATCH", "/exams/m1/status", { status: "published" });
+  check("publishing again publishes the class that was unpublished", [...await examState(), await M("ResultSummary").countDocuments({ examId: "m1", isPublished: true })], ["published", true, 4]);
+  await call("POST", "/results/m1/unpublish", { classId: "f1", reason: "Again" });
+  await call("POST", "/results/m1/unpublish", { classId: "g1", reason: "Both" });
+  check("both unpublished: nothing out", await examState(), ["completed", false]);
+
   // ── Term ────────────────────────────────────────────────────────────────
   console.log("--- a class's term results ---");
   const T = { academicYear: YEAR, term: 1, classId: "f1" };

@@ -51,6 +51,25 @@ const termSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * The three terms of two sequences a new year starts with, named in the
+ * school's language (decided 2026-10-16, docs/41 §7). Only at creation: a
+ * stored structure keeps the names it has.
+ */
+const DEFAULT_NAMES = {
+  en: { term: ["1st Term", "2nd Term", "3rd Term"], sequence: (n) => `Sequence ${n}`, assessment: (n) => `Test ${n}` },
+  fr: { term: ["1er trimestre", "2e trimestre", "3e trimestre"], sequence: (n) => `Séquence ${n}`, assessment: (n) => `Évaluation ${n}` },
+};
+const defaultTermsFor = (lang = "en") => {
+  const n = DEFAULT_NAMES[lang] ?? DEFAULT_NAMES.en;
+  return [1, 2, 3].map((t) => ({
+    number: t, name: n.term[t - 1], weight: t === 3 ? 33.34 : 33.33,
+    sequences: [2 * t - 1, 2 * t].map((q) => ({
+      number: q, name: n.sequence(q), weight: 50, assessment: { type: "test", label: n.assessment(q) },
+    })),
+  }));
+};
+
 const academicStructureSchema = new mongoose.Schema(
   {
     _id: { type: String, default: uuidv4 },
@@ -60,29 +79,9 @@ const academicStructureSchema = new mongoose.Schema(
 
     terms: {
       type:    [termSchema],
-      default: () => [
-        {
-          number: 1, name: "1st Term", weight: 33.33,
-          sequences: [
-            { number: 1, name: "Sequence 1", weight: 50, assessment: { type: "test", label: "Test 1" } },
-            { number: 2, name: "Sequence 2", weight: 50, assessment: { type: "test", label: "Test 2" } },
-          ],
-        },
-        {
-          number: 2, name: "2nd Term", weight: 33.33,
-          sequences: [
-            { number: 3, name: "Sequence 3", weight: 50, assessment: { type: "test", label: "Test 3" } },
-            { number: 4, name: "Sequence 4", weight: 50, assessment: { type: "test", label: "Test 4" } },
-          ],
-        },
-        {
-          number: 3, name: "3rd Term", weight: 33.34,
-          sequences: [
-            { number: 5, name: "Sequence 5", weight: 50, assessment: { type: "test", label: "Test 5" } },
-            { number: 6, name: "Sequence 6", weight: 50, assessment: { type: "test", label: "Test 6" } },
-          ],
-        },
-      ],
+      // English here; a structure created for a French school is seeded
+      // with defaultTermsFor("fr") instead (academicStructure.routes).
+      default: () => defaultTermsFor("en"),
     },
 
     // How to compute the annual average
@@ -126,5 +125,7 @@ const academicStructureSchema = new mongoose.Schema(
 
 academicStructureSchema.index({ schoolId: 1, academicYear: 1 }, { unique: true });
 academicStructureSchema.index({ schoolId: 1, deletedAt: 1 });
+
+academicStructureSchema.statics.defaultTermsFor = defaultTermsFor;
 
 module.exports = mongoose.model("AcademicStructure", academicStructureSchema);

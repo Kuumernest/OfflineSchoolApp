@@ -68,10 +68,10 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 110 suites, 6,430 checks, 0 failed;
-  `check-revert-previous.js` 33 against each of `origin/master` and
-  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 714, 0 failed;
-  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (89)
+- **Tests:** backend `check:all`: 110 suites, 6,437 checks, 0 failed;
+  `check-revert-previous.js` 37 against each of `origin/master` and
+  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 719, 0 failed;
+  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (90)
   pass.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
   open assessment types.
@@ -2956,6 +2956,66 @@ Checked against docs/37:
     - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
       an untouched file); `i18n:check` OK; `check:l10n` 89 passed.
 
+- **Follow-up: exam state, message gaps, the exams list, seeded names
+  (2026-10-16).** Same branch. No calculation, engine, threshold, version
+  constant or published row's figures changed.
+  - **The exam's own published state, found:** unpublishing the last
+    published class put the exam back to `completed`, but unpublishing one
+    class while another stayed published left the exam `published`. The web
+    exam page reads `status === "published"`: it showed the exam as
+    published, hid Publish (so the unpublished class could not be
+    published back) and offered Unpublish only from that state; the phone's
+    list showed "Results published". **Fixed:** `status` is `published` only
+    while every result is; any unpublish puts it back to `completed`;
+    `resultsPublished` says whether any result is still out. The web offers
+    Unpublish while any class's results are out, for those classes.
+    `check:unpublish` +4 (an exam of two classes).
+  - **Messages missed while offline:** a thread sync fetched only the
+    newest 50. It now pages back (`beforeSeq`) until it reaches the newest
+    message the phone already holds (at most 60 pages); a thread new to the
+    phone loads its newest page only. Mobile `check:outbox`: 120 messages
+    arriving offline, all fetched, three pages, then stop.
+  - **Mobile admin exams list:** every page (`ExamService.getAllExams`,
+    pages of 100 until a short one; offline, the device's whole cache) in a
+    FlatList instead of a ScrollView of page 1. Tested with 120 exams.
+  - **Seeded structure names:** a new year is created (GET or PUT) with
+    names in the school's language: "1er trimestre", "Séquence 1",
+    "Évaluation 1" for a French school (`AcademicStructure.defaultTermsFor`);
+    existing structures unchanged. `check:periodshapes` +3.
+  - docs/40 already had §2.5 and §3.11–§3.17; added §3.18–§3.21 for this
+    pass. docs/41 §1, §3, §5 and §6 rows updated.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,437 checks, 0 failed;
+    - `check-revert-previous.js`: 33 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed, 0 failed;
+    - mobile `npm run check`: 719 passed, 0 failed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 90 passed.
+
+- **Rollback order when something was published (2026-10-16).** Docs and a
+  test only; no code changed. The class-wide unpublish routes exist only in
+  the new code, so docs/40 1.4's published option now reads, in order:
+  record the manifest; unpublish the affected sequence, term and annual
+  results with the new routes; revert backend and web; cleanup (dry run
+  first); reprocess; publish again; reissue the cards issued from the new
+  figures. `check-revert-previous.js` step R follows exactly that order
+  (replacing step Q, which unpublished after the revert through the
+  previous code's per-summary route): a card issued under the new code
+  carries 14 (ama, S1), the eight unpublish calls answer 200, the dry run
+  counts six to clear, the rows after reprocessing are the previous
+  code's own, its promotion run proposes what it did before this branch,
+  and the reissued card carries the previous code's 12. 37 checks.
+  - Items 1-4 of the follow-up were already done in the pass above.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,437 checks, 0 failed;
+    - `check-revert-previous.js`: 37 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 719
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 90 passed.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3176,11 +3236,11 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the pass on the owner's answers
-after `a780975`): backend `check:all`, 110 suites, 6,430 checks, 0 failed;
-`check-revert-previous.js` 33 passed against `origin/master` and `097de9c`;
-desktop `npm run check`, 275 passed; mobile `npm run check`, 714 passed; web
-build and lint, 0 errors; web `i18n:check` and `check:l10n` (89) pass.
+branch `academic-agreed-calculation`, the rollback-order pass after
+`c870ec2`): backend `check:all`, 110 suites, 6,437 checks, 0 failed;
+`check-revert-previous.js` 37 passed against `origin/master` and `097de9c`;
+desktop `npm run check`, 275 passed; mobile `npm run check`, 719 passed; web
+build and lint, 0 errors; web `i18n:check` and `check:l10n` (90) pass.
 
 ## Appendix B. Files read (principal)
 

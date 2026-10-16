@@ -72,5 +72,10 @@ const result = read("app/admin/exams/results/[examId]/student/[studentId].js");
 check("no fixed 52 px coefficient box", /width:\s*52\b/.test(result), false);
 check("decimals through the app's locale (12,50 in French), not toFixed", [/\.toFixed\(/.test(result), /formatDecimal\(/.test(result)], [false, true]);
 
+console.log("--- the admin exams list ---");
+const examsList = read("app/admin/exams/index.js");
+check("every exam, every page, in a virtualised list (not a ScrollView of page 1)",
+  [/ExamService\.getAllExams\(/.test(examsList), /<FlatList\s+data=\{filtered\}/.test(examsList), /filtered\.map\(\(exam\)/.test(examsList)], [true, true, false]);
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
