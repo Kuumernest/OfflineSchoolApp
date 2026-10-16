@@ -22,3 +22,6 @@ nul
 # Template backups taken by scripts/repair-report-templates.js.
 # School documents — not ours to commit.
 OfflineSchoolApp/backend/backups/
+
+# Local editor settings.
+.vscode/
