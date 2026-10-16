@@ -69,7 +69,7 @@ result means.
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
 - **Tests:** backend `check:all`: 110 suites, 6,437 checks, 0 failed;
-  `check-revert-previous.js` 37 against each of `origin/master` and
+  `check-revert-previous.js` 41 against each of `origin/master` and
   `097de9c`; desktop `check` 275, 0 failed; mobile `check` 719, 0 failed;
   web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (90)
   pass.
@@ -3016,6 +3016,18 @@ Checked against docs/37:
     - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
       an untouched file); `i18n:check` OK; `check:l10n` 90 passed.
 
+- **Rollback order: step Q kept beside step R (2026-10-16).** Test and
+  docs only. docs/40 1.4's published option says "one call per class" in
+  step 2. `check-revert-previous.js` keeps step R (the 1.4 order:
+  manifest, unpublish with the new routes before the revert, revert,
+  cleanup with its dry run, reprocess, publish, reissue) and has step Q
+  back beside it (unpublish after the revert through the previous code's
+  per-result route), instead of R replacing it. 41 checks.
+  - Commands run (database URI and provider keys blanked):
+    `check-revert-previous.js`, 41 passed with `--ref origin/master` and
+    with `--ref 097de9c`. No other file changed, so the other suites stand
+    at the pass above (backend 6,437; desktop 275; mobile 719; web).
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3237,8 +3249,8 @@ the audit itself* no check suite was run, because no code changed.
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
 branch `academic-agreed-calculation`, the rollback-order pass after
-`c870ec2`): backend `check:all`, 110 suites, 6,437 checks, 0 failed;
-`check-revert-previous.js` 37 passed against `origin/master` and `097de9c`;
+`02ccab8`): backend `check:all`, 110 suites, 6,437 checks, 0 failed;
+`check-revert-previous.js` 41 passed against `origin/master` and `097de9c`;
 desktop `npm run check`, 275 passed; mobile `npm run check`, 719 passed; web
 build and lint, 0 errors; web `i18n:check` and `check:l10n` (90) pass.
 

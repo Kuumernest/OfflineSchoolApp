@@ -26,6 +26,9 @@
  *   G  this branch → record → the previous code reprocesses → cleanup → run;
  *   P  this branch, then PUBLISHED → record → the previous code reprocesses
  *      → cleanup → run (what publishing under the new code leaves);
+ *   Q  as P, but after the revert the school unpublishes first, through the
+ *      previous code's own per-result route, then cleanup, reprocess,
+ *      publish, run;
  *   R  as P, in docs/40 1.4's order: record, unpublish with the new routes
  *      (before the revert), revert, cleanup (dry run first), reprocess,
  *      publish, reissue a card issued from the new figures.
@@ -183,6 +186,31 @@ const phase = async ({ code, mode, uri, out }) => {
     await M("ResultSummary").updateMany({ schoolId: S, examId: { $in: ["s1", "s2"] } }, { $set: { isPublished: true, publishedAt: new Date() } });
     await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: true } });
     await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: true } });
+  }
+
+  if (mode === "unpublish") {
+    // The previous code's own routed unpublish, as a head would use it after
+    // the revert: PUT /api/results/summary/:id/publish { publish: false },
+    // one sequence result at a time (the new code's class-wide unpublish
+    // routes go with the revert).
+    const express = r("node_modules/express"), jwt = r("node_modules/jsonwebtoken");
+    const app = express(); app.use(express.json());
+    app.use("/api/results", r("middleware/auth").authenticate, r("src/routes/results.routes"));
+    app.use((err, _q, s2, _n) => s2.status(err.statusCode || 500).json({ message: err.message }));
+    const server = app.listen(0);
+    const token = jwt.sign({ id: "adm", role: "school_admin", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    res.unpublishStatuses = [];
+    for (const row of await M("ResultSummary").find({ schoolId: S, examId: { $in: ["s1", "s2"] }, isPublished: true }).sort({ _id: 1 }).lean()) {
+      const x = await fetch(`http://127.0.0.1:${server.address().port}/api/results/summary/${row._id}/publish`, { method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ publish: false }) });
+      res.unpublishStatuses.push(x.status);
+    }
+    server.close();
+    // The previous code has no route for term and annual results, and does
+    // not refuse to recompute them when published; set back for the rows'
+    // comparison only.
+    await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
+    await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
   }
 
   // This tree's routes over HTTP, as a head would use them.
@@ -415,7 +443,18 @@ const main = async () => {
     console.log(`       promotion run: ${JSON.stringify(promP.decisions)}`);
     check("what it leaves: the previous run still finds the published results, and differs", JSON.stringify(promP.decisions) === JSON.stringify(promC.decisions), false);
 
-    console.log("--- 7. published: the docs/40 1.4 order (R) ---");
+    console.log("--- 7. published, then unpublished after the revert, one result at a time (Q) ---");
+    await step(HEAD, "seed", "Q"); await step(HEAD, "newcalc", "Q"); await step(HEAD, "publishnew", "Q"); await step(HEAD, "record", "Q");
+    const unQ = await step(PREV, "unpublish", "Q");
+    check("the previous code's routed unpublish answers for each of the six", unQ.unpublishStatuses, [200, 200, 200, 200, 200, 200]);
+    check("after unpublishing, cleanup clears the six", (await step(PREV, "cleanup", "Q")).cleanup.counts.cleared, 6);
+    await step(PREV, "reprocess", "Q");
+    const Q = await step(PREV, "rows", "Q");
+    // Its routed unpublish clears publishedAt too, so no trace is left.
+    check("then every row is the previous code's own", rowDiffs(Q, C).map((d) => d.slice(0, 160)), []);
+    const promQ = await step(PREV, "promote", "Q");
+    check("and the previous run proposes what it did before this branch", promQ.decisions, promC.decisions);
+    console.log("--- 8. published: the docs/40 1.4 order (R) ---");
     // Published under the new code, a card issued from its figures; then:
     // record, unpublish with the new routes, revert, cleanup (dry run
     // first), reprocess, publish, reissue.

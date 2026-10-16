@@ -13,7 +13,7 @@ together on branch `academic-agreed-calculation`:
 Nothing below has been done on a real server, a real school's data, a
 browser or a device. Tests at this version (2026-10-16, database URI and
 provider keys blanked): backend `check:all`, every suite one by one, 110
-suites, 6,437 checks, 0 failed; `check-revert-previous.js` (1.4), 37 passed
+suites, 6,437 checks, 0 failed; `check-revert-previous.js` (1.4), 41 passed
 against each of `origin/master` and `097de9c`; desktop 275 and mobile 719
 passed, 0 failed; web build, lint, `i18n:check` and `check:l10n` pass. The
 detail check before release, and what it left open, is
@@ -92,8 +92,8 @@ has an owner:
       unpublishing comes before the revert):
       1. record the manifest;
       2. unpublish the affected sequence, term and annual results with the
-         new routes (Unpublish on the exam, term results and annual results
-         pages, with a reason; a year is refused while its promotion run is
+         new routes, one call per class (Unpublish on the exam, term results
+         and annual results pages, with a reason; a year is refused while its promotion run is
          a draft or committed: discard or reverse it first);
       3. revert backend and web together;
       4. run the cleanup with that manifest, --dry-run first;
@@ -164,11 +164,14 @@ has an owner:
   without the previous code reprocessing in between; an older row with a
   year, as "Calculate & save" writes one, is left alone. It also covers
   results published under the new code, and the published path above in
-  its order: manifest, unpublish with the new routes, revert, cleanup (dry
-  run first), reprocess, publish, reissue a card issued from the new
-  figures (the reissued card carries the previous code's figure).
+  its order (step R): manifest, unpublish with the new routes one call per
+  class, revert, cleanup (dry run first), reprocess, publish, reissue a card
+  issued from the new figures (the reissued card carries the previous
+  code's figure). Step Q, beside it, unpublishes after the revert through
+  the previous code's own per-result route instead; both end with the
+  previous code's own rows and promotion proposals.
   After the cleanup, the previous promotion run proposes exactly what it
-  proposed before this branch existed, and nothing else changed. 37
+  proposed before this branch existed, and nothing else changed. 41
   passed, 0 failed against `origin/master` (`99d59f4`) and against
   `097de9c` (this branch just before the agreed calculation).
 - **Expected:** the rollback decision above, read and understood by the

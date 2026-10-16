@@ -12,7 +12,7 @@ the exact before and after. The project owner's answers to §7 (same day)
 are recorded there and closed the rows they cover in §6; a follow-up pass
 closed four more (marked "follow-up"). Totals after it: backend
 `check:all` 110 suites, 6,437 checks, 0 failed; `check-revert-previous.js`
-37 against each of `origin/master` and `097de9c`; desktop 275, mobile 719,
+41 against each of `origin/master` and `097de9c`; desktop 275, mobile 719,
 0 failed; web build, lint, `i18n:check` and `check:l10n` (90) pass. Nothing here ran on a device, in Electron or in
 a browser: no browser is installed in this environment, and the phone app
 has no component renderer (jest is not installed). Screen fixes were read in
@@ -267,7 +267,7 @@ Severity: **B** blocks release, **S** should fix, **N** nice to have.
 | Clients | Inert structure fields offered and sent | `web/src/pages/settings/AcademicStructureSection.tsx:500-540` | S | yes (§7.4) | `check:agreedfollowup` (no copy onto annual rows); screen and payload changed |
 | Messaging | Thread silently misses messages past 50 while offline | `message.service.js:270-276` | S | yes (follow-up) | mobile `check:outbox`: 120 messages offline, no gap, three pages and stop |
 | Mobile | Exams list page 1 only | `app/admin/exams/index.js:274` | S | yes (follow-up) | mobile `check:outbox` (120 exams, two pages); `check-screen-details` (FlatList) |
-| Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, 37 vs `origin/master` and `097de9c` |
+| Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, beside step Q; 41 vs `origin/master` and `097de9c` |
 | Clients | After one class of an exam was unpublished while another stayed published, the exam still said "published": the web hid Publish, so that class could not be published back, and offered no Unpublish for the rest | `unpublish.service.js`; `web/src/pages/exams/[id]/index.tsx` | S | yes (follow-up) | `check:unpublish` (an exam of two classes); web `check:l10n` |
 | Speed | Both locales preloaded (160 kB gzip) | `web/src/i18n/index.ts` | N | no | lazy-load the other |
 | Speed | +1 query per class in whole-school term/annual compute | `termGrading`, `annualGrading` | N | no | batch the published check |
