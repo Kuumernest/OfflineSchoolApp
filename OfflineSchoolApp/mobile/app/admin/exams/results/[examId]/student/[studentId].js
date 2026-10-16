@@ -6,7 +6,7 @@ import React, {
 } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, StatusBar, Share, TextInput,
+  ActivityIndicator, Alert, StatusBar, Share,
   KeyboardAvoidingView,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
@@ -16,6 +16,7 @@ import api                              from "../../../../../../src/services/api
 import ReportCard                       from "../../../../components/ReportCard";
 import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../../../src/utils/appError";
+import { recalculateClass, CONFIRM } from "../../../../../../src/services/reportCardCalc.service";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -52,10 +53,15 @@ const TABS = [
 ];
 
 // ─────────────────────────────────────────────────────────
-// SUBJECT ROW EDITOR
+// SUBJECT ROW (read-only)
 // ─────────────────────────────────────────────────────────
+//
+// Every figure here is the server's (the report card payload): the mark,
+// the school's coefficient, the mark on /20 with CA blended, the weighted
+// mark. Nothing is edited on this screen: marks are corrected in mark entry,
+// and the coefficient, scale and pass mark are the school's (docs/39 §21.1).
 
-function SubjectEditor({ subject, onChange }) {
+function SubjectEditor({ subject }) {
   const { t }      = useTranslation();
   const isAbsent   = subject.isAbsent || subject.isExempt;
   const scoreColor = isAbsent
@@ -92,17 +98,9 @@ function SubjectEditor({ subject, onChange }) {
       </View>
 
       <View style={se.coeffCol}>
-        <TextInput
-          style={[se.coeffInput, isAbsent && se.coeffDisabled]}
-          value={String(subject.coefficient ?? 1)}
-          onChangeText={(v) => {
-            const num = parseFloat(v) || 0;
-            onChange({ ...subject, coefficient: num });
-          }}
-          keyboardType="decimal-pad"
-          editable={!isAbsent}
-          selectTextOnFocus
-        />
+        <Text style={[se.coeffInput, isAbsent && se.coeffDisabled]}>
+          {String(subject.coefficient ?? 1)}
+        </Text>
       </View>
 
       <View style={se.normCol}>
@@ -193,7 +191,7 @@ const se = StyleSheet.create({
 // SUMMARY BAR
 // ─────────────────────────────────────────────────────────
 
-function SummaryBar({ computed, passMark, outOf }) {
+function SummaryBar({ computed, outOf }) {
   const { t } = useTranslation();
 
   if (!computed) return null;
@@ -201,7 +199,7 @@ function SummaryBar({ computed, passMark, outOf }) {
     average, isPassing, totalCoefficients,
     subjectsPassed, subjectsFailed,
   } = computed;
-  const color = isPassing ? C.success : C.error;
+  const color = isPassing == null ? C.gray500 : isPassing ? C.success : C.error;
 
   return (
     <View style={[sb.bar, {
@@ -209,7 +207,7 @@ function SummaryBar({ computed, passMark, outOf }) {
       backgroundColor: color + "08",
     }]}>
       <View style={sb.item}>
-        <Text style={[sb.val, { color }]}>{average?.toFixed(2)}</Text>
+        <Text style={[sb.val, { color }]}>{average != null ? average.toFixed(2) : "—"}</Text>
         <Text style={sb.lbl}>{t("studentResult.avgOutOf", { outOf })}</Text>
       </View>
       <View style={sb.divider} />
@@ -230,7 +228,7 @@ function SummaryBar({ computed, passMark, outOf }) {
       <View style={sb.divider} />
       <View style={[sb.badge, { backgroundColor: color + "18" }]}>
         <Text style={[sb.badgeText, { color }]}>
-          {isPassing ? t("studentResult.pass") : t("studentResult.fail")}
+          {isPassing == null ? "—" : isPassing ? t("studentResult.pass") : t("studentResult.fail")}
         </Text>
       </View>
     </View>
@@ -261,25 +259,6 @@ const sb = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// LIVE STAT
-// ─────────────────────────────────────────────────────────
-
-function LiveStat({ label, value, color }) {
-  return (
-    <View style={ls.item}>
-      <Text style={[ls.val, { color }]}>{value ?? "—"}</Text>
-      <Text style={ls.lbl}>{label}</Text>
-    </View>
-  );
-}
-
-const ls = StyleSheet.create({
-  item: { alignItems: "center", flex: 1 },
-  val:  { fontSize: 18, fontWeight: "800" },
-  lbl:  { fontSize: 10, color: C.gray500, marginTop: 2, textAlign: "center" },
-});
-
-// ─────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────
 
@@ -299,9 +278,6 @@ export default function StudentReportCardScreen() {
   const [reportData,  setReportData]  = useState(null);
   const [computed,    setComputed]    = useState(null);
   const [subjects,    setSubjects]    = useState([]);
-
-  const [outOf,    setOutOf]    = useState("20");
-  const [passMark, setPassMark] = useState("10");
 
   // ── Load report card data ─────────────────────────────
 
@@ -336,108 +312,69 @@ export default function StudentReportCardScreen() {
 
   useEffect(() => { loadReportCard(); }, [loadReportCard]);
 
-  // ── Live calculation ──────────────────────────────────
+  // ── The card's figures (the server's) ─────────────────
+  //
+  // This used to recalculate on the phone from a typed scale, pass mark and
+  // coefficients, without CA — a figure no result is made of. It now shows
+  // what the server's report card computes from the stored marks.
 
-  const liveComputed = useMemo(() => {
-    if (!subjects.length) return null;
-
-    const out  = parseFloat(outOf)    || 20;
-    const pass = parseFloat(passMark) || 10;
-
-    let totalWeighted = 0;
-    let totalCoeff    = 0;
-    let passed        = 0;
-    let failed        = 0;
-
-    const rows = subjects.map((s) => {
-      if (s.isAbsent || s.isExempt || s.score == null) {
-        return { ...s, normalizedMark: null, weightedScore: null };
-      }
-      const max      = s.maxScore || 100;
-      const norm     = Math.round((s.score / max) * out * 100) / 100;
-      const weighted = Math.round(norm * (s.coefficient ?? 1) * 100) / 100;
-      totalWeighted += weighted;
-      totalCoeff    += s.coefficient ?? 1;
-      const isPass   = norm >= pass;
-      if (isPass) passed++; else failed++;
-      return { ...s, normalizedMark: norm, weightedScore: weighted, isPassing: isPass };
-    });
-
-    const avg    = totalCoeff > 0
-      ? Math.round((totalWeighted / totalCoeff) * 100) / 100
-      : 0;
-    const isPass = avg >= pass;
-    const pct    = out > 0 ? Math.round((avg / out) * 100) : 0;
-
+  const cardFigures = useMemo(() => {
+    if (!reportData || !subjects.length) return null;
+    const counted = subjects.filter((r) => r.normalizedMark != null);
+    const passed  = counted.filter((r) => r.isPassing === true).length;
+    const avg     = reportData.computed?.weightedAverage ?? null;
     return {
-      rows,
+      rows:              subjects,
       average:           avg,
-      outOf:             out,
-      passMark:          pass,
-      percentage:        pct,
-      isPassing:         isPass,
-      totalCoefficients: totalCoeff,
+      outOf:             20,
+      percentage:        avg != null ? Math.round((avg / 20) * 100) : null,
+      isPassing:         computed?.isPassing ?? null,
+      totalCoefficients: reportData.computed?.totalCoefficients
+                           ?? counted.reduce((n, r) => n + (r.coefficient ?? 1), 0),
       subjectsPassed:    passed,
-      subjectsFailed:    failed,
+      subjectsFailed:    counted.length - passed,
     };
-  }, [subjects, outOf, passMark]);
+  }, [reportData, subjects, computed]);
 
-  const displaySubjects = liveComputed?.rows ?? subjects;
-
-  // ── Subject change ────────────────────────────────────
-
-  const handleSubjectChange = useCallback((updated) => {
-    setSubjects((prev) =>
-      prev.map((s) =>
-        s.subjectId === updated.subjectId ? updated : s
-      )
-    );
-  }, []);
+  const displaySubjects = subjects;
 
   // ── Calculate & save ──────────────────────────────────
 
-  const handleCalculate = useCallback(async () => {
+  // Confirmed first: the server recalculates the whole class for this exam
+  // from the stored marks, and refuses if any result in the class is
+  // published (reportCardCalc.service).
+  const runCalculate = useCallback(async () => {
+    setCalculating(true);
     try {
-      setCalculating(true);
-      const out  = parseFloat(outOf)    || 20;
-      const pass = parseFloat(passMark) || 10;
-
-      const { data } = await api.post(
-        `/results/${examId}/student/${studentId}/reportcard/calculate`,
-        {
-          subjects: subjects.map((s) => ({
-            subjectId:   s.subjectId,
-            subjectName: s.subjectName,
-            score:       s.score,
-            maxScore:    s.maxScore,
-            coefficient: s.coefficient ?? 1,
-            isAbsent:    s.isAbsent,
-            isExempt:    s.isExempt,
-          })),
-          outOf:    out,
-          passMark: pass,
-        }
-      );
-
-      if (!data?.success) {
-        throw new Error(data?.error || t("studentResult.calcFailed"));
+      const res = await recalculateClass(api, examId, studentId);
+      if (!res.ok) {
+        Alert.alert(
+          t("studentResult.errorTitle"),
+          res.code === "PUBLISHED_RESULTS"
+            ? t("studentResult.calcRefusedPublished")
+            : res.message || t("studentResult.calcFailed")
+        );
+        return;
       }
-
-      setComputed(data.data);
+      setComputed(res.data);
+      await loadReportCard();
       setActiveTab("preview");
-      Alert.alert(
-        t("studentResult.calcDoneTitle"),
-        t("studentResult.calcDoneBody")
-      );
-    } catch (err) {
-      Alert.alert(
-        t("studentResult.errorTitle"),
-        errorText(t, err, "studentResult.calcFailed")
-      );
+      Alert.alert(t("studentResult.calcDoneTitle"), t("studentResult.calcDoneBody"));
     } finally {
       setCalculating(false);
     }
-  }, [examId, studentId, subjects, outOf, passMark, t]);
+  }, [examId, studentId, loadReportCard, t]);
+
+  const handleCalculate = useCallback(() => {
+    Alert.alert(
+      t(CONFIRM.title),
+      t(CONFIRM.body),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t(CONFIRM.confirm), onPress: () => { runCalculate(); } },
+      ]
+    );
+  }, [runCalculate, t]);
 
   // ── Reissue ───────────────────────────────────────────
 
@@ -493,7 +430,7 @@ export default function StudentReportCardScreen() {
     try {
       setSharing(true);
       const d = reportData;
-      const c = computed || liveComputed;
+      const c = computed || cardFigures;
       const msg =
         `${t("studentResult.shareTitle")}\n` +
         `${t("studentResult.shareStudent")} ${d?.studentName || "—"}\n` +
@@ -501,35 +438,34 @@ export default function StudentReportCardScreen() {
         `${t("studentResult.shareClass")} ${d?.className || "—"}\n` +
         `${t("results.my.examLabel")} ${d?.examName || "—"} · ${d?.term || ""} ${d?.academicYear || ""}\n\n` +
         `${t("studentResult.shareResults")}\n` +
-        `${t("studentResult.shareAverage")} ${c?.average?.toFixed(2) ?? "—"}/${c?.outOf ?? outOf}\n` +
+        `${t("studentResult.shareAverage")} ${c?.average?.toFixed(2) ?? "—"}/20\n` +
         `${t("results.my.gradeLabel")} ${c?.overallGrade || "—"}\n` +
-        `${t("results.my.resultLabel")} ${c?.isPassing ? t("results.my.passFlag") : t("results.my.failFlag")}\n` +
-        `${t("studentResult.sharePassMark")} ${c?.passMark ?? passMark}/${c?.outOf ?? outOf}`;
+        `${t("results.my.resultLabel")} ${c?.isPassing ? t("results.my.passFlag") : t("results.my.failFlag")}`;
       await Share.share({ message: msg });
     } catch (err) {
       Alert.alert(t("results.my.shareFailed"), errorText(t, err));
     } finally {
       setSharing(false);
     }
-  }, [reportData, computed, liveComputed, outOf, passMark, t]);
+  }, [reportData, computed, cardFigures, t]);
 
   // ── Build ReportCard result object ────────────────────
 
   const reportCardResult = useMemo(() => {
     if (!reportData) return null;
-    const c = computed || liveComputed;
+    const c = computed || cardFigures;
     return {
       studentName:      reportData.studentName,
       admissionNo:      reportData.admissionNo,
       className:        reportData.className,
-      percentage:       c?.percentage  ?? liveComputed?.percentage,
-      average:          c?.average     ?? liveComputed?.average,
+      percentage:       c?.percentage  ?? cardFigures?.percentage,
+      average:          c?.average     ?? cardFigures?.average,
       overallGrade:     c?.overallGrade,
       overallRemark:    c?.overallRemark,
       gpa:              c?.gpa,
-      isPassing:        c?.isPassing   ?? liveComputed?.isPassing,
-      subjectsPassed:   c?.subjectsPassed ?? liveComputed?.subjectsPassed,
-      subjectsFailed:   c?.subjectsFailed ?? liveComputed?.subjectsFailed,
+      isPassing:        c?.isPassing   ?? cardFigures?.isPassing,
+      subjectsPassed:   c?.subjectsPassed ?? cardFigures?.subjectsPassed,
+      subjectsFailed:   c?.subjectsFailed ?? cardFigures?.subjectsFailed,
       subjectsTotal:    subjects.length,
       totalScore:       null,
       maxTotalScore:    null,
@@ -554,7 +490,7 @@ export default function StudentReportCardScreen() {
         remark:         s.teacherRemark,
       })),
     };
-  }, [reportData, computed, liveComputed, displaySubjects, subjects]);
+  }, [reportData, computed, cardFigures, displaySubjects, subjects]);
 
   const examObj = useMemo(() => ({
     name:         reportData?.examName,
@@ -602,9 +538,6 @@ export default function StudentReportCardScreen() {
       </View>
     );
   }
-
-  const outOfNum    = parseFloat(outOf)    || 20;
-  const passMarkNum = parseFloat(passMark) || 10;
 
   // ─────────────────────────────────────────────────────
   // RENDER
@@ -719,46 +652,14 @@ export default function StudentReportCardScreen() {
               </View>
             </View>
 
-            {/* Calculation settings */}
+            {/* The school's calculation: nothing to set here (docs/39 §21.1) */}
             <View style={s.card}>
               <Text style={s.cardTitle}>{t("studentResult.calcSettings")}</Text>
-              <View style={s.settingsRow}>
-                <View style={s.settingItem}>
-                  <Text style={s.settingLabel}>
-                    {t("studentResult.normalizeOutOf")}
-                  </Text>
-                  <TextInput
-                    style={s.settingInput}
-                    value={outOf}
-                    onChangeText={setOutOf}
-                    keyboardType="decimal-pad"
-                    selectTextOnFocus
-                  />
-                </View>
-                <View style={s.settingItem}>
-                  <Text style={s.settingLabel}>
-                    {t("studentResult.passMark")}
-                  </Text>
-                  <TextInput
-                    style={s.settingInput}
-                    value={passMark}
-                    onChangeText={setPassMark}
-                    keyboardType="decimal-pad"
-                    selectTextOnFocus
-                  />
-                </View>
-              </View>
-              <Text style={s.settingHint}>
-                {t("studentResult.settingHint", { outOf, passMark })}
-              </Text>
+              <Text style={s.settingHint}>{t("studentResult.calcFixedHint")}</Text>
             </View>
 
             {/* Live summary bar */}
-            <SummaryBar
-              computed={liveComputed}
-              passMark={passMarkNum}
-              outOf={outOfNum}
-            />
+            <SummaryBar computed={cardFigures} outOf={20} />
 
             {/* Subject table */}
             <View style={s.card}>
@@ -775,7 +676,7 @@ export default function StudentReportCardScreen() {
                   {t("studentResult.thCoeff")}
                 </Text>
                 <Text style={[s.th, { flex: 0.8, textAlign: "center" }]}>
-                  /{outOf}
+                  /20
                 </Text>
                 <Text style={[s.th, { flex: 0.8, textAlign: "right" }]}>
                   {t("studentResult.thWtd")}
@@ -790,50 +691,10 @@ export default function StudentReportCardScreen() {
                 </View>
               ) : (
                 displaySubjects.map((sub, i) => (
-                  <SubjectEditor
-                    key={sub.subjectId || i}
-                    subject={sub}
-                    onChange={handleSubjectChange}
-                  />
+                  <SubjectEditor key={sub.subjectId || i} subject={sub} />
                 ))
               )}
             </View>
-
-            {/* Live result card */}
-            {liveComputed && (
-              <View style={[
-                s.card,
-                {
-                  borderColor: liveComputed.isPassing
-                    ? C.success + "40"
-                    : C.error + "40",
-                },
-              ]}>
-                <Text style={s.cardTitle}>{t("studentResult.liveCalc")}</Text>
-                <View style={s.liveRow}>
-                  <LiveStat
-                    label={t("studentResult.averageOutOf", { outOf: outOfNum })}
-                    value={liveComputed.average?.toFixed(2)}
-                    color={liveComputed.isPassing ? C.success : C.error}
-                  />
-                  <LiveStat
-                    label={t("studentResult.percentage")}
-                    value={`${liveComputed.percentage}%`}
-                    color={C.primary}
-                  />
-                  <LiveStat
-                    label={t("studentResult.passed")}
-                    value={liveComputed.subjectsPassed}
-                    color={C.success}
-                  />
-                  <LiveStat
-                    label={t("studentResult.failed")}
-                    value={liveComputed.subjectsFailed}
-                    color={C.error}
-                  />
-                </View>
-              </View>
-            )}
 
             {/* Calculate button */}
             <TouchableOpacity

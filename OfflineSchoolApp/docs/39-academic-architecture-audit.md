@@ -69,7 +69,7 @@ result means.
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
 - **Tests:** backend `check:all`: 107 suites, 6,352 checks, 0 failed;
-  desktop `check` 271, 0 failed; mobile `check` 667, 0 failed; web build and
+  desktop `check` 271, 0 failed; mobile `check` 679, 0 failed; web build and
   lint pass, 0 errors.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
   open assessment types.
@@ -272,12 +272,18 @@ spread over five documents (`School.settings`, `GradingConfig`,
 `AcademicStructure`, `Class`, `ReportTemplate`), some of it is dead, and
 none of it is versioned.
 
-*Since the audit:* two more things are configurable per school. The
-calculation rules (`AcademicStructure.rules`, Phase 4, §20.0) are edited in
-web Settings → Calculation rules (Phase 5). The report-card section layout
-(`ReportTemplateVersion`, Phase 2d, §10.3) is edited in Settings → Report
-card sections (Phase 5). Each new computation is stamped with its policy
-snapshot (Phase 2c). The table above is the audit-time picture.
+*Since the audit:*
+- **Calculation rules.** Phase 4 made them per-school settings, edited in
+  web Settings → Calculation rules (Phase 5). Since the decision (§21.1,
+  2026-10-16) the calculation is the same for every school. That screen is
+  read-only: it states the rules and the year's result counts. What a
+  school sets is its promotion bars per year, out of 20
+  (`AcademicStructure.rules`), edited on Promotion → Progression.
+- **Report-card sections.** The section layout (`ReportTemplateVersion`,
+  Phase 2d, §10.3) is edited in Settings → Report card sections (Phase 5).
+- Each new computation is stamped with its policy snapshot (Phase 2c).
+
+The table above is the audit-time picture.
 
 ---
 
@@ -519,14 +525,22 @@ Defects on the live route, each pinned:
   wherever the class has a next class, including a pupil the annual
   results mark "repeated". **Fixed (validation pass):** no result is now
   "unassigned", as under every other rule, so the run cannot be committed
-  until someone decides. The blindness itself is D1b, still the school's.
+  until someone decides. The blindness itself was D1b. **Decided (§21.1,
+  2026-10-16):**
+  - the promotion run reads published `AnnualResult` and `TermResult`;
+  - paper summaries carry `academicYear` and `term` again
+    (`examProcess.service.js:160`; `check:agreedcalc`).
 - **(f) The sequence card contradicts the stored result.** It prints 13.67
   (rebuilt from marks, with CA and coefficients) as the average, above a
   grade (B) and position taken from the stored 12. **Traced cause by cause
   in the defect-closure pass (§20.0, `check:cardstored`):** rounding,
   coefficients, CA, an absent subject, stale data and the papers' scale each
   separate the two on their own. The scale case (/100 papers headlined "A+"
-  for 65%) is fixed; which figure the card prints stays the school's call.
+  for 65%) is fixed. **Decided (D1, §21.1, 2026-10-16):** the stored
+  average is the card's figure, so the card prints what is stored, for every
+  result computed since (`exam-process/3`; `check:cardstored`,
+  `check:agreedcalc`). A card for an older `exam-process/1` row reads it as
+  before.
 - **(g) Re-processing a published exam rewrites its figures** with no guard
   and no `ResultChangeLog` row. Unlike `processResults`, it leaves
   `isPublished` alone. *Since the decision (D3, 2026-10-16):* for every
@@ -1311,9 +1325,12 @@ calculation"):* `annual_average_at_least` for every school, with no choice.
 - Promotion exams do not count.
 - A stored `manual_only` is still honoured, and nothing can set it.
 - The legacy reader (`resultsByStudent`, `proposeFor`) is removed.
-- A final-year pupil is graduated by the run, but the annual row compares
-  them with the bar like any other pupil, so the card can print "repeated"
-  for a pupil the run graduates. Not changed; reported in §20.0.
+- A final-year pupil: the run graduates them, and since the follow-up pass
+  the annual row and the annual card say "graduated" too, never "promoted"
+  or "repeated". Average, grade and place are unchanged; a French card prints
+  DIPLOMÉ(E) (`annualGrading.service.js:153-164`; `check:agreedfollowup`).
+  Until then the annual row compared them with the bar like any other
+  pupil.
 
 ---
 
@@ -2609,6 +2626,67 @@ Checked against docs/37:
     untouched file);
   - `check:agreedfollowup` against a worktree of `5e4b80e`: 9 of 14 fail.
 
+- **Mobile "Calculate & save" screen, and four doc passages
+  (2026-10-16).** Same branch.
+
+  **The mobile pupil-result screen**
+  (`mobile/app/admin/exams/results/[examId]/student/[studentId].js`).
+  - **Before:** the "Setup" tab showed each subject's mark as text, but its
+    coefficient as an editable field. A "Calculation settings" card had
+    editable "normalise out of" (20) and pass-mark (10) fields. A "live
+    calculation" on the phone recomputed the average from those three
+    inputs, with no CA, a figure no stored result is made of. "Calculate &
+    Generate Report Card" posted those numbers straight away, with no
+    confirmation; since the follow-up pass the server ignored them.
+  - **After:**
+    - nothing on the screen is editable;
+    - the coefficient is plain text;
+    - the settings card says the results are out of 20 with the school's
+      pass mark, coefficients and CA, and that a mark is corrected in mark
+      entry;
+    - the figures shown (rows, weighted average, coefficient total,
+      passed/failed) are the server's report-card payload, not a phone
+      calculation;
+    - the button first asks for confirmation: "This recalculates every pupil
+      of this class for this exam from the stored marks, with the school's
+      coefficients and CA. It is refused if any result in the class is
+      published." (FR: « Cela recalcule tous les élèves de cette classe pour
+      cet examen à partir des notes enregistrées … C'est refusé si un
+      résultat de la classe est publié. »);
+    - a refusal says so in EN/FR;
+    - the request goes through `src/services/reportCardCalc.service.js`
+      with an empty body.
+  - **Code differed from the brief:** the marks were already read-only. The
+    editable fields were the coefficients, the scale and the pass mark, and
+    the screen also ran a phone-side calculation from them; both are
+    removed.
+
+  **Docs:**
+  - §3: the calculation rules are read-only, and bars are edited on Promotion
+    → Progression;
+  - §4.7(e): D1b decided;
+  - §4.7(f): decided, the card prints what is stored;
+  - §14: a final-year pupil shows "graduated" on the annual row and card.
+
+  **Tests.** New mobile `check:reportcardcalc` (12):
+  - the real service against the real backend route: the whole class
+    recalculated from the stored marks (ama (2·15 + 9)/3 = 13, bih
+    (2·12 + 18)/3 = 14), an empty body, and 409 with nothing written when a
+    classmate's result is published;
+  - the screen and the EN/FR confirmation, by source.
+
+  On the previous commit (`fb12e2c`) it fails: the service does not exist,
+  and the old screen has the editable fields and no confirmation text. The
+  screen is not rendered by any test, and nothing ran on a device.
+
+  **Commands run** (database URI and provider keys blanked):
+  - backend: every suite in `check:all`, one by one: 107 suites, 6,352
+    checks, 0 failed;
+  - desktop `npm run check`: 271 passed, 0 failed;
+  - mobile `npm run check`: 679 passed, 0 failed (eslint 0 errors, `tsc`);
+  - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in an
+    untouched file).
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -2830,7 +2908,7 @@ the audit itself* no check suite was run, because no code changed.
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
 branch `academic-agreed-calculation`, follow-up pass): backend `check:all`, 107 suites, 6,352 checks, 0 failed;
-desktop `npm run check`, 271 passed; mobile `npm run check`, 667 passed; web
+desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 
 ## Appendix B. Files read (principal)
