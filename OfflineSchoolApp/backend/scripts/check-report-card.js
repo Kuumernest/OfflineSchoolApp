@@ -121,6 +121,17 @@ check("a subject nobody sat has no ranking",
 console.log("--- §3: the grading scale a school gets before it sets one ---");
 
 check("eight bands, as specified", DEFAULT_GRADES.length, 8);
+{
+  // docs/39 §4.6c: the mobile offline card keeps a copy of this scale (Metro
+  // cannot import shared/). Read off its source, band for band.
+  const fs = require("fs");
+  const src = fs.readFileSync(require("path").join(__dirname, "..", "..", "mobile", "src", "services", "report.data.service.js"), "utf8");
+  const table = src.slice(src.indexOf("const GRADE_SCALE = ["), src.indexOf("];", src.indexOf("const GRADE_SCALE = [")));
+  const mobile = [...table.matchAll(/\{\s*min:\s*([\d.]+),\s*grade:\s*"([^"]+)",\s*remark:\s*"([^"]+)"/g)]
+    .map((m) => [Number(m[1]), m[2], m[3]]);
+  check("the mobile offline scale is the shipped scale: min, letter, remark",
+    mobile, DEFAULT_GRADES.map((g) => [g.minMark, g.grade, g.remark]));
+}
 check("named in order",
   DEFAULT_GRADES.map((g) => g.grade),
   ["A+", "A", "B+", "B", "C+", "C", "D", "F"]);

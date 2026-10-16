@@ -8,12 +8,14 @@
  *
  * Computes annual averages from per-term results.
  *
- * Annual Average = (Term 1 Avg + Term 2 Avg + Term 3 Avg) / 3
- * (equal weighting, configurable via AcademicStructure.termWeights)
+ * Annual average = the term averages weighted by the year's term weights
+ * (AcademicStructure).
  *
- * Promotion is determined by:
- *   - Whether the student passed all terms (termAverage >= passMark)
- *   - Whether the student passed promotion exams (if configured)
+ * Promotion status (shared/academicRules promotionUnderRules, docs/39 §21.1):
+ *   - pending until every term of the year has a complete result;
+ *   - then the annual average against the class's bar out of 20 (or the
+ *     school's, or the pass mark): promoted at or above it, repeated below;
+ *   - a final-year class graduates.
  */
 
 const mongoose          = require("mongoose");
@@ -25,6 +27,7 @@ const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
 const academicPolicy    = require("./academicPolicy.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
+const { effectiveRules, calcVersionFor, promotionUnderRules } = require("../../../shared/academicRules");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -83,30 +86,34 @@ async function annualContextFor({ schoolId, academicYear }) {
   const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
   const termWeights = getTermWeights(policy.policy.structure.periods);
 
-  const promotionExams = structure.promotionExams ?? [];
-  let promotionExamIds = [];
-  if (promotionExams.length > 0) {
-    const Exam = mongoose.model("Exam");
-    const promotionExamDocs = await Exam.find({
-      schoolId,
-      academicYear,
-      sequenceNumber: { $in: promotionExams },
-      type: "promotion_exam",
-      deletedAt: null,
-    }).lean();
-    promotionExamIds = promotionExamDocs.map((e) => e._id);
-  }
+  // Promotion exams do not decide promotion under the decided rule (the
+  // annual average against the class's bar, docs/39 §14); they are read by
+  // nothing here. AcademicStructure.promotionExams still names them for the
+  // exam screens and the cards.
+  const promotionExamIds = [];
 
-  return { structure, passMark, termWeights, promotionExamIds, policyHash: policy._id };
+  const rules = effectiveRules(policy.policy.rules);
+  return {
+    structure, passMark, termWeights, promotionExamIds, policyHash: policy._id,
+    // The rules in force (shared/academicRules, decided 2026-10-16), from the
+    // same snapshot: the school's bands on the stored row, promotion by the
+    // annual average against the class's bar.
+    rules,
+    rawRules:    policy.policy.rules,
+    calcVersion: calcVersionFor("annual"),
+    gradeOf: (mark) => grading.lookupSchoolGrade(mark, gradingConfig),
+  };
 }
 
 /**
  * The annual row for one pupil, from the term results and promotion results
- * already in hand. Pure: no database. The arithmetic and the promotion rule
- * are exactly those of the per-pupil function this replaced.
+ * already in hand. Pure: no database. The promotion status follows the rule
+ * in the file header.
  */
-function annualRowFor(ctx, { termResults, promotionResults }) {
-  const { structure, passMark, termWeights } = ctx;
+function annualRowFor(ctx, { termResults, promotionResults, classId = null, isFinalYear = false }) {
+  const { passMark, termWeights } = ctx;
+  // The school's bands; the built-in scale only for a context built by hand.
+  const gradeOf = ctx.gradeOf || lookupGrade;
 
   // 5. Build per-term averages
   const termAverages = [];
@@ -117,7 +124,7 @@ function annualRowFor(ctx, { termResults, promotionResults }) {
   for (const tw of termWeights) {
     const tr = termResults.find((r) => r.term === tw.term);
     const avg = tr?.termAverage ?? null;
-    const grade = avg != null ? lookupGrade(avg) : null;
+    const grade = avg != null ? gradeOf(avg) : null;
 
     termAverages.push({
       term:         tw.term,
@@ -138,30 +145,25 @@ function annualRowFor(ctx, { termResults, promotionResults }) {
     ? Math.round((totalWeightedAvg / totalWeight) * 100) / 100
     : 0;
 
-  const annualGrade = lookupGrade(annualAverage);
+  const annualGrade = gradeOf(annualAverage);
   const isPassing = annualAverage >= passMark;
 
-  // 7. Determine promotion status
-  let promotionStatus = "pending";
-  if (completedTerms >= 3) {
-    const allTermsPassed = termAverages.every(
-      (ta) => ta.isComplete && ta.average >= passMark
-    );
-    let promotionExamsPassed = true;
-    for (const pr of promotionResults) {
-      if (pr.average < structure.promotionThreshold) {
-        promotionExamsPassed = false;
-        break;
-      }
-    }
-    if (allTermsPassed && promotionExamsPassed) {
-      promotionStatus = "promoted";
-    } else if (!allTermsPassed) {
-      promotionStatus = "repeated";
-    } else {
-      promotionStatus = "conditional";
-    }
-  }
+  // 7. Promotion status: the one function the promotion run also proposes
+  // by (shared/academicRules promotionUnderRules, docs/39 §14). The annual
+  // average against the class's bar, the school's pass mark when no bar is
+  // set; pending until every term of the year is complete.
+  const { status: decided } = promotionUnderRules(ctx.rawRules, {
+    annualAverage,
+    terms: termAverages.map((ta) => ({ isComplete: ta.isComplete })),
+    termsInYear: termWeights.length,
+    classId,
+    passMark,
+  });
+  // A final-year class graduates, whatever the average — as the promotion
+  // run proposes (promotion.service proposeUnderRules). The row said
+  // "promoted" or "repeated" against the bar while the run graduated the
+  // pupil (decided 2026-10-16). Average, grade and place are unchanged.
+  const promotionStatus = isFinalYear ? "graduated" : decided;
 
   return { termAverages, annualAverage, annualGrade, promotionStatus, isPassing };
 }
@@ -176,10 +178,12 @@ const annualSetFor = ({ studentName, admissionNo, className }, ctx, row) => ({
   overallGrade:        row.annualGrade.grade,
   overallRemark:       row.annualGrade.remark,
   promotionStatus:     row.promotionStatus,
-  promotionThreshold:  ctx.structure.promotionThreshold ?? null,
+  // The structure-level promotionThreshold is no longer copied here: nothing
+  // reads it, and the bar a row was judged by is the year's (rules) — decided
+  // 2026-10-16, docs/41 §7. Rows written before keep what they hold.
   isPassing:           row.isPassing,
   policyHash:          ctx.policyHash ?? null,
-  calcVersion:         CALC_VERSIONS.annual,
+  calcVersion:         ctx.calcVersion ?? CALC_VERSIONS.annual,
   syncStatus:          "pending",
 });
 
@@ -220,7 +224,26 @@ async function computeStudentAnnualAverage({
   }
   void structure;
 
-  const row = annualRowFor(ctx, { termResults, promotionResults });
+  // No term result, no annual result — as the term layer writes no row for a
+  // pupil with no marks. This wrote a 0, an F and last place for a pupil who
+  // had simply not been assessed (docs/39 §4.6k). An unpublished row left by
+  // an earlier run goes; a published one stays exactly as it was issued.
+  if (termResults.length === 0) {
+    await AnnualResult.deleteOne({
+      schoolId, academicYear, classId, studentId, isPublished: { $ne: true },
+    });
+    return null;
+  }
+
+  // A published row is never recomputed in place (D3, decided).
+  if (await AnnualResult.exists({ schoolId, academicYear, classId, studentId, isPublished: true, deletedAt: null })) {
+    const err = new Error("This annual result is published. Unpublish it first.");
+    err.status = 409; err.code = "PUBLISHED_RESULTS";
+    throw err;
+  }
+
+  const cls = await mongoose.model("Class").findOne({ _id: classId, schoolId }).select("isFinalYear").lean();
+  const row = annualRowFor(ctx, { termResults, promotionResults, classId, isFinalYear: Boolean(cls?.isFinalYear) });
 
   // 8. Upsert AnnualResult
   const filter = {
@@ -248,7 +271,8 @@ async function computeStudentAnnualAverage({
  * @param {string}  opts.schoolId
  * @param {string}  opts.academicYear
  * @param {string}  opts.classId
- * @returns {{ computed: number, skipped: number }}
+ * @returns {{ computed: number, skipped: number, noTerms: number }}
+ *   skipped includes noTerms: pupils with no term result, who get no row.
  */
 async function computeClassAnnualAverages({
   schoolId,
@@ -269,7 +293,7 @@ async function computeClassAnnualAverages({
   // the class the term was actually sat in.
   const classDoc = await mongoose.model("Class")
     .findOne({ _id: classId, schoolId })
-    .select("_id name")
+    .select("_id name isFinalYear")
     .lean()
     .catch(() => null);
   const resolvedClassName = classDoc?.name ?? null;
@@ -284,12 +308,26 @@ async function computeClassAnnualAverages({
 
   let computed = 0;
   let skipped  = 0;
+  let noTerms  = 0;
+  let excluded = [];
 
   if (students.length > 0) {
     // One context for the class (an absent structure fails the whole class,
     // as it failed every pupil of it before), one read of the class's term
     // results grouped by pupil, one read of the promotion results, one write.
     const ctx = await annualContextFor({ schoolId, academicYear });
+
+    // A published annual row is never recomputed in place (D3, decided).
+    {
+      const published = await AnnualResult.countDocuments({
+        schoolId, academicYear, classId, isPublished: true, deletedAt: null,
+      });
+      if (published > 0) {
+        const err = new Error(`${published} published annual result(s) would be recomputed. Unpublish them first.`);
+        err.status = 409; err.code = "PUBLISHED_RESULTS"; err.published = published;
+        throw err;
+      }
+    }
     // Student._id, which is what TermResult.studentId holds and what
     // buildAnnualCard looks the pupil up by. Reading the login id here
     // matched no term results at all for any pupil who had an account.
@@ -317,12 +355,18 @@ async function computeClassAnnualAverages({
     }
 
     const ops = [];
+    const noTermIds = [];
     for (const student of students) {
       try {
         const k = String(student._id);
+        // No term result, no annual row (docs/39 §4.6k): see
+        // computeStudentAnnualAverage.
+        if (!termsByStudent.has(k)) { noTermIds.push(student._id); continue; }
         const row = annualRowFor(ctx, {
           termResults:      termsByStudent.get(k) ?? [],
           promotionResults: promoByStudent.get(k) ?? [],
+          classId,
+          isFinalYear:      Boolean(classDoc?.isFinalYear),
         });
         ops.push({
           updateOne: {
@@ -342,26 +386,42 @@ async function computeClassAnnualAverages({
       }
     }
     if (ops.length > 0) await AnnualResult.bulkWrite(ops, { ordered: false });
+
+    // Rows an earlier run wrote for those pupils: an unpublished one is
+    // removed, so it is no longer ranked; a published one is left as issued
+    // and kept out of the positions below. Only asked when there are such
+    // pupils, so a class where everyone has a term costs no extra query.
+    if (noTermIds.length > 0) {
+      await AnnualResult.deleteMany({
+        schoolId, academicYear, classId, studentId: { $in: noTermIds }, isPublished: { $ne: true },
+      });
+      noTerms = noTermIds.length;
+      excluded = noTermIds.map(String);
+    }
   }
 
   // Compute class positions
-  await computeAnnualPositions({ schoolId, academicYear, classId });
+  await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded });
 
-  return { computed, skipped };
+  return { computed, skipped: skipped + noTerms, noTerms };
 }
 
 /**
  * Compute annual positions (dense ranking) for a class.
+ *
+ * `exclude`: pupils whose row is not ranked and not touched — a published
+ * row kept for a pupil who no longer has a term result (docs/39 §4.6k).
  */
-async function computeAnnualPositions({ schoolId, academicYear, classId }) {
-  const results = await AnnualResult.find({
+async function computeAnnualPositions({ schoolId, academicYear, classId, exclude = [] }) {
+  const skip = new Set(exclude.map(String));
+  const results = (await AnnualResult.find({
     schoolId,
     academicYear,
     classId,
     deletedAt: null,
   })
     .sort({ annualAverage: -1 })
-    .lean();
+    .lean()).filter((r) => !skip.has(String(r.studentId)));
 
   const totalInClass = results.length;
 
@@ -393,18 +453,33 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
 
   let totalComputed = 0;
   let totalSkipped  = 0;
+  let totalNoTerms  = 0;
+  // Under D3 (decided: refuse) a class with published annual results is left
+  // exactly as it is and named here; the other classes still compute.
+  const refusedClasses = [];
 
   for (const cls of classes) {
-    const { computed, skipped } = await computeClassAnnualAverages({
-      schoolId,
-      academicYear,
-      classId: cls._id,
-    });
-    totalComputed += computed;
-    totalSkipped  += skipped;
+    let out;
+    try {
+      out = await computeClassAnnualAverages({
+        schoolId,
+        academicYear,
+        classId: cls._id,
+      });
+    } catch (err) {
+      if (err.code !== "PUBLISHED_RESULTS") throw err;
+      refusedClasses.push({ classId: String(cls._id), className: cls.name ?? null, published: err.published });
+      continue;
+    }
+    totalComputed += out.computed;
+    totalSkipped  += out.skipped;
+    totalNoTerms  += out.noTerms;
   }
 
-  return { computed: totalComputed, skipped: totalSkipped };
+  return {
+    computed: totalComputed, skipped: totalSkipped, noTerms: totalNoTerms,
+    ...(refusedClasses.length ? { refusedClasses } : {}),
+  };
 }
 
 module.exports = {

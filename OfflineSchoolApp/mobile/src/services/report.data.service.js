@@ -878,19 +878,22 @@ export async function assembleReportData({
 // GRADING HELPERS
 // ─────────────────────────────────────────────────────────
 
-// Cameroon /20 scale — mirrors grading.service.js GRADE_SCALE and the
-// GradingConfig defaults, so an offline report card shows exactly the same
-// letters and remarks the server would print.
-//   A+ 18–20 · A 16–17.99 · B+ 14–15.99 · B 12–13.99 ·
-//   C 10–11.99 · D 8–9.99 · F 0–7.99 · pass = 10/20
+// The shipped /20 scale — a copy of shared/gradeScale.js DEFAULT_GRADES, which
+// Metro cannot resolve from this package, so an offline report card shows the
+// letters and remarks the server would print for a school with no bands of
+// its own. It had drifted to seven bands (no C+) with remarks of its own
+// (docs/39 §4.6c); check:reportcard now compares the two.
+//   Highest band first; a mark on a boundary belongs to the higher band.
+//   pass = 10/20
 const GRADE_SCALE = [
-  { min: 18.0, max: 20.0,  grade: "A+", remark: "Excellent"   },
-  { min: 16.0, max: 17.99, grade: "A",  remark: "Very Good"   },
-  { min: 14.0, max: 15.99, grade: "B+", remark: "Good"        },
-  { min: 12.0, max: 13.99, grade: "B",  remark: "Fairly Good" },
-  { min: 10.0, max: 11.99, grade: "C",  remark: "Average"     },
-  { min: 8.0,  max: 9.99,  grade: "D",  remark: "Poor"        },
-  { min: 0.0,  max: 7.99,  grade: "F",  remark: "Very Poor"   },
+  { min: 18, grade: "A+", remark: "Excellent"     },
+  { min: 16, grade: "A",  remark: "Very Good"     },
+  { min: 14, grade: "B+", remark: "Good"          },
+  { min: 12, grade: "B",  remark: "Fair"          },
+  { min: 11, grade: "C+", remark: "Above Average" },
+  { min: 10, grade: "C",  remark: "Average"       },
+  { min: 8,  grade: "D",  remark: "Below Average" },
+  { min: 0,  grade: "F",  remark: "Fail"          },
 ];
 
 const normalizeTo20 = (raw, maxScore) => {
@@ -908,7 +911,7 @@ const normalizeTo20 = (raw, maxScore) => {
  */
 function computeGrade(score, maxScore = 20) {
   const mark = normalizeTo20(score, maxScore);
-  return GRADE_SCALE.find((g) => mark >= g.min && mark <= g.max)?.grade || "F";
+  return GRADE_SCALE.find((g) => mark >= g.min)?.grade || "F";
 }
 
 /**
@@ -918,5 +921,5 @@ function computeGrade(score, maxScore = 20) {
  */
 function computeRemark(score, maxScore = 20) {
   const mark = normalizeTo20(score, maxScore);
-  return GRADE_SCALE.find((g) => mark >= g.min && mark <= g.max)?.remark || "Very Poor";
+  return GRADE_SCALE.find((g) => mark >= g.min)?.remark || "Fail";
 }

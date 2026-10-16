@@ -339,6 +339,31 @@ export const processResults = async (
   return data;
 };
 
+// ── Unpublishing, one class at a time, with a reason ────────────────────────
+// Only the published flag changes; figures stay, and cards already issued
+// stay as issued (backend services/unpublish.service.js).
+
+export type UnpublishLayer = "sequence" | "term" | "annual";
+
+export interface UnpublishParams {
+  schoolId:     string;
+  classId:      string;
+  reason:       string;
+  examId?:      string;
+  academicYear?: string;
+  term?:        number;
+}
+
+export const unpublishResults = async (layer: UnpublishLayer, p: UnpublishParams) => {
+  const body = { schoolId: p.schoolId, classId: p.classId, reason: p.reason };
+  const { data } = layer === "sequence"
+    ? await api.post(`/results/${p.examId}/unpublish`, body)
+    : layer === "term"
+      ? await api.post("/term-results/unpublish", { ...body, academicYear: p.academicYear, term: p.term })
+      : await api.post("/annual-results/unpublish", { ...body, academicYear: p.academicYear });
+  return data as { unpublished: number; note?: string };
+};
+
 export const publishResults = async (
 examId: string,
 schoolId: string

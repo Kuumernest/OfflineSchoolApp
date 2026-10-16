@@ -89,7 +89,7 @@ behaviour, not an oversight. See [13-financial-workflows.md](13-financial-workfl
 
 | Model | Purpose |
 |---|---|
-| `AcademicStructure` | Year, terms, sequences, weights, `passMark`, `promotionThreshold`, `annualAverageMethod`, `promotionExams`, `maxAbsences`. |
+| `AcademicStructure` | Year, terms, sequences, weights, `passMark`, `promotionExams`, `maxAbsences`; `rules` (the year's promotion bars, /20). `promotionThreshold` and `annualAverageMethod` are stored but read by nothing, and no longer offered on the structure screen (2026-10-16). |
 | `Class` | A class/form. 12 indexes. |
 | `Subject` | A subject, usually scoped to a class. |
 | `Period` | Timetable periods. |

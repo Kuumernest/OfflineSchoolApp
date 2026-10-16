@@ -47,7 +47,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import api                from "./api";
 import { getDatabase }    from "../db/database";
-import { MutationQueue, registerReconciler } from "./mutationQueue.service";
+import { MutationQueue, registerReconciler, registerFailureHandler } from "./mutationQueue.service";
 
 // ── Local schema ────────────────────────────────────────────────────────────
 
@@ -270,13 +270,35 @@ export async function listMessages(conversationId, { limit = 50 } = {}) {
 export async function syncMessages(conversationId, myId) {
   await ensureSchema();
   try {
-    const res  = await api.get(
-      `/messages/conversations/${conversationId}/messages`,
-      { timeout: 10000 }
-    );
-    const list = res.data?.messages ?? [];
-    const participantReads = res.data?.participantReads ?? [];
     const db   = await getDatabase();
+
+    // The newest message this phone already holds. The server answers a
+    // page of the newest messages, newest first; when more than a page
+    // arrived while the phone was offline, the page ends above that, and
+    // the messages between were never fetched: a silent gap. So page back
+    // (beforeSeq) until the page reaches it, or the thread's start. A thread
+    // never opened here has nothing to fill: its newest page is enough.
+    const held = await db.getFirstAsync(
+      `SELECT MAX(seq) AS seq FROM ${MESSAGES} WHERE conversation_id = ? AND seq IS NOT NULL`,
+      [String(conversationId)]
+    ).catch(() => null);
+    const heldSeq = held?.seq != null ? Number(held.seq) : null;
+
+    const PAGE = 50, MAX_PAGES = 60;   // at most 3,000 messages in one sync
+    const url  = `/messages/conversations/${conversationId}/messages`;
+    const res  = await api.get(url, { params: { limit: PAGE }, timeout: 10000 });
+    const list = [...(res.data?.messages ?? [])];
+    const participantReads = res.data?.participantReads ?? [];
+
+    let page = list;
+    for (let n = 1; heldSeq != null && n < MAX_PAGES && page.length >= PAGE; n++) {
+      const seqsOfPage = page.map((m) => Number(m.seq)).filter(Number.isFinite);
+      const oldest = seqsOfPage.length ? Math.min(...seqsOfPage) : null;
+      if (oldest == null || oldest <= heldSeq + 1) break;   // reached what the phone has
+      const more = await api.get(url, { params: { limit: PAGE, beforeSeq: oldest }, timeout: 10000 });
+      page = more.data?.messages ?? [];
+      list.push(...page);
+    }
 
     for (const m of list) await upsertMessage(db, conversationId, m, "sent");
 
@@ -412,6 +434,38 @@ export async function markFailed(clientId, reason) {
     `UPDATE ${MESSAGES} SET state = 'failed', error = ? WHERE id = ?`,
     [String(reason ?? "Send failed"), String(clientId)]
   );
+}
+
+/**
+ * Send a failed message again: its outbox row back in the queue with a fresh
+ * retry budget, and the bubble back to "queued". False when there is nothing
+ * to retry (already sent, or discarded from the pending-changes screen).
+ */
+export async function retrySend(clientId) {
+  await ensureSchema();
+  const db = await getDatabase();
+  const row = await db.getFirstAsync(
+    `SELECT id FROM mutation_outbox WHERE entity_key = ? AND status IN ('failed', 'conflict')`,
+    [`message:${clientId}`]
+  ).catch(() => null);
+  if (!row) return false;
+  await MutationQueue.retry(row.id);
+  await db.runAsync(
+    `UPDATE ${MESSAGES} SET state = 'queued', error = NULL WHERE id = ?`,
+    [String(clientId)]
+  );
+  return true;
+}
+
+/** One conversation as this device holds it, or null. */
+export async function getConversation(conversationId) {
+  await ensureSchema();
+  const db = await getDatabase();
+  const r = await db.getFirstAsync(
+    `SELECT id, kind, title, is_read_only, is_archived FROM ${CONVERSATIONS} WHERE id = ?`,
+    [String(conversationId)]
+  ).catch(() => null);
+  return r ? { _id: r.id, kind: r.kind, title: r.title, isReadOnly: !!r.is_read_only, isArchived: !!r.is_archived } : null;
 }
 
 /**
@@ -591,6 +645,12 @@ export const registerMessageReconcilers = () => {
     // takes the server's seq, which is what fixes its place in the thread.
     await confirmSent(args.clientId, sent);
   });
+
+  // Refused, or out of retries: the bubble turns failed instead of showing
+  // "queued" for ever.
+  registerFailureHandler("message", async ({ args, message }) => {
+    if (args?.clientId) await markFailed(args.clientId, message);
+  });
 };
 
 export default {
@@ -604,6 +664,8 @@ export default {
   sendMessage,
   confirmSent,
   markFailed,
+  retrySend,
+  getConversation,
   markRead,
   markDelivered,
   openDirect,

@@ -356,6 +356,14 @@ const upsertTeacherAttendance = async (db, {
  * corrections anybody actually makes; older days are still reachable through
  * the report screens, which fetch on demand as they always did.
  */
+/** Synced registers dated before `day` (YYYY-MM-DD), removed. */
+export const trimBefore = async (db, day) => {
+  const result = await db.runAsync(
+    `DELETE FROM attendance WHERE _synced = 1 AND date < ?`, [day]
+  ).catch(() => null);
+  return result?.changes ?? 0;
+};
+
 export const pullRecent = async ({ schoolId, days = 30 } = {}) => {
   const db = await getDatabase();
   await ensureSchema(db);
@@ -367,6 +375,14 @@ export const pullRecent = async ({ schoolId, days = 30 } = {}) => {
   const { data } = await api.get("/attendance/students", {
     params: { schoolId, startDate: iso(start), endDate: iso(end) },
   });
+
+  // Registers before the window, already on the server, are no longer kept:
+  // the phone only ever pulls these thirty days, so older synced rows were
+  // never refreshed and only grew (decided 2026-10-16, docs/41 §7). The
+  // report screens fetch older days on demand. An unsynced register stays,
+  // whatever its date, until the outbox has sent it.
+  await trimBefore(db, iso(start));
+
   const records = data?.records ?? data?.data ?? [];
   if (!Array.isArray(records) || !records.length) return { count: 0 };
 

@@ -17,7 +17,8 @@
  *
  *   - results.service.processResults (CA blended, coefficients, GPA-point
  *     average). No router has ever mounted it (git log -S); it is reached
- *     only from tests and the unrouted results.controller.computeResults.
+ *     only from tests (its unrouted caller, results.controller.computeResults,
+ *     which passed it an object, was removed: docs/39 §4.6e).
  *   - POST /api/exams/:examId/process (exam.routes.js). What web, mobile and
  *     desktop call — so what every real result in a database came from.
  *     Raw-mark integer mean, no CA, no coefficients, absent as zero, and no
@@ -47,7 +48,8 @@
  *                   annual and promotion layers read it as /20 or 0–100
  *   [docs/39 §4.3]  a recompute unpublishes a published result
  *   [docs/39 §4.4]  the promotion run and the annual results disagree
- *   [docs/39 §4.6k] a pupil with no term result gets an annual row of 0
+ *   [docs/39 §4.6k] FIXED: a pupil with no term result used to get an
+ *                   annual row of 0, F, ranked last; now gets none
  *   [docs/39 §4.6l] the sequence card's subject pass flag is the paper's,
  *                   not the blended mark it prints
  *   [docs/39 §4.7]  the live route: CA and coefficients ignored, absent as
@@ -350,8 +352,10 @@ const main = async () => {
 
   console.log("--- annual results (annualGrading) ---");
   const annualRun = await annualGrading.computeClassAnnualAverages({ schoolId: SCHOOL, academicYear: YEAR, classId: FORM3 });
-  // Five, not four: Eve too — see the annual rows below.
-  check("annual run", annualRun, { computed: 5, skipped: 0 });
+  // [docs/39 §4.6k, fixed] four, not five: Eve has no term result and gets no
+  // annual row, as the term layer gives her no term row. Was { computed: 5,
+  // skipped: 0 }.
+  check("annual run", annualRun, { computed: 4, skipped: 1, noTerms: 1 });
   {
     const all = {};
     for (const [id] of PUPILS) {
@@ -365,18 +369,22 @@ const main = async () => {
     /*
      * Ama: (3.09·33.33 + 2.83·33.33 + 2.27·33.34) / 100 = 2.7299 → 2.73.
      *
-     * [docs/39 §4.6k] Eve has no term result at all and is still written an
-     * annual row: average 0, F, ranked last of five. The term layer refuses
-     * exactly this ("not a zero", termGrading.service.js); the annual layer
-     * writes one for every active pupil. promotionStatus stays "pending"
-     * because fewer than three terms are complete.
+     * [docs/39 §4.6k, fixed] Eve has no term result at all and gets no
+     * annual row, as the term layer gives her none ("not a zero",
+     * termGrading.service.js). Until the fix she was written average 0, F,
+     * "pending", ranked 5 of 5. Nobody else's place moves (she was last);
+     * totalInClass is 4, not 5.
+     *
+     * [decided 2026-10-16, docs/41 §7] promotionThreshold: null — the
+     * structure-level threshold (10 here) is no longer copied onto annual
+     * rows; nothing read it. Every figure is unchanged.
      */
     check("annual rows", all, {
-      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 5 },
-      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 1, totalInClass: 5 },
-      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 4, totalInClass: 5 },
-      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 5 },
-      "stu-eve": { annualAverage: 0,    overallGrade: "F", isPassing: false, promotionStatus: "pending",  promotionThreshold: 10, classPosition: 5, totalInClass: 5 },
+      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
+      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 1, totalInClass: 4 },
+      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 4, totalInClass: 4 },
+      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
+      "stu-eve": null,
     });
     const ama = await AnnualResult.findOne({ schoolId: SCHOOL, academicYear: YEAR, studentId: "stu-ama" }).lean();
     check("Ama termAverages", (ama?.termAverages || []).map((x) => pick(x, ["term", "average", "overallGrade", "isComplete"])),
@@ -444,38 +452,24 @@ const main = async () => {
   console.log("--- publication and promotion ---");
   for (let seq = 1; seq <= 6; seq++) await results.publishResults(paperId(seq));
   {
-    const byStudent = await promotion.resultsByStudent(SCHOOL, YEAR);
-    // [docs/39 §4.1] the mean of six GPA-point sequence averages.
-    // Ama (2.87+3.3+2.53+3.13+2.53+2)/6 = 2.727 → 2.7. "terms" counts summaries, which are sequences.
-    check("resultsByStudent", Object.fromEntries([...byStudent.entries()].sort()), {
-      "stu-ama": { average: 2.7, passing: true, terms: 6 }, "stu-bih": { average: 2.9, passing: true, terms: 6 },
-      "stu-cho": { average: 2.3, passing: true, terms: 6 }, "stu-dan": { average: 2.7, passing: true, terms: 6 },
-    });
-
+    /*
+     * The decided rule (docs/39 §21.1, 2026-10-16): the run reads published
+     * ANNUAL results against the class's bar. Only the sequence summaries
+     * are published here, so no pupil has a published annual result and
+     * every one needs a decision. (Before the decision the run averaged
+     * the GPA-point summaries, proposed all four "promoted" while their
+     * annual rows said "repeated", and compared a 0–100 class bar with them,
+     * docs/39 §4.4, §21 D2.)
+     */
     const { decisions } = await promotion.generateRun({ schoolId: SCHOOL, fromYear: YEAR, toYear: NEXT_YEAR, generatedBy: null });
     check("promotion decisions", Object.fromEntries(decisions
       .map((x) => [x.studentId, pick(x, ["outcome", "basis", "average", "toClassId"])]).sort()), {
-      /*
-       * [docs/39 §4.4] every pupil the annual results call "repeated" is
-       * proposed "promoted" here — the run reads summaries, not annual results.
-       * Eve, with no results at all, is proposed "promoted" on basis "no_results".
-       */
-      "stu-ama": { outcome: "promoted", basis: "results_pass", average: 2.7, toClassId: FORM4 },
-      "stu-bih": { outcome: "promoted", basis: "results_pass", average: 2.9, toClassId: FORM4 },
-      "stu-cho": { outcome: "promoted", basis: "results_pass", average: 2.3, toClassId: FORM4 },
-      "stu-dan": { outcome: "promoted", basis: "results_pass", average: 2.7, toClassId: FORM4 },
-      "stu-eve": { outcome: "promoted", basis: "no_results", average: null, toClassId: FORM4 },
+      "stu-ama": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
+      "stu-bih": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
+      "stu-cho": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
+      "stu-dan": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
+      "stu-eve": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
     });
-
-    /*
-     * [docs/39 §4.1, §21 D2] a class promotion average is entered 0–100 and
-     * compared with that GPA-point mean, so a 50 % bar holds back every pupil.
-     */
-    const amaResult = byStudent.get("stu-ama");
-    check("proposeFor with a 50 % class bar", promotion.proposeFor({
-      currentClass: { _id: FORM3, nextClassId: FORM4, isFinalYear: false, promotionAverage: 50 },
-      result: amaResult,
-    }), { outcome: "repeated", basis: "average_fail", toClassId: FORM3 });
   }
 
   // ── Layer 6: recompute after publication ────────────────────────────────
@@ -494,7 +488,7 @@ const main = async () => {
   // ── The live route: POST /api/exams/:examId/process ─────────────────────
   //
   // Everything above runs results.service.processResults. No router mounts
-  // it: its one caller, results.controller.computeResults, is not routed.
+  // it (its one caller, the unrouted results.controller.computeResults, is gone).
   // What web, mobile and desktop actually call to compute a sequence is
   // POST /api/exams/:examId/process (exam.routes.js), which writes
   // ResultSummary by arithmetic of its own. The same school, built again,
@@ -532,45 +526,49 @@ const main = async () => {
 
     const live = (seq, id) => ResultSummary.findOne({ examId: `${L}ex-seq${seq}`, studentId: `${L}${id}` }).lean();
     const ama = await live(1, "stu-ama");
+    /*
+     * The decided calculation (docs/39 §21.1, exam-process/3): CA blended at
+     * 40/60, coefficients carried. Before the decision this route stored the
+     * paper alone (15, coefficient 1) and a raw mean of 12 (docs/39 §4.7).
+     *   Maths   0.4·(8/10·20) + 0.6·15 = 6.4 + 9   = 15.4  B+, ×2 = 30.8
+     *   English 0.4·(6/10·20) + 0.6·9  = 4.8 + 5.4 = 10.2  C (passes on it)
+     */
     check("live: Ama S1 Maths breakdown", pick(subjectRow(ama, "sub-math"),
       ["score", "maxScore", "normalizedMark", "coefficient", "weightedMark", "caMark", "testMark", "grade", "points", "isPassing"]),
-      /*
-       * [docs/39 §4.7] The paper alone: CA 8/10 is not blended in (processResults
-       * gives 15.4), and the Maths coefficient 2 is not carried (coefficient is
-       * the schema default 1).
-       */
-      { score: 15, maxScore: 20, normalizedMark: 15, coefficient: 1, weightedMark: null, caMark: null, testMark: null,
+      { score: 15.4, maxScore: 20, normalizedMark: 15.4, coefficient: 2, weightedMark: 30.8, caMark: 16, testMark: 15,
         grade: "B+", points: 3.3, isPassing: true });
     check("live: Ama S1 English breakdown", pick(subjectRow(ama, "sub-eng"),
       ["score", "normalizedMark", "coefficient", "caMark", "grade", "points", "isPassing"]),
-      // Paper 9/20 → D, failing; with its CA it would be 10.2, C, passing.
-      { score: 9, normalizedMark: 9, coefficient: 1, caMark: null, grade: "D", points: 1, isPassing: false });
+      { score: 10.2, normalizedMark: 10.2, coefficient: 1, caMark: 12, grade: "C", points: 2, isPassing: true });
     check("live: Ama S1 summary", pick(ama,
       ["average", "overallGrade", "isPassing", "gpa", "totalScore", "maxTotalScore", "percentage", "subjectsPassed", "subjectsFailed", "subjectsTotal"]),
       /*
-       * average = Math.round(raw total / subjects) = round(24 / 2) = 12: raw
-       * marks, unweighted, rounded to a whole number. Grade from 24/40 → 12/20 → B.
+       * (30.8 + 10.2)/3 = 13.67, B; percentage round(13.67/20·100) = 68;
+       * totalScore 15.4 + 10.2 = 25.6 of 40; both subjects pass.
        */
-      { average: 12, overallGrade: "B", isPassing: true, gpa: 3, totalScore: 24, maxTotalScore: 40, percentage: 60,
-        subjectsPassed: 1, subjectsFailed: 1, subjectsTotal: 2 });
+      { average: 13.67, overallGrade: "B", isPassing: true, gpa: 3, totalScore: 25.6, maxTotalScore: 40, percentage: 68,
+        subjectsPassed: 2, subjectsFailed: 0, subjectsTotal: 2 });
     const rows = {};
     for (const [id] of PUPILS) {
       const s = await live(1, id);
       rows[id] = s ? [s.average, s.percentage, s.overallGrade, s.isPassing, s.classPosition, s.totalInClass] : null;
     }
     /*
-     * [docs/39 §4.7] Cho's absent Maths counts as zero: round(11 / 2) = 6, and
-     * its 20 marks stay in the maximum (11/40 → 28 %) → F, failing. Positions
-     * rank on percentage: Bih 65, Ama = Dan 60 (shared 2nd), Cho 4th.
+     * Bih: Maths 12 (no CA: the paper alone), English 0.4·10 + 0.6·14 = 12.4
+     *      → (24 + 12.4)/3 = 12.13, 61 %.
+     * Cho: Maths absent, removed with its coefficient; English
+     *      0.4·11 + 0.6·11 = 11 → 11, C+, 55 %. (Was round(11/2) = 6, F.)
+     * Ranked on the average: Ama = Dan 13.67 (1st, shared), Bih 3rd, Cho 4th.
      */
     check("live: S1 every pupil [average, percentage, grade, passing, position, ofClass]", rows, {
-      "stu-ama": [12, 60, "B", true, 2, 4], "stu-bih": [13, 65, "B", true, 1, 4], "stu-cho": [6, 28, "F", false, 4, 4],
-      "stu-dan": [12, 60, "B", true, 2, 4], "stu-eve": null,
+      "stu-ama": [13.67, 68, "B", true, 1, 4], "stu-bih": [12.13, 61, "B", true, 3, 4], "stu-cho": [11, 55, "C+", true, 4, 4],
+      "stu-dan": [13.67, 68, "B", true, 1, 4], "stu-eve": null,
     });
     const seqAvg = {};
     for (let seq = 1; seq <= 6; seq++) seqAvg[seq] = (await live(seq, "stu-ama"))?.average ?? null;
-    // S2 (17+11)/2 = 14; S3 22/2 = 11; S4 26/2 = 13; S5 24/2 = 12; S6 20/2 = 10.
-    check("live: Ama sequence averages S1..S6", seqAvg, { 1: 12, 2: 14, 3: 11, 4: 13, 5: 12, 6: 10 });
+    // S2 Maths 0.4·16 + 0.6·17 = 16.6, English 0.4·12 + 0.6·11 = 11.4 → (33.2 + 11.4)/3 = 14.87.
+    // S3–S6 have no CA: S3 (2·14 + 8)/3 = 12; S4 (2·16 + 10)/3 = 14; S5 (2·15 + 9)/3 = 13; S6 (2·13 + 7)/3 = 11.
+    check("live: Ama sequence averages S1..S6", seqAvg, { 1: 13.67, 2: 14.87, 3: 12, 4: 14, 5: 13, 6: 11 });
 
     for (const term of [1, 2, 3]) {
       await termGrading.computeClassTermAverages({ schoolId: LIVE, academicYear: YEAR, term, classId: `${L}${FORM3}` });
@@ -582,15 +580,23 @@ const main = async () => {
         terms[`T${term} ${id}`] = r ? [r.termAverage, r.overallGrade, r.isPassing, r.classPosition] : null;
       }
     }
-    // On the live route the term layer reads a /20-like average: Ama T1 (12 + 14)/2 = 13, B, passing.
-    // Cho T1 (6 + round(13/2) = 7)/2 = 6.5.
+    /*
+     * Terms are the 50/50 mean of their two sequences, graded on the school's
+     * bands (none here: the built-in table).
+     *   Ama T1 (13.67 + 14.87)/2 = 14.27 B+; T2 (12 + 14)/2 = 13 B; T3 (13 + 11)/2 = 12 B.
+     *   Bih S2 Maths 14, English 0.4·10 + 0.6·16 = 13.6 → 13.87; T1 (12.13 + 13.87)/2 = 13 B.
+     *       S3 (2·11 + 13)/3 = 11.67, S4 (2·13 + 15)/3 = 13.67 → T2 12.67 B;
+     *       S5 (2·12 + 14)/3 = 12.67, S6 (2·10 + 12)/3 = 10.67 → T3 11.67 C+.
+     *   Cho (English only) S2 0.4·11 + 0.6·13 = 12.2 → T1 (11 + 12.2)/2 = 11.6 C+;
+     *       T2 (10 + 12)/2 = 11 C+; T3 (11 + 9)/2 = 10 C.
+     */
     check("live: every term row [average, grade, passing, position]", terms, {
-      "T1 stu-ama": [13, "B", true, 2], "T1 stu-bih": [14, "B+", true, 1], "T1 stu-cho": [6.5, "F", false, 4],
-      "T1 stu-dan": [13, "B", true, 2], "T1 stu-eve": null,
-      "T2 stu-ama": [12, "B", true, 2], "T2 stu-bih": [13, "B", true, 1], "T2 stu-cho": [5.5, "F", false, 4],
-      "T2 stu-dan": [12, "B", true, 2], "T2 stu-eve": null,
-      "T3 stu-ama": [11, "C+", true, 2], "T3 stu-bih": [12, "B", true, 1], "T3 stu-cho": [5.5, "F", false, 4],
-      "T3 stu-dan": [11, "C+", true, 2], "T3 stu-eve": null,
+      "T1 stu-ama": [14.27, "B+", true, 1], "T1 stu-bih": [13, "B", true, 3], "T1 stu-cho": [11.6, "C+", true, 4],
+      "T1 stu-dan": [14.27, "B+", true, 1], "T1 stu-eve": null,
+      "T2 stu-ama": [13, "B", true, 1], "T2 stu-bih": [12.67, "B", true, 3], "T2 stu-cho": [11, "C+", true, 4],
+      "T2 stu-dan": [13, "B", true, 1], "T2 stu-eve": null,
+      "T3 stu-ama": [12, "B", true, 1], "T3 stu-bih": [11.67, "C+", true, 3], "T3 stu-cho": [10, "C", true, 4],
+      "T3 stu-dan": [12, "B", true, 1], "T3 stu-eve": null,
     });
 
     await annualGrading.computeClassAnnualAverages({ schoolId: LIVE, academicYear: YEAR, classId: `${L}${FORM3}` });
@@ -599,11 +605,17 @@ const main = async () => {
       const r = await AnnualResult.findOne({ schoolId: LIVE, academicYear: YEAR, studentId: `${L}${id}` }).lean();
       annual[id] = r ? [r.annualAverage, r.overallGrade, r.isPassing, r.promotionStatus, r.classPosition] : null;
     }
-    // Ama (13·33.33 + 12·33.33 + 11·33.34)/100 = 12.00. Eve: the §4.6k zero row again.
+    /*
+     * Ama (14.27·33.33 + 13·33.33 + 12·33.34)/100 = 13.0899 → 13.09 B
+     * Bih (13·33.33 + 12.67·33.33 + 11.67·33.34)/100 = 12.4466 → 12.45 B
+     * Cho (11.6·33.33 + 11·33.33 + 10·33.34)/100 = 10.8666 → 10.87 C
+     * Promotion against the bar: no bar set, so the pass mark 10; all three
+     * terms complete; each at or above 10 → promoted. Eve: no row (§4.6k).
+     */
     check("live: annual rows [average, grade, passing, promotion, position]", annual, {
-      "stu-ama": [12, "B", true, "promoted", 2], "stu-bih": [13, "B", true, "promoted", 1],
-      "stu-cho": [5.83, "F", false, "repeated", 4], "stu-dan": [12, "B", true, "promoted", 2],
-      "stu-eve": [0, "F", false, "pending", 5],
+      "stu-ama": [13.09, "B", true, "promoted", 1], "stu-bih": [12.45, "B", true, "promoted", 3],
+      "stu-cho": [10.87, "C", true, "promoted", 4], "stu-dan": [13.09, "B", true, "promoted", 1],
+      "stu-eve": null,
     });
 
     const card = await buildStudentReportCardData(`${L}ex-seq1`, `${L}stu-ama`);
@@ -612,37 +624,28 @@ const main = async () => {
       isPassing: card.data?.summary?.isPassing ?? null, classPosition: card.data?.summary?.classPosition ?? null,
       weightedAverage: card.data?.computed?.weightedAverage ?? null,
     },
-    /*
-     * [docs/39 §4.7] The card rebuilds its rows from the marks — CA blended,
-     * coefficients applied — and prints 13.67 as the average, above a grade (B)
-     * and a position taken from the stored 12.
-     */
-    { average: 12, overallGrade: "B", isPassing: true, classPosition: 2, weightedAverage: 13.67 });
+    // The card prints the stored figure: 13.67, B, 1st (docs/39 §4.7f closed by D1).
+    { average: 13.67, overallGrade: "B", isPassing: true, classPosition: 1, weightedAverage: 13.67 });
 
     for (let seq = 1; seq <= 6; seq++) await results.publishResults(`${L}ex-seq${seq}`);
-    const byStudent = await promotion.resultsByStudent(LIVE, YEAR);
-    /*
-     * [docs/39 §4.7] Nothing. The live route never writes academicYear onto a
-     * summary, and the promotion run selects published summaries BY
-     * academicYear — so it sees no results for any pupil.
-     */
-    check("live: resultsByStudent", Object.fromEntries([...byStudent.entries()].sort()), {});
     const { decisions } = await promotion.generateRun({ schoolId: LIVE, fromYear: YEAR, toYear: NEXT_YEAR, generatedBy: null });
-    // So every pupil is proposed on "no_results" — promoted, Cho (annual: repeated) included.
+    // The run reads published ANNUAL results (D1b, decided). Only the
+    // sequence summaries are published here, so every pupil needs a decision.
     check("live: promotion decisions [outcome, basis]", Object.fromEntries(decisions
       .map((x) => [x.studentId, [x.outcome, x.basis]]).sort()), {
-      "L-stu-ama": ["promoted", "no_results"], "L-stu-bih": ["promoted", "no_results"], "L-stu-cho": ["promoted", "no_results"],
-      "L-stu-dan": ["promoted", "no_results"], "L-stu-eve": ["promoted", "no_results"],
+      "L-stu-ama": ["unassigned", "no_results"], "L-stu-bih": ["unassigned", "no_results"], "L-stu-cho": ["unassigned", "no_results"],
+      "L-stu-dan": ["unassigned", "no_results"], "L-stu-eve": ["unassigned", "no_results"],
     });
-    check("live: summaries carry no academicYear or term", pick(await live(1, "stu-ama"), ["academicYear", "term"]),
-      { academicYear: null, term: null });
+    check("live: paper summaries carry their year and term (§4.7e closed)", pick(await live(1, "stu-ama"), ["academicYear", "term"]),
+      { academicYear: YEAR, term: "1" });
 
     // A re-process after publication.
     const before = await live(1, "stu-ama");
-    await post(`/exams/${L}ex-seq1/process`, {});
+    const reprocess = await post(`/exams/${L}ex-seq1/process`, {});
     const after = await live(1, "stu-ama");
-    // Unlike processResults (§4.3), the live route leaves publication alone — and rewrites the figures unguarded.
-    check("live: re-process after publication [isPublished before, after]", [before?.isPublished, after?.isPublished], [true, true]);
+    // A published result is never recomputed (D3, decided): 409, nothing written.
+    check("live: re-process after publication → 409, the row untouched",
+      [reprocess.status, reprocess.body?.code, JSON.stringify(after) === JSON.stringify(before)], [409, "PUBLISHED_RESULTS", true]);
 
     // ── Provenance (docs/39 §8, Phase 2c) ───────────────────────────────
     //
@@ -665,24 +668,26 @@ const main = async () => {
     const paperIds = (prefix) => ({ $in: [1, 2, 3, 4, 5, 6].map((q) => `${prefix}ex-seq${q}`) });
     check("unrouted path: every summary stamped results-service/1",
       await stamps(ResultSummary, { examId: paperIds("") }), [`${snapUnrouted._id}|results-service/1`]);
-    check("live route: every summary stamped exam-process/1",
-      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/1`]);
-    check("term rows stamped term/1, per school",
+    check("live route: every summary stamped exam-process/3",
+      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/3`]);
+    check("term rows stamped term/3, per school",
       [await stamps(TermResult, { schoolId: SCHOOL }), await stamps(TermResult, { schoolId: LIVE })],
-      [[`${snapUnrouted._id}|term/1`], [`${snapLive._id}|term/1`]]);
-    check("annual rows stamped annual/1, per school",
+      [[`${snapUnrouted._id}|term/3`], [`${snapLive._id}|term/3`]]);
+    check("annual rows stamped annual/3, per school",
       [await stamps(AnnualResult, { schoolId: SCHOOL }), await stamps(AnnualResult, { schoolId: LIVE })],
-      [[`${snapUnrouted._id}|annual/1`], [`${snapLive._id}|annual/1`]]);
+      [[`${snapUnrouted._id}|annual/3`], [`${snapLive._id}|annual/3`]]);
 
     /*
-     * A configuration edit touches no result. A recompute after it is stamped
-     * with the new configuration — and on the live route, which ignores the CA
-     * split (§4.7a), the figures do not move even though the stamp does.
+     * A configuration edit touches no result. A recompute after it (once the
+     * sequence is unpublished: a published one is refused) is stamped with
+     * the new configuration, and follows the new CA split:
+     *   S2 at 30/70: Maths 0.3·16 + 0.7·17 = 16.7, English 0.3·12 + 0.7·11 = 11.3
+     *   → (33.4 + 11.3)/3 = 14.9 (was 14.87 at 40/60).
      */
     await GradingConfig.updateOne({ schoolId: LIVE }, { $set: { caWeight: 30, testWeight: 70 } });
-    const s2Before = await live(2, "stu-ama");
     check("after a config edit, existing rows keep their stamp",
-      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/1`]);
+      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/3`]);
+    await ResultSummary.updateMany({ examId: `${L}ex-seq2` }, { $set: { isPublished: false } });
     await post(`/exams/${L}ex-seq2/process`, {});
     const s2After = await live(2, "stu-ama");
     const snapEdited = await policySvc.resolve({ schoolId: LIVE, academicYear: YEAR });
@@ -690,9 +695,7 @@ const main = async () => {
       s2After.policyHash === snapEdited._id, snapEdited._id !== snapLive._id,
       (await live(1, "stu-ama")).policyHash === snapLive._id,
     ], [true, true, true]);
-    check("and its figures did not move (the live route ignores the CA split)",
-      pick(s2After, ["average", "overallGrade", "isPassing", "classPosition"]),
-      pick(s2Before, ["average", "overallGrade", "isPassing", "classPosition"]));
+    check("and its figure follows the new split: 14.9", s2After.average, 14.9);
     check("the earlier snapshot is still there to answer for the rows that used it",
       (await policySvc.get(snapLive._id, { schoolId: LIVE }))?._id, snapLive._id);
 

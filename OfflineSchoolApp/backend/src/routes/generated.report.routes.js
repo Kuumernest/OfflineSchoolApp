@@ -45,8 +45,8 @@ router.use(tenant.requireSchool());
 // POST /api/generated-reports
 // Called by the device after generating a PDF.
 // Stores the frozen rendered HTML and variable payload.
-// Upserts on examId + studentId so re-generation updates
-// the existing record rather than creating a duplicate.
+// Records a card ONCE, per examId + studentId (or student,
+// term and year): a second post is refused with 409.
 // ─────────────────────────────────────────────────────────
 
 router.post("/", writeReports, asyncHandler(async (req, res) => {
@@ -94,14 +94,32 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
     if (!studentOk) return res.status(404).json({ success: false, error: "Student not found" });
   }
 
-  // Upsert — one record per student per exam, within this school
+  // One record per student per exam, within this school — and once it exists
+  // it is the card that was issued. This used to upsert, `$set`-ing the
+  // caller's HTML over a frozen card a parent may already hold (docs/39
+  // §4.6g); the first issue wins here, as it does in archiveGeneratedReport.
+  // Superseding an issued card is the reissue route's job, which re-renders
+  // it from the results rather than taking a client's HTML.
   const filter = examId
     ? { examId, studentId, schoolId: resolvedSchoolId }
     : { studentId, term, academicYear, schoolId: resolvedSchoolId };
 
-  const update = {
-    $set: {
+  const existing = await GeneratedReport.findOne(filter).select("_id").lean();
+  if (existing) {
+    return res.status(409).json({
+      success:  false,
+      code:     "REPORT_ALREADY_ISSUED",
+      error:    "A report card has already been issued for this student; reissue it instead",
+      reportId: existing._id,
+    });
+  }
+
+  let report;
+  try {
+    report = (await GeneratedReport.create({
+      _id:             uuidv4(),
       schoolId:        resolvedSchoolId,
+      studentId,
       examId:          examId          || null,
       templateId:      templateId      || null,
       templateVersion: templateVersion || 1,
@@ -111,24 +129,12 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
       term:            term            || null,
       academicYear:    academicYear    || null,
       generatedBy:     req.user?._id   || null,
-    },
-    $setOnInsert: {
-      _id:         uuidv4(),
-      isPublished: false,
-      deletedAt:   null,
-    },
-  };
-
-  let report;
-  try {
-    report = await GeneratedReport.findOneAndUpdate(
-      filter,
-      update,
-      { upsert: true, returnDocument: 'after' }
-    ).lean();
+      isPublished:     false,
+      deletedAt:       null,
+    })).toObject();
   } catch (err) {
-    // The scoped filter found nothing, the insert hit the platform-wide unique
-    // index: the pair belongs to a row this school may not touch.
+    // A concurrent post won, or the pair belongs to a row this school may not
+    // touch (the unique index on examId + studentId spans the platform).
     if (err?.code === 11000) {
       return res.status(409).json({ success: false, code: "REPORT_EXISTS", error: "A report card for this exam and student already exists" });
     }

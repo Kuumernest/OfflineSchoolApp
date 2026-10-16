@@ -14,6 +14,7 @@ import api              from "../../../../src/services/api";
 import DateField        from "../../../../src/components/DateField";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../src/utils/appError";
+import { useAcademicTerms } from "../../../../src/hooks/useAcademicTerms";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -25,11 +26,12 @@ const EXAM_TYPES = [
   { value: "promotion_exam",  labelKey: "examEdit.typePromotionExam"   },
 ];
 
-const TERMS = [
-  { value: "first_term",  labelKey: "examEdit.termFirst"  },
-  { value: "second_term", labelKey: "examEdit.termSecond" },
-  { value: "third_term",  labelKey: "examEdit.termThird"  },
-];
+// Exam.term is a number, 1–3. The values were "first_term"…, which the
+// server refuses (400), so no edit could be saved, and a stored 2 matched no
+// option. Strings for the picker; sent as a number. The picker offers the
+// year's own terms (useAcademicTerms); these name a term the school left
+// unnamed, and are the fallback when the year cannot be read.
+const TERM_LABEL_KEYS = { 1: "examEdit.termFirst", 2: "examEdit.termSecond", 3: "examEdit.termThird" };
 
 /** Turn a labelKey table into the { value, label } shape OptionPicker renders. */
 const translateOptions = (t, options) =>
@@ -324,7 +326,7 @@ export default function EditExamScreen() {
 
   const [name,            setName]            = useState("");
   const [type,            setType]            = useState("test");
-  const [term,            setTerm]            = useState("first_term");
+  const [term,            setTerm]            = useState("1");
   const [academicYear,    setAcademicYear]    = useState("");
   const [startDate,       setStartDate]       = useState("");
   const [endDate,         setEndDate]         = useState("");
@@ -335,6 +337,9 @@ export default function EditExamScreen() {
   const [selectedClasses, setSelectedClasses] = useState([]);
 
   // ── Load exam ──────────────────────────────────────────
+  const termLabel = useCallback((n) => (TERM_LABEL_KEYS[n] ? t(TERM_LABEL_KEYS[n]) : String(n)), [t]);
+  const { options: yearTerms } = useAcademicTerms(schoolId, academicYear, termLabel);
+
   const loadExam = useCallback(async () => {
     try {
       setLoading(true);
@@ -345,7 +350,7 @@ export default function EditExamScreen() {
       setExam(e);
       setName(e.name              || "");
       setType(e.type              || "test");
-      setTerm(e.term              || "first_term");
+      setTerm(e.term != null && e.term !== "" ? String(e.term) : "1");
       setAcademicYear(e.academicYear || "");
       setStartDate(e.startDate    || "");
       setEndDate(e.endDate        || "");
@@ -487,7 +492,7 @@ export default function EditExamScreen() {
       await ExamService.updateExam(id, {
         name:         name.trim(),
         type,
-        term,
+        term:         Number(term),
         academicYear: academicYear.trim(),
         startDate:    startDate.trim()    || undefined,
         endDate:      endDate.trim()      || undefined,
@@ -556,7 +561,10 @@ export default function EditExamScreen() {
 
   const selectedIds    = selectedClasses.map((c) => c.classId);
   const typeOptions    = translateOptions(t, EXAM_TYPES);
-  const termOptions    = translateOptions(t, TERMS);
+  // The exam's own term stays on offer even if the year no longer lists it:
+  // an edit never moves an exam to another term unless somebody picks one.
+  const termOptions    = yearTerms.some((o) => o.value === term)
+    ? yearTerms : [...yearTerms, { value: term, label: termLabel(Number(term)) }];
   const tm             = Number(totalMarks);
   const pm             = Number(passMark);
   const passRatePct    = tm > 0 ? ((pm / tm) * 100).toFixed(1) : null;

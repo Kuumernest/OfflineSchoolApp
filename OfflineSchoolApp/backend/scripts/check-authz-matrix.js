@@ -197,6 +197,43 @@ const bad = (label, detail) => {
   await scoped("admin", "GET", `/api/academic-structure/${B}/2026-2027`,
     "as-b", "school A's admin reading school B");
 
+  // D4 (docs/39 §4.6j): a teacher reads the year's shape with exams.view —
+  // the rule the desktop feed already ships it under — but not its rules, and
+  // a teacher's read creates nothing.
+  {
+    const AS = mongoose.model("AcademicStructure");
+    await AS.create({ _id: "as-a-shape", schoolId: A, academicYear: "2027-2028",
+      terms: [{ number: 1, name: "First Semester", weight: 100,
+        sequences: [{ number: 1, name: "Evaluation 1", weight: 100, assessment: { type: "test" } }] }],
+      rules: { promotionRule: "manual_only" } });
+    await AS.create({ _id: "as-b-shape", schoolId: B, academicYear: "2028-2029",
+      terms: [{ number: 1, name: "Beta Only Semester", weight: 100,
+        sequences: [{ number: 1, name: "Beta Eval", weight: 100, assessment: { type: "test" } }] }] });
+    const r = await probe("allow", "teacher", "GET", `/api/academic-structure/${A}/2027-2028`, null,
+      "a teacher reading the year's shape (exams.view)");
+    const shape = r.body?.structure ?? {};
+    if (shape.terms?.[0]?.name === "First Semester" && shape.terms?.[0]?.sequences?.[0]?.name === "Evaluation 1")
+      ok("  with the school's own terms and sequences");
+    else bad("  with the school's own terms and sequences", JSON.stringify(shape).slice(0, 200));
+    if (!("rules" in shape) && !("createdBy" in shape) && !("_id" in shape)) ok("  and nothing but the shape: no rules, no audit ids");
+    else bad("  and nothing but the shape", Object.keys(shape).join(","));
+    const before = await AS.countDocuments({ schoolId: A });
+    const fresh = await probe("allow", "teacher", "GET", `/api/academic-structure/${A}/2030-2031`, null,
+      "a teacher reading a year nobody set up");
+    if ((await AS.countDocuments({ schoolId: A })) === before && fresh.body?.structure?.terms?.length === 3)
+      ok("  gets the default year, and nothing is stored");
+    else bad("  gets the default year, and nothing is stored", `${fresh.body?.structure?.terms?.length} terms`);
+    await scoped("teacher", "GET", `/api/academic-structure/${B}/2028-2029`,
+      "Beta Only Semester", "school A's teacher reading school B's year");
+    await probe("deny", "teacher", "GET", `/api/academic-structure/${A}`, null, "a teacher listing every year (settings.view)");
+    await probe("deny", "teacher", "GET", `/api/academic-structure/${A}/2027-2028/rules`, null, "a teacher reading the rules");
+    await probe("deny", "bursar",  "GET", `/api/academic-structure/${A}/2027-2028`, null, "the bursar (no exams.view)");
+    await probe("deny", "student", "GET", `/api/academic-structure/${A}/2027-2028`, null, "a pupil");
+    const admin = await call("admin", "GET", `/api/academic-structure/${A}/2027-2028`);
+    if (admin.body?.structure?.rules?.promotionRule === "manual_only") ok("  the administrator still reads the whole document");
+    else bad("  the administrator still reads the whole document", JSON.stringify(admin.body).slice(0, 160));
+  }
+
   // ── Bulk export is a mass data read ───────────────────────────────────────
   console.log("\n--- exports ---");
 

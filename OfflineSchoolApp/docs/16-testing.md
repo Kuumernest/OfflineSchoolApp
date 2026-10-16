@@ -242,7 +242,7 @@ gates and three desktop pass/fail suites.
 | Web has no assertion suite | Only type-check, build, i18n and normaliser gates. |
 | `POST /api/sync/push` | Implemented, permission-gated, **no client and no suite**. |
 | Teacher-attendance change history | Not implemented, so nothing tests it. |
-| `annualAverageMethod: "sequences"` | Implemented; no end-to-end suite. |
+| `annualAverageMethod` | Read by nothing; no longer offered on the structure screen (2026-10-16). |
 | `maxAbsences` effect on promotion | Implemented as a field; not covered. |
 | Real multi-device convergence | Every multi-device result is simulated clients against in-memory MongoDB. |
 | `npm audit` | Not run anywhere in CI. |

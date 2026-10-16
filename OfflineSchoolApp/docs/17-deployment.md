@@ -160,17 +160,65 @@ public staging host at `NODE_ENV != production`.
 
 ```bash
 cd OfflineSchoolApp
-export MONGO_USER=… MONGO_PASSWORD=… JWT_SECRET=… JWT_REFRESH_SECRET=… ALLOWED_ORIGINS=…
+export MONGO_USER=… MONGO_PASSWORD=… JWT_SECRET=… JWT_REFRESH_SECRET=… ALLOWED_ORIGINS=… DOMAIN=…
 docker compose up -d --build
 ```
 
-Three services:
+The first time, issue the certificate before nginx starts (below, TLS).
+
+Four services:
 
 | Service | Image | Ports | Volumes |
 |---|---|---|---|
 | `mongo` | `mongo:7` | **none published** | `mongo_data:/data/db` |
-| `backend` | built from `Dockerfile` | `5000:5000` | `uploads_data:/app/src/uploads` |
-| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80` | `./nginx.conf` only |
+| `backend` | built from `Dockerfile` | **none published** (5000 on the Docker network only) | `uploads_data:/app/src/uploads` |
+| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80`, `443:443` | `nginx-start.sh`, `nginx-http.conf` and `nginx.conf` (templates); `letsencrypt` and `certbot_webroot`, read-only |
+| `certbot` | `certbot/certbot` | none | `letsencrypt`, `certbot_webroot` |
+
+### TLS
+
+nginx serves the app on 443 only (TLS 1.2 and 1.3, HTTP/2, HSTS). Port 80
+answers the Let's Encrypt challenge (`/.well-known/acme-challenge/`) and
+redirects everything else to `https://`. Two templates, with `${DOMAIN}`
+filled in at start-up: `nginx-http.conf` (port 80) and `nginx.conf` (port
+443, reading the certificate from `/etc/letsencrypt/live/${DOMAIN}/`).
+`nginx-start.sh` serves port 80 at once and adds 443 as soon as the
+certificate exists (checking every minute, after `nginx -t`), so a fresh
+server starts without one.
+
+**First certificate, once.** With `DOMAIN` pointing at this server, start
+the stack, then issue it through the webroot nginx is already serving:
+
+```bash
+docker compose up -d
+docker compose run --rm --entrypoint certbot certbot \
+  certonly --webroot -w /var/www/certbot -d "$DOMAIN" -m <operator email> --agree-tos --no-eff-email
+```
+
+Within a minute nginx logs `[tls] certificate found for $DOMAIN: HTTPS on`.
+Until then it logs `[tls] no certificate yet …` and serves port 80 only.
+
+**Renewal:** the `certbot` service tries `certbot renew` twice a day through
+the webroot, and nginx reloads every 6 hours to pick up a renewed
+certificate. Check the expiry with
+`docker compose run --rm --entrypoint certbot certbot certificates`.
+
+**Clients:** every client uses `https://$DOMAIN/api`: the mobile build's
+`EXPO_PUBLIC_API_URL`, the desktop app's server address, and
+`ALLOWED_ORIGINS` (`https://$DOMAIN`). The backend's port 5000 is not
+reachable from outside; from the server itself,
+`docker compose exec backend wget -qO- http://localhost:5000/api/health`.
+
+### Logs, time, indexes
+
+- **Logs:** every service writes Docker's `json-file` logs capped at 10 MB ×
+  5 files (`logging` in `docker-compose.yml`), so they cannot fill the disk.
+- **Time:** the backend and nginx run with `TZ=Africa/Douala`, so printed
+  dates and log times are Cameroon time; a new school's
+  `settings.timezone` defaults to `Africa/Douala`.
+- **Indexes:** at boot the backend checks every index the models declare
+  and logs one line per missing index, then
+  `[indexes] Indexes verified: N, missing: M`. Never fatal.
 
 ### The Dockerfile
 

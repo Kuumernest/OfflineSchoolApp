@@ -257,6 +257,11 @@ const metricsFor = ({ subjectId, subjectName, points }, grading) => {
       mark:         p.mark,
       grade:        p.grade,
       isPassing:    p.isPassing,
+      // The CA blended into this mark (/20), or null when the mark is the
+      // paper alone. Read by the strengths layer so a CA already inside the
+      // academic mark is not counted again as coursework (docs/39 §4.6d).
+      // Not used by any analysis here.
+      caMark:       p.caMark ?? null,
     })),
     scale: 20,
     overallAverage: n ? round1(mean(marks)) : null,

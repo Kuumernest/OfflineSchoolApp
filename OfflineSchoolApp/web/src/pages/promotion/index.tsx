@@ -98,6 +98,19 @@ export default function PromotionPage() {
     enabled:  !!schoolId,
   });
 
+  // Before a run is generated: which classes have no published annual result
+  // for the year being closed. Every pupil there would need a decision.
+  const fromYear = years.from.trim();
+  const readinessQ = useQuery({
+    queryKey: ["promotion", "progression", schoolId, fromYear],
+    queryFn:  () => fetchProgression(schoolId, fromYear),
+    enabled:  !!schoolId && genOpen && /^\d{4}[/-]\d{4}$/.test(fromYear),
+  });
+  const classesWithoutResults = (readinessQ.data?.data ?? []).filter((c) => {
+    const yc = readinessQ.data?.year?.classes[c._id];
+    return !c.isFinalYear && yc && yc.pupils > 0 && yc.publishedAnnual === 0;
+  });
+
   const invalidate = () => { void qc.invalidateQueries({ queryKey: ["promotion"] }); };
 
   const generateMutation = useMutation({
@@ -506,6 +519,12 @@ export default function PromotionPage() {
               />
             </FormField>
           </div>
+          {classesWithoutResults.length > 0 && (
+            <p className="text-sm text-warning">
+              {t("prog.noResults", { count: classesWithoutResults.length })}{" "}
+              {classesWithoutResults.map((c) => c.name).join(", ")} — {t("prog.noResultsHint")}
+            </p>
+          )}
           <p className="text-sm text-ink-muted">{t("promo.draftNotice")}</p>
           <div className="flex justify-end gap-2 border-t border-line pt-4">
             <Button type="button" variant="secondary" onClick={() => setGenOpen(false)}>

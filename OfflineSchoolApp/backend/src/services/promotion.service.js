@@ -3,11 +3,16 @@
 
 const Student           = require("../db/models/Student");
 const Class             = require("../db/models/Class");
-const ResultSummary     = require("../db/models/ResultSummary");
 const Enrollment        = require("../db/models/Enrollment");
 const PromotionRun      = require("../db/models/PromotionRun");
 const PromotionDecision = require("../db/models/PromotionDecision");
 const { displayName } = require("../utils/studentName");
+const AcademicStructure = require("../db/models/AcademicStructure");
+const AnnualResult      = require("../db/models/AnnualResult");
+const TermResult        = require("../db/models/TermResult");
+const { promotionUnderRules } = require("../../../shared/academicRules");
+const GradingConfig     = require("../db/models/GradingConfig");
+const { legacyTermsOf } = require("../../../shared/academicPolicy");
 
 /**
  * End-of-year rollover: who moves up, who repeats, who leaves.
@@ -41,87 +46,66 @@ const { displayName } = require("../utils/studentName");
 // SEEDING A DRAFT FROM RESULTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * The year's academic picture per student, from published result summaries.
- *
- * Only published summaries count. A draft result is a teacher's working copy,
- * and promoting a school off unpublished marks would act on figures nobody has
- * signed off.
- */
-const resultsByStudent = async (schoolId, academicYear) => {
-  const rows = await ResultSummary.aggregate([
-    { $match: { schoolId, academicYear, isPublished: true, deletedAt: null } },
-    { $group: {
-        _id:      "$studentId",
-        average:  { $avg: "$average" },
-        passes:   { $sum: { $cond: ["$isPassing", 1, 0] } },
-        total:    { $sum: 1 },
-    } },
-  ]);
+// The pre-decision ("legacy") reader averaged the year's published sequence
+// summaries against Class.promotionAverage (0-100). It is gone: every run now
+// reads the published annual average against the class's bar for the year
+// (docs/39 §14, decided 2026-10-16). Class.promotionAverage stays on the class
+// for reference and is shown beside the new /20 bar until an admin confirms
+// one; no run reads it.
 
-  return new Map(rows.map((r) => [r._id, {
-    average: r.average === null || r.average === undefined ? null : Math.round(r.average * 10) / 10,
-    // Passed more terms than not. A single bad term does not hold a child back,
-    // and the head can still override either way.
-    passing: r.passes * 2 >= r.total,
-    terms:   r.total,
-  }]));
+/**
+ * The year's picture per student: published AnnualResult and TermResult rows,
+ * the year's own figures (docs/39 §14, decision D1b). Published only: a draft
+ * result is a working copy nobody has signed off.
+ */
+const yearByStudent = async (schoolId, academicYear) => {
+  const [annual, terms] = await Promise.all([
+    AnnualResult.find({ schoolId, academicYear, isPublished: true, deletedAt: null })
+      .select("studentId annualAverage").lean(),
+    TermResult.find({ schoolId, academicYear, isPublished: true, deletedAt: null })
+      .select("studentId term isPassing").lean(),
+  ]);
+  const out = new Map();
+  const entry = (id) => {
+    const k = String(id);
+    if (!out.has(k)) out.set(k, { annualAverage: null, terms: new Map() });
+    return out.get(k);
+  };
+  for (const a of annual) entry(a.studentId).annualAverage = a.annualAverage ?? null;
+  for (const t of terms)  entry(t.studentId).terms.set(Number(t.term), !!t.isPassing);
+  return out;
 };
 
 /**
- * Decide one student's proposed outcome. Pure — no database, no clock.
+ * One student's proposal. Pure.
  *
- * When the student's class carries a `promotionAverage` (set per class by the
- * school admin on the promotion page), the student's published yearly average
- * must meet it to move up — the majority-of-terms rule no longer decides on
- * its own. A class without a threshold keeps the old behaviour, so nothing
- * changes for schools that have not set one.
- *
- * @returns {{outcome: string, basis: string, toClassId: string|null}}
+ * The outcome comes from promotionUnderRules — the very function the annual
+ * row's promotionStatus is computed by — so the run and the annual card can
+ * no longer disagree (docs/39 §4.4). The rules about destinations are the
+ * legacy ones: a final year graduates, a missing next class is never guessed.
  */
-const proposeFor = ({ currentClass, result }) => {
-  if (!currentClass) {
-    return { outcome: "unassigned", basis: "no_results", toClassId: null };
-  }
+const proposeUnderRules = ({ rules, currentClass, year, termNumbers, passMark = null }) => {
+  if (!currentClass) return { outcome: "unassigned", basis: "no_results", toClassId: null };
+  if (currentClass.isFinalYear) return { outcome: "graduated", basis: "final_year", toClassId: null };
 
-  if (currentClass.isFinalYear) {
-    return { outcome: "graduated", basis: "final_year", toClassId: null };
-  }
+  const { status, reason } = promotionUnderRules(rules, {
+    annualAverage: year?.annualAverage ?? null,
+    terms: termNumbers.map((n) => ({ isComplete: year?.terms.has(n) ?? false, passed: year?.terms.get(n) ?? false })),
+    termsInYear: termNumbers.length,
+    classId: currentClass._id,
+    passMark,
+  });
 
-  // The class's own bar, when the admin has set one. Checked before the
-  // pass-count rule: a student can have scraped through two of three terms
-  // and still sit under the average the class demands.
-  if (
-    currentClass.promotionAverage !== null &&
-    currentClass.promotionAverage !== undefined &&
-    result &&
-    result.average !== null &&
-    result.average !== undefined
-  ) {
-    if (result.average < currentClass.promotionAverage) {
-      // The student stays exactly where they are — a real destination.
-      return {
-        outcome:   "repeated",
-        basis:     "average_fail",
-        toClassId: currentClass._id,
-      };
-    }
-  } else if (result && !result.passing) {
-    // Failing the year repeats it — the student stays exactly where they are,
-    // which is a real destination, not an absent one.
-    return { outcome: "repeated", basis: "results_fail", toClassId: currentClass._id };
+  if (status === "pending") {
+    // Not decidable from results: an incomplete year, no bar, or manual_only.
+    // Unassigned blocks the commit until someone decides (rule 1).
+    return { outcome: "unassigned", basis: reason === "manual" ? "manual" : "no_results", toClassId: null };
   }
-
-  if (!currentClass.nextClassId) {
-    // Rule 1. No destination is stated, so none is invented.
-    return { outcome: "unassigned", basis: result ? "results_pass" : "no_results", toClassId: null };
+  if (status === "repeated") {
+    return { outcome: "repeated", basis: reason === "average_fail" ? "average_fail" : "results_fail", toClassId: currentClass._id };
   }
-
-  return {
-    outcome:   "promoted",
-    basis:     result ? "results_pass" : "no_results",
-    toClassId: currentClass.nextClassId,
-  };
+  if (!currentClass.nextClassId) return { outcome: "unassigned", basis: "results_pass", toClassId: null };
+  return { outcome: "promoted", basis: "results_pass", toClassId: currentClass.nextClassId };
 };
 
 const tallyCounts = (decisions) => ({
@@ -163,10 +147,18 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
   }
 
   const classes = await Class.find({ schoolId, deletedAt: null })
-    .select("name nextClassId isFinalYear promotionAverage").lean();
+    .select("name nextClassId isFinalYear").lean();
   const classById = new Map(classes.map((c) => [String(c._id), c]));
 
-  const results = await resultsByStudent(schoolId, fromYear);
+  // The year being closed: its terms, its bars, and the school's pass mark,
+  // which is the bar of a class with none (shared/academicRules).
+  const [structure, gradingConfig] = await Promise.all([
+    AcademicStructure.findOne({ schoolId, academicYear: fromYear, deletedAt: null }).select("rules terms").lean(),
+    GradingConfig.findOne({ schoolId }).select("passMark").lean(),
+  ]);
+  const passMark    = gradingConfig?.passMark ?? 10;
+  const years       = await yearByStudent(schoolId, fromYear);
+  const termNumbers = [...new Set(legacyTermsOf(structure).map((t) => t.number))];
 
   const run = await PromotionRun.create({
     schoolId, fromYear, toYear,
@@ -176,8 +168,8 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
 
   const rows = students.map((s) => {
     const currentClass = s.classId ? classById.get(String(s.classId)) : null;
-    const result       = results.get(String(s._id)) ?? null;
-    const proposal     = proposeFor({ currentClass, result });
+    const year         = years.get(String(s._id)) ?? null;
+    const proposal     = proposeUnderRules({ rules: structure?.rules, currentClass, year, termNumbers, passMark });
     const target       = proposal.toClassId ? classById.get(String(proposal.toClassId)) : null;
 
     return {
@@ -192,7 +184,7 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
       toClassName:   target?.name ?? null,
       outcome:       proposal.outcome,
       basis:         proposal.basis,
-      average:       result?.average ?? null,
+      average:       year?.annualAverage ?? null,
     };
   });
 
@@ -411,9 +403,9 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
 };
 
 module.exports = {
-  proposeFor,
+  proposeUnderRules,
   tallyCounts,
-  resultsByStudent,
+  yearByStudent,
   generateRun,
   setDecision,
   commitRun,

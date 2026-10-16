@@ -579,14 +579,22 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
       average:        record.annualAverage,
       overallGrade:   grading.showGrades ? record.overallGrade : null,
       overallRemark:  record.overallRemark,
+      // The year's own average. This read `record.termAverage ?? …`, copied
+      // from the term card: an annual row carrying a stray termAverage
+      // printed that figure's French remark beside the year's (docs/39 §4.6h).
       overallRemarkFr: GradingConfig.bandRemark(
-        GradingConfig.findGradeBand(record.termAverage ?? record.annualAverage, grading.bands),
+        GradingConfig.findGradeBand(record.annualAverage, grading.bands),
         "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,
       isPassing:      record.isPassing,
       isPublished:    record.isPublished ?? false,
       promotionStatus: promotionLabel(record),
+      // The machine value and the destination, so a French card can print
+      // the decision in French (reportHtml promotionText); the English
+      // sentence above is unchanged.
+      promotionCode:      record.promotionStatus || null,
+      promotionNextClass: record.nextClassName || record.promotedToClassName || null,
     },
     annualResult: {
       average:       record.annualAverage,
@@ -708,12 +716,16 @@ async function loadSchoolForCard(schoolId, req) {
   const doc = schoolId
     ? await School.findOne({ _id: String(schoolId) })
         .select("name logo motto region division state city schoolType " +
-                "address phone nextTermResumption")
+                "address phone nextTermResumption defaultLanguage")
         .lean().catch(() => null)
     : null;
 
   return {
     doc,
+    // The language every report card of the school prints in, whoever views
+    // it (decided 2026-10-16, docs/41 §7): School.defaultLanguage. No class
+    // or section carries a language of its own in the data model.
+    language: doc?.defaultLanguage === "fr" ? "fr" : "en",
     school: {
       name:       doc?.name  || "",
       logo:       absoluteLogoUrl(doc?.logo, req),
@@ -778,7 +790,7 @@ async function cardVerification({ data, schoolId, studentId, documentKey, req })
    */
   const avg20 = data.computed?.weightedAverage != null
     ? Number(data.computed.weightedAverage)
-    : averageOutOf20(data.summary?.average, data.reportType);
+    : averageOutOf20(data.summary?.average, data.reportType, data.summary?.calcVersion);
 
   const isPassing = data.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
   const position  = data.summary?.classPosition;

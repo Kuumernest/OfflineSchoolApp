@@ -235,6 +235,13 @@ module.exports = [
       const schoolId = resolveSchoolId(session, query.schoolId);
       if (!schoolId) return null;
 
+      // ?year= asks for the year's bars and how many pupils of each class have
+      // a published annual result (docs/39 §14). That is the server's to say:
+      // it counts every class's published results and reads the year's bars
+      // with the school's pass mark, and a mirror that has not pulled all of
+      // them would report a class as having none. Declined, so it goes out.
+      if (query.year) return null;
+
       const rows = progressionRows(docs, schoolId);
       if (!rows) return null;
 
@@ -242,6 +249,8 @@ module.exports = [
         count: rows.length,
         incomplete: rows.filter((c) => !c.isFinalYear && !c.nextClassId).length,
         data: rows,
+        // The server's answer without ?year= carries year: null.
+        year: null,
       });
     },
   },

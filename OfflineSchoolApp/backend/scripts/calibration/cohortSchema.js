@@ -51,7 +51,17 @@ const academicOrder   = require(path.join(__dirname, "..", "..", "..", "shared",
 const subjectInsights = require(path.join(__dirname, "..", "..", "..", "shared", "intelligence", "subjectInsights"));
 
 const FORMAT         = "osa-intelligence-cohort";
-const FORMAT_VERSION = 1;
+/*
+ * 2 adds `caMark` to every subject row: the CA mark (/20) blended into that
+ * row's normalizedMark, or null when the mark holds no CA. The strengths
+ * engine needs it so a CA already inside the academic mark is not counted a
+ * second time as coursework (docs/39 §4.6d; LEARNING_INTEGRATION_VERSION
+ * 1.1.0). A version 1 file is still read: its rows carry no caMark, which is
+ * true of every mark computed before the decided calculation (exam-process/1
+ * held the paper alone).
+ */
+const FORMAT_VERSION = 2;
+const SUPPORTED_FORMAT_VERSIONS = Object.freeze([1, 2]);
 
 /**
  * Exam.type, as the backend model enumerates it. Listed here because this file
@@ -107,7 +117,9 @@ const validateCohort = (cohort) => {
 
   // ── Envelope ─────────────────────────────────────────────────────────────
   if (cohort.format !== FORMAT) err(`format must be "${FORMAT}"`);
-  if (cohort.formatVersion !== FORMAT_VERSION) err(`formatVersion must be ${FORMAT_VERSION}`);
+  if (!SUPPORTED_FORMAT_VERSIONS.includes(cohort.formatVersion)) {
+    err(`formatVersion must be one of ${SUPPORTED_FORMAT_VERSIONS.join(", ")}`);
+  }
   if (!isPlainObject(cohort.provenance) || !PROVENANCE_KINDS.includes(cohort.provenance.kind)) {
     err(`provenance.kind must be one of ${PROVENANCE_KINDS.join(", ")}`);
   }
@@ -254,6 +266,15 @@ const validateCohort = (cohort) => {
         err(`${sat}.normalizedMark must be a number 0–${subjectInsights.SCALE} or null`);
       }
 
+      // caMark: required (number or null) from format 2; absent in format 1.
+      if (cohort.formatVersion === 2 && s.caMark === undefined) {
+        err(`${sat}.caMark is required in format 2 (null when the mark holds no CA)`);
+      }
+      if (s.caMark !== undefined && s.caMark !== null &&
+          (typeof s.caMark !== "number" || !Number.isFinite(s.caMark) || s.caMark < 0 || s.caMark > subjectInsights.SCALE)) {
+        err(`${sat}.caMark must be a number 0–${subjectInsights.SCALE} or null`);
+      }
+
       if (s.grade !== undefined && s.grade !== null && (typeof s.grade !== "string" || s.grade.length > 8)) {
         err(`${sat}.grade must be a short string or null`);
       }
@@ -344,6 +365,8 @@ const toEngineInput = (cohort) => {
           score:          s.score,
           maxScore:       s.maxScore,
           coefficient:    s.coefficient ?? 1,
+          // The CA inside the mark (format 2); a format 1 row has none.
+          caMark:         s.caMark ?? null,
           isAbsent:       s.isAbsent === true,
           isExempt:       s.isExempt === true,
           // Carried as evidence on each mark by the engine (never a rule input).
@@ -401,6 +424,7 @@ const toEngineInput = (cohort) => {
 module.exports = {
   FORMAT,
   FORMAT_VERSION,
+  SUPPORTED_FORMAT_VERSIONS,
   ASSESSMENT_TYPES,
   PROVENANCE_KINDS,
   FORBIDDEN_KEYS,
@@ -477,6 +501,8 @@ const cohortFromDocuments = ({
       score:          s.score === undefined ? null : s.score,
       maxScore:       s.maxScore ?? 20,
       coefficient:    s.coefficient ?? 1,
+      // The CA blended into normalizedMark, or null (format 2).
+      caMark:         typeof s.caMark === "number" ? s.caMark : null,
       isAbsent:       s.isAbsent === true,
       isExempt:       s.isExempt === true,
       isPassing:      typeof s.isPassing === "boolean" ? s.isPassing : null,

@@ -227,6 +227,16 @@ router.post("/score",                                 adminOrTeacher, ctrl.upser
 // Publish / unpublish a single result summary
 router.put("/summary/:summaryId/publish",             adminOnly,      ctrl.publishResult);
 
+// Unpublish a class's sequence results for one exam, with a reason
+// (services/unpublish.service.js). Figures stay; issued cards stay as issued.
+router.post("/:examId/unpublish", adminOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, error: "schoolId is required" });
+  const { classId, reason } = req.body || {};
+  const r = await require("../services/unpublish.service").unpublishSequence(req, { schoolId, examId: req.params.examId, classId, reason });
+  return res.status(r.status).json(r.body);
+}));
+
 // Soft-delete a score
 router.delete("/score/:scoreId",                      adminOnly,      ctrl.deleteScore);
 

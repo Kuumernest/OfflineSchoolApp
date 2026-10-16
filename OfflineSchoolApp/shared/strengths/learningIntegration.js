@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Multi-modal integration — LEARNING_INTEGRATION_VERSION 1.0.0, the layer
+ * Multi-modal integration — LEARNING_INTEGRATION_VERSION 1.1.0, the layer
  * that makes the Strength Reading 1.2.0.
  *
  * ── The question this layer asks ──────────────────────────────────────────
@@ -41,8 +41,13 @@
  * holds for a practical entered as an exam score — in this application the
  * academic baseline already reads it, so it is reported as baseline evidence
  * and not recounted; a practical recorded outside the results (none today)
- * would count under PRACTICAL. Continuous assessment (CA) is skipped by the
- * academic engine and is therefore independent.
+ * would count under PRACTICAL. Continuous assessment (CA) is independent only
+ * where the academic mark does not already contain it. Since the decided
+ * calculation (docs/39 §21.1) a sequence mark blends the CA in when the school
+ * has CA on, and the academic profile says so per mark (`caMark`); a CA event
+ * of that subject and occasion is then baseline evidence, reported and not
+ * recounted (1.1.0, docs/39 §4.6d). A mark computed before the decision is the
+ * paper alone (no caMark), and its CA still corroborates once, as in 1.0.0.
  *
  * ── Relationships ─────────────────────────────────────────────────────────
  *
@@ -60,7 +65,7 @@
 const { STATES, CONFIDENCE } = require("./engineConstants");
 const { dimensionsForSubject } = require("./taxonomy");
 
-const LEARNING_INTEGRATION_VERSION = "1.0.0";
+const LEARNING_INTEGRATION_VERSION = "1.1.0";
 
 const LEARNING_EVIDENCE_AUTHORITY = Object.freeze({
   academic:           "baseline",
@@ -120,15 +125,37 @@ const perfOf = (e) => (e.observations ?? []).find((o) => o.kind === "performance
  * mark supports, below the pass mark contradicts, between is neutral — the
  * same bar the academic engine uses, on the same 0–1 scale.
  */
-const inBaseline = (e) => e.family === "formal" || (e.family === "practical" && e.provenance?.sourceModel === "StudentScore");
+/** One subject at one occasion, the same key whichever separator the year was written with. */
+const occasionKey = (subjectId, academicYear, term, sequence) =>
+  `${subjectId}|${String(academicYear ?? "").replace("-", "/")}|${term ?? ""}|${sequence ?? ""}`;
 
-const learningItems = ({ learningEvidence, subjectNames, grading }) => {
+/** The occasions whose academic mark already holds the CA (caMark on the profile's marks). */
+const blendedOccasions = (academicProfile) => {
+  const keys = new Set();
+  for (const subject of academicProfile?.subjects ?? []) {
+    for (const m of subject.marks ?? []) {
+      if (m.caMark !== null && m.caMark !== undefined) {
+        keys.add(occasionKey(subject.subjectId, m.academicYear, m.term, m.sequence));
+      }
+    }
+  }
+  return keys;
+};
+
+const inBaseline = (e, blended) =>
+  e.family === "formal" ||
+  (e.family === "practical" && e.provenance?.sourceModel === "StudentScore") ||
+  // A CA whose sequence mark already contains it (1.1.0).
+  (e.family === "continuous" && blended.has(occasionKey(e.subjectId, e.context?.academicYear, e.context?.term, e.context?.sequence)));
+
+const learningItems = ({ learningEvidence, subjectNames, grading, academicProfile = null }) => {
+  const blended = blendedOccasions(academicProfile);
   const strongAt = (grading?.strongMark ?? 14) / 20, passAt = (grading?.passMark ?? 10) / 20;
   const byKey = new Map();
   let collapsed = 0, baseline = 0;
   for (const e of learningEvidence?.events ?? []) {
     if (!perfOf(e)) continue;
-    if (inBaseline(e)) { baseline += 1; continue; }   // already in the academic reading: never counted twice
+    if (inBaseline(e, blended)) { baseline += 1; continue; }   // already in the academic reading: never counted twice
     if (!SUPPORTING_LEARNING_FAMILIES[e.family]) continue;
     const key = e.independentKey ?? e.learningEventId;
     if (byKey.has(key)) collapsed += 1;          // a retry of the same quiz: one event, the latest attempt speaks
@@ -270,7 +297,7 @@ const integrateDimension = (reading, items, { attendancePattern, present }) => {
 const integrateLearningEvidence = ({ readings, academicProfile = null, learningEvidence = null, explorationEvidence = [], subjectNames = {}, asOf = null }) => {
   const names = { ...Object.fromEntries((academicProfile?.subjects ?? []).filter((s) => s.subjectName).map((s) => [String(s.subjectId), s.subjectName])), ...subjectNames };
   const grading = academicProfile?.engine ?? academicProfile?.grading ?? null;
-  const { items, collapsed, baseline } = learningItems({ learningEvidence, subjectNames: names, grading });
+  const { items, collapsed, baseline } = learningItems({ learningEvidence, subjectNames: names, grading, academicProfile });
   const attendancePattern = learningEvidence?.patterns?.attendance?.overall?.pattern ?? null;
   const present = modalitiesPresent({ learningEvidence, readings, explorationEvidence });
   const integrated = readings.map((r) => integrateDimension(r, items, { attendancePattern, present }));

@@ -4,12 +4,14 @@ import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
   ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
-  KeyRound, Calendar,
+  KeyRound, Calendar, Calculator, LayoutTemplate,
 } from "lucide-react";
 
 import PermissionsSection from "@/pages/settings/PermissionsSection";
 import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
 import AcademicStructureSection from "@/pages/settings/AcademicStructureSection";
+import CalculationRulesSection  from "@/pages/settings/CalculationRulesSection";
+import ReportLayoutSection      from "@/pages/settings/ReportLayoutSection";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
@@ -47,6 +49,8 @@ interface SchoolSettings {
   academicYearStart:  string;
   academicYearEnd:    string;
   nextTermResumption: string;
+  /** The language every report card of the school prints in. */
+  defaultLanguage:    "en" | "fr";
   schoolDays:         string[];
   schoolStartTime:    string;
   schoolEndTime:      string;
@@ -110,6 +114,10 @@ const SECTIONS = [
   { id: "profile",     labelKey: "settings.secProfile",     icon: User          },
   { id: "grading",     labelKey: "settings.secGrading",     icon: GraduationCap },
   { id: "academicStructure", labelKey: "settings.secAcademicStructure", icon: Calendar },
+  // The year's calculation rules sit under its structure: the structure says
+  // what the year is made of, the rules say how results are made from it.
+  { id: "calculationRules",  labelKey: "settings.secCalculationRules",  icon: Calculator },
+  { id: "reportLayout",      labelKey: "settings.secReportLayout",      icon: LayoutTemplate },
   { id: "admins",      labelKey: "settings.secAdmins",      icon: Shield        },
   // Sits next to Office accounts on purpose: appointing somebody and deciding
   // what they may do are two halves of one job, and a head who has just created
@@ -327,6 +335,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     region: "", division: "",
     description: "", academicYearStart: "", academicYearEnd: "",
     nextTermResumption: "",
+    defaultLanguage: "en",
     // API values, never translated.
     schoolDays: ["Monday","Tuesday","Wednesday","Thursday","Friday"],
     schoolStartTime: "07:30", schoolEndTime: "15:30", logo: null,
@@ -371,6 +380,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             academicYearStart:  s.academicYearStart  ?? "",
             academicYearEnd:    s.academicYearEnd    ?? "",
             nextTermResumption: s.nextTermResumption ?? "",
+            defaultLanguage:    s.defaultLanguage === "fr" ? "fr" : "en",
             schoolDays:         Array.isArray(s.schoolDays) && s.schoolDays.length
               ? s.schoolDays
               : ["Monday","Tuesday","Wednesday","Thursday","Friday"],
@@ -685,6 +695,21 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <p className="mt-1 text-xs text-ink-muted">
                 {t("settings.nextTermResumptionHint")}
               </p>
+            </div>
+            {/* Every report card prints in this language, whoever views or
+                reissues it (decided 2026-10-16, docs/41 §7). */}
+            <div>
+              <FieldLabel>{t("settings.cardLanguage")}</FieldLabel>
+              <select
+                value={form.defaultLanguage}
+                onChange={(e) => set("defaultLanguage", e.target.value === "fr" ? "fr" : "en")}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
+              >
+                {/* Each language named in itself. */}
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">{t("settings.cardLanguageHint")}</p>
             </div>
           </div>
 
@@ -2111,6 +2136,8 @@ export default function SettingsPage() {
             {activeSection === "profile"   && <ProfileSection />}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "academicStructure" && <AcademicStructureSection schoolId={schoolId} />}
+            {activeSection === "calculationRules"  && <CalculationRulesSection  schoolId={schoolId} />}
+            {activeSection === "reportLayout"      && <ReportLayoutSection      schoolId={schoolId} />}
             {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
             {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
             {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}

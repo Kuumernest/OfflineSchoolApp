@@ -307,6 +307,8 @@
     "subjectCount": "{{count}} subject",
     "subjectCount_other": "{{count}} subjects",
     "toastCalculated": "Results calculated",
+    "refusedPublished": "Not recalculated, results published: {{classes}}",
+    "refusedPublished_other": "Not recalculated, results published in {{count}} classes: {{classes}}",
     "toastPublished": "Results published — students can now view their scores"
   },
   "dashboard": {
@@ -967,9 +969,9 @@
     "saved": "Saved",
     "saveFailed": "Save failed. Please try again.",
     "invalidScores": "{{count}} score(s) must be a number between 0 and {{max}} — please correct the highlighted cells.",
-    "missingScores": "{{count}} student(s) have no score — enter a mark or mark them absent.",
+    "missingScores": "{{count}} student(s) have no score — enter a mark or mark them absent. Absent leaves the subject out of the average; 0 counts as a mark.",
     "markPresent": "Mark present",
-    "markAbsent": "Mark absent",
+    "markAbsent": "Mark absent: this subject is left out of the pupil's average. A 0 is a mark and counts.",
     "noStudentsMatch": "No students match your search",
     "noStudentsInClass": "No students found in this class",
     "processConfirm": "Calculate results? This will compute grades, averages and rankings for all students.",
@@ -1066,7 +1068,7 @@
     "mustBePositive": "Must be a positive number",
     "passMarkRange": "Must be between 0 and {{max}}",
     "sequenceRequired": "Choose the sequence this exam belongs to",
-    "promoSequenceHint": "* Sequences 5 and 6 can be configured as promotion exams",
+    "promoSequenceHint": "* marks this year's promotion exams, set in the academic structure. They do not decide promotion.",
     "createFailed": "Could not create the exam.",
     "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right",
     "noSubjectsWarning": "⚠️ No subjects assigned. You can add them later from the exam detail."
@@ -1577,6 +1579,8 @@
   "settings": {
     "nextTermResumption": "Next term resumes",
     "nextTermResumptionHint": "Printed at the foot of every report card.",
+    "cardLanguage": "Report card language",
+    "cardLanguageHint": "Every report card of the school prints in this language, whoever views or reissues it.",
     "title": "Settings",
     "blurb": "Manage your school, profile and system preferences",
     "basicInfo": "Basic information",
@@ -1753,7 +1757,9 @@
     "caSplitHint": "CA and Test must add up to 100%. The sequence mark is CA x its weight plus Test x its weight.",
     "caWeightSum": "CA and Test must add up to 100% (currently {{total}}%)",
     "caWeightNegative": "Weights cannot be negative",
-    "caWeightInvalid": "Weights must be numbers"
+    "caWeightInvalid": "Weights must be numbers",
+    "secCalculationRules": "Calculation rules",
+    "secReportLayout": "Report card sections"
   },
   "permissions": {
     "title": "Who may do what",
@@ -2303,18 +2309,34 @@
   },
   "prog": {
     "title": "Class progression",
-    "blurb": "Which class each one leads to. Stated here once, because it cannot be guessed from the names — nothing in \"Form 5\" says the next stop is \"Lower Sixth\".",
+    "blurb": "Which class each one leads to, and the bar its pupils must reach. Destinations are stated here once, because they cannot be guessed from the names — nothing in \"Form 5\" says the next stop is \"Lower Sixth\".",
     "nextClass": "Leads to",
     "finalYear": "Final year",
     "finalYearHint": "Students here leave at the end of the year.",
-    "average": "Promotion average",
-    "averageOff": "Term-count rule",
     "notSet": "Not set",
     "incomplete": "{{count}} class has no destination",
     "incomplete_other": "{{count}} classes have no destination",
     "incompleteHint": "Their students cannot be promoted until this is set.",
     "complete": "Every class has a destination",
-    "saved": "Progression saved"
+    "saved": "Progression saved",
+    "year": "Academic year",
+    "schoolBar": "School bar (/20)",
+    "schoolBarHint": "For classes without their own bar. Empty: the pass mark ({{passMark}}).",
+    "rule": "A pupil is promoted when the published annual average reaches the class's bar, repeats below it, and graduates from a final-year class. Without a published annual result for every term, the pupil needs a decision. Promotion exams do not count.",
+    "bar": "Bar (/20)",
+    "barDefault": "{{bar}} (default)",
+    "oldAverage": "Old promotion average: {{value}} (0–100, not used). Enter a bar out of 20 to confirm one for this year.",
+    "results": "Published annual results",
+    "publishedOf": "{{published}} of {{pupils}}",
+    "noneOf": "None of {{pupils}}",
+    "noResults": "{{count}} class has no published annual results for this year:",
+    "noResults_other": "{{count}} classes have no published annual results for this year:",
+    "noResultsHint": "a run would propose every pupil there as needing a decision.",
+    "noStructure": "This year has no academic structure yet; bars cannot be saved until it has one (Settings → Academic structure).",
+    "draftLocks": "A draft promotion run exists for this year. Commit or discard it before changing a bar.",
+    "graduates": "Graduates",
+    "reason": "Reason for changing the bars",
+    "reasonHint": "Recorded in the audit trail with the old and new bars."
   },
   "promo": {
     "title": "End of year",
@@ -2356,7 +2378,7 @@
     "basis": "Based on",
     "basis_results_pass": "Passed",
     "basis_results_fail": "Failed",
-    "basis_average_fail": "Below the class average",
+    "basis_average_fail": "Below the class's promotion bar",
     "basis_no_results": "No results on record",
     "basis_final_year": "Final year class",
     "basis_manual": "Set by hand",
@@ -2915,6 +2937,8 @@
     "noMessagesYet": "No messages yet",
     "selectOne": "Select a conversation",
     "readOnly": "READ ONLY",
+    "participantCount": "{{count}} participant",
+    "participantCount_other": "{{count}} participants",
     "unknownSender": "Unknown",
     "deleted": "This message was deleted",
     "deleteMessage": "Delete message",
@@ -3074,10 +3098,6 @@
     "promoYes": "Promo",
     "promoNo": "Promo",
     "globalSettings": "Global Settings",
-    "annualAvgMethod": "Annual average method",
-    "method_terms": "From term averages",
-    "method_sequences": "From all sequences",
-    "promotionThreshold": "Promotion threshold",
     "passMark": "Pass mark",
     "maxAbsences": "Max absences",
     "noLimit": "No limit",
@@ -3090,7 +3110,15 @@
     "termComputed": "Term results computed",
     "termPublished": "Term results published",
     "annualComputed": "Annual results computed",
-    "annualPublished": "Annual results published"
+    "annualPublished": "Annual results published",
+    "addTerm": "Add a term",
+    "removeTerm": "Remove this term",
+    "addSequence": "Add a sequence",
+    "removeSequence": "Remove this sequence",
+    "newTermName": "Term {{n}}",
+    "newSequenceName": "Sequence {{n}}",
+    "shapeHint": "A year has 1 to {{terms}} terms (for example semesters) and up to {{sequences}} sequences in all; every term needs at least one. A term or sequence that already has exams cannot be removed or moved.",
+    "promoNotUsed": "Not used to decide promotion. Promotion uses the annual average and the class bar."
   },
   "termResults": {
     "title": "Term Results",
@@ -3167,7 +3195,17 @@
     "timeout": "The server took too long to answer. Please try again.",
     "server": "The server ran into a problem. Please try again in a moment.",
     "forbidden": "You do not have permission to do that.",
-    "signedOut": "Your session has ended. Please sign in again."
+    "signedOut": "Your session has ended. Please sign in again.",
+    "code": {
+      "PUBLISHED_RESULTS": "Refused: some of these results are published, and a published result is never recalculated. Use Unpublish (with a reason) on this page first, then calculate again.",
+      "RESULTS_LOCKED": "These results are locked. Give a reason to change them.",
+      "REASON_REQUIRED": "Give a reason for this change.",
+      "PROMOTION_RUN_DRAFT": "A draft promotion run exists for this year. Finish or discard it first.",
+      "NO_STRUCTURE": "This year has no academic structure yet.",
+      "RULE_FIXED": "This rule is the same for every school and cannot be changed.",
+      "PROMOTION_RUN_EXISTS": "A promotion run for this year was made from these results. Discard the draft, or reverse the run, first.",
+      "CLASS_REQUIRED": "Choose a class: results are unpublished one class at a time."
+    }
   },
   "studentEdit": {
     "title": "Correct student record",
@@ -5177,5 +5215,103 @@
       "QUESTION_REQUIRED": "Type a question first.",
       "QUESTION_TOO_LONG": "The question is too long."
     }
+  },
+  "academicRules": {
+    "title": "How results are calculated",
+    "intro": "The same for every school, decided by the project owner. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
+    "year": "Academic year",
+    "statement": {
+      "sequence": "Sequence average: each subject's mark out of 20 (CA blended in by the school's CA/paper split when CA is on; the paper alone when CA is off), weighted by the subject's coefficient.",
+      "absent": "A subject marked absent or exempt, or with no paper mark, is left out — mark and coefficient. A 0 entered by a teacher is a real 0 and counts. A pupil with no paper mark in any subject has no sequence result.",
+      "grading": "Term and annual results carry the school's own grade bands, the same bands the report card prints under them.",
+      "promotion": "Promotion: the published annual average, out of 20, against the class's bar for the year. At or above the bar: promoted. Below: repeats. Final-year class: graduates. No published annual result, or a term of the year not published: needs a decision. Promotion exams do not count.",
+      "published": "A published result is never recomputed. To correct one, unpublish it first; the change is then computed the same way."
+    },
+    "defaultBarSchool": "A class without its own bar is judged against the school's bar: {{bar}}/20.",
+    "defaultBarPassMark": "A class without its own bar is judged against the pass mark: {{bar}}/20.",
+    "editBars": "Set the bars on Promotion → Progression.",
+    "counts": "This year: {{published}} published results (kept exactly as issued) and {{unpublished}} unpublished (computed this way the next time they are processed).",
+    "unavailable": "The year's rules could not be read."
+  },
+  "reportLayout": {
+    "title": "Report card sections",
+    "intro": "Choose which sections the school's report cards print. Hidden sections are still computed, stored and published — they are only not printed.",
+    "defaultLayout": "Default: every section",
+    "version": "Version {{version}}",
+    "presentationOnly": "Each change is saved as a new version. Cards already issued keep the version they were issued with.",
+    "templatePrintsIt": "The school's own card template prints this section regardless; edit the template to hide it.",
+    "takesEffect": "Applies to cards printed or issued after saving.",
+    "confirmTitle": "Save the report card sections",
+    "confirmMessage": "This becomes version {{version}}. Hidden: {{hidden}}. Cards already issued keep their version; new cards use this one.",
+    "nothingHidden": "nothing",
+    "saved": "Report card sections saved as version {{version}}",
+    "unchanged": "Nothing to change",
+    "saveFailed": "Could not save the report card sections",
+    "unavailable": "The report card sections could not be loaded.",
+    "history": "Versions",
+    "hiddenCount": "{{count}} section hidden",
+    "hiddenCount_other": "{{count}} sections hidden",
+    "section": {
+      "watermark": {
+        "label": "School logo behind the card",
+        "desc": "The school's logo printed faintly behind every card."
+      },
+      "header": {
+        "label": "Header",
+        "desc": "Ministry, school name, logo, motto, the card's title and the exam or year."
+      },
+      "studentInfo": {
+        "label": "Student details",
+        "desc": "Name, admission number, gender, date of birth, class and year."
+      },
+      "results": {
+        "label": "Academic results",
+        "desc": "The subject table: marks, coefficients, grades, remarks, positions and totals."
+      },
+      "performance": {
+        "label": "Performance",
+        "desc": "Rank, average, overall grade and, on the annual card, the decision."
+      },
+      "classProfile": {
+        "label": "Class profile",
+        "desc": "Class average, highest and lowest."
+      },
+      "conduct": {
+        "label": "Conduct",
+        "desc": "The work, behaviour and observation boxes filled in by hand."
+      },
+      "remarks": {
+        "label": "Remarks and signatures",
+        "desc": "The class teacher's and principal's remarks with signature lines."
+      },
+      "verification": {
+        "label": "Verification code",
+        "desc": "The QR code and verification code, when one exists."
+      },
+      "footer": {
+        "label": "Footer",
+        "desc": "Date of issue and school name."
+      }
+    }
+  },
+  "academicPeriods": {
+    "sequenceN": "Sequence {{n}}",
+    "termN": "Term {{n}}"
+  },
+  "unpublish": {
+    "action": "Unpublish…",
+    "title": "Unpublish results",
+    "confirm": "Unpublish",
+    "body_sequence": "Unpublishes this exam's results for one class. Nothing is recalculated: the figures stay as they are until you calculate again.",
+    "body_term": "Unpublishes this term's results for one class. Nothing is recalculated: the figures stay as they are until you compute again.",
+    "body_annual": "Unpublishes this year's results for one class. Nothing is recalculated. Refused while a promotion run for the year is a draft or committed.",
+    "issuedStay": "Report cards already issued stay as issued.",
+    "class": "Class",
+    "chooseClass": "Choose a class",
+    "reason": "Reason (recorded)",
+    "reasonPh": "Why are these results being unpublished?",
+    "done": "{{count}} result unpublished",
+    "done_other": "{{count}} results unpublished",
+    "failed": "Could not unpublish"
   }
 }

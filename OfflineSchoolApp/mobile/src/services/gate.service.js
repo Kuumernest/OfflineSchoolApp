@@ -244,10 +244,24 @@ export const scan = async ({ schoolId, token, station = null }) => {
   return { ok: true, duplicate: false, student: known, direction, at };
 };
 
+/**
+ * Synced scans from earlier days, removed. Only today's scans are ever read
+ * on the phone (the debounce, the direction, the list), and the server holds
+ * every scan once synced; a gate phone otherwise keeps every scan of the year
+ * (about 400,000 for 1,200 pupils). Unsynced scans stay, whatever their day.
+ */
+export const pruneOldScans = async (db) => {
+  const result = await db.runAsync(
+    `DELETE FROM ${EVENTS} WHERE _synced = 1 AND date < ?`, [dayKey()]
+  ).catch(() => null);
+  return result?.changes ?? 0;
+};
+
 /** Today's scans on this device, newest first. */
 export const todayLocal = async () => {
   const db = await getDatabase();
   await ensureSchema(db);
+  await pruneOldScans(db);
 
   const rows = await db.getAllAsync(
     `SELECT * FROM ${EVENTS} WHERE date = ? ORDER BY at DESC`, [dayKey()]
@@ -275,4 +289,4 @@ export const todayLocal = async () => {
   return { date: dayKey(), events, onSite, pending: events.filter((e) => !e.isSynced).length };
 };
 
-export default { syncRoster, scan, todayLocal, dayKey, DEBOUNCE_SECONDS };
+export default { syncRoster, scan, todayLocal, dayKey, pruneOldScans, DEBOUNCE_SECONDS };

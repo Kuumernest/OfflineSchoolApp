@@ -3834,7 +3834,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "postalCode schoolType termSystem registrationNumber foundedYear " +
     "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
-    "schoolDays schoolStartTime schoolEndTime";
+    "schoolDays schoolStartTime schoolEndTime defaultLanguage";
 
   if (includeLogo) {
     const school = await School.findById(schoolId)
@@ -3892,8 +3892,13 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     registrationNumber, foundedYear, principalName, description,
     region, division,
     academicYearStart, academicYearEnd, nextTermResumption, schoolDays,
-    schoolStartTime, schoolEndTime, removeLogo,
+    schoolStartTime, schoolEndTime, removeLogo, defaultLanguage,
   } = req.body;
+
+  // The language every report card of the school prints in (docs/41 §7).
+  if (defaultLanguage !== undefined && !["en", "fr"].includes(defaultLanguage)) {
+    return sendError(res, 400, "defaultLanguage must be en or fr");
+  }
 
   // The screens send `schoolCode` (what the form field is called) but the
   // schema stores `code`. Accept either — `code` stays for clients (the
@@ -3932,6 +3937,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
     ...(schoolEndTime    !== undefined && { schoolEndTime                         }),
     ...(applicationsOpen !== undefined && { applicationsOpen                      }),
+    ...(defaultLanguage  !== undefined && { defaultLanguage                       }),
   };
 
   // The logo arrives as base64 (the mobile picker posts JSON), but it is

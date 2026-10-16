@@ -36,6 +36,16 @@ const AUDIT_ACTIONS = [
   "superAdmin.activated",
   "superAdmin.deactivated",
   "superAdmin.passwordReset",
+  // A school's calculation rules for a year changed (shared/academicRules,
+  // docs/39 Phase 4): before/after are the effective rules.
+  "academic.rulesChanged",
+  // An issued report card was superseded by an admin's reissue (docs/39
+  // §4.6f): before/after are its template and layout, never its content.
+  "reportCard.reissued",
+  // A class's sequence, term or annual results were unpublished, with a
+  // reason (services/unpublish.service.js): before/after are the counts of
+  // published rows; resourceType says which layer.
+  "results.unpublished",
 ];
 
 const auditLogSchema = new mongoose.Schema(

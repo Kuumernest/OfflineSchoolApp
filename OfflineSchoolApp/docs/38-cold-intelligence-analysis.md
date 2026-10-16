@@ -105,15 +105,57 @@ the moment of the request. There is no "nearly current".
 
 The fingerprint is a sha256 over:
 
-- the engine version and a digest of the analysis code by content
-  (`shared/intelligence/**`, `analyseCohort.js`, `cohortSchema.js`,
-  `isolatedEngine.js`, the worker), so a deploy that changes any of them
-  invalidates every stored report whether or not a version moved;
+- the engine version and a digest of the analysis code by content, so a
+  deploy that changes any of it invalidates every stored report whether or
+  not a version moved (see "What the code digest covers" below);
 - the school and the scope key;
 - for each collection the analysis reads, with **the same filters the load
   uses**: students (`_id`, `classId`, `updatedAt`), exams, result summaries,
   the grading config, the latest academic structure, interventions
   (`_id`, `updatedAt`), each section with its row count.
+
+**What the code digest covers** (`backend/src/services/intelligence/analysisCode.js`).
+The file set is read off the module graph, not kept by hand.
+- **Where it starts:** the worker (`analysisWorker.js`) and
+  `scripts/calibration/analyseCohort.js`.
+- **What it follows:** every relative string literal (as
+  `scripts/check-orphans.js` does), plus `path.join(__dirname, "…")` and
+  `path.join(CONST, "…")` for constants built the same way.
+- **What is hashed:** each reached project file (never `node_modules`), as
+  its project-relative path and its content, sorted by path. Computed once
+  per process.
+
+Today that set is these 11 files:
+- `backend/src/services/intelligence/analysisWorker.js`;
+- `backend/scripts/calibration/analyseCohort.js`, `cohortSchema.js`,
+  `isolatedEngine.js`;
+- `shared/intelligence/index.js`, `subjectInsights.js`, `guidance.js`,
+  `academicOrder.js`, `interventionOutcome.js`;
+- `shared/caAssessment.js`, `shared/gradeScale.js`.
+
+That is exactly the set the worker loads at runtime.
+
+The earlier hand-kept list (`shared/intelligence/**`, the three calibration
+scripts and the worker) missed the last two. A deploy that changed
+`caAssessment.js` or `gradeScale.js` would have left every fingerprint
+unchanged and served a report computed by the old code.
+
+`shared/strengths/**` and `shared/academicRules.js` are not loaded by the
+analysis, so they are not covered. A process that also loads models, as
+`reviewCases.caseFor` does, pulls them in through
+`ExplorationEvidence.js`, outside the analysis.
+
+`check:analysis` (section 11) proves the coverage:
+- it runs the real worker and requires every project file in its
+  `require.cache` to be in the set;
+- on a temporary copy of the project, changing a covered file moves the
+  digest, and changing an uncovered one does not;
+- the digest is the same in two processes;
+- after a covered file changes, the stored report is not served: a new run
+  starts, under the new digest.
+
+The change of method itself moves every digest once, so the first request
+after this deploy analyses each scope again.
 
 **Write paths inspected, not assumed.** All six models have
 `timestamps: true`. No write in `backend/src` passes `timestamps: false` to
@@ -421,7 +463,8 @@ step of `check:intel`), on an in-memory MongoDB with the real router:
    heaps.
 6. Restart the server while an analysis is running and confirm the scope
    answers 202 and then recovers within about a minute (§5, Shutdown).
-7. Decide the rollback path (§11) before the first deploy.
+7. Decide the rollback path (§11) before the first deploy. Decided: see
+   docs/40 1.4.
 
 ## 11. Deployment prerequisites and rollback
 
@@ -580,3 +623,17 @@ measured path.
 Not run: the mobile and desktop suites (neither package changed), the web
 `npm run lint` over the whole app (CI documents pre-existing errors there),
 any browser, any real deployment, any live Anthropic call (not on this path).
+
+**The code-digest pass** (§4, "What the code digest covers"; branch
+`academic-agreed-calculation`, commit `be837eb`; database URI and provider
+keys blanked; Atlas not connected to):
+
+| Command (from `backend/`) | Result |
+|---|---|
+| A runtime probe: the real worker run once with its message wrapped to return its `require.cache`; `reviewCases.caseFor` run in a fresh process | worker: 11 project files; the hand-kept digest list missed `shared/caAssessment.js` and `shared/gradeScale.js`. `caseFor`'s process: 98 project files, the analysis's plus models and utilities (`shared/strengths/**` arrives through `ExplorationEvidence.js`, not the analysis) |
+| `npm run check:analysis` (section 11 added) | **130 passed, 0 failed** (115 + 15) |
+| the same file against the code before the change (`9fe8e6c`, a worktree) | 2 failed (the worker loads files outside the digest set), then stopped: the derived-digest function does not exist there |
+| `npm run check:orphans` | 6 passed, 0 failed |
+| backend `check:all`, every suite one by one | **107 suites, 6,367 checks**; 106 suites passed, `check:access` failed 1 check once on its bare "677" pattern (an id or timestamp containing those digits) and passed 66/66 on three reruns. That check was fixed afterwards (`6334652`: it looks for the fixture's own phone numbers) and passed 66/66 on five consecutive runs |
+
+Not run in that pass: the desktop, mobile and web suites (no change there).

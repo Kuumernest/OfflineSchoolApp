@@ -285,7 +285,12 @@ const main = async () => {
     [issued?.layoutVersionId, issued?.layoutVersion, issued?.layoutSections?.results], [`${SCHOOLS.A}:v1`, 1, false]);
   const frozen = issued?.renderedHtml;
 
+  const academicRows = async () => JSON.stringify(await Promise.all(
+    ["StudentScore", "ResultSummary", "TermResult", "AnnualResult"].map((m) => M(m).find({}).sort({ _id: 1 }).lean())));
+  const rowsBeforeLayout = await academicRows();
   const a2 = await putLayout("adm-A", { results: true, footer: false });
+  // A section switch is presentation: it moves no mark, result or rank.
+  check("switching sections rewrites no score, summary, term or annual row", await academicRows(), rowsBeforeLayout);
   check("A changes its layout → version 2", [a2.status, a2.body?.layout?.version, a2.body?.layout?.basedOnVersion], [201, 2, 1]);
 
   const reprint = await seqCard("adm-A", "A", "p1");
@@ -299,11 +304,23 @@ const main = async () => {
   check("a card issued after the change prints with v2", [shows(fresh.html).results, shows(fresh.html).footer, fresh.data?.layout?.version],
     [true, false, 2]);
 
-  const reissued = await call("POST", "adm-A", "/results/A-ex1/student/A-p1/reportcard/reissue", { lang: "en" });
+  // docs/39 §4.6f: the reissued card carries the same letterhead and
+  // verification strip as an issued one, and the reissue is audited.
+  await M("School").updateOne({ _id: SCHOOLS.A }, { $set: { motto: "Discipline and Work" } });
+  const reissued = await call("POST", "adm-A", "/results/A-ex1/student/A-p1/reportcard/reissue",
+    { lang: "en", reason: "Mathematics mark corrected" });
   const afterReissue = await M("GeneratedReport").findOne({ examId: "A-ex1", studentId: "A-p1" }).lean();
   check("a reissue is the deliberate supersede: current layout (v2), recorded",
     [reissued.status, reissued.body?.data?.layout?.version, afterReissue.layoutVersion, afterReissue.renderedHtml.includes("<table>")],
     [200, 2, 2, true]);
+  check("the reissued card keeps the letterhead (motto) and the verification strip (QR and code)",
+    ["Discipline and Work", 'class="verify-qr"', 'class="verify-code"'].map((m) => afterReissue.renderedHtml.includes(m)),
+    [true, true, true]);
+  const reissueAudit = await M("AuditLog").findOne({ action: "reportCard.reissued", schoolId: SCHOOLS.A }).lean();
+  check("the reissue is audited: who, which card, layout v1 → v2, the reason, no card content",
+    [reissueAudit?.actorId != null, reissueAudit?.resourceId, reissueAudit?.before?.layoutVersion, reissueAudit?.after?.layoutVersion,
+     reissueAudit?.reason, JSON.stringify(reissueAudit ?? {}).includes("<table>")],
+    [true, afterReissue._id, 1, 2, "Mathematics mark corrected", false]);
 
   // ── 9. Legacy cards ─────────────────────────────────────────────────────
 

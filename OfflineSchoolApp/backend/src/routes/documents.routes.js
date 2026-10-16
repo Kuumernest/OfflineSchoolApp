@@ -17,7 +17,7 @@ const { buildTranscriptHtml } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
 const QRCode                  = require("qrcode");
 const gate                    = require("../services/gate.service");
-const { academicYearLabel } = require("../utils/idCardExpiry");
+const { academicYearLabel, expiryFor } = require("../utils/idCardExpiry");
 const docVerify = require("../services/documentVerify.service");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
@@ -88,6 +88,7 @@ const schoolHeading = async (schoolId) => {
     motto:   school?.motto ?? null,
     academicYear: school?.settings?.academicYear ?? null,
     currentTerm:  school?.settings?.currentTerm ?? null,
+    defaultLanguage: school?.defaultLanguage === "fr" ? "fr" : "en",
     // Carried through in the shape the model uses, because expiryFor() reads
     // it from settings. Flattening it here would silently ignore whatever the
     // school had set and quietly print the default on every card.
@@ -217,7 +218,7 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
   if (req.query.studentId) filter._id = String(req.query.studentId);
 
   const rows = await Student.find(filter)
-    .select("studentName name firstName lastName enrollmentNo photoUrl guardianPhone")
+    .select("studentName name firstName lastName enrollmentNo photoUrl gender dateOfBirth guardianName guardianPhone")
     .lean();
 
   const school = await schoolHeading(schoolId);
@@ -229,6 +230,12 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
       enrollmentNo:  s.enrollmentNo ?? null,
       className:     klass.name,
       photoUrl:      s.photoUrl ?? null,
+      // The emergency contact and the identifying details the card prints
+      // (decided 2026-10-16). No health information: the model's bloodGroup
+      // is deliberately left off.
+      gender:        s.gender ?? null,
+      dateOfBirth:   s.dateOfBirth ?? null,
+      guardianName:  s.guardianName ?? null,
       guardianPhone: s.guardianPhone ?? null,
     }))
     .filter((s) => s.enrollmentNo)
@@ -270,12 +277,17 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
    * stated its academic year; the arithmetic lives in one place so the settings
    * screen and the printed card can never disagree.
    */
-  const lang = req.query.lang;
+  // In the school's language, whoever prints it, as the report cards are
+  // (School.defaultLanguage); ?lang= no longer decides.
+  const lang = school.defaultLanguage;
+  const until = expiryFor(school);
   const data = {
     school,
     class: { _id: String(klass._id), name: klass.name },
     students,
     academicYear: academicYearLabel(school),
+    // The end of the academic year, or the school's own validity date.
+    validUntil: `${String(until.getUTCDate()).padStart(2, "0")}/${String(until.getUTCMonth() + 1).padStart(2, "0")}/${until.getUTCFullYear()}`,
   };
 
   return respond(req, res, {
@@ -291,6 +303,7 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
       labels:    labelsFor(lang),
       printedOn: formatPrintDate(new Date(), lang),
       origin:    originOf(req),
+      lang,
     }),
   });
 }));

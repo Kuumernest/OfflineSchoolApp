@@ -62,12 +62,14 @@ const SORT_OPTIONS = [
   { value: "startDate_desc", labelKey: "exams.sortDateDesc" },
 ];
 
-// `value` is the stored/queried term string; only the label is localised.
+// `value` is the stored/queried term: Exam.term is a number, 1–3, and
+// GET /api/exams refuses anything else with 400. The values were "Term 1"…
+// and "Full Year", so choosing any term emptied the list with an error. The
+// whole year is "All terms" (no filter). Only the label is localised.
 const TERM_FILTER_OPTIONS = [
-  { value: "Term 1",    labelKey: "exams.term1"    },
-  { value: "Term 2",    labelKey: "exams.term2"    },
-  { value: "Term 3",    labelKey: "exams.term3"    },
-  { value: "Full Year", labelKey: "exams.fullYear" },
+  { value: "1", labelKey: "exams.term1" },
+  { value: "2", labelKey: "exams.term2" },
+  { value: "3", labelKey: "exams.term3" },
 ];
 
 const VIEW_TITLE_KEYS: Record<ViewMode, string> = {

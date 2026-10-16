@@ -185,6 +185,7 @@ const check = (label, actual, expected) => {
   const as = (token) => ({
     get:  (url)       => call("GET",  url, { token }),
     post: (url, body) => call("POST", url, { token, body }),
+    put:  (url, body) => call("PUT",  url, { token, body }),
   });
   // Signed in through the real login, so the token is the one the client holds.
   const login = await call("POST", "/auth/login", { body: { email: "root@example.test", password: PASSWORD } });
@@ -272,6 +273,14 @@ const check = (label, actual, expected) => {
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 11–13. a school's own admin is unchanged ---");
 
+  // The school's language, set on the settings screen: the language its
+  // report cards print in (docs/41 §7).
+  const setFr = await adminA.put("/admin/school-info", { defaultLanguage: "fr" });
+  const badLang = await adminA.put("/admin/school-info", { defaultLanguage: "de" });
+  check("    school-info sets and returns the school's language; only en or fr",
+    [setFr.status, (await adminA.get("/admin/school-info")).body.school?.defaultLanguage, badLang.status], [200, "fr", 400]);
+  await adminA.put("/admin/school-info", { defaultLanguage: "en" });
+
   check("11. School A's admin sees School A",
     figures((await adminA.get("/admin/stats")).body).approvedStudents, 3);
   const cross = await adminA.get(`/admin/stats?schoolId=${B}`);
@@ -291,6 +300,13 @@ const check = (label, actual, expected) => {
   check("15. in School A, the super_admin's School A conversations", inA.status, 200);
   check("    exactly the one they are party to there",
     (inA.body.conversations ?? []).map((c) => c._id), ["conv-a-root"]);
+  // The phone works out its unread badge from lastMessageSeq and its own
+  // lastReadSeq (mobile message.service upsertConversation); without the
+  // first it counted every thread as read.
+  await Conversation.updateOne({ _id: "conv-a-root", "participants.id": "root" }, { $set: { lastMessageSeq: 3, "participants.$.lastReadSeq": 1 } });
+  const withSeq = (await root.get(`/messages/conversations?schoolId=${A}`)).body.conversations?.[0];
+  check("    the list carries lastMessageSeq beside unread (3 sent, 1 read: 2 unread)",
+    [withSeq?.lastMessageSeq, withSeq?.unread], [3, 2]);
   const auditA = await root.get(`/messages/audit/conversations?schoolId=${A}`);
   check("    and the audit view lists School A's threads and only those",
     [auditA.status, (auditA.body.conversations ?? []).map((c) => c._id).sort()],

@@ -140,14 +140,14 @@ who sees the same warning every morning stops reading it. See
 ```mermaid
 graph LR
     subgraph host["Docker host — docker-compose.yml"]
-        NG["nginx:alpine<br/>:80 published"]
-        BE["backend<br/>:5000 published"]
+        NG["nginx:alpine<br/>:80 and :443 published<br/>(80 redirects to HTTPS)"]
+        BE["backend<br/>:5000 on the Docker network only"]
         MG[("mongo:7<br/>NO host port")]
         V1[["mongo_data"]]
         V2[["uploads_data → /app/src/uploads"]]
     end
     BR["Browsers"] --> NG
-    DV["Mobile devices"] --> BE
+    DV["Mobile and desktop apps"] --> NG
     NG -- "/api/ and /uploads/" --> BE
     BE --> MG
     MG --- V1

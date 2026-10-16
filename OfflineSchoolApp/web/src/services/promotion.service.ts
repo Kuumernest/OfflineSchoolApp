@@ -19,19 +19,19 @@ const qs = (params: Record<string, string | undefined>): string => {
 
 // ─── Progression ──────────────────────────────────────────────────────────────
 
-export async function fetchProgression(schoolId: string): Promise<ProgressionResponse> {
-  const { data } = await api.get(`${BASE}/progression${qs({ schoolId })}`);
+export async function fetchProgression(schoolId: string, year?: string): Promise<ProgressionResponse> {
+  const { data } = await api.get(`${BASE}/progression${qs({ schoolId, year })}`);
   const body = data as ProgressionResponse;
-  return { data: body.data ?? [], count: body.count ?? 0, incomplete: body.incomplete ?? 0 };
+  return { data: body.data ?? [], count: body.count ?? 0, incomplete: body.incomplete ?? 0, year: body.year ?? null };
 }
 
+/** Destinations and final-year flags. Bars are saved per year (academicRules.service saveBars). */
 export async function saveProgression(
   schoolId: string,
   entries: {
     classId: string;
     nextClassId: string | null;
     isFinalYear: boolean;
-    promotionAverage: number | null;
   }[]
 ): Promise<ProgressionClass[]> {
   const { data } = await api.put(`${BASE}/progression`, { schoolId, entries });

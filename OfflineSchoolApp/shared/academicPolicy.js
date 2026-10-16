@@ -46,6 +46,7 @@
 
 const { DEFAULT_PASS_MARK } = require("./gradeScale");
 const CA = require("./caAssessment");
+const { snapshotRules } = require("./academicRules");
 
 /**
  * The code that wrote a result row, one name per writer. Each moves only when
@@ -248,6 +249,12 @@ const resolvePolicy = ({ schoolId, academicYear, structure = null, gradingConfig
       promotionExams:     [...(structure?.promotionExams || [])].map(Number).sort((a, b) => a - b),
       promotionThreshold: num(structure?.promotionThreshold),
     },
+
+    // The calculation rules (shared/academicRules.js): the decided rule set
+    // every school computes under (docs/39 §21.1, 2026-10-16), and the
+    // school's promotion bars for the year. Every school's hash moved once
+    // when the rules were decided, because the arithmetic did.
+    rules: snapshotRules(structure?.rules),
   };
 };
 

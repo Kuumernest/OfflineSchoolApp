@@ -5,7 +5,7 @@ import React, {
   useState, useEffect, useCallback, useMemo,
 } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, StatusBar, Alert,
 } from "react-native";
 import { useRouter }    from "expo-router";
@@ -271,7 +271,7 @@ export default function ExamsDashboardScreen() {
 
       const [dashRes, examRes] = await Promise.all([
         ExamService.getDashboard(schoolId),
-        ExamService.getExams({ schoolId }),
+        ExamService.getAllExams({ schoolId }),
       ]);
 
       setDashboard(dashRes?.dashboard || null);
@@ -383,9 +383,15 @@ export default function ExamsDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      {/* Every exam, every page (getAllExams), in a virtualised list: a
+          ScrollView of the first 50 dropped the rest of a school's exams. */}
+      <FlatList
+        data={filtered}
+        keyExtractor={(exam) => String(exam._id || exam.id)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        initialNumToRender={12}
+        windowSize={7}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -394,7 +400,8 @@ export default function ExamsDashboardScreen() {
             colors={["#4F46E5"]}
           />
         }
-      >
+        ListHeaderComponent={
+          <>
         {/* Stats grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
@@ -586,7 +593,26 @@ export default function ExamsDashboardScreen() {
             ) : null}
           </Text>
 
-          {filtered.length === 0 ? (
+        </View>
+          </>
+        }
+        renderItem={({ item: exam }) => (
+          <View style={styles.examListItem}>
+            <ExamCard
+                exam={exam}
+                onPress={() =>
+                  router.push({
+                    pathname: "/admin/exams/[id]",
+                    params:   { id: String(exam._id || exam.id) },
+                  })
+                }
+                onStatusChange={handleStatusChange}
+                onViewResults={handleViewResults}
+              />
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.examListItem}>
             <View style={styles.empty}>
               <Ionicons name="document-outline" size={48} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>{t("examsDash.noneFound")}</Text>
@@ -599,26 +625,10 @@ export default function ExamsDashboardScreen() {
                 <Text style={styles.emptyBtnText}>{t("examsDash.qaCreate")}</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            filtered.map((exam) => (
-              <ExamCard
-                key={String(exam._id || exam.id)}
-                exam={exam}
-                onPress={() =>
-                  router.push({
-                    pathname: "/admin/exams/[id]",
-                    params:   { id: String(exam._id || exam.id) },
-                  })
-                }
-                onStatusChange={handleStatusChange}
-                onViewResults={handleViewResults}
-              />
-            ))
-          )}
-        </View>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+          </View>
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
+      />
     </View>
   );
 }
@@ -759,6 +769,8 @@ const styles = StyleSheet.create({
   tabText:       { fontSize: 12, fontWeight: "600", color: "#6B7280" },
   tabTextActive: { color: "#FFF" },
   examList:      { gap: 0 },
+  // Each card in the list, spaced as the list's own children were.
+  examListItem:  { marginBottom: 0 },
   sectionTitle: {
     fontSize:     15,
     fontWeight:   "700",

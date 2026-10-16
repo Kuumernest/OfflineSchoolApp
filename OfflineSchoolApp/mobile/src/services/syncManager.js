@@ -1773,6 +1773,9 @@ class SyncManagerClass {
       if (!schoolId) return;
       const { pullRecent } = require("./attendance.service");
       await pullRecent({ schoolId });
+      // Exams nobody has opened on this phone for 60 days: their cached marks
+      // and results go (examCache.evictUnopenedExams; never anything unsynced).
+      await require("./examCache.service").evictUnopenedExams().catch(() => {});
     } catch (err) {
       console.warn("[SyncManager] pullAttendance failed:", err.message);
     }

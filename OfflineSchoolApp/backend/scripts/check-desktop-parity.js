@@ -4649,6 +4649,32 @@ const main = async () => {
   docs.putMany("gradingConfig",
     JSON.parse(JSON.stringify(await GradingConfigModel.find({}).lean())));
 
+  {
+    // docs/39 §4.6b: offline grading reads the school's own bands. The config
+    // is found by schoolId — its _id is an ObjectId — so a school whose bands
+    // are on /20 grades with them, not the built-in scale. Its own school, so
+    // nothing above or below sees it.
+    const G = "cccccccccccccccccccccccc";
+    docs.putMany("gradingConfig", [{ _id: "6a0000000000000000000001", schoolId: G, passMark: 10,
+      grades: [{ grade: "TOP", minMark: 14, maxMark: 20, gpaPoints: 4, remark: "Top band" },
+               { grade: "LOW", minMark: 0, maxMark: 13.99, gpaPoints: 0, remark: "Low band" }] }]);
+    docs.putMany("exam", [{ _id: "ex-g", schoolId: G, name: "G", type: "test", term: 1, sequenceNumber: 1,
+      academicYear: YEAR, classId: "cls-g", classIds: ["cls-g"], status: "ongoing", deletedAt: null }]);
+    docs.putMany("examSubject", [{ _id: "es-g", examId: "ex-g", schoolId: G, subjectId: "sub-g", classId: "cls-g",
+      subjectName: "Maths", maxScore: 20, deletedAt: null }]);
+    // The handler itself, not api.handle: it prepares the row without queueing
+    // a request, so nothing here reaches the sync checks further down.
+    const bulk = require(path.join(DESKTOP, "api", "writes", "exams"))
+      .find((e) => e.route === "POST /api/exams/:examId/scores/bulk");
+    const out = bulk.handler({ params: { examId: "ex-g" },
+      body: { classId: "cls-g", subjectId: "sub-g", scores: [{ studentId: "pupil-g", score: 15 }] } },
+      { docs, session: { userId: "admin-g", schoolId: G } });
+    check("offline marks are graded on the school's own /20 bands: 15 → TOP (the built-in scale says B+)",
+      [out?.doc?.grade, out?.doc?.remark], ["TOP", "Top band"]);
+    for (const [c, id] of [["gradingConfig", "6a0000000000000000000001"], ["exam", "ex-g"], ["examSubject", "es-g"],
+      ...docs.find("studentScore", { examId: "ex-g" }).map((r) => ["studentScore", r._id])]) docs.forget(c, id);
+  }
+
   const stgConfigId = String(
     (await GradingConfigModel.findOne({ schoolId: SCHOOL }).lean())._id
   );
@@ -7872,6 +7898,47 @@ const main = async () => {
       api.handle({ method, path, query: { schoolId: SCHOOL },
         body: { schoolId: SCHOOL, name: "X", email: "x@y.com" } }, staffCtx2),
       null);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // The year's periods, offline (docs/39 D4): GET /api/academic-structure
+  // answered from the mirror by the server's rule — the whole document for
+  // settings.view, its shape for exams.view alone — and sent out wherever the
+  // mirror cannot give the server's answer.
+  console.log("--- the academic structure, offline ---");
+  {
+    const asJwt      = require("jsonwebtoken");
+    const asDefaults = require("../src/services/permissions.service").defaultsFor;
+    app.use("/api/academic-structure", authenticate, require("../src/routes/academicStructure.routes"));
+    const AS = mongoose.model("AcademicStructure");
+    const Y = "2031/2032", PATH = `/api/academic-structure/${SCHOOL}/2031%2F2032`;
+    await AS.create({ schoolId: SCHOOL, academicYear: Y, promotionExams: [3],
+      terms: [
+        { number: 1, name: "First Semester", weight: 50, sequences: [
+          { number: 1, name: "Eval 1", weight: 50, assessment: { type: "test" } },
+          { number: 2, name: "Eval 2", weight: 50, assessment: { type: "test" } }] },
+        { number: 2, name: "Second Semester", weight: 50, sequences: [
+          { number: 3, name: "Eval 3", weight: 100, assessment: { type: "test" } }] }],
+      rules: { promotionRule: "manual_only" } });
+    docs.putMany("academicStructure", JSON.parse(JSON.stringify(await AS.find({ schoolId: SCHOOL }).lean())));
+    const as = (id, role) => ({
+      token:   asJwt.sign({ id, role, schoolId: SCHOOL }, process.env.JWT_SECRET, { expiresIn: "1h" }),
+      session: { userId: id, role, schoolId: SCHOOL, permissions: asDefaults(role) },
+    });
+    const asAdmin = as("admin-1", "school_admin"), asTeacher = as("t1", "teacher"), asBursar = as("b1", "bursar");
+    await parity("the year, as an administrator reads it", PATH, asAdmin);
+    await parity("the year's shape, as a teacher reads it", PATH, asTeacher);
+    const local = (who, path = PATH) => api.handle({ method: "GET", path, query: {} },
+      { docs, meta: store.meta(db), queue: outbox(db), session: who.session });
+    const shape = local(asTeacher)?.data?.structure;
+    check("offline, a teacher gets the school's own periods and no rules",
+      [shape?.terms?.map((t) => t.name), shape?.promotionExams, "rules" in (shape ?? {})],
+      [["First Semester", "Second Semester"], [3], false]);
+    check("a bursar (no exams.view) is not answered locally", local(asBursar), null);
+    check("a year the mirror does not hold goes to the server",
+      local(asTeacher, `/api/academic-structure/${SCHOOL}/2040%2F2041`), null);
+    check("a path naming another school goes to the server (which refuses it)",
+      local(asTeacher, "/api/academic-structure/bbbbbbbbbbbbbbbbbbbbbbbb/2031%2F2032"), null);
   }
 
   server.close();

@@ -50,6 +50,7 @@ const reads = [
   ...require("./handlers/settings"),
   ...require("./handlers/promotion"),
   ...require("./handlers/staff"),
+  ...require("./handlers/academicStructure"),
   // Student intelligence, computed locally by shared/intelligence — the same
   // functions the server calls, over this machine's mirrored rows.
   ...require("./handlers/intelligence"),

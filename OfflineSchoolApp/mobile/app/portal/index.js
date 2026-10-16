@@ -548,6 +548,10 @@ export default function ParentPortalScreen() {
           showing — a badge that needs a second request to a tab nobody has
           opened is a badge no client draws. */}
       <View style={styles.tabs}>
+        {/* Six tabs at 360 px leave about 60 px each, less than "Attendance"
+            or "Informations": they fill the width when they fit, and scroll
+            sideways when they do not, rather than wrapping mid-word. */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
         {TABS.map((key) => {
           // Messages counts unread threads; Notices counts school notices
           // that arrived since the parent last opened that tab. Deliberately
@@ -569,7 +573,7 @@ export default function ParentPortalScreen() {
                   : t(`portal.${key}`)
               }
             >
-              <Text style={[styles.tabText, tab === key && styles.tabTextOn]}>
+              <Text style={[styles.tabText, tab === key && styles.tabTextOn]} numberOfLines={1}>
                 {t(`portal.${key}`)}
               </Text>
               {unread > 0 ? (
@@ -582,6 +586,7 @@ export default function ParentPortalScreen() {
             </TouchableOpacity>
           );
         })}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -1127,7 +1132,7 @@ export default function ParentPortalScreen() {
                             of this notice, and "1" beside every new card is
                             noise. */}
                         {unreadCard ? <View style={styles.unreadDot} /> : null}
-                        <Text style={styles.lineMeta}>
+                        <Text style={[styles.lineMeta, styles.noticeMeta]} numberOfLines={1}>
                           {formatDateShort(n.sentAt || n.createdAt)}
                           {about ? ` · ${about}` : ""}
                         </Text>
@@ -1238,8 +1243,9 @@ const styles = StyleSheet.create({
     flexDirection: "row", backgroundColor: C.surface,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
+  tabsRow: { flexGrow: 1 },
   tab: {
-    flex: 1, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent",
+    flexGrow: 1, minWidth: 64, paddingHorizontal: 10, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent",
     // Row rather than centre-only, so the badge sits beside the word instead
     // of over it. The gap holds the label in place whether or not it is there.
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
@@ -1318,6 +1324,8 @@ const styles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 8,
     alignItems: "center", justifyContent: "center",
   },
+  // Beside the kind: shrinks (and ends in …) before it pushes the row wider.
+  noticeMeta: { flexShrink: 1, maxWidth: "50%" },
   noticeKind: { flex: 1, fontSize: 12, fontWeight: "700", color: C.inkBody },
   noticePending: { marginTop: 6, fontSize: 11, fontWeight: "600", color: C.warning },
 

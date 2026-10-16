@@ -7,8 +7,11 @@ result means.
 
 - **Branch:** `academic-architecture-audit`, from `cold-intelligence-analysis`
   @ `71a023d`.
-- **Kind of change:** documentation only. No application code, schema, test,
-  or dependency was changed.
+- **Kind of change:** *for the audit itself*, documentation only: no
+  application code, schema, test or dependency was changed. *Since then* the
+  implementation branches carry code, tests and these documents
+  (`academic-phases-4-6`, then `academic-agreed-calculation`; §20.0 records
+  each pass).
 - **Goal, as set:** *configurable academic rules, stable underlying
   data/evidence contracts.*
 - **Method:** read the models, services, routes, renderers, clients and
@@ -35,6 +38,63 @@ result means.
 > affect real data are in **§4.7**. Read §4.7 first. The conclusion stands:
 > the current behaviour cannot be "represented as configuration" without
 > first deciding which calculation is authoritative (§21 D1, revised).
+
+## Current status (2026-10-16, branch `academic-agreed-calculation`)
+
+- **First launch, no live schools** (confirmed by the project owner,
+  2026-10-16). No school uses the platform yet, so no school has results
+  under the previous code: the agreed calculation is the platform's
+  calculation from the first day. Launch: Sunday 1 November 2026
+  (docs/40). What this audit and §20.0 say about results computed before
+  the release, old rows and old app builds describes the code's behaviour
+  for a later change once schools are live; the migration steps built for
+  it (revert-plus-cleanup rollback, dry run per school, days without
+  publishing) are not needed for this launch.
+- **The calculation is decided, for every school** (§21.1, by the project
+  owner on 2026-10-16; implementation in §20.0, "Agreed calculation").
+  - Sequence average: the coefficient-weighted mean out of 20, CA blended
+    when the school has CA on.
+  - A subject with no paper mark is left out; a teacher's 0 counts.
+  - Term and annual rows carry the school's bands.
+  - Promotion: the published annual average against the class's bar for the
+    year.
+  - A published result is never recomputed.
+  - What a school still sets: CA on/off and the CA/paper split, showGrades,
+    coefficients (they cannot be switched off), and its promotion bars per
+    year.
+- **Effective for every result computed from the release.** Published rows
+  keep their figures and `calcVersion`. Unpublished current-year results
+  follow the decided calculation the next time their exam, term or year is
+  processed.
+- **Phases 1–5 done; Phase 6 partly done** (the table in §20). The Phase 4
+  per-school rule choices are gone from the API and the settings screen.
+- **Fixed and pinned:**
+  - §4.6: a, b, c, f, g, h, i, j, k and l are fixed (l for every result
+    computed now; a card for an old `exam-process/1` row keeps the paper's
+    flag); d is fixed in this pass (learning integration 1.1.0, cohort format
+    2); e was removed (an unmounted handler).
+  - §4.7 a–g, by the decision: the live route blends CA, carries
+    coefficients, leaves absent subjects out, stores /20 to two decimals,
+    writes the year and term, prints on the card what it stores, and refuses
+    to recompute a published result.
+- **Tests:** backend `check:all`: 115 suites, 6,490 checks, 0 failed;
+  `check-revert-previous.js` 41 against each of `origin/master` and
+  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 721, 0 failed;
+  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (93)
+  pass.
+- **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
+  open assessment types.
+- **Not done in Phase 4:** term and annual cards are not archived at issue,
+  and the QR snapshot is refreshed on every render (§20.0, card/QR
+  lifecycle). Ranking settings (`AcademicStructure.ranking`) were not built.
+- **Still open** (decisions, not code):
+  - the term/annual card and QR lifecycle;
+  - a bulk-decision control on the promotion screen;
+  - a retention rule for analysis run records (docs/38 §10).
+- **Untested paths** are listed at the end of the "Agreed calculation" and
+  "Follow-up" entries in §20.0.
+- **Never run:** anything on a device, in Electron or in a browser; anything
+  against a real school's data.
 
 ---
 
@@ -65,21 +125,43 @@ School ─────────────── settings.academicYear "2026
         │                                          teacher · submission workflow
         ├─ ExamMark    (teacher submission layer; not synced; not read by results)
         └─ StudentScore (exam × student × subject)  raw score · maxScore · absent/exempt
-              │                                      + grade/remark/points written back (default scale)
+              │                                      + grade/remark/points written back (default scale) ³
               ▼
-        ResultSummary (exam × student)       the SEQUENCE result: CA blended into the paper's row
-              │  average (GPA points 0–4!) · subjectBreakdown[] (/20 marks, CA parts) · positions
+        ResultSummary (exam × student)       the SEQUENCE result: CA blended into the paper's row ¹
+              │  average (GPA points 0–4!) · subjectBreakdown[] (/20 marks, CA parts) · positions ¹
               ▼
         TermResult (school, year, term, class, student)      termAverage · sequenceAverages[] · position
               ▼
         AnnualResult (school, year, class, student)          annualAverage · termAverages[] · promotionStatus
               ▼
-        PromotionRun / PromotionDecision                     (reads ResultSummary, not AnnualResult)
+        PromotionRun / PromotionDecision                     (reads ResultSummary, not AnnualResult) ²
 
 Report cards: sequence ← ResultSummary + live StudentScores
               term     ← TermResult (headline) + live StudentScores (rows)
               annual   ← AnnualResult (headline) + live StudentScores (rows)
 ```
+
+> **Two writers (see the correction at the top).**
+> ¹ This line describes the unrouted `processResults`.
+> - **The live route today** (`POST /exams/:examId/process`,
+>   `exam.routes.js:1531-1541` → `examProcess.service.js:76-273`): every
+>   school's summary is the decided calculation (§21.1, `exam-process/3`).
+>   That is the coefficient-weighted /20 mean, CA blended when the school has
+>   it on, a subject with no paper mark left out. Grades come from
+>   `computeGrade`, which uses the school's bands and `passMark`
+>   (`examProcess.service.js:29-63`, `:181`, `:188`).
+> - **Before the decision**, the live route stored `raw_mean`: a whole-number
+>   raw-mark mean with no CA and no coefficients (§4.7). Rows it wrote keep
+>   `exam-process/1`.
+>
+> ² This was the `legacy` promotion rule, read from published summaries. It
+> was removed with the decision. Every run now reads published
+> `AnnualResult` and `TermResult` (`promotion.service.js:61-77`, `:87`).
+>
+> ³ "Default scale" is the unrouted `processResults` (`results.service.js`).
+> On the live route, mark entry grades each `StudentScore` with
+> `computeGrade`, using the school's bands and `passMark` and falling back to
+> the built-in table (`examProcess.service.js:29-63`, `exam.routes.js:1394`).
 
 Evidence:
 
@@ -90,9 +172,9 @@ Evidence:
 | Exam ↔ structure binding is by (year, term, sequenceNumber) match, no id | `termGrading.service.js:60-110`, `reportCardData.service.js:360-375` |
 | Terms/sequences are nested arrays with no ids | `AcademicStructure.js:32-53` |
 | `Period` is a **timetable slot** (HH:MM), not an academic period | `Period.js:15-58`, `web/src/pages/periods/index.tsx:2` |
-| CA is a separate `Exam{type:"ca", parentExamId}` blended into the paper's summary | `shared/caAssessment.js:1-40`, `results.service.js:96,186-212` |
+| CA is a separate `Exam{type:"ca", parentExamId}` blended into the paper's summary | `shared/caAssessment.js:1-40`, `results.service.js:96,186-212`. That is the unrouted path. The live route blends CA for every school with CA on, since the decision (`examProcess.service.js:151`) |
 | Term result reads only non-CA papers' summaries | `termGrading.service.js:77-95` |
-| Promotion reads published `ResultSummary`, not `AnnualResult` | `promotion.service.js:51-68` |
+| Promotion reads published `ResultSummary`, not `AnnualResult` | `promotion.service.js:51-68`. That was the `legacy` rule, removed with the decision (§21.1): every run reads published `AnnualResult`/`TermResult` (`promotion.service.js:61-77`) |
 | `Grade` model (`examType: test/midterm/final/assignment/quiz`) is legacy: synced (`syncFeed.js:300`) but read by no backend code | grep, this audit |
 
 ### 1.2 The calculations, as they run
@@ -119,8 +201,8 @@ annual, cards and promotion (rows below "Term average") are shared by both.
 | Term average | `termGrading.termResultFields` `:121-171` | sequence-weight-weighted mean of `ResultSummary.average`; grade `lookupGrade(avg)` on /20; pass = `avg ≥ GradingConfig.passMark` |
 | Term rank | `termGrading.computeTermPositions` `:360-399` | competition ranking within class only |
 | Annual average | `annualGrading.annualRowFor` `:100-157` | term-weight-weighted mean of `termAverage`; pass `≥ GradingConfig.passMark` |
-| Annual promotion status | same, `:136-154` | all 3 terms passed AND each promotion exam `average ≥ AcademicStructure.promotionThreshold` |
-| Promotion proposal | `promotion.proposeFor` `promotion.service.js:82-124` | if `Class.promotionAverage` (0–100) set: mean of published `ResultSummary.average` vs it; else majority of published summaries passing |
+| Annual promotion status | same, `:136-154` | all 3 terms passed AND each promotion exam `average ≥ AcademicStructure.promotionThreshold`. *Since Phase 6* (then the `legacy` rule): every term of the year's structure complete and passed, not 3 (`check:periodshapes`). *Since the decision* (§21.1), for every school: `promotionUnderRules`, the annual average against the class's bar once every term is complete; a final-year class graduates (`annualGrading.service.js:153-164`; `check:agreedcalc`, `check:agreedfollowup`) |
+| Promotion proposal | `promotion.proposeFor` `promotion.service.js:82-124` | if `Class.promotionAverage` (0–100) set: mean of published `ResultSummary.average` vs it; else majority of published summaries passing. *Since the decision* (§21.1) this `legacy` reader is removed. Every run proposes by `proposeUnderRules` (`promotion.service.js:87`) from published annual and term results; a pupil with none needs a decision (`check:agreedcalc`) |
 | Card subject rows (term/annual) | `reportCardData.subjectRowsFor` `:192-238` | rebuilt live from marks; grade from the school's **current** `GradingConfig.grades`; pass `≥ current passMark` |
 
 ---
@@ -135,17 +217,17 @@ hardcoded business rule · **G** configuration · **H** intelligence dependency.
 
 | Assumption | Holds today? | Where (class) |
 |---|---|---|
-| Every school has the same academic periods | **Yes**: ≤3 terms, ≤6 sequences, numbered | `AcademicStructure.js:36,46` (F); `Exam.js:56-65` (A,C); `TermResult.js:31` (A); `exam.constants.ts:42-65` SEQUENCE_MAP (B,F); `exams/term-results/index.tsx:32-34` (B); mobile `create.js:43-46` (B); `cohortSchema.js:153-156` (H) |
+| Every school has the same academic periods | **Yes**: ≤3 terms, ≤6 sequences, numbered. *Since Phase 6:* a school shapes its own year within those bounds: 1–3 terms (semesters by name), any number of sequences per term, ≤6 in the year (`shared/periodStructure.js`; `check:periodshapes`). The bounds remain | `AcademicStructure.js:36,46` (F); `Exam.js:56-65` (A,C); `TermResult.js:31` (A); `exam.constants.ts:42-65` SEQUENCE_MAP (B,F); `exams/term-results/index.tsx:32-34` (B); mobile `create.js:43-46` (B); `cohortSchema.js:153-156` (H) |
 | Every period has sequences | **Yes** for term results: a term with no sequence has no exams to average | `termGrading.service.js:74-95` (A) |
 | Every sequence has CA/exam | **No, already configurable**: `caEnabled` and per-sequence CA presence; missing CA renormalises | `GradingConfig.js:74`, `caAssessment.js` (G) |
 | Every assessment is an exam | **Structurally yes**: an assessment *is* an `Exam` row with `type` from a closed enum of 4 | `Exam.js:14` (C,F); `AcademicStructure.js:11` (G); `learningEvidence/taxonomy.js:42-47` (H) |
-| Every result uses the same calculation | **Yes**: one code path, no per-school variation except CA split, sequence/term weights, coefficients | `grading.service.js` (A,F) |
-| Every school uses the same grading scale | **For stored results, yes**: `grading.service` uses the built-in scale; school bands apply only at render time | `grading.service.js:38,68-81` vs `reportCardData.service.js:210` (F) |
-| Every school ranks students | **Yes**: always computed, always printed | `results.service.js:321-382`, `reportHtml.service.js:574-621` (A,B,F) |
+| Every result uses the same calculation | **Yes**: one code path, no per-school variation except CA split, sequence/term weights, coefficients. *Corrected:* two paths compute sequence results, the unrouted `processResults` and the live `POST /exams/:examId/process` (§4.7). *Since the decision* (§21.1) the live route computes one calculation for every school (`shared/academicRules.js`) | `grading.service.js` (A,F); `examProcess.service.js:76-273` (A) |
+| Every school uses the same grading scale | **For stored results, yes**: `grading.service` uses the built-in scale; school bands apply only at render time. *Corrected:* that is the unrouted path. The live route grades marks and sequence summaries with the school's bands and `passMark`, falling back to the built-in table (`computeGrade`, `examProcess.service.js:29-63`). Since the decision, term and annual rows store the school's bands too, for every school (`termGrading.service.js:124`, `annualGrading.service.js:102`) | `grading.service.js:38,68-81` vs `reportCardData.service.js:210` (F) |
+| Every school ranks students | **Yes**: always computed, always printed | `results.service.js:321-382` (unrouted); live route `examProcess.service.js:217-223`; `reportHtml.service.js:574-621` (A,B,F) |
 | Every school promotes by the same rule | **Yes**, with a per-class average bar | `promotion.service.js:82-124` (F), `Class.promotionAverage` (G) |
 | Every report card has the same sections | **Built-in renderer: yes.** A school may replace the whole card with an HTML token template | `reportHtml.service.js:323-977` (B,F); `ReportTemplate.js` (G) |
 | The mark scale is /20 | **Yes, everywhere** | `grading.service.js:56`, `GradingConfig` bands (G but /20-bound), `reportCard.js:179-185`, `subjectInsights.js:467` SCALE=20 (H), `cohortSchema.js:249-254` (H), `SettingsPage.tsx` `max=20` (B), `AcademicStructureSection.tsx:417,432` (B) |
-| Pass mark is 10/20 | **Mixed**: hard-coded in `grading.service.js:46`, `reportCardData.service.js:780`, `reportHtml.service.js:495`; configurable in `GradingConfig.passMark` and **again** in `AcademicStructure.passMark` (two sources) | (F, G) |
+| Pass mark is 10/20 | **Mixed**: hard-coded in `grading.service.js:46`, `reportCardData.service.js:780`, `reportHtml.service.js:495`; configurable in `GradingConfig.passMark` and **again** in `AcademicStructure.passMark` (two sources). *Corrected:* the hard-coded 10 in `grading.service.js` is the unrouted path. The live route reads `GradingConfig.passMark`, falling back to 10 (`examProcess.service.js:43,61`). The card 10s are fallbacks used only when no stored pass flag exists (`reportCardData.service.js:786`, `reportHtml.service.js:507`) | (F, G) |
 | The header is Cameroonian and bilingual | **Yes**, not configurable | `shared/officialHeader.js:58-105` (B,F) |
 
 ### 2.2 Search terms, classified
@@ -185,15 +267,15 @@ What a school can already change without code, and where:
 | Annual method `terms`/`sequences` | `annualAverageMethod` | same | **nothing**: `annualGrading` always uses terms (untested, `docs/12:263`, `docs/19` D7) |
 | `maxAbsences` | `AcademicStructure` | same | **nothing** |
 | Promotion exams + threshold | `promotionExams`, `promotionThreshold` | same | `annualGrading` promotion status |
-| Grade bands, remarks (EN/FR) | `GradingConfig.grades` | web Settings → Grading | report card rendering, intelligence band floors; **not** stored grades |
+| Grade bands, remarks (EN/FR) | `GradingConfig.grades` | web Settings → Grading | report card rendering, intelligence band floors; **not** stored grades. *Corrected:* on the live route they are stored on `StudentScore` and on sequence summaries (`computeGrade`, `examProcess.service.js:29-63`, `exam.routes.js:1394`). Since the decision, term and annual rows store them too, for every school |
 | Pass mark | `GradingConfig.passMark` and `AcademicStructure.passMark` | both screens | term/annual pass, card subject pass, intelligence (GradingConfig first, then AcademicStructure) |
 | Show grades | `GradingConfig.showGrades` | Grading | cards |
 | CA on/off, CA/Test split | `GradingConfig.caEnabled/caWeight/testWeight` | Grading | sequence blend, term card weights |
 | `useGpa`, `gpaScale`, `gradingType` | `GradingConfig` | Grading | **nothing** in calculation |
 | `sequenceWeights`, `termWeights`, `*WeightingMethod` | `GradingConfig` | not exposed | **nothing** (dead; the live weights are in AcademicStructure) |
 | Subject coefficient | `Subject.coefficient` → `ExamSubject.weight` | subjects, exam subject editor | sequence average, card rows |
-| Per-subject max mark, pass mark | `ExamSubject.maxScore`, `passMark` | exam editor | `maxScore` yes; `ExamSubject.passMark` **no** (grading uses 10/20) |
-| Promotion average per class (0–100) | `Class.promotionAverage` | Promotion → Progression | promotion proposal |
+| Per-subject max mark, pass mark | `ExamSubject.maxScore`, `passMark` | exam editor | `maxScore` yes; `ExamSubject.passMark` **no** (grading uses 10/20). *Corrected:* on the live route grading uses `GradingConfig.passMark`, which defaults to 10 (`examProcess.service.js:43,61`). `ExamSubject.passMark` is still unused in grading; it is only copied to the CA subject (`sequenceAssessment.service.js:408,449`) |
+| Promotion average per class (0–100) | `Class.promotionAverage` | Promotion → Progression | promotion proposal. *Since the decision:* read by no run and no longer written; replaced by per-year bars out of 20 (`AcademicStructure.rules`, §14) |
 | Class progression | `Class.nextClassId`, `isFinalYear` | same | promotion proposal |
 | Whole report card layout | `ReportTemplate.html/css` (token template) | Reports → Builder | rendering, when a default template exists |
 
@@ -202,6 +284,19 @@ spread over five documents (`School.settings`, `GradingConfig`,
 `AcademicStructure`, `Class`, `ReportTemplate`), some of it is dead, and
 none of it is versioned.
 
+*Since the audit:*
+- **Calculation rules.** Phase 4 made them per-school settings, edited in
+  web Settings → Calculation rules (Phase 5). Since the decision (§21.1,
+  2026-10-16) the calculation is the same for every school. That screen is
+  read-only: it states the rules and the year's result counts. What a
+  school sets is its promotion bars per year, out of 20
+  (`AcademicStructure.rules`), edited on Promotion → Progression.
+- **Report-card sections.** The section layout (`ReportTemplateVersion`,
+  Phase 2d, §10.3) is edited in Settings → Report card sections (Phase 5).
+- Each new computation is stamped with its policy snapshot (Phase 2c).
+
+The table above is the audit-time picture.
+
 ---
 
 ## 4. Problems with the current model
@@ -209,6 +304,12 @@ none of it is versioned.
 Ordered by consequence. §4.1–§4.4 are defects in current behaviour, found
 during the audit. They are **reported, not fixed**: fixing any of them
 changes stored or printed results, which this task forbids.
+*Since the audit:* Phase 4 added per-school, opt-in rules that address §4.2 (`gradingAuthority`), §4.3
+(stamping and `publishedResults: refuse`) and §4.4 (one promotion function
+under the non-legacy rules). No school enabled them. On 2026-10-16 the
+project owner decided them for every school (§21.1): school bands on term and
+annual rows, every published result protected, one promotion rule — §20.0,
+"Agreed calculation".
 
 ### 4.1 The sequence average is GPA points; everything above it reads it as /20 — **reproduced, on the unrouted path**
 
@@ -276,6 +377,23 @@ source" is not met today. There are two systems, and the one a school
 configures is not the one that writes results. Re-rendering an old card
 after a band change prints different grades.
 
+*Corrected:* the "stored" bullet is the unrouted `processResults`. The live
+route stores:
+- **marks and sequence summaries** graded with the school's bands and
+  `passMark` at the time of processing, falling back to the built-in table
+  (`computeGrade`, `examProcess.service.js:29-63`; `StudentScore` at
+  `exam.routes.js:1394`);
+- **term and annual rows**, since the decision (§21.1), also graded with the
+  school's bands, for every school (`termGrading.service.js:124`,
+  `annualGrading.service.js:102`; `check:academicrules`). Before it, they
+  stored the built-in scale unless a school opted into `school_bands`.
+
+What remains of the split: a stored grade keeps the bands in force when it
+was computed, while every card grades its subject rows with the bands in
+force when it is rendered (`reportCardData.service.js:194-215`, called at
+`:408` and `:550`). A band change therefore still moves printed row grades
+on a re-render, while the headline stays as stored.
+
 ### 4.3 Nothing is versioned, and published results are not protected from recomputation
 
 - `GradingConfig` is one mutable document per school (`GradingConfig.js:35`,
@@ -284,8 +402,11 @@ after a band change prints different grades.
   counter over an overwritten `html` (`template.routes.js:286-296`).
 - Results record no configuration identity at all.
 - `processResults` rewrites `isPublished:false, isLocked:false` on every
-  recompute (`results.service.js:309-310`), and `POST /exams/:id/process`
-  runs it without the result-write guard (`exam.routes.js:1539+`).
+  recompute (`results.service.js:309-310`; now `:318-319`). *Corrected:*
+  `POST /exams/:id/process` does not run `processResults`. It computes its
+  own figures (now `examProcess.service.js:76-273`), also without the
+  result-write guard (no `guardResultWrite` or `logResultChange` in that
+  handler), and it leaves `isPublished` alone (§4.7g).
 - Term and annual recompute overwrites published rows (`termGrading.service.js:266-330`,
   `annualGrading.service.js:223-334`). `TermResult/AnnualResult.isLocked`
   exists and nothing sets or enforces it. Publish has no audit row, and
@@ -297,6 +418,24 @@ after a band change prints different grades.
 
 Today, "which configuration produced this result?" has no answer.
 
+*Since the audit:*
+- Every newly computed summary, term and annual row carries `policyHash` and
+  `calcVersion` (Phase 2c, `check:academic`).
+- A published sequence, term or annual row is never recomputed, for every
+  school (D3, decided 2026-10-16). Every layer answers 409
+  `PUBLISHED_RESULTS` and writes nothing (`examProcess.service.js:139-148`;
+  `check:rulesmatrix`, `check:agreedcalc`). So does "calculate & save"
+  (`check:agreedfollowup`). Phase 4 had made this an opt-in rule;
+  `overwrite` no longer exists.
+- Unchanged, and verified at HEAD:
+  - term and annual cards are not archived at issue, and the QR is
+    refreshed on every render (§20.0, a decision);
+  - publishing term and annual results writes no audit row (no `AuditLog`
+    or `ResultChangeLog` call in `termResults.routes.js` or
+    `annualResults.routes.js`);
+  - `ResultChangeLog.entity` is still `score`/`summary`/`examSubject`/`exam`
+    (`ResultChangeLog.js:39`).
+
 ### 4.4 Promotion is decided in three places with three rules
 
 1. `AnnualResult.promotionStatus`: all terms passed plus promotion exams
@@ -307,6 +446,17 @@ Today, "which configuration produced this result?" has no answer.
 
 Annual cards print (1) (`reportCardData.service.js:575-623`). The rollover
 acts on (2). They can disagree, and both are affected by §4.1.
+
+*On real data the equivalent is §4.7.* (1) reads term averages built from
+raw-mark means (§4.7d). Under `legacy`, (2) finds no published summary with
+an `academicYear`, so every pupil is proposed `unassigned`/`no_results`
+(§4.7e; `check:academic`). *Since the decision* (§21.1, 2026-10-16), one
+rule decides (1) and (2) for every school, through one function,
+`promotionUnderRules` (`shared/academicRules.js`; `check:rulesmatrix`,
+`check:agreedcalc`). A final-year class graduates on both
+(`annualGrading.service.js:164`; `check:agreedfollowup`). `legacy` is
+removed. Nothing writes (3): the field is only read for the annual card
+(`ResultSummary.js:121`, `reportHtml.service.js:512`).
 
 ### 4.5 Structural rigidity
 
@@ -320,23 +470,28 @@ acts on (2). They can disagree, and both are affected by §4.1.
   on the structure, and dead copies sit on the grading config.
 - The "grade" ranking scope groups by `className` string
   (`results.service.js:357`), which is the class again under another name.
+  That is the unrouted path. The live route ranks within the class only
+  (`examProcess.service.js:217-223`).
 
-### 4.6 Other defects found on the way (reported, not fixed)
+### 4.6 Other defects found on the way
+
+Reported, not fixed, at the time of the audit. The **Verified** column gives
+each finding's current status and the test that pins it.
 
 | # | Finding | Evidence | Verified |
 |---|---|---|---|
-| a | Bulk-score validation checks against the **client-sent** `maxScore` but stores the ExamSubject's | `exam.routes.js:1318` vs `:1393` | code reading |
-| b | Desktop offline grading looks up GradingConfig by `_id = schoolId`, so it never finds the school's bands | `desktop/src/main/api/writes/exams.js:402`, `store.js:369-374` | code reading |
-| c | Mobile carries a divergent 7-band scale for its offline card fallback | `mobile/src/services/report.data.service.js:886-925` | code reading (sync audit) |
-| d | Strengths engine counts CA twice: CA events (family `continuous`) are corroboration though CA is already blended into the academic mark | `shared/strengths/learningIntegration.js:86,124` | code reading; not reproduced |
-| e | `results.controller` calls `processResults({examId,…})` with an object | `results.controller.js:1369` | code reading; route reachability not traced |
-| f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | report-card audit |
-| g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | report-card audit |
-| h | Annual card's French remark reads `termAverage ?? annualAverage` | `reportCardData.service.js:580` | code reading |
-| i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design. **Fixed in Phase 2(e)** (§17.4) | `exam.routes.js:20-23,194-200`; scratch probe | probe |
-| j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | code reading |
-| k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **pinned** in `check:academic` |
-| l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
+| a | Bulk-score validation checks against the **client-sent** `maxScore` but stores the ExamSubject's; the single-mark route lets the body raise both | `exam.routes.js:1318` vs `:1393`; `results.controller.js` `upsertScore` | **Fixed:** both routes and the desktop mirror use `ExamSubject.maxScore` (`check:marks`) |
+| b | Desktop offline grading looks up GradingConfig by `_id = schoolId`, so it never finds the school's bands | `desktop/src/main/api/writes/exams.js:402`, `store.js:369-374` | **Fixed:** found by `schoolId` in scores/bulk and process (`check:desktop`) |
+| c | Mobile carries a divergent 7-band scale for its offline card fallback | `mobile/src/services/report.data.service.js:886-925` | **Fixed:** a copy of the shipped 8-band scale, compared band for band by `check:reportcard` |
+| d | Strengths engine counts CA twice: CA events (family `continuous`) are corroboration though CA is already blended into the academic mark | `shared/strengths/learningIntegration.js:86,124` | **Fixed (agreed-calculation pass):** a CA event whose occasion's academic mark carries a `caMark` is baseline, not corroboration; learning integration 1.1.0, cohort `FORMAT_VERSION` 2 with `caMark` per subject row (`check:cadouble`, now "fixed"). It had been reproduced and pinned as a known defect in the defect-closure pass (§20.0) |
+| e | `results.controller` calls `processResults({examId,…})` with an object | `results.controller.js:1369` | **Removed:** the handler was mounted on no route |
+| f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | **Fixed:** same letterhead and verification strip as the issue path; `AuditLog` `reportCard.reissued` (`check:reportlayout`) |
+| g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | **Fixed:** an existing card is refused, 409 `REPORT_ALREADY_ISSUED` (`check:marks`) |
+| h | Annual card's French remark reads `termAverage ?? annualAverage` | `reportCardData.service.js:580` | **Fixed:** reads `annualAverage` (`check:cards`) |
+| i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` had no explicit guard. At audit time a probe showed `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list failed closed by accident, not by design (§17.3) | `exam.routes.js:20-23,194-200` (at audit time); scratch probe | **Fixed in Phase 2(e)** (`85e71f8`): `tenant.requireSchool()` refuses with 400 `SCHOOL_REQUIRED` on every exam, template and issued-card route (`check:schoolguard`, 170; §17.4). Originally verified by probe only |
+| j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | **Fixed (D4):** the year's shape on `exams.view` (`check:authz`, `check:feed`) |
+| k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **Fixed:** no row; an unpublished stale row is removed, a published one kept as issued and not ranked (`check:annualnoterms`; `check:academic` pins moved) |
+| l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **Fixed:** for a summary computed by the decided calculation (`exam-process/3`), each card row passes on the blended mark it prints, as the stored summary counts it (`results.controller.js` `isPassing: onSequenceMark || agreed`; `check:cardstored`). A card for an older `exam-process/1` row keeps the paper's stored flag, as it always printed (`check:cardstored`, old-row section) |
 
 ---
 
@@ -367,7 +522,10 @@ Defects on the live route, each pinned:
   them.
 - **(c) An absent subject counts as zero** in the average (`round(11/2) = 6`
   for a pupil absent in Maths, giving F). Its maximum also stays in the
-  percentage.
+  percentage. A pupil absent in every subject was stored at 0, 0 % and
+  ranked last (pinned then by `check:weightednomarks`; that section was
+  removed with the decision). Since the decision such a pupil has no
+  summary at all (`check:weightednomarks`, `check:agreedcalc`).
 - **(d) Averages are whole numbers.** `Math.round` of a raw-mark mean, on the
   scale the papers are marked on (/20 here; /100 if papers are /100, the
   `ExamSubject.maxScore` default). Term and annual results then read it as
@@ -375,15 +533,48 @@ Defects on the live route, each pinned:
 - **(e) No `academicYear` or `term` on the summary**, and nothing backfills
   them. `promotion.resultsByStudent` selects published summaries by
   `academicYear`, so **the promotion run finds no results for any pupil**.
-  Every pupil is proposed on basis `no_results`, which means "promoted"
-  wherever the class has a next class. That includes a pupil the annual
-  results mark "repeated".
+  Every pupil is proposed on basis `no_results`, which meant "promoted"
+  wherever the class has a next class, including a pupil the annual
+  results mark "repeated". **Fixed (validation pass):** no result is now
+  "unassigned", as under every other rule, so the run cannot be committed
+  until someone decides. The blindness itself was D1b. **Decided (§21.1,
+  2026-10-16):**
+  - the promotion run reads published `AnnualResult` and `TermResult`;
+  - paper summaries carry `academicYear` and `term` again
+    (`examProcess.service.js:160`; `check:agreedcalc`).
 - **(f) The sequence card contradicts the stored result.** It prints 13.67
   (rebuilt from marks, with CA and coefficients) as the average, above a
-  grade (B) and position taken from the stored 12.
+  grade (B) and position taken from the stored 12. **Traced cause by cause
+  in the defect-closure pass (§20.0, `check:cardstored`):** rounding,
+  coefficients, CA, an absent subject, stale data and the papers' scale each
+  separate the two on their own. The scale case (/100 papers headlined "A+"
+  for 65%) is fixed. **Decided (D1, §21.1, 2026-10-16):** the stored
+  average is the card's figure, so the card prints what is stored, for every
+  result computed since (`exam-process/3`; `check:cardstored`,
+  `check:agreedcalc`). A card for an older `exam-process/1` row reads it as
+  before.
 - **(g) Re-processing a published exam rewrites its figures** with no guard
   and no `ResultChangeLog` row. Unlike `processResults`, it leaves
-  `isPublished` alone.
+  `isPublished` alone. *Since the decision (D3, 2026-10-16):* for every
+  school, re-processing a published exam answers 409 `PUBLISHED_RESULTS` and
+  writes nothing (`examProcess.service.js:139-148`; `check:rulesmatrix`,
+  `check:agreedcalc`). The behaviour described here no longer happens.
+
+*Since the decision (2026-10-16, §21.1; §20.0 "Agreed calculation"):* the
+live route computes the decided calculation for every school, stamped
+`exam-process/3` (`examProcess.service.js:76-273`, `weightedSequence.service.js`).
+- **(a), (b):** CA is blended by the school's split when it has CA on, and
+  coefficients are carried.
+- **(c):** a subject with no paper mark is left out, mark and coefficient. A
+  pupil with none at all gets no summary.
+- **(d):** the average is /20, to two decimals.
+- **(e):** paper summaries carry `academicYear` and `term`.
+- **(f):** the card prints what is stored.
+- **(g):** a published result is refused (409).
+
+Rows written before stay as they were and are read by their `calcVersion`:
+a term reads an `exam-process/1` sequence as its percentage ÷ 5.
+`check:agreedcalc`, `check:academic` (live half), `check:cardstored`.
 
 The intelligence layer reads `subjectBreakdown.normalizedMark`. On real data
 that is the paper-only mark, rounded to one decimal, not the CA-blended mark
@@ -545,6 +736,12 @@ sources:     { structureId, structureUpdatedAt, gradingConfigUpdatedAt },
 createdAt, createdBy,
 ```
 
+> **As implemented (Phase 2b/2c, §20.0):** the snapshot holds configuration
+> only (`POLICY_FORMAT 2`) and carries no `calcVersion`. Each writer stamps
+> its own on the row it writes (`CALC_VERSIONS`: `exam-process/1`,
+> `results-service/1`, `term/1`, `annual/1`; the rules add `exam-process/2`,
+> `term/2`, `annual/2`). The sketch above is the original proposal.
+
 - **Lifecycle:** created on demand by `policySnapshot.resolve(schoolId, year)`
   the first time a computation runs under a new effective policy. It is
   insert-only. A unique `_id` makes concurrent creation idempotent. It is
@@ -564,6 +761,11 @@ calcVersion:  String | null,
 averageScale: "gpa4" | "20" | null,   // what `average` is on; null on legacy rows = "as §9 documents"
 averageOn20:  Number | null,      // ResultSummary only: the /20 figure, stored beside the legacy one
 ```
+
+> **As implemented (Phase 2c, §20.0):** only `policyHash` and `calcVersion`
+> were added. `averageScale` and `averageOn20` were dropped: `calcVersion`
+> says how `average` is read (`sequenceAverageIsOn20`), and which /20 figure
+> is official is decision D1 (now the `sequenceAverage` rule, §12 item 6).
 
 - **No new "AssessmentContribution" collection.** The contribution of each
   component is already on `subjectBreakdown` (`caScore/caMark/caWeight/test*`,
@@ -629,7 +831,13 @@ Scope rules:
 - A super admin must name the school. With none named, every configuration
   route returns 400, as `academicStructure.routes.js:44,84,126` already does.
   §4.6(i) lists the routers that must adopt the same explicit guard rather
-  than relying on `schoolId: undefined` matching nothing.
+  than relying on `schoolId: undefined` matching nothing. *Done in Phase
+  2(e)* (§17.4): `tenant.requireSchool()` guards the exam
+  (`exam.routes.js:65`), template (`template.routes.js:46-48`) and
+  issued-card (`generated.report.routes.js:42`) routers, and the results
+  router refuses a schoolless school account (`check:schoolguard`). Still on
+  private copies of the rule: `admin.routes` (`admin.routes.js:68`) and
+  `promotion.routes` (`promotion.routes.js:19`).
 - The snapshot hash includes `schoolId`, so identical policies in two schools
   never share a document.
 
@@ -676,7 +884,11 @@ Rules:
   coefficient, and no `academicYear`. A row with `academicYear` set and
   `subjectBreakdown[].caWeight` present came from `processResults`, which
   only tests and scripts reach. On such rows `average` is GPA points, and
-  sequence cards print it ×5 (`shared/reportCard.js`).
+  sequence cards print it ×5 (`shared/reportCard.js`). *Since Phase 4*, the
+  live route under `weighted_20` also writes `academicYear` and CA fields,
+  with a /20 `average`. Tell the two apart by `calcVersion`
+  (`results-service/1` against `exam-process/2`), never by the fields
+  (`shared/academicRules.js` `sequenceAverageIsOn20`).
 - `TermResult.termAverage` and `AnnualResult.annualAverage` are means of
   whichever average their summaries held. On real data that is the
   raw-mark mean (§4.7). Their stored values are what was published. They
@@ -703,6 +915,9 @@ There are two renderers:
   `placeholder.engine.js`), used whenever a default template exists.
 
 There are no section toggles, and attendance is a label with no panel.
+*Since the audit:* per-school section toggles exist (`ReportTemplateVersion`,
+Phase 2d, §10.3; the settings screen is Phase 5). The rest of this paragraph
+was not re-verified.
 Stamp, custom fields and signature images do not exist. The principal
 comment is never filled.
 
@@ -838,7 +1053,7 @@ honours a section by gating the block: `{{if section_results}} … {{endif}}`.
   repair-script patch in the existing style. That patch is not written
   here, because it would edit schools' documents.
 
-**API contract** (for a future settings screen). `reports.manage` (ADMIN
+**API contract** (for a future settings screen, at Phase 2d; the screen is now built, see below). `reports.manage` (ADMIN
 roles), like every route under `/api/templates`. The school comes from
 `utils/tenant.resolveSchoolId`, with an explicit 400 `SCHOOL_REQUIRED` when
 none is resolved. A super_admin must name the school. A write naming
@@ -852,11 +1067,23 @@ another school gets 403.
 | `GET /api/templates/layout/versions` | every version, newest first |
 | `GET /api/templates/layout/versions/:n` | one version of this school's, or 404 |
 
-There is no client UI for this. No existing screen manages sections: the
+(At Phase 2d.) There is no client UI for this. No existing screen manages sections: the
 web Reports → Builder edits token-template HTML only. The settings screen is
 future work (Phase 5, §20.2), against the contract above.
 
-**Tests.** `check:reportlayout` (64 checks; in `check:all` after
+*Since Phase 5:* Settings → Report card sections
+(`web/src/pages/settings/ReportLayoutSection.tsx`, mounted at
+`SettingsPage.tsx:2121`). It offers:
+- one checkbox per section, with its description (`:105-118`);
+- a warning where the school's own token template prints a section anyway
+  (`:83`, `:112-116`);
+- a confirmation that names the new version before saving (`:59-66`);
+- the version history (`:136-142`).
+
+It offers no reordering and no per-section options, because the API has
+none. The screen has no automated test; not verified in a browser.
+
+**Tests.** `check:reportlayout` (64 checks at Phase 2d, 67 at HEAD; in `check:all` after
 `check:academicpolicy`) runs through the real routers and auth over HTTP. It
 covers:
 1. Two schools with different layouts and different cards.
@@ -903,8 +1130,12 @@ Mutations:
   only when the server is unreachable) and its **on-screen results views**
   do not read the layout. Every printed card comes from the server. The
   JSON payload carries `layout` for a client that wants it.
-- **Not changed:** §4.6(f) (reissue omits letterhead and QR) and §4.6(g)
-  (`POST /api/generated-reports` can overwrite a frozen card).
+- **Not changed in Phase 2(d):** §4.6(f) (reissue omits letterhead and QR)
+  and §4.6(g) (`POST /api/generated-reports` can overwrite a frozen card).
+  **Both fixed since** (`a42c105`): a reissue keeps the letterhead and
+  verification strip and is audited as `reportCard.reissued`
+  (`check:reportlayout`); an existing card is refused with 409
+  `REPORT_ALREADY_ISSUED` (`check:marks`). See the §4.6 table.
 
 ## 11. Assessment strategy
 
@@ -964,10 +1195,33 @@ special case.
    (parent / annual), subject coefficients (unchanged).
 5. Distinction and fail rules: two closed rules (`average_at_least`,
    `subjects_failed_at_most`). More only on demand.
-6. **The sequence average's scale is a Phase-0 decision (§21-D1).** Under
-   `calcVersion "results/1"` it stays GPA points, written beside an explicit
-   `averageOn20`. A `"results/2"` that ranks and grades on the /20 mean is the
-   likely fix, but it changes results and needs the school's sign-off.
+6. **The sequence average's scale is a Phase-0 decision (§21-D1).**
+   *As first planned (superseded):* under `calcVersion "results/1"` it would
+   stay GPA points, written beside an explicit `averageOn20`, and a
+   `"results/2"` would rank and grade on the /20 mean. That plan described
+   the unrouted `processResults` (§4.1). The live route never stored GPA
+   points; it stores a whole-number raw-mark mean (§4.7).
+   *As implemented:* there is no single `results/N`. Each writer names its
+   own arithmetic (`shared/academicPolicy.js` `CALC_VERSIONS`:
+   `exam-process/1`, `results-service/1`, `term/1`, `annual/1`). D1 is the
+   per-school rule `sequenceAverage` (`shared/academicRules.js`). `raw_mean`
+   is the default and today's behaviour, stamped `exam-process/1`.
+   `weighted_20` is the CA-blended, coefficient-weighted /20 mean, stamped
+   `exam-process/2`. `averageOn20` was dropped in Phase 2(c): `calcVersion`
+   says how `average` is read (`sequenceAverageIsOn20`). No school has chosen
+   `weighted_20`; the decision is still the school's.
+   *Decided (2026-10-16, project owner, §21.1):* the coefficient-weighted /20
+   mean for every school, with no school choice. It is stamped
+   `exam-process/3`: `weighted_20`'s arithmetic, except that a CA with no
+   paper mark no longer counts. Term and annual rows store the school's bands
+   (`term/3`, `annual/3`). `sequenceFigureOn20` (`shared/academicRules.js`)
+   reads an older sequence row on /20 for the term layer.
+
+Items 1–5 are the design. Of them, only the single grading authority exists:
+since the decision (§21.1), term and annual rows store the school's bands
+for every school, so item 1 holds for every stored row (Phase 4 had offered
+it as a per-school choice). The configurable scale (`scale.max`) and
+rounding are not built (§20.0, Phase 6).
 
 `GradingConfig` must never be edited in a way that recomputes anything.
 That is already true. What is new is that the edit becomes visible as
@@ -988,6 +1242,18 @@ That is already true. What is new is that the edit becomes visible as
 - Fully absent pupils are excluded.
 - Positions are written onto result rows.
 
+*Corrected:* the basis and scopes above are the unrouted `processResults`.
+Before the decision, the live route ranked on the integer `percentage`,
+class only, and ranked a fully absent pupil at 0 %.
+
+*Since the decision (§21.1):* the live route ranks every school on the
+decided /20 average, with competition places, class only
+(`examProcess.service.js:227`; `check:agreedcalc`, `check:rulesmatrix`). A
+pupil with no paper mark has no summary and is not ranked. There is one
+ranker, `shared/ranking.js` `competitionPlaces`, used by the sequence route,
+term (`termGrading.service.js:420`) and annual
+(`annualGrading.service.js:427`).
+
 **Extension point** (in `AcademicStructure.ranking`, snapshotted):
 
 ```js
@@ -1006,6 +1272,9 @@ section and token. The `competitionPlaces` function
 (`termGrading.service.js:346-358`) and the sequence ranker
 (`results.service.js:344-355`) become one `rank(values, policy)` in
 `shared/`. Today they are two implementations of the same competition rule.
+*As implemented:* `shared/ranking.js` is that function, with competition ties
+only and no policy argument. `AcademicStructure.ranking` (enabled, scopes,
+publish) was not built.
 
 ---
 
@@ -1034,8 +1303,46 @@ promotion: {
 - `Class.promotionAverage` (0–100) is converted to `threshold` on
   `grading.scale` only through an explicit, confirmed admin action. It is
   never inferred, because today it is compared against GPA points (§4.1).
+  On real data it is compared with the mean of raw-mark summary averages,
+  and the legacy run finds none of those (§4.7e).
 - No rules engine. A school whose promotion needs judgement uses
   `manual_only`, and every proposal is "needs decision".
+
+*As implemented in Phase 4 (`shared/academicRules.js`; superseded by the
+decision below):*
+- The rules are on `AcademicStructure.rules`: `promotionRule` is one of
+  `legacy` (the default), `annual_average_at_least`,
+  `majority_of_terms_passed` or `manual_only`. `promotionThreshold` and
+  per-class `classThresholds` are on /20.
+- Under the non-legacy rules the run reads published `AnnualResult` and
+  `TermResult`, and one function decides both the annual row and the
+  proposal (`check:rulesmatrix`).
+- `requirePromotionExam` was not built. Promotion exams count only under
+  `legacy`: the non-legacy branch returns before the promotion-exam check
+  (`annualGrading.service.js:161-170` against `:176-195`).
+- `Class.promotionAverage` is still read by `legacy` and was not converted.
+- Whether the annual card prints "pending review" until a run is committed:
+  not verified.
+
+*Decided (2026-10-16, project owner, §21.1) and implemented (§20.0 "Agreed
+calculation"):* `annual_average_at_least` for every school, with no choice.
+- Bars are per year in `AcademicStructure.rules`: a school bar
+  (`promotionThreshold`, null = the pass mark) and `classThresholds`, all
+  /20. They are edited on Promotion → Progression through the rules write
+  path: validated, refused while a draft run exists, and audited with a
+  required reason.
+- A new year's structure starts with the previous year's bars.
+- `Class.promotionAverage` is read by no run. It is shown beside the bar until
+  one is confirmed for the year, and nothing converts it.
+- Promotion exams do not count.
+- A stored `manual_only` is still honoured, and nothing can set it.
+- The legacy reader (`resultsByStudent`, `proposeFor`) is removed.
+- A final-year pupil: the run graduates them, and since the follow-up pass
+  the annual row and the annual card say "graduated" too, never "promoted"
+  or "repeated". Average, grade and place are unchanged; a French card prints
+  DIPLÔMÉ(E) (`annualGrading.service.js:153-164`; `check:agreedfollowup`).
+  Until then the annual row compared them with the bar like any other
+  pupil.
 
 ---
 
@@ -1089,8 +1396,11 @@ coefficients (carried, not reasoned on), `ExamMark`, `Period`.
    `YYYY-YYYY` values would misorder intelligence history, so any new write
    path normalises the separator.
 5. §4.6(d), the CA double-count in strengths, is an engine defect in its own
-   right. It is out of scope here because semantics are frozen, and it is
-   listed in §21.
+   right. It is out of scope here because semantics are frozen. *Corrected:*
+   it was never listed in §21. **Fixed** in the agreed-calculation pass
+   (§20.0): learning integration 1.1.0 treats a CA already inside the
+   academic mark as baseline; cohort `FORMAT_VERSION` 2 carries `caMark` per
+   subject row (format 1 still read); `check:cadouble` reads "fixed".
 
 ---
 
@@ -1111,6 +1421,20 @@ Clients grade locally in two divergent ways (desktop `gradeUtils.js` without
 coefficients or CA; mobile with its own scale). Those local results are
 provisional display only. The server recomputes.
 
+*Since the audit:*
+- Mobile's own scale was replaced by a copy of the shipped 8-band scale,
+  compared band for band with the shared table (§4.6c, `check:reportcard`;
+  by source text, not exercised in the app).
+- The desktop finds the school's bands by `schoolId` (§4.6b,
+  `check:desktop`).
+- The desktop's offline `/process` always sends the request to the server.
+  Its local raw-mean copy was removed with the decision, because the decided
+  calculation needs the CA beside the paper and the published-row guard
+  (`desktop/src/main/api/writes/exams.js`, desktop `check:process-rules`).
+- Mobile now reads the year's terms over REST, keeping the last answer for
+  offline use (validation pass, mobile `check:academicterms`). The
+  `AcademicStructure` "no" above is the audit-time picture.
+
 ### 16.2 Can configurable assessments be represented offline?
 
 **On desktop, yes, with no contract change.** It mirrors whole documents,
@@ -1127,7 +1451,9 @@ Required changes:
 3. Mark key unchanged: `(examId, studentId, subjectId)`. No conflict-rule
    change is needed for configurability.
 4. Validation must use the server-side `maxScore` (§4.6a). This is a server
-   fix and independent of this design.
+   fix and independent of this design. *Done:* both score routes and the
+   desktop mirror use `ExamSubject.maxScore` (`check:marks`,
+   desktop `check:score-writes`).
 5. Local grading on both clients should call the shared, policy-driven
    grader from §12. Until then client grades are labelled provisional, as
    they effectively are.
@@ -1152,7 +1478,7 @@ Heads are `school_admin`.
 |---|---|---|
 | school_admin | read + write own school | `settings.manage` (ADMIN, not delegable), unchanged |
 | super_admin | read + write the **explicitly named** school only; 400 when none | `resolveSchoolId` + explicit guard; `namedAnotherSchool` on writes |
-| teacher | read the effective (snapshotted) policy for their school: periods, components, max marks, pass mark; never write | new read permission `academics.view` (TEACHING, delegable) **or** grant `settings.view` narrowly. Today teachers get the structure via the desktop feed (`exams.view`) but not REST (§4.6j); one rule should cover both |
+| teacher | read the year's shape for their school: periods, names, promotion exams, pass marks; never the rules; never write | **Done (D4):** `exams.view`, the permission the desktop feed already used, now also opens `GET /api/academic-structure/:schoolId/:year` (shape only, nothing created). One rule for REST and feed, no new key. A separate `academics.view` was rejected: revoking it would also have to stop the feed, which offline exam creation needs |
 | bursar | none | not in TEACHING roles |
 | student / parent (portal) | only what is printed on *published* documents | portal routes already serve frozen cards (`portal.routes.js:762-805`) |
 
@@ -1260,8 +1586,10 @@ on two synthetic schools:
 **Not covered.** `admin.routes` and `promotion.routes` still carry private
 copies of the rule (§17.2). Promotion already refuses a missing school
 (§4.6i). Neither is an exam or template router, so neither was changed
-here. `POST /api/generated-reports` overwriting a frozen card (§4.6g) is
-unchanged; that route only gained the missing-school refusal.
+here. In Phase 2(e), `POST /api/generated-reports` gained only the
+missing-school refusal, and still let a frozen card be overwritten (§4.6g).
+That was fixed later (`a42c105`): an existing card is refused with 409
+`REPORT_ALREADY_ISSUED` (`check:marks`).
 
 ---
 
@@ -1340,13 +1668,13 @@ Checked against docs/37:
 
 | Phase | Content | Behaviour change |
 |---|---|---|
-| **0. Decisions** (no code) | §21 D1–D4, above all D1, the sequence-average scale | none |
+| **0. Decisions** (no code) (**done**: D1, D1b, D2, D3 decided for every school by the project owner on 2026-10-16, §21.1; D4 resolved) | §21 D1–D4, above all D1, the sequence-average scale | none |
 | **1. Audit** | this document | none |
-| **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
+| **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion` on newly computed rows (`averageScale` and `averageOn20`, first proposed here, were dropped by design; §20.0 Phase 2c); (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
 | **3. Represent today's structure as configuration** (**done**, ahead of D1 on the project owner's instruction; §20.0) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
-| **4. Configuration-driven calculation** | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
-| **5. Admin configuration UI** | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
-| **6. Genuinely custom structures** | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
+| **4. Configuration-driven calculation** (**done** as per-school rules, defaults = today, validated; term/annual card archiving and QR at issue **not done**, a decision; §20.0) | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships under a new per-writer `calcVersion` for **new** computations only (as implemented: `exam-process/2`, `term/2`, `annual/2`; `shared/academicRules.js` `calcVersionFor`) | yes, each behind a decision and a version |
+| **5. Admin configuration UI** (**done** for the rules and section layouts; §20.0) | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
+| **6. Genuinely custom structures** (**partly done**: flexible periods within today's bounds, validated; the rest not started; §20.0) | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
 
 ### 20.0 Progress
 
@@ -1369,6 +1697,9 @@ Checked against docs/37:
     `verify`). Both entry points refuse a missing school.
   - The model is listed in the sync feed's `EXCLUDED` with its reason.
   - Tests: `check:academicpolicy`, 85 checks, in `check:all` after `check:academic`.
+    (86 from Phase 2(c), which rewrote the suite for `POLICY_FORMAT 2`: both
+    counts verified by running the suite at `b049045` and `abdb150`; 86 at
+    HEAD.)
 
   Differences from the §6.3 sketch, made on purpose:
   1. The grading section records **both** authorities as results/1 actually
@@ -1488,7 +1819,10 @@ Checked against docs/37:
   - **Kept as is, deliberately:**
     - `annualGrading` decides promotion only once `completedTerms >= 3`,
       whatever the tree holds. Counting the tree's terms would change
-      results for a school with fewer terms.
+      results for a school with fewer terms. *Changed in Phase 6:* the
+      default status is decided when every term of the year is complete
+      (`annualGrading.service.js:176`; see Phase 6, "The annual layer",
+      and `check:periodshapes`).
     - Promotion-exam settings are still read off the structure. Both are
       promotion rules (D1b, D2), not structure.
   - **Tests.** `check:periodtree` has 20 checks and is in `check:all` after
@@ -1507,6 +1841,1352 @@ Checked against docs/37:
     `check:academic` (52), `check:academicpolicy` (86), `check:term`,
     `check:cards`, `check:coeff`, `check:reportcard` and `check:complexity`
     are unchanged.
+- **Phase 4, done: the school's calculation rules (decisions D1–D3 and §12
+  as settings, never taken by the code).**
+  - **Why rules.** D1, D1b, D2 and D3 change real results and need the
+    school's authorised academic review, which the code cannot give. So
+    each is a rule on `AcademicStructure.rules`, chosen per school and year
+    (`shared/academicRules.js`). **Every default is the behaviour before
+    rules existed.** A school that sets nothing computes byte-for-byte as
+    before (`check:academic` and every earlier suite unchanged) and keeps
+    the same policy hash: only non-default rules enter the snapshot.
+  - **The rules:**
+    | Rule | Default (today) | Option | Writer version |
+    |---|---|---|---|
+    | `sequenceAverage` (D1) | `raw_mean` | `weighted_20`: the figure the sequence card prints (CA blended, coefficients, absent left out, 2 decimals); ranked on it; the subject passes on its blended mark (§4.6l); paper summaries carry `academicYear`/`term` (§4.7e) | `exam-process/2` |
+    | `gradingAuthority` (§12) | `split` | `school_bands`: term and annual rows store the school's bands | `term/2`, `annual/2` |
+    | `promotionRule` (D1b, D2) | `legacy` | `annual_average_at_least` (school bar, per-class bars), `majority_of_terms_passed`, `manual_only`. One function decides both the annual row's status and the promotion run's proposal (§4.4, §14). The run reads published `AnnualResult`/`TermResult` | `annual/2` |
+    | `publishedResults` (D3) | `overwrite` | `refuse`: processing an exam, term or year with published results is refused with 409 and nothing is written; a whole-school run skips and names those classes | — |
+  - **Reading /20.** Cards, the verification snapshot and class statistics
+    read an `exam-process/2` average as /20 (`averageOutOf20` takes the
+    row's `calcVersion`), never ×5.
+  - **One ranker:** `shared/ranking.competitionPlaces`, used by term, annual
+    and the weighted route. The default route keeps its own pinned loop.
+  - **API:** `GET`/`PUT /api/academic-structure/:schoolId/:year/rules` and
+    `POST …/rules/preview` (`settings.view` / `settings.manage`).
+    - **Validation:** writes are validated strictly, and incoherent sets are
+      refused (for example `annual_average_at_least` without a bar).
+    - **Audit:** a no-op stores nothing. A real change is audited (`AuditLog`
+      `academic.rulesChanged`, before/after and a reason).
+    - **Draft promotion runs:** a promotion-rule change is refused while a
+      draft promotion run exists for the year.
+    - **Preview counts:** the preview returns, per layer, how many results
+      are published (they keep their figures) and how many are unpublished
+      (they follow the new rules when next processed).
+  - **Tests:** `check:academicrules`, 63 checks. They include stored average
+    === card `weightedAverage` for every pupil, and run proposals === annual
+    status. Mutations: no CA blend fails 8, class bar ignored fails 2, the
+    route ignoring `refuse` fails 2.
+  - **Not done from the Phase 4 row:**
+    - Component weights still come from `GradingConfig.caWeight/testWeight`.
+      That is the same arithmetic; generalising components is the §6.4
+      model, part of Phase 6.
+    - Term and annual cards are still not archived at issue, and the QR is
+      still refreshed per render (§10.2(4)(5)). Changing what a reprint
+      shows is a document decision of its own; it is not taken here.
+- **The decisions are still the school's.** No rule has been switched on for
+  any school. Choosing `weighted_20` is D1. The settings screen (Phase 5)
+  is where the school's authorised academic review records it, with the
+  consequence shown first.
+- **Phase 5, done: the settings screens** (web, Settings).
+  - **Calculation rules:** per year, every option described, today's
+    behaviour marked as such, published and unpublished counts, and the
+    promotion bars validated. Save shows the server's preview first: what
+    moves, what it reaches, the counts, any blocking draft run, and a reason
+    for the audit trail.
+  - **Report card sections:** the Phase 2(d) API, which had no client. Each
+    section is described, with a warning where the school's own template
+    prints a section regardless, a confirmation naming the new version, and
+    the version history. Reorder and per-section options are not offered,
+    because the API has none.
+  - **Not built from §20.2:** a ranking visibility editor (§13), and an
+    impact preview for structure edits (structure edits are guarded instead;
+    see Phase 6).
+- **Phase 6, partly done: a school shapes its own year, within the bounds
+  every stored record already lives in.**
+  - **The shape.** 1–3 terms (semesters by name), each with at least one
+    sequence, up to 6 sequences across the year, numbered 1..m in order
+    (`shared/periodStructure.js`). For example, two semesters of three
+    evaluations each. No stored record needs migrating: terms stay 1–3 and
+    sequences 1–6, and the term and annual layers, cards and snapshot
+    already read the year from its structure (Phase 3).
+  - **The save route** validates any `terms` it is sent (400
+    `INVALID_STRUCTURE`). It refuses to remove a period, or move it to
+    another term, while it has exams (409 `PERIODS_IN_USE`, nothing stored),
+    and drops promotion exams the year no longer has. A write without
+    `terms` is unaffected.
+  - **The annual layer** decides the default promotion status when every
+    term of the year is complete. That was `completedTerms >= 3`, which is
+    identical for three-term years and could never be met by two
+    semesters.
+  - **Web:**
+    - The structure editor adds and removes terms and sequences, numbers
+      sequences across the year (it assumed two per term), and keeps
+      promotion exams on their sequences.
+    - Exam create and edit offer the year's own terms and sequences
+      (`hooks/useAcademicPeriods`), including its own promotion exams in
+      place of the fixed 5 and 6.
+    - The term- and annual-results tables show one column per sequence or
+      term the year actually has.
+    - Everything falls back to the old fixed set when the structure cannot
+      be read. That includes teachers, who lack `settings.view` (§4.6j).
+      *Since D4 (validation pass)* teachers no longer fall back. The hook
+      reads `GET /academic-structure/:schoolId/:year`
+      (`web/src/hooks/useAcademicPeriods.ts:57-66`), which answers
+      `exams.view` with the year's terms and promotion exams
+      (`academicStructure.routes.js:39-45,64-68`; `check:authz`). The hook
+      itself has no test and was not run in a browser.
+  - **Tests:** `check:periodshapes`, 27 checks. The shape rules; the route,
+    with nothing stored on refusal; and a two-semester school end to end,
+    against hand-worked figures (semesters 13 and 12, year 12.5, three
+    named columns, annual card 12.5). Mutations: the old `>= 3` rule fails
+    1, no in-use guard fails 3.
+  - **Not done from the Phase 6 row,** each a cross-cutting change of its
+    own:
+    - non-/20 scales, which the intelligence thresholds are all written in
+      (`SCALE = 20`, deltas 2/4/14);
+    - more than 3 terms or 6 sequences: the bounds of `Exam`, the cohort
+      schema and the card tokens;
+    - open assessment types and families, and `Exam.periodKey`/`componentKey`
+      (§11.2);
+    - cohort `FORMAT_VERSION` 2 and the §15.2 intelligence mappings;
+    - the mobile and desktop term pickers. *Since done:*
+      - the mobile pickers, in the validation pass (mobile
+        `check:academicterms`; no device run);
+      - the desktop has no pickers of its own. It loads the web build
+        (`desktop/src/main/main.js:184-196`, `electron-builder.yml:50-51`),
+        so it uses the web pickers (`useAcademicPeriods`). It answers the
+        structure read offline by the server's rule
+        (`desktop/src/main/api/handlers/academicStructure.js`;
+        `check:desktop`). Not run in Electron.
+  - **Found on the way:**
+    - Mobile's exam edit sent `"first_term"`, and its create sent
+      `"Term 1"`, into the numeric `term` field. **Fixed:** both send 1–3.
+    - The web exam list's term filter sent `"Term 1"` (400). **Fixed:**
+      1–3; "Full Year" is "All terms".
+    - `platformStats` drops term filters above 3. Not fixed: `Exam.term`
+      cannot exceed 3 either.
+
+- **Validation pass (2026-10-14).** An end-to-end check of Phases 4–6, the
+  remaining well-defined defects, and D4. **No rule was switched on for any
+  school, and no default changed except where stated below.**
+
+  **Environment.** The configured database is `school_db` on Atlas, holding
+  one school (GVA001, 22 active pupils). The project owner confirmed it is a
+  demo school. It was **read only, once**, and copied into an in-memory
+  MongoDB; every destructive run went to that copy or to synthetic fixtures.
+  Nothing was written to Atlas.
+
+  **Implemented and verified** (each by a test that fails on the code before
+  the change):
+
+  | What | Test |
+  |---|---|
+  | Every rule, end to end through `POST /exams/:examId/process` → term → annual → promotion, on hand-worked figures: defaults; invalid values and incoherent sets refused (400) with nothing stored or audited; each rule's preview (what moves, what it reaches, nothing stored); each change audited with before/after and reason (null when absent); `raw_mean` vs `weighted_20`; `split` vs `school_bands` at the 10 and 14 band edges; ties (competition places); an absent subject vs a genuine zero; a pupil with no marks; incomplete and complete years under all four promotion rules, annual status === run proposal; `calcVersion` and `policyHash` per rule, the snapshot recording exactly the rules in force; a rule change rewrites no row; legacy `policyHash: null` rows read as stored and left alone; `overwrite` recomputes published term/annual rows in place and keeps them published; `refuse` blocks sequence, term and annual (class and whole-school) and writes nothing; unpublish-then-recompute goes through | `check:rulesmatrix` (new, 81) |
+  | Promotion: no result is no evidence. Under `legacy` a pupil with no published result was proposed "promoted"; now "unassigned" (`no_results`), as under every other rule. **A behaviour change of the default run:** on the live route, whose summaries carry no `academicYear` (D1b), every pupil of a `raw_mean` school is now unassigned, and the head decides each before committing. There is no bulk decision on the promotion screen | `check:academic` (2 pins moved), `check:rulesmatrix` |
+  | §4.6 a, f, g, k, and the term labels — the five integrity items (see the table and Phase 6 notes) | `check:marks`, `check:reportlayout`, `check:annualnoterms` (new, 11) |
+  | §4.6 b, c, e, h, j (see the table) | `check:desktop`, `check:reportcard`, `check:cards`, `check:authz`, `check:feed` |
+  | D4: teachers read the year's shape on `exams.view`; the desktop answers the same read offline by the same rule | `check:authz`, `check:feed`, `check:desktop` (parity) |
+  | Report-card sections are presentation only: switching them rewrites no score, summary, term or annual row | `check:reportlayout` |
+
+  Already verified by existing suites and re-run: issued sequence cards keep
+  their layout version, layout versions are append-only and per school,
+  cross-school reads and the `requireSchool()` guard (`check:reportlayout`,
+  `check:schoolguard`, `check:crossschool`), legacy cards print every section.
+
+  **On the copy of the demo school** (`school_db`, validation script in the
+  session scratchpad, not committed; output carries counts and pseudonyms only):
+  - Re-running the default (`raw_mean`) over the 100 stored summaries
+    reproduces 96 exactly. The 4 that differ are explained: positions were
+    stored among 50 pupils, 48 of whom (the seed, docs/33) are now
+    soft-deleted, so a recompute ranks 2; and one stored average (13) predates
+    a mark being recorded absent, so the recompute gives 12. That published
+    summary is stale, which is a data fact, not a code defect.
+  - **The 13.67-vs-12 discrepancy on real marks:** on the 12 summaries of
+    active pupils the card's average and the stored average disagree on 4,
+    by up to 1.03 (stored 12, card 13.03). Cause, as in §4.7(f): `raw_mean`
+    stores the whole-number mean of paper marks (no CA, no coefficients,
+    absent as zero); the card rebuilds the coefficient-weighted, CA-blended
+    /20 mean. Under `weighted_20` (on the copy only) stored === card for
+    12 of 12, stamped `exam-process/2` with `academicYear`; no place or
+    pass/fail changed in this small cohort; the largest term move was 0.12.
+  - The legacy promotion run on the copy: 16 unassigned (no results), 6
+    graduated — it would have proposed those 16 "promoted". Under
+    `weighted_20` it finds results for the 2 pupils who have them.
+  - 3 of 8 exams store `term` as the text "Term 1", which the schema cannot
+    write; they predate the picker fixes or came in by a raw path. Not
+    repaired: it is the demo school's data, and none is a sequence paper.
+
+  **Implemented, not verified in the required environment:**
+  - The mobile term pickers (exam create and edit) read the year's terms
+    (online, then the last answer kept in AsyncStorage, then the fixed three)
+    and send numbers. The service is tested against the real route as a
+    teacher (`mobile` `check:academicterms`, 7; fails with D4 reverted); the
+    two screens are not exercised by any test and were not run on a device.
+  - Mobile's offline grade scale: checked against the shared table by text,
+    not exercised in the app.
+  - Desktop: the offline structure read and the grading fix run in
+    `check:desktop` against the real handlers, not in the Electron app.
+
+  **Still incomplete:**
+  - **Term and annual cards are not archived at issue, and the QR snapshot
+    is refreshed on every render, previews included.** Staff reprints of
+    sequence cards also re-render live (only the layout is frozen; the
+    archived HTML reaches the portal), so a mark corrected without a reissue
+    moves the QR page away from the paper a family holds. The lifecycle needs
+    a product decision, so nothing was built. Options:
+    1. *Archive at first print after publication, as sequence cards do.*
+       Needs a document key on `GeneratedReport` — the unique sparse index
+       `{examId, studentId}` makes a term and an annual card of one pupil
+       collide (both index as `examId: null`) — a migration of that index,
+       term/annual reissue routes, and portal routes (the portal serves no
+       term or annual card today).
+    2. *Issue at publish:* render and archive every pupil's card when
+       term/annual results are published. Heavier publish; unpublishing must
+       define what happens to issued codes.
+    3. *Freeze the QR only:* write the snapshot once, when the result is
+       published, and refresh it only on reissue. Smallest, but reverses the
+       stated design in `documentVerify.service.js` ("a mismatch … is the
+       check working") and leaves the paper itself unreproducible.
+    The decision is what the QR page means (as issued, or the current
+    records) and what event issues a term or annual card.
+  - Non-/20 scales, more than 3 terms or 6 sequences, open assessment types,
+    cohort `FORMAT_VERSION` 2: unchanged (see Phase 6). The bounds are
+    `Exam.term` 1–3, `Exam.sequenceNumber` 1–6, `TermResult.term` 1–3,
+    `shared/academicRules` thresholds on /20, and the intelligence thresholds
+    written in /20 (`SCALE = 20`). Not expanded: no release scope needs it,
+    and the evidence conversion for another scale is undefined.
+  - The mobile report-generation screen still lists "First/Second/Third
+    Term" as labels; they gate the screen and reach no numeric field.
+
+  **Requires an academic or product-owner decision:**
+  - D1, D1b, D2, D3 — unchanged; the school's (§21.1). The copy shows what
+    D1 moves on real marks; it does not decide it.
+  - The 13.67-vs-12 card: under `raw_mean` the card prints a figure other
+    than the stored one. Making the default card print the stored figure
+    would change every school's printed documents; choosing `weighted_20`
+    makes them agree. Left as is.
+  - Term/annual card lifecycle and QR meaning (above).
+  - A bulk decision on the promotion screen, now that a `raw_mean` school's
+    run proposes nothing (above).
+
+  **Commands run** (database URI and provider keys blanked, so nothing
+  could reach Atlas or a provider):
+  - backend `npm run check:all`: 6,323 checks in 101 suites, 0 failed;
+  - desktop `npm run check`: passed (its `check:score-writes` had failed
+    since the §4.6a mirror change and now pins the server's rule);
+  - mobile `npm run check`: passed, including `eslint` (0 errors) and
+    `tsc --noEmit`;
+  - web `npm run build` (`tsc -b` + vite) and `npm run lint`: passed, 0
+    errors (1 warning in an untouched file);
+  - each new or changed check also against the pre-change code, to show it
+    fails there;
+  - the read-only probe and the copy validation of `school_db`.
+
+  Not run: anything on a device, in the Electron app, or in a browser; any
+  check against a real school's data, which this repository has never seen.
+
+- **Defect-closure pass (2026-10-14, after the validation pass).** Three
+  open defects, the card/QR lifecycle, and the mobile term pickers. Atlas
+  was not connected to in this pass. No school's rule, published result or
+  promotion outcome changed; every destructive test ran on an in-memory
+  database.
+
+  **§4.7(f), card average vs stored average — traced; one cause fixed; the
+  rest is the school's decision.** `check:cardstored` (new) builds one
+  synthetic school per cause and runs the live `/process` route and the real
+  card builder. Under `raw_mean` the two figures are different calculations
+  from the same marks:
+
+  | Cause (alone) | Stored (`/process`) | Card (`weightedAverage`) |
+  |---|---|---|
+  | none (control) | 13 | 13 |
+  | rounding: 12 and 13 | 13 (12.5 rounds up) | 12.5 |
+  | coefficient: Maths 15 ×2, English 9 | 12 | 13 |
+  | CA 40/60: 15+8/10, 9+6/10 | 12 (paper only) | 12.8 (15.4, 10.2) |
+  | absent Maths, English 11 | 6 (absent as 0, 5.5 up) | 11 (absent left out) |
+  | stale: English corrected 14→18 after processing | 13 | 15 |
+  | papers /100: 60, 70 | 65 (the papers' scale) | 13 |
+
+  The card prints the second figure as its average
+  (`reportHtml.resolveAverage20`), and takes its headline grade, pass/fail
+  and position from the first (`results.controller` `resolveAvg20`,
+  `summary`). Under `weighted_20` the stored figure is the card's, equal for
+  every cause once processed (pinned). **Fixed:** on non-/20 papers the
+  headline grade was looked up on the raw-scale figure read as /20, so a
+  pupil on 65% (13/20) was headlined "A+". It now reads that stored figure
+  through its own percentage (13 → B). Cards on /20 papers are unchanged
+  (when every paper is /20 the figure is used as before). **Not changed:**
+  which figure a `raw_mean` card prints, and the stale case. Term and annual
+  results already report staleness (`resultStaleness.service`); sequence
+  summaries do not, and adding that is a small, policy-free change, offered
+  below rather than made.
+
+  **§4.6(d), CA counted twice — reproduced; blocked on two gates.**
+  `check:cadouble` (new) runs the real shared engines:
+  - On the default path (`raw_mean`), the academic reading is the paper
+    alone. CA is outside it, and counting it once as coursework is correct:
+    two CA marks lift an EMERGING reading to ESTABLISHED, as designed.
+  - Under `weighted_20` the reading is the CA-blended mark, and the same CA
+    marks lift it again, from EMERGING to ESTABLISHED, on evidence already
+    used.
+
+  No school runs `weighted_20`, so no school's data is affected today. The
+  correction is clear: a CA event whose period's mark already contains CA is
+  baseline, not corroboration. It is not made, because it needs:
+  1. the academic profile to say which marks contain CA. The offline
+     calibration cohort (`FORMAT_VERSION 1`) has no field for it, so a
+     live-only fix breaks "live = offline", and adding one is cohort format
+     v2, a gate;
+  2. a new `LEARNING_INTEGRATION_VERSION`, which every open pilot reports as
+     drift (409 `ENGINE_VERSION_CHANGED` until re-baselined).
+
+  **Decision request:** fix §4.6(d) together with any school's adoption of
+  `weighted_20` (D1), and approve cohort format v2 with a `caMark` per
+  subject row, plus the integration version bump. Until then the defect is
+  pinned and unreachable.
+
+  **§4.6(l), the card row's pass flag — fixed where the rule decides it.**
+  The row printed the paper's stored flag beside a blended mark and grade
+  (presentation only; `StudentScore.isPassing` is correctly "paper ≥ pass
+  mark"). Under `weighted_20` the configured rule defines a subject's pass
+  on its blended mark, and the stored summary counts it that way. The row
+  now agrees: blended mark ≥ the school's pass mark, absent not passing
+  (`check:cardstored`: 10.2 and exactly 10.00 pass, 9.96 and absent do not;
+  2 passed / 1 failed, as stored). Under `raw_mean` the row is unchanged
+  and still pinned in `check:academic`, because there the official figure
+  is the paper and the card's blended row is the §4.7(f) question. No pass
+  mark changed, and promotion is untouched.
+
+  **Mobile term values — a server fix found by testing.** `POST /exams`
+  with the old label `"Term 1"` (and `PUT` with `"first_term"`) answered
+  500, not 400. The mobile outbox reads 5xx as "offline, retry", so such an
+  edit would have been retried for ever. Both routes now refuse a term
+  outside 1–3 with 400, as they already did `sequenceNumber`.
+
+  **The card/QR lifecycle, as it is (`check:cardlifecycle`, new; nothing
+  changed):**
+
+  | Event | Archive (`GeneratedReport`) | QR row (`DocumentVerification`) |
+  |---|---|---|
+  | draft print (unpublished) | none | minted; snapshot of the unpublished figures |
+  | publication | untouched | untouched |
+  | first print after publication | written (first issue wins) | same code; snapshot refreshed |
+  | mark corrected, reprocessed | untouched | untouched until something prints |
+  | staff reprint | untouched (staff see a live render) | snapshot refreshed from live data, so the public page now disagrees with the archived paper |
+  | reissue (admin, audited) | rewritten | refreshed |
+  | revocation | untouched | revoked; reprints keep it revoked |
+  | term or annual card, any render | never archived | refreshed on every render |
+
+  The snapshot refreshes on every render because `ensure()` does an
+  unconditional `$set` of the snapshot (`documentVerify.service.js`),
+  deliberately: "the page always answers with the school's current record…
+  a mismatch is the check working". Pinned invariants that hold under every
+  option: one code per document across reprints, the page answers from the
+  stored snapshot (never live data), revocation survives reprints, and the
+  archive changes only by reissue.
+
+  | | 1. Archive at first print | 2. Issue at publication | 3. Freeze the QR only |
+  |---|---|---|---|
+  | Immutability | the paper, from first print after publication | the paper, from publication | the QR page only; the paper re-renders |
+  | Corrections | reissue (exists for sequence cards; to build for term/annual) | unpublish → correct → republish or reissue; codes on unpublish to define | reissue refreshes the QR; the paper follows live data |
+  | Traceability | archive + layout version per card | the same, complete for every pupil at once | snapshot only; the paper cannot be reproduced |
+  | QR behaviour | snapshot frozen at issue | frozen at publication; drafts get no code | frozen at publication; drafts get no code |
+  | Impact | `GeneratedReport` key/index migration (term and annual collide on `examId: null`), term/annual reissue and portal routes | as 1, plus a batch render at publish (heavy; partial failures) | `documentVerify` and its model only; reverses the stated design |
+
+  **Mobile exam terms — automated only; no device.** Mobile
+  `check:academicterms` (16) runs the real term service and the real
+  `ExamService` against the real backend routes:
+  - the school's own semesters, read as a teacher;
+  - kept for offline use, with the fixed three when nothing is known;
+  - the term sent as a number online and queued as a number offline;
+  - the replay accepted;
+  - an edit that resends the exam's term not moving it;
+  - the old labels refused with 400.
+
+  The screens themselves are checked by their source text only. **No device,
+  emulator or Expo runtime was available** (no Android SDK, `adb` or
+  emulator in the Codespace), so loading states, picker rendering and sync
+  on a device are **not verified**. Noticed, not changed: `ExamService`
+  sends a client `id` while the server keeps a supplied `_id`; mobile
+  reconciles ids through its id map (`check:idmap`).
+
+  **Requires a decision (unchanged by this pass):**
+  - D1, D1b, D2, D3.
+  - The `raw_mean` card figure, and with it the row pass flag under
+    `raw_mean`.
+  - §4.6(d)'s fix (with D1, cohort format v2 and the integration version).
+  - A bulk-decision control on the promotion screen.
+  - The card/QR lifecycle.
+  - Non-/20 scales, more than 3 terms or 6 sequences, open assessment types,
+    cohort format v2.
+
+  **Offered, not made (safe, but new behaviour):** a staleness flag on
+  sequence summaries, as term and annual results have, so a card whose marks
+  changed after processing says so.
+
+  **Commands run** (database URI and provider keys blanked; Atlas not
+  connected to at any point in this pass):
+  - backend `npm run check:all`: 6,366 checks in 104 suites, 0 failed. That
+    is the validation pass's 6,323 in 101 plus exactly the 43 new checks
+    (`check:cardstored` 26, `check:cadouble` 3, `check:cardlifecycle` 14),
+    so no existing suite's count moved. An earlier run in this pass stopped
+    at the known intermittent `check:pilot` privacy check (it fails when a
+    random id happens to contain "16"); the suites after it then passed when
+    re-run, and the clean run above passed whole;
+  - desktop `npm run check`: 266 passed, 0 failed;
+  - mobile `npm run check`: 667 passed, 0 failed, including
+    `check:academicterms` (16), eslint (0 errors) and `tsc`;
+  - web `npm run build` and `npm run lint`: passed, 0 errors;
+  - each new check also against the pre-change code: `check:cardstored`
+    fails 2 (the scale headline, the weighted_20 row flag), and mobile
+    `check:academicterms` fails 2 (the 500s).
+
+  Not run: anything on a device, emulator, in Electron or in a browser.
+
+- **Calculation and promotion validation pass (2026-10-16).** A re-check of
+  the six cases the validation and defect-closure passes covered, each
+  expected figure re-derived by hand from the configured rules, and two new
+  defects found and fixed. No school's rule, default, published result or
+  promotion outcome changed.
+
+  **Environment.** `school_db` on Atlas, read only (counts and codes): one
+  school (GVA001), 22 active pupils and 49 soft-deleted, 100 summaries, 50
+  term rows, no annual rows or promotion runs, and one structure with
+  `rules: null` (every rule at its default). It is the demo school recorded
+  in the validation pass. Nothing was written to it. Every test ran on an
+  in-memory MongoDB with the database URI and provider keys blanked.
+
+  **The cases, re-derived** (all already pinned; the pins agree with the
+  hand-worked figures):
+
+  | Case | Hand-worked | Pinned by |
+  |---|---|---|
+  | Card 13.67 vs stored 12 (§4.7f) | stored `round((15+9)/2) = 12`; card `(2·15.4 + 10.2)/3 = 13.67`, Maths `0.4·16 + 0.6·15 = 15.4`, English `0.4·12 + 0.6·9 = 10.2`; under `weighted_20` stored = card = 13.67 | `check:academic`, `check:academicrules`, `check:cardstored` |
+  | Live route under `raw_mean` (§4.7 a–d) | no CA, coefficient 1, Cho `round(11/2) = 6` at 28 % (absent as 0, its 20 kept in the maximum), whole numbers. Kept as the documented default | `check:academic` |
+  | Promotion with no results (§4.7e) | `legacy`: no published summary → `unassigned`/`no_results`, never `promoted`; other rules: an incomplete year or no annual average → `pending` → `unassigned` | `check:academic`, `check:rulesmatrix` |
+  | No term results → no annual row (§4.6k) | no row; an unpublished stale row removed, a published one kept and unranked | `check:annualnoterms`, `check:rulesmatrix` (eve) |
+  | `weighted_20`, `school_bands`, all four promotion rules, `refuse` | matrix figures re-worked: ama 12/13, bih 15/14, cho 5/10, dan 5/3.33; places 1,2,2,4,4 and 1,2,2,4,5; dan 7.33 → term 5.33 → year 4.33; `annual_average_at_least` 12 holds cho (10) back, a class bar of 10 does not | `check:rulesmatrix`, `check:academicrules` |
+  | Legacy rows and defaults | `policyHash: null` term rows read as stored; the year `(11·33.33 + 12·33.33 + 13·33.34)/100 = 12.0001 → 12` (the test's comment said 12.0034; corrected) | `check:rulesmatrix`, `check:academic` |
+
+  **Fixed: under `weighted_20`, a pupil absent or exempt in every subject
+  was given a sequence result of 0.** The rule leaves absent subjects out,
+  so such a pupil has nothing to average. The route stored 0, F, failing,
+  ranked last, and the term layer averaged that 0 in as a sequence sat. A
+  pupil absent for one whole sequence and on 13 in the other got a term of
+  6.5 and failed, where the rule gives 13. It is the sequence-level twin of
+  §4.6k and is handled the same way: no summary. An unpublished stale summary
+  is removed. A published one is kept exactly as issued and left out of the
+  places. Under `weighted_20` the sequence card prints no average for that
+  pupil, where it printed a rebuilt 0 (stored and card still agree). The
+  default (`raw_mean`) is unchanged and pinned: absent counts as zero, so the
+  same pupil still gets 0 there. `exam.routes.js` (`/process`, weighted
+  branch); `results.controller.js` (the card's average). Test:
+  `check:weightednomarks` (new, 15; 9 fail on the pre-change code).
+
+  **Fixed: the desktop's offline `/process` ignored the year's rules.** It
+  always computed the default arithmetic, so offline a `weighted_20` school
+  saw raw-mean figures until sync. A `refuse` school overwrote published
+  summaries on the desk, and the queued request was then refused by the
+  server. It now declines (sends the request to the server, the
+  dispatcher's contract for "the server should decide") under `weighted_20`,
+  and under `refuse` when a mirrored summary for the exam is published. On
+  defaults it computes exactly as before. `desktop/src/main/api/writes/exams.js`.
+  Test: desktop `check:process-rules` (new, 7; 2 fail on the pre-change
+  code).
+
+  **Found, not changed (untested or needs a decision):**
+  - **Mirror staleness on deletion.** Removing a no-result row (this fix, and
+    §4.6k's annual one) is a hard delete. The sync feed carries soft deletes
+    only, so an admin's desktop keeps the stale unpublished row until it
+    re-syncs from scratch. A soft delete needs the `/process` upsert to clear
+    `deletedAt`, which touches the default path; not done.
+  - **`weighted_20` with CA, paper absent.** A subject whose paper is marked
+    absent is left out even when the pupil has a CA mark, while a subject with
+    CA and *no* paper row counts the CA alone. The card does the same, so the
+    two agree; whether a recorded absence should discard the CA is the
+    school's rule, not decided here.
+  - **`POST /results/:examId/student/:studentId/reportcard`** (the
+    "calculate & save" route) rewrites a summary from body numbers under an
+    admin's reason, keeps the row's `calcVersion`, and is not subject to
+    `publishedResults: refuse`. It is guarded and audited (`guardResultWrite`,
+    `ResultChangeLog`) but no academic-rules test covers it.
+  - **`averageOutOf20` on a `raw_mean` summary** multiplies by 5 (12 → 60).
+    It is reached only when a sequence card has no rebuilt average, which
+    the live card builder always supplies; not reached by any test on live
+    data.
+  - **Term pass versus annual status under a non-legacy rule.** The annual row
+    re-derives each term's pass from `termAverage ≥ passMark` at annual
+    time, while the promotion run reads the stored `TermResult.isPassing`. They
+    agree unless the pass mark changes between the two computations; not
+    tested.
+  - The decisions listed above (D1, D1b, D2, D3, the `raw_mean` card figure,
+    §4.6d, the card/QR lifecycle, the bulk promotion decision) are unchanged.
+
+  **Commands run** (database URI and provider keys blanked):
+  - backend `npm run check:all`: 6,381 checks in 105 suites, 0 failed: the
+    defect-closure pass's 6,366 in 104 plus exactly the 15 of
+    `check:weightednomarks`, so no existing suite's count moved; `check:desktop`
+    (1,372) re-run separately after the desktop change, 0 failed;
+  - desktop `npm run check`: 273 passed, 0 failed (266 plus
+    `check:process-rules` 7);
+  - each new check also against the pre-change code (9 and 2 failures);
+  - the read-only probe of `school_db` (counts and codes only).
+
+  Not run: mobile and web checks (neither was changed); anything on a
+  device, in Electron or in a browser.
+
+- **Agreed calculation (2026-10-16): the decided rules for every school.**
+  Branch `academic-agreed-calculation`, from `academic-phases-4-6` @
+  `097de9c`.
+
+  **The decisions** (project owner, 2026-10-16; recorded under D1, D1b, D2
+  and D3 in §21.1):
+  - The sequence average is the coefficient-weighted mean out of 20.
+  - CA is blended when `GradingConfig.caEnabled` is on, and ignored when it
+    is off.
+  - An absent or exempt subject is removed, mark and coefficient. A 0 entered
+    by a teacher is a real 0. Coefficients cannot be switched off.
+  - What stays per school: CA on/off, the CA/paper split, and showGrades.
+  - Term and annual rows carry the school's bands.
+  - Promotion is the published annual average, out of 20, against the
+    class's bar for the year:
+    - below the bar, the pupil repeats; at or above, promoted;
+    - a final-year class graduates;
+    - with no published annual result, the pupil needs a decision.
+  - The school sets bars, not a rule.
+
+  The verification pass found four places where the code differed from the
+  brief. The project owner answered all four the same day:
+  1. **Published rows.** The default `overwrite` rewrote them. Now
+     **refuse, for every school**: 409, nothing written; unpublish first.
+  2. **Mixed terms.** The term layer read a summary's average whatever its
+     `calcVersion`. Now a term holding an old `exam-process/1` sequence
+     **reads it as its percentage ÷ 5** (`sequenceFigureOn20`); the row is
+     never changed.
+  3. **CA without a paper mark** (no paper row, or one not entered and not
+     marked absent). It counted the CA alone under `weighted_20`. Now
+     **removed**, as an absence: the card prints the CA on the row and does
+     not count it.
+  4. **An incomplete year.** `annual_average_at_least` also needs every term
+     published. **Kept:** without them the pupil needs a decision.
+
+  **Effective date: every unpublished result from the release.**
+  - Published rows keep their figures and `calcVersion` and are read as
+    before.
+  - For the current year, every unpublished sequence, term and annual result
+    is computed the decided way the next time its exam, term or year is
+    processed.
+  - A term or year whose results are published is refused until it is
+    unpublished.
+  - A current-year term that mixes a published old sequence with new ones
+    reads the old one at percentage ÷ 5. That is /20 on the old row's own
+    marks: still no CA, no coefficients, and absent counted as zero, as it
+    was computed.
+
+  **What changed:**
+  - `shared/academicRules.js`: the four rules are platform constants
+    (`PLATFORM`). Schools write only `promotionThreshold` (null = the pass
+    mark) and `classThresholds`, out of 20.
+    - A write naming a Phase 4 rule is refused (400 `RULE_FIXED`).
+    - A stored Phase 4 value is ignored, except `manual_only`, which is still
+      honoured (no school is known to have it).
+    - The snapshot records `{ platform: "agreed/1", …bars }`, so every
+      school's policy hash moved once.
+    - Writers stamp `exam-process/3`, `term/3` and `annual/3`.
+  - `POST /exams/:examId/process` (`exam.routes.js:1570-1902`) always runs
+    the decided calculation (`weightedSequence.service.js`).
+    - The raw-mean branch is removed. Rows it wrote are read through their
+      `calcVersion` by `sequenceAverageIsOn20`, `sequenceFigureOn20`,
+      `resolveAvg20` and `averageOutOf20`; none of these needs the old
+      arithmetic.
+    - Every school is refused when a summary is published.
+  - The sequence card (`results.controller.js`): for an `exam-process/3`
+    summary, or none yet, a subject with no paper mark is printed and not
+    counted. A card for an older summary keeps its arithmetic.
+  - Term and annual (`termGrading.service.js`, `annualGrading.service.js`):
+    - school bands always;
+    - the published-row refusal always, on the per-pupil functions too;
+    - promotion from `promotionUnderRules`, with the pass mark as the default
+      bar;
+    - promotion exams are no longer read.
+  - The promotion run (`promotion.service.js`) reads published
+    `AnnualResult`/`TermResult` only. The legacy reader is removed, and
+    `Class.promotionAverage` is not read.
+  - Bars (`academicStructure.routes.js`):
+    - `PUT …/rules` takes bars only, needs a reason (400 `REASON_REQUIRED`),
+      and is refused during a draft run;
+    - it is audited before and after with the reason;
+    - a year's structure created by GET or PUT copies the previous year's
+      bars (`barsFromPreviousYear`; no copy path existed before).
+  - Progression (`promotion.routes.js`):
+    - `GET /progression?year=` returns, per class, the bar, whether it is
+      confirmed for the year, the bar in force, pupils, and published annual
+      results;
+    - `PUT /progression` no longer writes `promotionAverage` (it nulled it
+      when absent).
+  - Desktop:
+    - offline `/process` always goes to the server, and the raw-mean copy in
+      `gradeUtils.js` is removed;
+    - `GET /promotion/progression` answers `year: null`, and sends `?year=`
+      to the server.
+  - §4.6(d):
+    - learning integration 1.1.0: a CA event whose occasion's academic mark
+      carries a `caMark` is baseline, not corroboration
+      (`shared/strengths/learningIntegration.js`);
+    - the academic profile's marks carry `caMark`
+      (`shared/intelligence/subjectInsights.js`; additive, so the academic
+      engine stays 1.0.0);
+    - cohort `FORMAT_VERSION` 2 with a `caMark` per subject row; format 1 is
+      still read.
+  - Web:
+    - Settings → Calculation rules is now a read-only statement;
+    - Promotion → Progression edits the year's bars;
+    - the new-run dialog warns about classes with no published annual
+      result;
+    - mark-entry help text (web and mobile) says absent leaves the subject
+      out and 0 counts.
+
+  **Options removed from a screen.** From Settings → Calculation rules:
+  - the sequence average (raw mean / weighted /20);
+  - the grading authority (built-in / school bands);
+  - the promotion rule (legacy / annual average / majority of terms /
+    manual);
+  - published results (overwrite / refuse).
+
+  From Promotion → Progression: the 0–100 "promotion average" input. It is
+  replaced by a /20 bar per year, with the old value shown until a bar is
+  confirmed.
+
+  **What the version bump does to open pilots.** `pilot.service.js`
+  compares each pilot's recorded engine versions with the current ones
+  (`currentEngineVersions`, `learningIntegration` among them, `:108-120`).
+  - A pilot opened under integration 1.0.0 now reports drift. Recording a
+    calibration decision on it is refused (409 `ENGINE_VERSION_CHANGED`,
+    `:534-537`) until it is re-baselined. INSUFFICIENT_EVIDENCE and CLOSED
+    stay open.
+  - A pilot recorded before per-engine versions existed is compared on the
+    academic version only, which did not move.
+
+  **Tests.** Each new or changed suite was also run against the pre-change
+  code (`097de9c`) and fails there.
+  - `check:agreedcalc` (new, 31): 24 failures, then a crash, on the old code.
+    It covers:
+    - CA on and off; a coefficient-2 subject; absent against an entered 0;
+      CA with no paper row; a pupil absent in everything;
+    - stored = card; a published result refused; a mixed term at
+      percentage ÷ 5; the Phase 4 choices refused;
+    - promotion at, just above and just below a bar; a class with no bar
+      (the school's, then the pass mark); a final-year class; no published
+      annual result; an incomplete year;
+    - the old 0–100 value never read;
+    - a bar change refused during a draft run, refused without a reason,
+      and audited with its reason; the next year starting with copied bars,
+      by GET and by PUT.
+  - Rewritten for the decided behaviour, each with hand-worked figures:
+    - `check:academicrules` (56), `check:rulesmatrix` (27),
+      `check:cardstored` (19), `check:weightednomarks` (11),
+      `check:annualnoterms` (10);
+    - `check:academic` (49): the live half re-derived figure by figure; the
+      three legacy-reader pins removed.
+  - `check:cadouble` (5) flipped from "known defect" to "fixed".
+  - Desktop `check:process-rules` (5) fails all 5 on the old code.
+  - Pins moved by the decision, each with its reason in the test:
+    - the integration version in `check:integration`, `check:development`,
+      `check:devguidance` and `check:advanced`;
+    - `check:complexity`'s query ceiling for an annual class run (8 → 9:
+      the published-row count now runs for every school);
+    - `check:periodscope`'s own-class compute (now 409: its fixture's class
+      holds a published row);
+    - `check:desktop`'s progression parity (`year: null`).
+
+  **Where the code differed from the brief:**
+  - The four points answered above.
+  - The annual row knows nothing of final years. A final-year pupil below
+    the bar is "repeated" on the annual row and the card, while the run
+    graduates them (`check:agreedcalc` pins both). **Not changed** (a
+    document decision).
+  - "List the stored `Class.promotionAverage` values per school" needs the
+    database, and this pass ran with Atlas disconnected. **Not done:** the
+    Progression screen shows each class's old value. The last read-only
+    probe (2026-10-16) found one school with `rules: null`, so no school
+    was on another rule then; not re-checked.
+
+  **Not done, or not verified:**
+  - **Mirror staleness.** The desktop mirror keeps a hard-deleted
+    unpublished no-result row until it re-syncs (as for §4.6k).
+  - **Promotion exams are still configurable but count for nothing.**
+    `AcademicStructure.promotionExams` is still edited in the structure
+    screen and used by the exam screens and cards, but no promotion reads it
+    (as decided). The only related screen text found is the exam-create
+    hint "Sequences 5 and 6 can be configured as promotion exams", which
+    does not say they decide promotion. Not changed.
+  - **The "calculate & save" route** (`POST /results/…/reportcard`) still
+    rewrites a summary from body numbers, under the existing lock and audit
+    guard. It keeps the row's `calcVersion` and is not tested against the
+    decided rules.
+  - **Untested in a browser or on a device:** the web Calculation rules and
+    Progression screens, the new-run warning, and the mark-entry text
+    (web and mobile). There are no web tests.
+  - **Non-/20 scales, more than 3 terms or 6 sequences, the card/QR
+    lifecycle:** unchanged.
+
+  **Commands run** (database URI and provider keys blanked; Atlas not
+  connected to):
+  - backend: every suite in `check:all`, one by one: 106 suites, 6,338 checks, 0 failed (`check:agreedcalc` 31 new; the reworked suites as listed above);
+  - desktop `npm run check`: 271 passed, 0 failed;
+  - mobile `npm run check`: 667 passed, 0 failed (eslint 0 errors, `tsc`);
+  - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in an
+    untouched file);
+  - each new or changed suite against a worktree of `097de9c`.
+
+- **Follow-up to the agreed calculation (2026-10-16).** Same branch. Three
+  fixes decided by the project owner, and the documents brought into line.
+
+  **1. A final-year pupil's annual row says "graduated".**
+  - For a pupil in a class with `isFinalYear`, the annual row's
+    `promotionStatus` is `graduated`, never `promoted` or `repeated`, as the
+    run proposes (`annualGrading.service.js:153-164`). Average, grade and
+    place are unchanged.
+  - Rows computed from now. A published row keeps what it says (its class is
+    refused, `check:agreedfollowup`).
+  - The annual card prints GRADUATED.
+  - **Found on the way:** a French card printed every promotion status in
+    English. The card's own French labels (`LABELS.fr`: ADMIS(E) EN …,
+    REDOUBLANT, DIPLOMÉ(E)) existed and were unused. Asked; the project
+    owner chose them.
+  - A French card now prints the decision in French
+    (`reportHtml.service.js` `promotionText`); an English card is unchanged.
+    The annual payload carries `promotionCode` and `promotionNextClass` for
+    this.
+  - `annual/3` is kept rather than bumped: it has never been released, so no
+    stored row carries it, and the final-year rule is part of what it means.
+
+  **2. "Calculate & save".**
+  - The route is `POST /results/:examId/student/:studentId/reportcard/
+    calculate`, not `…/reportcard`, which is the GET.
+  - **One screen calls it:** the mobile admin pupil-result screen
+    (`mobile/app/admin/exams/results/[examId]/student/[studentId].js:399-440`,
+    "Calculate & Generate Report Card"). Web and desktop do not.
+  - It built a summary from the marks, coefficients, scale and pass mark
+    the phone sent, and kept the row's `calcVersion`. It now runs exactly
+    what `/process` runs, for the pupil's class, on the stored marks and CA,
+    stamped `exam-process/3`. The body's numbers are not read.
+  - The `/process` core moved to `services/examProcess.service.js`
+    (`processExam`, with `computeGrade`); `/process` and this route both
+    call it.
+  - A published summary is refused with 409 `PUBLISHED_RESULTS` and nothing
+    written. That holds even for an admin with a reason, who could override
+    before. A pupil with no paper mark gets 404 `NO_RESULT`. An unpublished
+    recompute is audited (`ResultChangeLog`, old → new average).
+  - The class-wide run means the call is also refused when a classmate's
+    summary for the exam is published, as `/process` is.
+  - The mobile screen still lets its marks and its scale and pass-mark
+    settings be edited locally. Those edits are no longer saved; its
+    confirmation now says so (EN/FR). The screen itself is not changed.
+
+  **3. Promotion exams.** On Settings → Academic structure (web), a line
+  under the promotion-exam threshold, and the same text as the tooltip of
+  each sequence's "Promo" toggle: "Not used to decide promotion. Promotion
+  uses the annual average and the class bar." (FR: « N'est pas utilisé pour
+  décider du passage. Le passage utilise la moyenne annuelle et le seuil de
+  la classe. »). The screen has two promotion-exam controls (the toggles and
+  the threshold), and the line covers both. No behaviour changed.
+
+  **Documents.** The passages that still described the pre-decision
+  defaults as current now read as history or state the current behaviour:
+  - the header, the §1.1 footnotes and evidence rows, §1.2's promotion rows;
+  - §2.1, §3, §4.2–§4.5;
+  - the §4.6(d) and (l) rows, §4.7(c) and (g);
+  - §12's closing paragraph, §13, §14, §15.2 item 5, §16.1, §20.1, §21.1 D3,
+    §21.3, Appendix A.
+
+  Line references into the sequence route now point at
+  `examProcess.service.js`.
+
+  **Tests.**
+  - `check:agreedfollowup` (new, 14): fails 9 on the previous commit
+    (`5e4b80e`). It covers:
+    - a final-year pupil below and above the bar;
+    - a non-final-year pupil unchanged;
+    - a published row kept;
+    - the run and the card agreeing, in English and in French;
+    - calculate & save from stored marks (the body ignored), audited,
+      re-audited after a correction, and refused when published.
+  - Pins moved, each with its reason in the test:
+    - `check:agreedcalc`'s final-year row ("repeated" → "graduated");
+    - `check:marks`'s calculate checks: the stored marks' 15, not the body's
+      12; a published summary refused with 409 for teacher and admin, where
+      it was 423 and 200-with-reason.
+
+  **Not done, or not verified:**
+  - The mobile pupil-result screen still shows editable marks and the
+    scale/pass-mark settings for calculate & save. Their values are ignored
+    now and the confirmation says so; the screen is not reworked.
+  - Nothing run on a device, in Electron or in a browser; there are no web
+    tests for the structure-screen line or the French card.
+
+  **Commands run** (database URI and provider keys blanked; Atlas not
+  connected to):
+  - backend: every suite in `check:all`, one by one (107 suites).
+    `check:agreedcalc` and `check:marks` failed in that run on the two pins
+    this pass moves (listed above); after their update both were run again
+    (31 and 92 passed, 0 failed), so the total is 6,352 checks, 0 failed;
+  - desktop `npm run check`: 271 passed, 0 failed;
+  - mobile `npm run check`: 667 passed, 0 failed (eslint 0 errors, `tsc`);
+  - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in an
+    untouched file);
+  - `check:agreedfollowup` against a worktree of `5e4b80e`: 9 of 14 fail.
+
+- **Mobile "Calculate & save" screen, and four doc passages
+  (2026-10-16).** Same branch.
+
+  **The mobile pupil-result screen**
+  (`mobile/app/admin/exams/results/[examId]/student/[studentId].js`).
+  - **Before:** the "Setup" tab showed each subject's mark as text, but its
+    coefficient as an editable field. A "Calculation settings" card had
+    editable "normalise out of" (20) and pass-mark (10) fields. A "live
+    calculation" on the phone recomputed the average from those three
+    inputs, with no CA, a figure no stored result is made of. "Calculate &
+    Generate Report Card" posted those numbers straight away, with no
+    confirmation; since the follow-up pass the server ignored them.
+  - **After:**
+    - nothing on the screen is editable;
+    - the coefficient is plain text;
+    - the settings card says the results are out of 20 with the school's
+      pass mark, coefficients and CA, and that a mark is corrected in mark
+      entry;
+    - the figures shown (rows, weighted average, coefficient total,
+      passed/failed) are the server's report-card payload, not a phone
+      calculation;
+    - the button first asks for confirmation: "This recalculates every pupil
+      of this class for this exam from the stored marks, with the school's
+      coefficients and CA. It is refused if any result in the class is
+      published." (FR: « Cela recalcule tous les élèves de cette classe pour
+      cet examen à partir des notes enregistrées … C'est refusé si un
+      résultat de la classe est publié. »);
+    - a refusal says so in EN/FR;
+    - the request goes through `src/services/reportCardCalc.service.js`
+      with an empty body.
+  - **Code differed from the brief:** the marks were already read-only. The
+    editable fields were the coefficients, the scale and the pass mark, and
+    the screen also ran a phone-side calculation from them; both are
+    removed.
+
+  **Docs:**
+  - §3: the calculation rules are read-only, and bars are edited on Promotion
+    → Progression;
+  - §4.7(e): D1b decided;
+  - §4.7(f): decided, the card prints what is stored;
+  - §14: a final-year pupil shows "graduated" on the annual row and card.
+
+  **Tests.** New mobile `check:reportcardcalc` (12):
+  - the real service against the real backend route: the whole class
+    recalculated from the stored marks (ama (2·15 + 9)/3 = 13, bih
+    (2·12 + 18)/3 = 14), an empty body, and 409 with nothing written when a
+    classmate's result is published;
+  - the screen and the EN/FR confirmation, by source.
+
+  On the previous commit (`fb12e2c`) it fails: the service does not exist,
+  and the old screen has the editable fields and no confirmation text. The
+  screen is not rendered by any test, and nothing ran on a device.
+
+  **Commands run** (database URI and provider keys blanked):
+  - backend: every suite in `check:all`, one by one: 107 suites, 6,352
+    checks, 0 failed;
+  - desktop `npm run check`: 271 passed, 0 failed;
+  - mobile `npm run check`: 679 passed, 0 failed (eslint 0 errors, `tsc`);
+  - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in an
+    untouched file).
+
+- **Release tooling: dry run per school, unconfirmed bars (2026-10-16).**
+  Same branch. No calculation, engine, threshold or version changed.
+  - **`backend/scripts/dry-run-agreed-calc.js`:**
+    - copies one school from a source database into a private in-memory
+      MongoDB;
+    - reprocesses its unpublished results for the year with this branch's
+      code;
+    - reports, with salted pseudonymous pupil ids only: averages and
+      positions changed per layer, the largest change, and each annual
+      promotion status that would change.
+
+    It reads the source with `find()` only, on its own connection.
+  - **`backend/scripts/list-unconfirmed-bars.js`** lists, per school, the
+    classes with no confirmed bar for the year. It is read-only, and
+    final-year classes are excepted.
+  - **`check:dryrun` (new, 12):**
+    - the dry run on a synthetic school, every figure hand-worked;
+    - the command line giving the same report;
+    - the bar listing;
+    - the source byte-identical afterwards (`dbHash`, every document, every
+      index).
+  - docs/40 gains steps 1.5 (staged release), 1.7 (dry run) and 7.1
+    (unconfirmed bars).
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,379 checks, 0 failed;
+    - desktop `npm run check` 271/0;
+    - mobile `npm run check` 679/0;
+    - web build and lint, 0 errors.
+
+- **Rollback decided; release order (2026-10-16).** Same branch. No
+  calculation, engine, threshold, version or published row changed.
+  - **Rollback of the agreed calculation, decided by the project owner:** a
+    restore from backup; no code-only rollback (docs/40 1.4, the wording
+    as given).
+  - **One server for every school.** `docker-compose.yml` runs one backend
+    (line 26) on one database `school_app` (line 37); schools are records
+    (`superAdmin.routes.js:198`), scoped by `schoolId` (`tenant.js:98`). A
+    deploy switches every school, and a restore restores every school.
+    docs/40 1.6 proposes, not decided or built, a separate instance for the
+    first school, and lists what it costs. No per-school switch was added.
+  - **Pilots:** a closed pilot's reviews do not count toward a new one
+    (reviews carry the open pilot's id, `insights.routes.js:713`; a pilot's
+    evidence is its own id, `pilot.service.js:190`). docs/40 §5 says what
+    the head saves before closing.
+  - **Old desktop builds** cannot render, print or issue a report card
+    offline (`desktop/src/main/api/coverage.js:417`, `:427`; no term or
+    annual card route offline). docs/40 1.7.
+  - **Dry run:** the report also counts the year's published sequence,
+    term and annual rows (refused until unpublished); the promotion line
+    says when the year has no annual results. `check:dryrun` 12 → 13.
+  - docs/40: the dry run is now 1.5, before the release to one school
+    (1.6); shipping is 1.7. The 1.4 decision's "daily backup from 1.5"
+    reads "from 1.6" to follow the renumbering.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - desktop, mobile and web: no file changed; not rerun.
+
+- **What a code revert leaves; release to every school (2026-10-16).**
+  Same branch. No calculation, engine, threshold, version or published row
+  changed.
+  - **New `backend/scripts/check-revert-previous.js --ref <git ref>`** (14
+    checks, not in `check:all`: it checks out the previous code in a
+    temporary git worktree). This branch reprocesses a made-up school,
+    nothing is published, then the previous code reads, reprocesses and
+    runs promotion.
+  - **Found** (the same at `origin/master` and at `097de9c`):
+    - Cards, the term layer and the annual rows read the new rows
+      correctly.
+    - Reprocessing overwrites every figure, position, grade and
+      `calcVersion` with the previous code's own.
+    - But every sequence result this branch wrote keeps `academicYear` and
+      `term`: the previous route's `$set` does not include them
+      (`exam.routes.js:1760` at `origin/master`). The previous promotion
+      run selects published summaries by `academicYear`
+      (`promotion.service.js:53`), so after a revert it finds results where
+      it found none before, and compares their /20 average with the old
+      0–100 class bar (50 in the test: every Form 1 pupil proposed
+      "repeated", where before the run proposed `no_results`).
+  - So a code revert is clean only if nothing was reprocessed; docs/40 1.4's
+    decision wording is unchanged.
+  - docs/40 1.6 is now "Release to every school, with safeguards": every
+    head accepts their dry run, a backup of the whole server every day of
+    the first week, the break between terms preferred. The separate
+    instance is kept as "considered, not chosen". No "do not publish"
+    request was added (to 1.6 or §6): it would not keep rollback a code
+    revert.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - `check-revert-previous.js`: 14 passed, 0 failed, with
+      `--ref origin/master` and with `--ref 097de9c`;
+    - desktop, mobile and web: no file changed; not rerun.
+
+- **Revert cleanup (2026-10-16).** Same branch. No calculation, engine,
+  threshold, version or published row changed.
+  - **The previous code does write a year and term itself:** "Calculate &
+    save" (`POST /api/results/:examId/student/:studentId/reportcard/calculate`,
+    `results.routes.js:210`) creates a summary with them when the pupil has
+    none (`results.controller.js:1333` at `origin/master`, `:1406` at
+    `097de9c`); the previous mobile app calls it. No other routed writer
+    sets them: the process route's `$set` omits them, `processResults`
+    (which sets them) is not routed, and sync push writes only periods and
+    pupils.
+  - **New `backend/scripts/revert-cleanup-agreed-calc.js`:**
+    - `--record` before the revert (read-only) lists the ids of the
+      summaries stamped `exam-process/3`;
+    - `--manifest` after it sets `academicYear` and `term` back to null on
+      exactly those ids, where they still hold the recorded values and the
+      row is unpublished;
+    - it prints the counts first, and `--dry-run` writes nothing.
+
+    No filter on a row's contents is safe after the revert: a reprocessed
+    row is `exam-process/1` again, and an older "Calculate & save" row
+    holds a year too.
+  - **`check-revert-previous.js`, now 32 checks:**
+    - after the revert and the cleanup, reprocessed or not, the previous
+      promotion run proposes exactly what it did before this branch;
+    - only `academicYear` and `term` on the recorded rows change, and the
+      older row keeps its year.
+  - **Published under the new code:**
+    - the cleanup leaves those rows;
+    - the previous route rewrites a published row's figures in place,
+      still published;
+    - the previous run still finds those results.
+
+    Unpublishing first, then cleanup, reprocess and publish, gives the
+    previous code's own rows (the date of the first publication stays) and
+    its own proposals.
+  - docs/40 1.4: the decision's last line now points at the daily backup
+    (1.6); a revert-plus-cleanup rollback is proposed under the decision,
+    awaiting the project owner.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - `check-revert-previous.js`: 32 passed, 0 failed, with
+      `--ref origin/master` and with `--ref 097de9c`;
+    - `revert-cleanup-agreed-calc.js` from the command line (record, dry
+      run, cleanup, a missing argument) on an in-memory database;
+    - desktop, mobile and web: no file changed; not rerun.
+
+- **Rollback decided: revert plus cleanup (2026-10-16).** The project owner
+  adopted the docs/40 1.4 proposal:
+  - nothing published under the new calculation: revert backend and web,
+    then the cleanup with the latest manifest (`--dry-run` first); no
+    restore;
+  - something published: restore a backup (1.3 or the latest daily one), or
+    unpublish, clean up, reprocess and republish, and reissue cards issued
+    from the new figures;
+  - the manifest is recorded every day of the first week and again just
+    before any revert.
+
+  docs/40 1.6 adds the daily manifest and asks schools not to publish for
+  the first 5 school days; §6 carries the request in both languages, and
+  §7 a daily row for the manifest. Docs only; no code changed.
+
+- **Detail check before release (2026-10-16).** Same branch. Speed,
+  storage, English/French, clients against the backend, the mobile display
+  (the message module first) and loose ends; the findings, measurements and
+  open questions are in [docs/41](41-detail-check.md). No calculation,
+  engine, threshold, version constant, published row or recorded decision
+  changed.
+  - **Fixed, each with a test that failed before:**
+    - the analysis code digest threw in the Docker image (no `backend/`
+      folder there), so every analysis run would fail in production;
+    - the staff/pupil unread badge was always 0; a refused message showed
+      "queued" for ever (now failed, tap to retry); the composer was offered
+      on read-only threads; a guardian's retried send could post twice;
+    - the six message screens had no safe-area insets; the web messages
+      page was unusable at 360 px; the portal tabs wrapped; this branch's
+      pupil-result screen overlapped at 360 px and printed "12.50" in French;
+    - the phone's outbox kept every sent row and a gate phone every scan;
+      `outboxRowsForTable` never found a row (unquoted SQL);
+    - notifications were always English; coded server refusals
+      (PUBLISHED_RESULTS and five others) showed in English or as axios's
+      "Request failed with status code 409" on web and mobile; the
+      verification page's titles and buttons were English only; four
+      strings were wrong since the agreed calculation (promotion basis,
+      promotion-exam hint, admin mark-entry help, French calculate & save);
+    - the desktop's offline exam create and edit accepted any term;
+    - out-of-date comments in `AcademicStructure.js`,
+      `annualGrading.service.js` and `shared/ranking.js`.
+  - **New checks:** backend `check:complexitycalc` (queries per call flat
+    for 5 and 40 pupils, with ceilings, on every path this branch changed);
+    mobile `check-screen-details.js` and `check-hardcoded-strings.js` (any
+    new hard-coded text fails; 87 known ones in its baseline).
+  - **Not fixed (decisions or larger work, docs/41 §6–§7):** no client can
+    unpublish, though the 409 says to (blocks release); report-card
+    language; English emails; the 50-message thread gap; inert structure
+    fields; retention; phone cache trimming.
+  - `check:reportcardcalc` pinned the old French confirmation; its pin now
+    reads the new wording ("L'opération est refusée si…").
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 109 suites, 6,396 checks, 0 failed;
+    - `check-revert-previous.js`: 32 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - `perf:scale` and `perf:analysis` (docs/41 §1);
+    - desktop `npm run check`: 274 passed, 0 failed;
+    - mobile `npm run check`: 709 passed, 0 failed (eslint 0 errors,
+      `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 84 passed.
+
+- **The owner's answers to docs/41 §7 (2026-10-16).** Same branch. No
+  calculation, engine, threshold, version constant or published row's
+  figures changed; §21.1 unchanged.
+  - **Unpublishing** (closes the release blocker in docs/41 §6):
+    `POST /api/results/:examId/unpublish`, `POST /api/term-results/unpublish`,
+    `POST /api/annual-results/unpublish` (`services/unpublish.service.js`).
+    One class at a time, a reason required (400 REASON_REQUIRED),
+    `results.publish` only (school admin), school-scoped. Only `isPublished`
+    and `publishedAt` change; figures, positions and `calcVersion` stay;
+    the answer says issued cards stay as issued. AuditLog action
+    `results.unpublished` (counts before/after, the reason); a sequence also
+    gets a ResultChangeLog row (`entity: "exam"`). ResultChangeLog requires
+    an `examId`, so extending its `entity` with term and annual is not its
+    pattern; those are in the AuditLog only. A year is refused (409
+    PROMOTION_RUN_EXISTS, with the run's state) while a draft or committed
+    promotion run for it exists. When a sequence's last published class is
+    unpublished the exam goes back to `completed`, so it can be published
+    again. Web: "Unpublish…" with a reason dialog beside Publish on the exam,
+    term and annual pages. Mobile: the 409 refusal says where to unpublish.
+    Desktop: the server's (no offline answer).
+  - **French card wording:** DIPLÔMÉ(E); REDOUBLANT kept; ADMIS(E) SOUS
+    CONDITION for a conditional promotion (it printed in English).
+  - **Card language:** every sequence, term and annual card and every
+    reissue prints in `School.defaultLanguage`, whoever views it;
+    `?lang=`/`body.lang` no longer decide. Set on the web school settings
+    screen (`PUT /admin/school-info` accepts `defaultLanguage`, en or fr).
+    No class or section language exists in the data model (`Class.section`
+    is a free-text label), so none is used or added.
+  - **Inert structure fields:** `annualAverageMethod` and the
+    structure-level `promotionThreshold` are no longer shown or sent by the
+    structure screen, and annual rows no longer copy the threshold
+    (`check:academic`'s annual-row pin is now `promotionThreshold: null`;
+    every figure unchanged). Stored data untouched. docs/05, 12, 16, 19
+    corrected: nothing ever read `annualAverageMethod`.
+  - **Phone:** synced attendance before the 30-day window is removed on
+    each pull; an exam's cached marks, results, subjects and cards go when
+    it has not been opened for 60 days (`examCache.evictUnopenedExams`); an
+    exam with anything unsynced, or a request queued for it, is left.
+  - **French terms:** "Année scolaire" (card label and locales, was "Année
+    académique"); "annuler la publication" (was "dépublier/dépubliez");
+    "Chef d'établissement" for `academic.headTeacher` and `doc.headTeacher`
+    (the card already said "chef d'établissement"). The settings field for
+    the head's name still says "Principal".
+  - **Tests:** new `check:unpublish` (29: publish, refused 409, unpublish
+    with a reason, allowed, republish, for each layer; the promotion-run
+    refusal; cards and a reissue in the school's language);
+    `check-revert-previous.js` step Q now unpublishes through the previous
+    code's routed `PUT /results/summary/:id/publish` (33); and additions to
+    `check:agreedfollowup`, `check:schoolctx`, mobile `check:outbox`, desktop
+    `check:process-rules`, web `check:l10n`. `check-pilot-readiness`'s leak
+    test matched "16" inside ids and digests (seen once in a full run); it
+    now strips ids and digests and matches the mark alone, with a fixed
+    sample.
+  - docs/40: §2.5 (one analysis on staging, ends `succeeded`), §3.11–§3.17
+    (message screens on Android and iOS at 360 px, unpublishing, the
+    language setting), §6 in both languages. docs/41: §7 answered, §6 rows
+    closed.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,430 checks, 0 failed;
+    - `check-revert-previous.js`: 33 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed, 0 failed;
+    - mobile `npm run check`: 714 passed, 0 failed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 89 passed.
+
+- **Follow-up: exam state, message gaps, the exams list, seeded names
+  (2026-10-16).** Same branch. No calculation, engine, threshold, version
+  constant or published row's figures changed.
+  - **The exam's own published state, found:** unpublishing the last
+    published class put the exam back to `completed`, but unpublishing one
+    class while another stayed published left the exam `published`. The web
+    exam page reads `status === "published"`: it showed the exam as
+    published, hid Publish (so the unpublished class could not be
+    published back) and offered Unpublish only from that state; the phone's
+    list showed "Results published". **Fixed:** `status` is `published` only
+    while every result is; any unpublish puts it back to `completed`;
+    `resultsPublished` says whether any result is still out. The web offers
+    Unpublish while any class's results are out, for those classes.
+    `check:unpublish` +4 (an exam of two classes).
+  - **Messages missed while offline:** a thread sync fetched only the
+    newest 50. It now pages back (`beforeSeq`) until it reaches the newest
+    message the phone already holds (at most 60 pages); a thread new to the
+    phone loads its newest page only. Mobile `check:outbox`: 120 messages
+    arriving offline, all fetched, three pages, then stop.
+  - **Mobile admin exams list:** every page (`ExamService.getAllExams`,
+    pages of 100 until a short one; offline, the device's whole cache) in a
+    FlatList instead of a ScrollView of page 1. Tested with 120 exams.
+  - **Seeded structure names:** a new year is created (GET or PUT) with
+    names in the school's language: "1er trimestre", "Séquence 1",
+    "Évaluation 1" for a French school (`AcademicStructure.defaultTermsFor`);
+    existing structures unchanged. `check:periodshapes` +3.
+  - docs/40 already had §2.5 and §3.11–§3.17; added §3.18–§3.21 for this
+    pass. docs/41 §1, §3, §5 and §6 rows updated.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,437 checks, 0 failed;
+    - `check-revert-previous.js`: 33 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed, 0 failed;
+    - mobile `npm run check`: 719 passed, 0 failed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 90 passed.
+
+- **Rollback order when something was published (2026-10-16).** Docs and a
+  test only; no code changed. The class-wide unpublish routes exist only in
+  the new code, so docs/40 1.4's published option now reads, in order:
+  record the manifest; unpublish the affected sequence, term and annual
+  results with the new routes; revert backend and web; cleanup (dry run
+  first); reprocess; publish again; reissue the cards issued from the new
+  figures. `check-revert-previous.js` step R follows exactly that order
+  (replacing step Q, which unpublished after the revert through the
+  previous code's per-summary route): a card issued under the new code
+  carries 14 (ama, S1), the eight unpublish calls answer 200, the dry run
+  counts six to clear, the rows after reprocessing are the previous
+  code's own, its promotion run proposes what it did before this branch,
+  and the reissued card carries the previous code's 12. 37 checks.
+  - Items 1-4 of the follow-up were already done in the pass above.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,437 checks, 0 failed;
+    - `check-revert-previous.js`: 37 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 719
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 90 passed.
+
+- **Rollback order: step Q kept beside step R (2026-10-16).** Test and
+  docs only. docs/40 1.4's published option says "one call per class" in
+  step 2. `check-revert-previous.js` keeps step R (the 1.4 order:
+  manifest, unpublish with the new routes before the revert, revert,
+  cleanup with its dry run, reprocess, publish, reissue) and has step Q
+  back beside it (unpublish after the revert through the previous code's
+  per-result route), instead of R replacing it. 41 checks.
+  - Commands run (database URI and provider keys blanked):
+    `check-revert-previous.js`, 41 passed with `--ref origin/master` and
+    with `--ref 097de9c`. No other file changed, so the other suites stand
+    at the pass above (backend 6,437; desktop 275; mobile 719; web).
+
+- **The head's title, and the pupil ID card (2026-10-16).** Same branch.
+  No calculation, engine, threshold, version constant, published row or
+  recorded decision changed.
+  - **DIPLÔMÉ(E):** §14 corrected; §20.0 history entries left as written.
+  - **The head's title:** French says "Chef d'établissement" wherever it
+    names the head — web `settings.principal`, `platform.schools.principal`,
+    `academic.principalRemark`, `builder.principalRemark`,
+    `builder.vars.principalName/principalComment`, two notes; mobile
+    `settings.principal`, `adminSettings.principal/principalPh`,
+    `academic.principalRemark`, `builder.principalRemark`,
+    `portal.principalRemark`, `templateBuilder.*`; printed documents'
+    `labels.fr.headTeacher` (class lists, transcripts). English unchanged:
+    the card ("Principal's Remark") and the settings field ("Principal")
+    already agree.
+  - **The pupil ID card** (`GET /api/documents/id-cards/:classId`,
+    `print/idCard.js`, labels in `print/labels.js`; printed from the web
+    documents page, from mobile through `document.service.js`, and from the
+    desktop through the web console, the server's route):
+    - removed the "Principal" placeholder printed in script in the head's
+      signature space: a clean space for a signature and stamp above the
+      line; the head's title stays as the label under it ("Principal",
+      French "Chef d'établissement"). No signature or stamp image exists in
+      the data model.
+    - added the school's address and phone, the pupil's sex and date of
+      birth, the validity date (the school's own or the end of the academic
+      year, `expiryFor`) and an emergency contact (guardian's name and
+      phone); already there: school name and logo, photo (or the framed
+      blank), full name, matricule, class, academic year, the gate QR. No
+      health information (the model's `bloodGroup` is left off).
+    - printed in `School.defaultLanguage`, like the report cards; labels in
+      both languages; `<html lang>` set.
+    - every field but the name held to one line with an ellipsis; the name
+      steps down a size; the card stays 85.6 × 54 mm.
+    - `check:idcard` (new, 17).
+  - docs/40 §3.22 (the ID card on staging, web and mobile, both languages).
+    docs/41 §6 rows added.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 111 suites, 6,454 checks, 0 failed;
+    - `check-revert-previous.js`: 41 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 721
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 93 passed.
+
+- **First launch: docs/40 reworked (2026-10-16).** Docs only; no code
+  changed. The project owner confirmed that no school uses the platform
+  yet: this release is the first launch (Sunday 1 November 2026), not a
+  migration of live schools.
+  - docs/40 now opens with that, and adds §0 Launch readiness (0.1–0.20):
+    merge and tag; build every app from the tag; the production database
+    and its data; production settings; backups of the database and the
+    uploads volume with one timed restore; security; live services with
+    production keys; monitoring; restarts after a reboot; time zone; slow
+    connections; a full school year on staging on web and mobile in both
+    languages; the app stores; mobile builds submitted early; a signed
+    desktop build; a named support contact; first runs against production;
+    every index verified; and on the day, 2.2, 2.3 and 2.5 against
+    production.
+  - Marked not needed for this launch, each saying when it would apply (a
+    later change to the calculation once schools are live): 1.4's
+    revert-plus-cleanup rollback and manifest (replaced by redeploying the
+    previous image or fixing forward); 1.5 the dry run per school; 1.6's
+    days without publishing and the daily manifest (daily backups stay, as
+    normal operations); 1.7's warnings about old app builds; §5 pilots; §7's
+    manifest and 409 rows. §2 and §3 unchanged. §6 is a welcome note for
+    the first schools, in English and French.
+  - Found while writing §0, from the repository: `docker-compose.yml`
+    publishes the backend's port 5000 (lines 46–47) as well as nginx's 80,
+    and nginx listens on 80 only (TLS is to be put in front or in it); the
+    compose file sets no Docker log rotation and no time zone; a school's
+    time zone defaults to "UTC" (`School.js:255-257`); the code has no SMS
+    channel; the boot log verifies only the analysis index
+    (`analysisRuns.service.js:706-707`); `scripts/seed-form1-students.js`
+    creates pupils with a known password. Each is a §0 step; none was
+    changed here.
+  - docs/41 notes the first launch. No suite was run: no code changed.
+
+- **The stack's doors: port 5000 closed, TLS (2026-10-16).** Deployment
+  configuration; no application code changed.
+  - `docker-compose.yml`: the backend no longer publishes 5000 (`expose`
+    only; nginx reaches it on the Docker network). nginx publishes 80 and
+    443. A `certbot` service renews the Let's Encrypt certificate twice a day
+    through the webroot; nginx reloads every 6 hours to pick it up. New
+    required variable `DOMAIN`.
+  - `nginx.conf` is now a template (`${DOMAIN}`, rendered by the nginx
+    image): port 80 serves only `/.well-known/acme-challenge/` and
+    redirects the rest to `https://`; 443 serves TLS 1.2/1.3 with HTTP/2 and
+    HSTS, with the web console, `/api/` and `/uploads/` blocks unchanged.
+  - Run by hand in `nginx:alpine` with a self-signed certificate: `nginx -t`
+    passed; 80 → 301 `https://…` with the path kept, the challenge file
+    served; 443 served the web console over HTTP/2 and TLS 1.3 with HSTS;
+    TLS 1.1 refused; the reload loop running. The `/api/` proxy could not be
+    exercised: this environment drops container-to-container traffic (as
+    docs/40 2.1 records), so a stand-in backend was unreachable even
+    directly.
+  - New `check:deployconfig` (13; 11 fail on the previous files): only 80
+    and 443 published by any service; the 443 server's TLS, certificate,
+    protocols, HSTS and locations; port 80 only redirects and answers the
+    challenge; the template, volumes, reload and renewal.
+  - docs/17 (TLS section: first certificate, renewal, clients on
+    `https://$DOMAIN/api`), docs/19 A5 resolved, docs/02 and docs/04, docs/40
+    0.5, 0.7 and 2.3, docs/41.
+  - Commands run: backend `check:all` one by one, 112 suites, 6,467 checks,
+    0 failed (no other suite's files changed).
+
+- **Operations: log caps, Cameroon time, indexes at boot, the seed guard,
+  the first certificate (2026-10-16).** No calculation, engine,
+  threshold, version constant, published row or recorded decision changed.
+  - **Logs:** every service in `docker-compose.yml` logs to json-file
+    capped at 10 MB × 5 files.
+  - **Time:** a new school's `settings.timezone` defaults to
+    `Africa/Douala` (was "UTC"; existing schools keep what they stored);
+    the backend and nginx run with `TZ=Africa/Douala` (both images honour
+    it: Node through ICU, nginx through its zoneinfo). A date printed at
+    23:30 UTC on 1 November reads 2 November. `check:timezone` (4).
+  - **Indexes at boot:** `services/indexCheck.service.js` compares every
+    index the models declare with the database after the models' builds,
+    logs one line per missing index and `[indexes] Indexes verified: N,
+    missing: M`; never fatal (`server.js`, in a try). `check:indexboot` (6,
+    with one index dropped and a missing collection).
+  - **Seed scripts:** the one script that creates accounts with a known
+    password, `scripts/seed-form1-students.js` ("student123"), refuses to
+    run before connecting when `NODE_ENV` is production or the database is
+    neither local (localhost, 127.0.0.1, ::1; not the Compose `mongo` host)
+    nor named as a test one, unless `--i-know` (`scripts/seedGuard.js`).
+    Found and left: `seed-academic-structure.js` writes to a real URI but
+    creates no accounts; `smoke-bursar-path.js` creates its user in an
+    in-memory database. `check:seedguard` (9).
+  - **First certificate:** with the previous configuration nginx could not
+    start on a fresh server (its 443 block names certificate files that do
+    not exist yet). Now `nginx-http.conf` (port 80: the challenge and a
+    redirect) is served at once, and `nginx-start.sh` adds `nginx.conf`
+    (443) as soon as the certificate exists, after `nginx -t`, then reloads
+    every 6 hours. Run by hand in `nginx:alpine`: with no certificate, port
+    80 served the challenge and 443 stayed closed; the certificate files
+    copied in, HTTPS came on within the 2-second test poll (TLS 1.3, HSTS);
+    log times in WAT; a clean stop on SIGTERM. The first certificate is now
+    issued through the webroot with nginx running (docs/17).
+    `check:deployconfig` 13 → 17.
+  - docs/17 (TLS, logs, time, indexes), docs/40 0.5, 0.7, 0.9, 0.11,
+    0.15 (`https://<DOMAIN>/api`) and 0.19, docs/41.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 115 suites, 6,490 checks, 0 failed;
+    - `check-revert-previous.js`: 41 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 721
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 93 passed.
 
 ### 20.1 Safest first implementation slice
 
@@ -1519,16 +3199,19 @@ Checked against docs/37:
   system cannot recover retroactively.
 - The tests are the safety net Phase 3 needs. Today the term tests seed
   inputs that `processResults` never produces (§4.1), so a refactor could
-  pass them and still change real results.
+  pass them and still change real results. *Since done:* `check:academic`
+  and `check:rulesmatrix` run the live route end to end.
 
 This slice is done, and so are Phase 2(d), section layouts (§10.3), and
 Phase 2(e), the missing-school guard (§17.4), which was implemented and
 verified by `check:schoolguard`. Phase 2 is complete. Phase 3 is also done,
 ahead of D1 on the project owner's instruction, with no figure changed
-(§20.0). D1 is still undecided and needs the school's sign-off. It now
-blocks Phase 4.
+(§20.0). Phase 4 made D1–D3 per-school rules whose defaults were the
+behaviour before them; no school chose otherwise. On 2026-10-16 the project
+owner decided them for every school (§21.1), and the agreed-calculation pass
+made that the platform's behaviour for every unpublished result (§20.0).
 
-### 20.2 Admin experience (Phase 5 design; not implemented)
+### 20.2 Admin experience (Phase 5 design; partly implemented, see §20.0)
 
 ```
 Academic Settings
@@ -1560,11 +3243,24 @@ consequence:**
 
 ## 21. Risks and unresolved decisions
 
-### 21.1 Decisions needed before Phase 3
+### 21.1 Decisions needed before Phase 3 (D1–D4 since decided)
 
 > Phase 3 has since been done without these, as a behaviour-preserving
-> refactor (§20.0). None of them is decided. D1–D3 now block Phase 4,
-> which is where results change.
+> refactor (§20.0). Phase 4 turned D1, D1b, D2 and D3 into per-school rules
+> (`shared/academicRules.js`) whose defaults are today's behaviour. So none
+> is decided by the code, and none is decided for any school until its
+> authorised academic review chooses in Settings → Calculation rules. The
+> questions below are the ones that review answers. D4, a permission
+> question rather than a school's academic decision, was resolved in the
+> validation pass (below).
+>
+> **D1, D1b, D2 and D3 were decided on 2026-10-16 by the project owner,** for
+> every school at once, not per school. The decision was given in writing in
+> the brief for the "agreed calculation" pass (§20.0). The project owner
+> answered four questions the code raised the same day: published rows,
+> mixed terms, CA without a paper mark, and incomplete years. The Phase 4
+> choices are no longer settings. Each decision is recorded under its
+> question below; the questions are kept as they were asked.
 
 - **D1 (revised). Which sequence calculation is authoritative (§4.1, §4.7).**
   Real results are the live route's: a whole-number raw mean, with no CA, no
@@ -1582,18 +3278,75 @@ consequence:**
   Published rows stay as issued, with an annotation report (§9). **This
   needs the school's authorised academic review.** It will move term and
   annual figures and promotion outcomes relative to today.
+
+  **Decided (2026-10-16, project owner):** the coefficient-weighted mean out
+  of 20, always.
+  - CA is blended in by the school's split when `GradingConfig.caEnabled`
+    is on, and ignored when it is off.
+  - A subject with no paper mark is removed entirely, mark and coefficient.
+    That covers absent, exempt, or not entered, including a CA with no
+    paper (answer of the same day).
+  - A 0 entered by a teacher is a real 0. Coefficients cannot be switched
+    off.
+  - Stamped `exam-process/3`, for every result computed from the release.
+    Published rows keep their figures and `calcVersion`.
+  - A term that holds an old `exam-process/1` sequence reads it as its
+    percentage ÷ 5 (answer of the same day).
 - **D1b. Promotion is blind on real data (§4.7e).** Until summaries carry
   `academicYear`, every proposal is "no results". Decide whether the run
   should read `AnnualResult` (the §14 recommendation) or summaries with a
   backfilled year. Either changes which pupils a run proposes to hold back.
+
+  **Decided (2026-10-16, project owner):** the run reads published
+  `AnnualResult` and `TermResult`. A pupil with no published annual result,
+  or a year with a term not published, needs a decision (answer of the same
+  day). Paper summaries also carry `academicYear` and `term` again.
 - **D2. Which promotion rule is authoritative** (§4.4), and whether
   `Class.promotionAverage` was entered meaning /20, a percentage, or
   something else, since it is compared against GPA points today.
+  *Corrected facts (the question is unchanged):* the comparison is with the
+  mean of the year's published summary averages, under `legacy` only
+  (`promotion.service.js:56-74`, `:108-115`).
+  - On real data those are raw-mark means, which the run finds none of,
+    because the live route writes no `academicYear` (§4.7e).
+  - Under `weighted_20` they are /20 means.
+  - The bar is entered as 0–100 (`Class.js:141-145`,
+    `web/src/pages/promotion/progression.tsx:178-188`).
+  - The non-legacy rules use their own /20 thresholds instead
+    (`AcademicStructure.rules`, §14).
+
+  **Decided (2026-10-16, project owner):** one rule for every school.
+  - The published annual average, out of 20, is compared with the class's
+    bar for the year: at or above, promoted; below, repeats.
+  - A final-year class graduates. No published annual result means a
+    decision is needed.
+  - Bars are per year, out of 20 (`AcademicStructure.rules`:
+    `classThresholds`, plus the school's bar for classes without their own,
+    which defaults to the pass mark). A new year copies the previous year's
+    bars.
+  - `Class.promotionAverage` (0–100) is read by no run. It is shown beside
+    the new bar until an admin confirms one, and nothing converts it.
+  - Promotion exams do not count. A stored `manual_only` is still honoured,
+    and nothing can set it.
 - **D3. Recompute of published results.** Today recompute silently
   unpublishes sequences and overwrites published term and annual results.
   Should Phase 4's guard *refuse*, or *recompute into a new unpublished
   revision*?
-- **D4. Teacher read access to configuration** (§4.6j, §17.2).
+  *Corrected facts (the question is unchanged):*
+  - Unpublishing on recompute is `processResults` (unrouted,
+    `results.service.js:318-319`). The live route leaves `isPublished`
+    alone and rewrites the figures (§4.7g, `check:academic`).
+  - Phase 4 added `publishedResults: refuse` as an opt-in rule
+    (`check:rulesmatrix`). The default was then still `overwrite`.
+    "Recompute into a new revision" was not built.
+
+  **Decided (2026-10-16, project owner, answer to the code's question):**
+  refuse, for every school. Processing an exam, term or year that has
+  published rows answers 409 `PUBLISHED_RESULTS` and writes nothing.
+  Unpublishing first is the deliberate act.
+- **D4. Teacher read access to configuration** (§4.6j, §17.2). **Resolved
+  in the validation pass:** the year's shape on `exams.view`, the feed's
+  existing rule (§17.2).
 
 ### 21.2 Risks
 
@@ -1610,10 +3363,29 @@ consequence:**
 ### 21.3 Not done in this audit
 
 - No live database was inspected, so the extent of §4.1 in real published
-  data is unknown.
+  data is unknown. The validation pass ran on a copy of the demo school
+  (§20.0); a real school's data has still not been seen.
 - Desktop renderer source is not in this repository (`desktop/src/main`
-  only), so desktop UI assumptions were not audited.
-- §4.6(a–h) were established by code reading. Only §4.1 and §4.6(i) were
+  only), so desktop UI assumptions were not audited. *Corrected:* the
+  desktop has no renderer of its own. It loads the web build
+  (`desktop/src/main/main.js:184-196`), so its UI is the web app in this
+  repository. Nothing has been run in Electron.
+- *At the time of the audit*, §4.6(a–h) were established by code reading,
+  and only §4.1 and §4.6(i) were executed. *Since then* every §4.6 finding
+  and §4.7 has been executed by a committed test:
+  - §4.6 a, g: `check:marks`
+  - §4.6 b: `check:desktop`
+  - §4.6 c: `check:reportcard`
+  - §4.6 d: `check:cadouble` (fixed in the agreed-calculation pass)
+  - §4.6 f: `check:reportlayout`
+  - §4.6 h: `check:cards`
+  - §4.6 i: `check:schoolguard`
+  - §4.6 j: `check:authz`, `check:feed`
+  - §4.6 k: `check:annualnoterms`
+  - §4.6 l: `check:cardstored`
+  - §4.7: `check:academic`, over HTTP
+
+  §4.6(e) was a handler mounted on no route. It was removed rather than
   executed.
 - No browser check of any screen.
 
@@ -1629,9 +3401,18 @@ node <scratchpad>/scale-probe.js backend                                 # §4.1
 node <scratchpad>/undef-probe.js backend                                 # §17.3: 0 documents
 ```
 
-The scratch scripts are in the session scratchpad, not the repository. No
-check suite was run, because no code changed. The probes exercise
-unmodified services against an in-memory MongoDB.
+The scratch scripts are in the session scratchpad, not the repository.
+The probes exercise unmodified services against an in-memory MongoDB. *For
+the audit itself* no check suite was run, because no code changed.
+
+*Since the audit*, every implementation pass has run the check suites with
+the database URI and provider keys blanked. Each pass lists its commands
+and results under "Commands run" in §20.0. The most recent run (2026-10-16,
+branch `academic-agreed-calculation`, the ID-card pass after `f8926ed`):
+backend `check:all`, 115 suites, 6,490 checks, 0 failed;
+`check-revert-previous.js` 41 passed against `origin/master` and `097de9c`;
+desktop `npm run check`, 275 passed; mobile `npm run check`, 721 passed; web
+build and lint, 0 errors; web `i18n:check` and `check:l10n` (93) pass.
 
 ## Appendix B. Files read (principal)
 

@@ -53,7 +53,6 @@
  */
 
 const os = require("os");
-const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const crypto = require("crypto");
@@ -70,12 +69,12 @@ const Intervention      = require("../../db/models/Intervention");
 
 const ROOT   = path.join(__dirname, "..", "..", "..");
 const SHARED = path.join(ROOT, "..", "shared");
-const CAL    = path.join(ROOT, "scripts", "calibration");
 // require.resolve, not a joined path: it fails at load if the file is missing,
 // and scripts/check-orphans.js can see the worker is reachable.
 const WORKER_FILE = require.resolve("./analysisWorker");
 
 const { ENGINE_VERSION } = require(path.join(SHARED, "intelligence"));
+const analysisCode = require("./analysisCode");
 
 const gunzip = promisify(zlib.gunzip);
 
@@ -179,28 +178,15 @@ const scopeKeyOf = ({ classIds }) => {
 const activeKeyOf = (schoolId, scopeKey, fingerprint) => `${schoolId}|${scopeKey}|${fingerprint}`;
 
 /**
- * The analysis code a report depends on: the engine and the calibration
- * scripts, by content. A deploy that changes either changes every fingerprint,
- * so a report from older code is never served — whether or not anybody
- * remembered to move a version number.
+ * The analysis code a report depends on, by content: every project file the
+ * worker's analysis loads, read off the module graph (analysisCode.js). A
+ * deploy that changes any of them changes every fingerprint, so a report from
+ * older code is never served — whether or not anybody remembered to move a
+ * version number. Computed once per process.
  */
 let codeDigestMemo = null;
 const codeDigest = () => {
-  if (codeDigestMemo) return codeDigestMemo;
-  const files = [];
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.name.endsWith(".js")) files.push(p);
-    }
-  };
-  walk(path.join(SHARED, "intelligence"));
-  for (const f of ["analyseCohort.js", "cohortSchema.js", "isolatedEngine.js"]) files.push(path.join(CAL, f));
-  files.push(WORKER_FILE);
-  const h = crypto.createHash("sha256");
-  for (const f of files.sort()) h.update(path.relative(ROOT, f)).update("\0").update(fs.readFileSync(f)).update("\0");
-  codeDigestMemo = h.digest("hex");
+  if (!codeDigestMemo) codeDigestMemo = analysisCode.codeDigestOf();
   return codeDigestMemo;
 };
 
@@ -732,5 +718,5 @@ module.exports = {
   ERROR_MESSAGES,
   DEFAULTS,
   // For the check script.
-  _internals: { loadEvidence, fingerprintOf, scopeKeyOf, codeDigest, runWorker, PROVENANCE },
+  _internals: { loadEvidence, fingerprintOf, scopeKeyOf, codeDigest, codeFiles: analysisCode.codeFiles, codeDigestOf: analysisCode.codeDigestOf, runWorker, PROVENANCE, WORKER_FILE },
 };

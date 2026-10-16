@@ -19,12 +19,10 @@ const User          = require("../db/models/User");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const StudentRoster = require("../db/models/Student");
 const { teacherAssigned } = require("../utils/teacherScope");
-const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
-const academicPolicy = require("../services/academicPolicy.service");
-const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+const { processExam, computeGrade } = require("../services/examProcess.service");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -105,41 +103,7 @@ const resolveClassData = async (classIdArray, schoolId) => {
   };
 };
 
-const computeGrade = (score, maxScore, gradingConfig) => {
-  if (score === null || score === undefined) {
-    return {
-      percentage: null,
-      grade:      null,
-      remark:     null,
-      gpaPoints:  null,
-      isPassing:  null,
-    };
-  }
-  const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
-  // Normalize to /20 Cameroon scale for grade band lookup
-  const markOutOf20 = normalizeTo20(score, maxScore);
-  const grades   = gradingConfig?.grades || [];
-  const passMark = gradingConfig?.passMark ?? 10;
-  // Bands are stored on the /20 scale. If the school has no config — or stored
-  // bands on some other scale — fall back to the built-in Cameroon scale so a
-  // genuine 12/20 never degrades to a wrong letter like F for everyone.
-  let match = grades.find(
-    (g) => markOutOf20 >= g.minMark && markOutOf20 <= g.maxMark
-  );
-  if (!match) {
-    const fb = lookupGrade(markOutOf20);
-    match = fb
-      ? { grade: fb.grade, remark: fb.remark, gpaPoints: fb.points }
-      : null;
-  }
-  return {
-    percentage,
-    grade:     match?.grade     || null,
-    remark:    match?.remark    || null,
-    gpaPoints: match?.gpaPoints ?? null,
-    isPassing: markOutOf20 >= passMark,
-  };
-};
+// computeGrade lives with the exam processing it serves (examProcess.service).
 
 /**
  * Backfill studentName, admissionNo, and className for old ResultSummary rows
@@ -667,6 +631,12 @@ router.get("/:id", staffOnly, asyncHandler(async (req, res) => {
 // POST /api/exams
 // ─────────────────────────────────────────────────────────
 
+/** Exam.term as the schema holds it: an integer 1-3 (a numeric string casts). */
+const isTermNumber = (term) => {
+  const n = Number(term);
+  return term !== null && term !== "" && Number.isInteger(n) && n >= 1 && n <= 3;
+};
+
 router.post("/", adminOnly, asyncHandler(async (req, res) => {
   const {
     name, type, academicYear, term, sequenceNumber,
@@ -677,6 +647,10 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   if (!name?.trim())  return res.status(400).json({ message: "name is required" });
   if (!academicYear)  return res.status(400).json({ message: "academicYear is required" });
   if (!term)          return res.status(400).json({ message: "term is required" });
+  // The schema's 1-3, said as a 400. A label such as "Term 1" — what the
+  // mobile screens used to send — left as a 500, which the mobile outbox
+  // reads as "offline, retry", so it was retried for ever.
+  if (!isTermNumber(term)) return res.status(400).json({ message: "term must be 1-3" });
   // The schema constrains this to 1-6, so an out-of-range value would arrive
   // as a ValidationError and leave with a 500. A 400 says which field.
   if (sequenceNumber != null && sequenceNumber !== "") {
@@ -853,8 +827,11 @@ router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
     totalMarks, passMark, status,
   } = req.body;
 
-  // Same 1-6 check the create route makes: the schema constrains it, so an
+  // Same checks the create route makes: the schema constrains both, so an
   // out-of-range value would arrive as a ValidationError and leave as a 500.
+  if (term !== undefined && !isTermNumber(term)) {
+    return res.status(400).json({ message: "term must be 1-3" });
+  }
   if (sequenceNumber != null && sequenceNumber !== "") {
     const sq = Number(sequenceNumber);
     if (!Number.isInteger(sq) || sq < 1 || sq > 6) {
@@ -1320,16 +1297,22 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   // every average and grade computed from it, so the sheet is validated before
   // anything is written. Absent and exempt rows carry no score; every other
   // student must have a real number between 0 and the subject's ceiling.
+  //
+  // The ceiling is the one the mark is stored and graded against below — the
+  // exam subject's — never a maxScore sent on the row. Checking the row's own
+  // value let { score: 30, maxScore: 40 } through on a /20 subject, to be
+  // stored as 30/20 (docs/39 §4.6a).
+  const ceiling = examSubject?.maxScore ?? 100;
   const invalidScores = scores.filter((s) => {
     if (!s || s.isAbsent || s.isExempt)                           return false;
     if (s.score === null || s.score === undefined || s.score === "") return true;
     const n = Number(s.score);
-    return !Number.isFinite(n) || n < 0 || n > (s.maxScore ?? examSubject?.maxScore ?? 100);
+    return !Number.isFinite(n) || n < 0 || n > ceiling;
   });
   if (invalidScores.length > 0) {
     return res.status(400).json({
       success: false,
-      message: `${invalidScores.length} invalid score(s): every present student needs a mark between 0 and ${examSubject?.maxScore ?? 100}`,
+      message: `${invalidScores.length} invalid score(s): every present student needs a mark between 0 and ${ceiling}`,
       invalid: invalidScores.map((s) => s.studentId),
     });
   }
@@ -1553,230 +1536,8 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   const exam = await Exam.findOne({ _id: examId, schoolId }).lean();
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
-  const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
-
-  // The configuration this run reads, frozen and named, so every summary it
-  // writes can say what produced it (docs/39 §8). Stamped only: nothing below
-  // reads it, and the arithmetic is unchanged.
-  const policy = await academicPolicy.resolve({
-    schoolId, academicYear: exam.academicYear, gradingConfig, createdBy: req.user?._id ?? null,
-  });
-  const scoreQuery    = { examId, schoolId, deletedAt: null };
-  if (classId) scoreQuery.classId = classId;
-
-  const allScores    = await StudentScore.find(scoreQuery).lean();
-  const examSubjects = await ExamSubject.find({
-    examId,
-    schoolId,
-    deletedAt: null,
-    ...(classId ? { classId } : {}),
-  }).lean();
-
-  const subjectMap = new Map(examSubjects.map((es) => [es.subjectId, es]));
-  const byStudent  = {};
-  for (const score of allScores) {
-    if (!byStudent[score.studentId]) byStudent[score.studentId] = [];
-    byStudent[score.studentId].push(score);
-  }
-
-  // Fetch student names for all students in this result set
-  const studentIds = Object.keys(byStudent);
-  const Student = require("../db/models/Student");
-  const Class   = require("../db/models/Class");
-  const students = await Student.find({ _id: { $in: studentIds }, schoolId })
-    .select("_id studentName firstName lastName enrollmentNo classId className")
-    .lean();
-  const studentMap = new Map(students.map((s) => [String(s._id), s]));
-
-  // Every summary this run might update, in one query.
-  //
-  // The loop below used to run ResultSummary.findOne per pupil and then a
-  // findByIdAndUpdate or create per pupil, and the positions pass after it
-  // a third write per pupil — three sequential round trips each, awaited
-  // one at a time. On an in-memory mongod with no network at all that was
-  // 10.5s for 1,200 pupils; against Atlas, where every one of those trips
-  // pays real latency, it is minutes. This is the whole reason processing
-  // an exam felt like it hung.
-  const existingSummaries = await ResultSummary.find({
-    examId, schoolId, studentId: { $in: studentIds },
-  }).select("_id studentId").lean();
-  const existingByStudent = new Map(
-    existingSummaries.map((s) => [String(s.studentId), s])
-  );
-
-  // Collected here and sent as one bulkWrite after the loop.
-  const summaryOps = [];
-
-  // Fetch class names for all classes represented
-  const classIds = [...new Set(students.map((s) => s.classId).filter(Boolean))];
-  const classes = classIds.length > 0
-    ? await Class.find({ _id: { $in: classIds }, schoolId }).select("_id name").lean()
-    : [];
-  const classNamesById = new Map(classes.map((c) => [String(c._id), c.name]));
-
-  const summaries = [];
-
-  for (const [studentId, scores] of Object.entries(byStudent)) {
-    let totalScore    = 0;
-    let maxTotalScore = 0;
-    let passed        = 0;
-    let failedCount   = 0;
-
-    const subjectBreakdown = [];
-
-    for (const s of scores) {
-      const es       = subjectMap.get(s.subjectId);
-      const maxScore = es?.maxScore ?? s.maxScore ?? 100;
-      maxTotalScore += maxScore;
-
-      if (!s.isAbsent && !s.isExempt && s.score !== null) {
-        totalScore += s.score;
-        const pct  = Math.round((s.score / maxScore) * 100);
-
-        // Recomputed here, not copied off the score row.
-        //
-        // maxScore above is read from the exam subject as it stands NOW, and
-        // normalizedMark is derived from it — but grade, points, remark and
-        // isPassing used to be taken from StudentScore, where they were
-        // computed when the mark was saved, against whatever maxScore applied
-        // then. One function deriving one field from the current scale and
-        // copying four that depend on the same input is a straightforward
-        // inconsistency, and it had a sharp edge: correcting a subject's
-        // maxScore and reprocessing moved the mark and left the letter alone.
-        // A subject marked out of 20 while its maxScore said 100 graded F, and
-        // no amount of fixing the scale afterwards could shift it.
-        //
-        // scripts/check-grade-pipeline.js pins this.
-        const graded = computeGrade(s.score, maxScore, gradingConfig);
-
-        if (graded.isPassing) passed++;
-        else                  failedCount++;
-
-        subjectBreakdown.push({
-          subjectId:      s.subjectId,
-          subjectName:    es?.subjectName || s.subjectId,
-          score:          s.score,
-          maxScore,
-          normalizedMark: Math.round((pct / 100) * 20 * 10) / 10,
-          grade:          graded.grade,
-          points:         graded.gpaPoints,
-          remark:         graded.remark,
-          isPassing:      graded.isPassing,
-          isAbsent:       false,
-        });
-      } else {
-        subjectBreakdown.push({
-          subjectId:      s.subjectId,
-          subjectName:    es?.subjectName || s.subjectId,
-          score:          null,
-          maxScore,
-          normalizedMark: null,
-          grade:          null,
-          points:         null,
-          remark:         s.isAbsent ? "Absent" : "Exempt",
-          isPassing:      false,
-          isAbsent:       s.isAbsent,
-        });
-      }
-    }
-
-    const percentage = maxTotalScore > 0
-      ? Math.round((totalScore / maxTotalScore) * 100) : 0;
-    const average    = scores.length > 0
-      ? Math.round(totalScore / scores.length) : 0;
-    const computed   = computeGrade(totalScore, maxTotalScore, gradingConfig);
-
-    const existing = existingByStudent.get(String(studentId));
-    const stu = studentMap.get(studentId);
-    const studentName = stu?.studentName || [stu?.firstName, stu?.lastName].filter(Boolean).join(" ") || null;
-    const admissionNo = stu?.enrollmentNo || null;
-    const className   = stu?.className || classNamesById.get(String(stu?.classId)) || null;
-
-    // The id is settled here rather than by the database, so the positions
-    // pass below can address a row this run has not written yet.
-    const summaryId = existing?._id || uuidv4();
-
-    const fields = {
-      classId:        classId || exam.classId,
-      className,
-      studentName,
-      admissionNo,
-      totalScore,
-      maxTotalScore,
-      percentage,
-      average,
-      overallGrade:   computed.grade,
-      overallRemark:  computed.remark,
-      gpa:            computed.gpaPoints,
-      subjectsPassed: passed,
-      subjectsFailed: failedCount,
-      subjectsTotal:  scores.length,
-      isPassing:      computed.isPassing,
-      subjectBreakdown,
-      policyHash:     policy._id,
-      calcVersion:    CALC_VERSIONS.examProcess,
-      syncStatus:     "synced",
-      lastSyncedAt:   new Date(),
-    };
-
-    summaries.push({ _id: summaryId, ...fields, examId, studentId, schoolId });
-  }
-
-  // ── Class positions ──────────────────────────────────────
-  const grouped = {};
-  for (const s of summaries) {
-    const cId = s.classId || "unknown";
-    if (!grouped[cId]) grouped[cId] = [];
-    grouped[cId].push(s);
-  }
-
-  for (const classSummaries of Object.values(grouped)) {
-    classSummaries.sort((a, b) => b.percentage - a.percentage);
-    let pos = 1;
-    for (let i = 0; i < classSummaries.length; i++) {
-      if (
-        i > 0 &&
-        classSummaries[i].percentage < classSummaries[i - 1].percentage
-      ) {
-        pos = i + 1;
-      }
-      // Onto the in-memory row. Ranking is the last thing computed and the
-      // only field that needs the whole cohort, so folding it in here is
-      // what lets the summaries go out in a single write instead of a
-      // second full pass over the collection to add two integers.
-      classSummaries[i].classPosition = pos;
-      classSummaries[i].totalInClass  = classSummaries.length;
-    }
-  }
-
-  for (const s of summaries) {
-    const { _id, examId: eId, studentId: sId, schoolId: schId, ...fields } = s;
-    summaryOps.push({
-      updateOne: {
-        // Keyed on the natural identity rather than the generated _id, so
-        // a concurrent run cannot insert a second summary for one pupil.
-        filter: { examId: eId, studentId: sId, schoolId: schId },
-        update: {
-          $set: fields,
-          $setOnInsert: { _id, examId: eId, studentId: sId, schoolId: schId },
-        },
-        upsert: true,
-      },
-    });
-  }
-
-  if (summaryOps.length) {
-    await ResultSummary.bulkWrite(summaryOps, { ordered: false });
-  }
-
-  await Exam.findByIdAndUpdate(examId, { status: "completed" });
-  console.log(`✅ Results processed: ${summaries.length} students`);
-
-  return res.json({
-    success:   true,
-    processed: summaries.length,
-    message:   `Results processed for ${summaries.length} student(s)`,
-  });
+  const result = await processExam({ exam, schoolId, classId: classId || null, userId: req.user?._id ?? null });
+  return res.status(result.status).json(result.body);
 }));
 
 // ─────────────────────────────────────────────────────────

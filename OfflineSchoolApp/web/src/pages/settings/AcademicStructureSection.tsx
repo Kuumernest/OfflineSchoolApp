@@ -1,7 +1,7 @@
 // web/src/pages/settings/AcademicStructureSection.tsx
 import { useState, useEffect, useCallback } from "react";
 import {
-  Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp,
+  Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp, Plus, Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -81,29 +81,61 @@ const ASSESSMENT_TYPES = ["test", "practical", "promotion_exam"] as const;
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const extractMessage = (err: unknown): string =>
-  (err as { response?: { data?: { message?: string } } })
-    ?.response?.data?.message ??
-  (err instanceof Error ? err.message : i18n.t("settings.somethingWrong"));
+const extractMessage = (err: unknown): string => {
+  const data = (err as { response?: { data?: { message?: string; error?: string; errors?: Array<{ message?: string }> } } })
+    ?.response?.data;
+  return data?.message ?? data?.error ?? data?.errors?.[0]?.message ??
+    (err instanceof Error ? err.message : i18n.t("settings.somethingWrong"));
+};
+
+// The bounds every stored exam and result already lives in (docs/39 Phase 6,
+// shared/periodStructure.js on the server, which enforces the same).
+const MAX_TERMS = 3;
+const MAX_SEQUENCES = 6;
+/** A number no real sequence has, for one just added and not yet renumbered. */
+const NEW_SEQUENCE = 99 as SequenceNumber;
+
+/**
+ * Terms numbered 1..n and sequences 1..m across the whole year, in order —
+ * the shape the server accepts — with the promotion exams following their
+ * sequences to their new numbers. For the standard three-by-two year this
+ * changes nothing.
+ */
+function reshape(terms: TermConfig[], promotionExams: number[] | undefined) {
+  let n = 0;
+  const moved = new Map<number, number>();
+  const out = terms.map((t, i) => ({
+    ...t,
+    number: (i + 1) as TermNumber,
+    sequences: t.sequences.map((sq) => {
+      n += 1;
+      if (sq.number !== NEW_SEQUENCE) moved.set(sq.number, n);
+      return { ...sq, number: n as SequenceNumber };
+    }),
+  }));
+  const promo = (promotionExams ?? []).filter((p) => moved.has(p)).map((p) => moved.get(p)!) as SequenceNumber[];
+  return { terms: out, promotionExams: promo };
+}
 
 /** Ensure a structure matches current schema defaults (migration-safe). */
 function normalise(raw: AcademicStructure): AcademicStructure {
-  const terms = (raw.terms ?? DEFAULT_TERMS).map((t, i) => {
-    const num = (i + 1) as TermNumber;
-    return {
-      ...t,
-      number: num,
-      sequences: (t.sequences ?? []).map((s, j) => {
-        const seqNum = ((num - 1) * 2 + j + 1) as SequenceNumber;
-        return {
-          ...s,
-          number: seqNum,
-          weight: s.weight ?? 50,
-          assessment: s.assessment ?? { type: "test" as const },
-        };
-      }),
-    };
-  });
+  // Sequences are numbered across the whole year (1..m), not "two per term":
+  // a year may have three evaluations in a semester (docs/39 Phase 6). For
+  // the standard year the numbers are the ones it always had.
+  let seq = 0;
+  const terms = (raw.terms ?? DEFAULT_TERMS).map((t, i) => ({
+    ...t,
+    number: (i + 1) as TermNumber,
+    sequences: (t.sequences ?? []).map((s) => {
+      seq += 1;
+      return {
+        ...s,
+        number: seq as SequenceNumber,
+        weight: s.weight ?? 50,
+        assessment: s.assessment ?? { type: "test" as const },
+      };
+    }),
+  }));
   return { ...raw, terms };
 }
 
@@ -151,9 +183,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
     try {
       const { data } = await api.put(`/academic-structure/${schoolId}/${encodeURIComponent(academicYear)}`, {
         terms: structure.terms,
-        annualAverageMethod: structure.annualAverageMethod,
         promotionExams: structure.promotionExams,
-        promotionThreshold: structure.promotionThreshold,
         passMark: structure.passMark,
         maxAbsences: structure.maxAbsences,
       });
@@ -181,6 +211,40 @@ export default function AcademicStructureSection({ schoolId }: Props) {
     sequences[seqIdx] = { ...sequences[seqIdx], ...patch };
     terms[termIdx] = { ...terms[termIdx], sequences };
     setStructure({ ...structure, terms });
+  };
+
+  // ── Shaping the year (docs/39 Phase 6) ──
+  const totalSequences = structure?.terms.reduce((n, tm) => n + tm.sequences.length, 0) ?? 0;
+  const applyShape = (terms: TermConfig[]) => {
+    if (!structure) return;
+    setStructure({ ...structure, ...reshape(terms, structure.promotionExams) });
+  };
+  const newSequence = (): SequenceConfig => ({
+    number: NEW_SEQUENCE,
+    name: t("academicStructure.newSequenceName", { n: totalSequences + 1 }),
+    weight: 50,
+    assessment: { type: "test" },
+  } as SequenceConfig);
+  const addTerm = () => {
+    if (!structure || structure.terms.length >= MAX_TERMS || totalSequences >= MAX_SEQUENCES) return;
+    applyShape([...structure.terms, {
+      number: (structure.terms.length + 1) as TermNumber,
+      name: t("academicStructure.newTermName", { n: structure.terms.length + 1 }),
+      weight: 0,
+      sequences: [newSequence()],
+    } as TermConfig]);
+  };
+  const removeTerm = (termIdx: number) => {
+    if (!structure || structure.terms.length <= 1) return;
+    applyShape(structure.terms.filter((_, i) => i !== termIdx));
+  };
+  const addSequence = (termIdx: number) => {
+    if (!structure || totalSequences >= MAX_SEQUENCES) return;
+    applyShape(structure.terms.map((tm, i) => (i === termIdx ? { ...tm, sequences: [...tm.sequences, newSequence()] } : tm)));
+  };
+  const removeSequence = (termIdx: number, seqIdx: number) => {
+    if (!structure || structure.terms[termIdx].sequences.length <= 1) return;
+    applyShape(structure.terms.map((tm, i) => (i === termIdx ? { ...tm, sequences: tm.sequences.filter((_, j) => j !== seqIdx) } : tm)));
   };
 
   const togglePromotionExam = (seqNum: SequenceNumber) => {
@@ -299,7 +363,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                         <div className="grid grid-cols-12 gap-3 items-end">
 
                           {/* Seq name */}
-                          <div className="col-span-4">
+                          <div className="col-span-3">
                             <label className="block text-xs text-gray-500 mb-1">
                               {SEQUENCE_NAMES[seq.number]}
                             </label>
@@ -356,6 +420,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                             <button
                               type="button"
                               onClick={() => togglePromotionExam(seq.number)}
+                              title={t("academicStructure.promoNotUsed")}
                               className={cn(
                                 "rounded-lg px-2 py-1.5 text-xs font-medium transition",
                                 isPromo
@@ -367,10 +432,42 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                             </button>
                           </div>
 
+                          {/* Remove (a term keeps at least one) */}
+                          <div className="col-span-1 flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => removeSequence(termIdx, seqIdx)}
+                              disabled={term.sequences.length <= 1}
+                              aria-label={t("academicStructure.removeSequence")}
+                              title={t("academicStructure.removeSequence")}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+
                         </div>
                       </div>
                     );
                   })}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addSequence(termIdx)}
+                      disabled={totalSequences >= MAX_SEQUENCES}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> {t("academicStructure.addSequence")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeTerm(termIdx)}
+                      disabled={structure.terms.length <= 1}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> {t("academicStructure.removeTerm")}
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -379,50 +476,31 @@ export default function AcademicStructureSection({ schoolId }: Props) {
         );
       })}
 
+      {/* ── Shape of the year (docs/39 Phase 6) ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={addTerm}
+          disabled={structure.terms.length >= MAX_TERMS || totalSequences >= MAX_SEQUENCES}
+          className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Plus className="h-4 w-4" /> {t("academicStructure.addTerm")}
+        </button>
+        <span className="text-xs text-gray-500">
+          {t("academicStructure.shapeHint", { terms: MAX_TERMS, sequences: MAX_SEQUENCES })}
+        </span>
+      </div>
+
       {/* ── Global Settings ── */}
       <Card>
         <CardTitle>{t("academicStructure.globalSettings")}</CardTitle>
         <div className="space-y-4">
 
-          {/* Annual average method */}
-          <div>
-            <FieldLabel>{t("academicStructure.annualAvgMethod")}</FieldLabel>
-            <div className="flex gap-3 mt-1">
-              {(["terms", "sequences"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setStructure({ ...structure, annualAverageMethod: m })}
-                  className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-medium transition border",
-                    structure.annualAverageMethod === m
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  )}
-                >
-                  {t(`academicStructure.method_${m}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Promotion threshold */}
+          {/* The annual average method and a structure-level promotion
+              threshold were offered here; nothing reads them (the year's bars
+              are set on Promotion → Progression), so they are no longer shown
+              or sent (decided 2026-10-16, docs/41 §7). Stored values stay. */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <FieldLabel>{t("academicStructure.promotionThreshold")}</FieldLabel>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={20}
-                  step="0.5"
-                  value={structure.promotionThreshold ?? 10}
-                  onChange={(e) => setStructure({ ...structure, promotionThreshold: Number(e.target.value) })}
-                  className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                />
-                <span className="text-sm text-gray-500">/ 20</span>
-              </div>
-            </div>
             <div>
               <FieldLabel>{t("academicStructure.passMark")}</FieldLabel>
               <div className="flex items-center gap-2">

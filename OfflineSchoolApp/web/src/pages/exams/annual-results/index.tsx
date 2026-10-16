@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
+import { UnpublishButton } from "@/components/results/UnpublishButton";
+import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { AnnualResult } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────
@@ -63,6 +65,9 @@ export default function AnnualResultsPage() {
   const classes = classesQ.data ?? [];
 
   const { data, isLoading } = useAnnualResults(academicYear, classId || undefined, page);
+  // One column per term the year actually has (docs/39 Phase 6), not a fixed three.
+  const periods = useAcademicPeriods(academicYear);
+  const columnCount = 8 + periods.terms.length;
   const computeMutation = useComputeAnnualResults();
   const publishMutation = usePublishAnnualResults();
 
@@ -176,6 +181,14 @@ export default function AnnualResultsPage() {
           )}
           {t("annualResults.publish")}
         </button>}
+        {/* One class at a time, with a reason (docs/41 §7). */}
+        {isAdmin && <UnpublishButton
+          layer="annual"
+          classOptions={classes.map((c) => ({ id: String(c._id), name: c.name }))}
+          classId={classId || undefined}
+          academicYear={academicYear}
+          disabled={!results.some((r) => r.isPublished)}
+        />}
       </div>
 
       {/* Overtaken by the term results behind them.
@@ -225,9 +238,9 @@ export default function AnnualResultsPage() {
               <th className="px-4 py-3">{t("annualResults.studentName")}</th>
               <th className="px-4 py-3">{t("annualResults.admissionNo")}</th>
               <th className="px-4 py-3">{t("annualResults.className")}</th>
-              <th className="px-4 py-3 text-center">{t("annualResults.term1Avg")}</th>
-              <th className="px-4 py-3 text-center">{t("annualResults.term2Avg")}</th>
-              <th className="px-4 py-3 text-center">{t("annualResults.term3Avg")}</th>
+              {periods.terms.map((tm) => (
+                <th key={tm.number} className="px-4 py-3 text-center">{tm.label}</th>
+              ))}
               <th className="px-4 py-3 text-center">{t("annualResults.annualAverage")}</th>
               <th className="px-4 py-3 text-center">{t("annualResults.grade")}</th>
               <th className="px-4 py-3 text-center">{t("annualResults.position")}</th>
@@ -237,21 +250,18 @@ export default function AnnualResultsPage() {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center">
+                <td colSpan={columnCount} className="px-4 py-12 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
                 </td>
               </tr>
             ) : results.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={columnCount} className="px-4 py-12 text-center text-gray-400">
                   {t("annualResults.noResults")}
                 </td>
               </tr>
             ) : (
               results.map((r, idx) => {
-                const t1 = r.termAverages?.find((t) => t.term === 1);
-                const t2 = r.termAverages?.find((t) => t.term === 2);
-                const t3 = r.termAverages?.find((t) => t.term === 3);
                 return (
                   <tr
                     key={r._id}
@@ -274,15 +284,11 @@ export default function AnnualResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
                     <td className="px-4 py-3 text-gray-500">{r.className}</td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {t1?.average?.toFixed(1) ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {t2?.average?.toFixed(1) ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {t3?.average?.toFixed(1) ?? "—"}
-                    </td>
+                    {periods.terms.map((tm) => (
+                      <td key={tm.number} className="px-4 py-3 text-center text-gray-700">
+                        {r.termAverages?.find((ta) => ta.term === tm.number)?.average?.toFixed(1) ?? "—"}
+                      </td>
+                    ))}
                     <td className="px-4 py-3 text-center font-semibold text-gray-900">
                       {r.annualAverage?.toFixed(1) ?? "—"}
                     </td>

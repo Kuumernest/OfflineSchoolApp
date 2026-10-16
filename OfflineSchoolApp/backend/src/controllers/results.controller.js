@@ -7,7 +7,7 @@ const ResultSummary   = require("../db/models/ResultSummary");
 const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
-const School          = require("../db/models/School");
+const { processExam } = require("../services/examProcess.service");
 const GeneratedReport = require("../db/models/GeneratedReport");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
@@ -31,6 +31,7 @@ const { lookupGrade } = require("../services/grading.service");
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
+const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
 // The CA half of a sequence. A sequence card shows both assessments and the
 // mark they combine to; the pairing and the arithmetic are shared with the
 // grading engine so the card cannot print a different number from the one the
@@ -477,9 +478,30 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     };
   };
 
-  /** The /20 average this card headlines, for the overall band lookup. */
-  const resolveAvg20 = () =>
-    summary?.average != null ? Number(summary.average) : null;
+  // A subject passes on its sequence mark under weighted_20 (see the row).
+  const onSequenceMark = sequenceAverageIsOn20(summary?.calcVersion);
+  const passMark20     = Number(gradingConfig?.passMark ?? 10);
+
+  /**
+   * The stored average on /20, for the headline band lookup.
+   *
+   * A weighted_20 summary is on /20 already. A live-route (raw_mean) summary
+   * is the mean of raw paper marks on the papers' OWN scale: /20 when every
+   * paper is /20, which is unchanged here, but 65 for papers marked /100 —
+   * and read as /20 that headlined a pupil on 65% (13/20) "A+" (docs/39
+   * §4.7d/f). Such a summary is read through its own percentage instead.
+   * Which figure a card headlines is not decided here: this is the same
+   * stored figure, on the scale the bands are written in.
+   */
+  const resolveAvg20 = () => {
+    if (summary?.average == null) return null;
+    const average = Number(summary.average);
+    const live = summary.calcVersion == null || summary.calcVersion === "exam-process/1";
+    const subjects = Number(summary.subjectsTotal), maxTotal = Number(summary.maxTotalScore);
+    const allOn20 = subjects > 0 && maxTotal === 20 * subjects;
+    if (!live || allOn20 || !(subjects > 0 && maxTotal > 0) || summary.percentage == null) return average;
+    return Math.round((Number(summary.percentage) / 5) * 100) / 100;
+  };
 
   // Lookup by both ref styles: StudentScore.examSubjectId → ExamSubject._id,
   // while rows entered before subjects were set up may only carry subjectId.
@@ -525,6 +547,11 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     }
   }
 
+  // The decided calculation (exam-process/3, docs/39 §21.1) counts a subject
+  // only with a paper mark: a CA with no paper is printed, not counted. A card
+  // for a summary computed before it keeps the arithmetic it was printed with.
+  const agreed = !summary || summary.calcVersion === "exam-process/3";
+
   const subjectRows = [...scores, ...caOnlyRows].map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
                      subjectMap.get(String(score.subjectId)) || {};
@@ -555,7 +582,8 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
         })
       : null;
 
-    const effectiveScore = blended ? blended.score : score.score;
+    const noPaper = agreed && (score.score == null || score.isAbsent || score.isExempt);
+    const effectiveScore = noPaper ? null : (blended ? blended.score : score.score);
 
     const normalizedMark =
       effectiveScore != null && !score.isAbsent && !score.isExempt
@@ -616,7 +644,16 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       // the fallback for a score with no mark to look up.
       grade:         gi.grade            ?? score.grade,
       gradePoint:    gi.points           ?? score.gpaPoints ?? null,
-      isPassing:     score.isPassing     ?? null,
+      // The paper's stored flag — except where the school's rule says a
+      // subject passes on its sequence mark (weighted_20: "the subject passes
+      // on its blended mark", shared/academicRules), which is the mark this
+      // row prints and the stored summary counts. There the row printed
+      // "10.2, C, Fail" beside a summary that counted it passed (docs/39
+      // §4.6l). Under raw_mean the row is unchanged: which figure that card
+      // prints is the school's decision (§4.7f).
+      isPassing:     onSequenceMark || agreed
+        ? (normalizedMark != null ? normalizedMark >= passMark20 : false)
+        : (score.isPassing ?? null),
       normalizedMark,
       weightedScore,
       // Per-subject rank over the students who actually sat this subject (§5)
@@ -653,9 +690,6 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   const totalWeighted = activeRows.reduce(
     (s, r) => s + (r.weightedScore ?? 0), 0
   );
-  const weightedAverage = totalCoeff > 0
-    ? Math.round((totalWeighted / totalCoeff) * 100) / 100
-    : 0;
 
   // ── Report type (§7) ────────────────────────────────────────────────────────
   // sequence → a bound sequence (1–6); annual → the promotion exam, the only
@@ -666,8 +700,9 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // sequence card names its sequence, a term card names its term, and the
   // annual card names neither because it covers the whole year.
   let ownName = null;
+  let structure = null;
   if (reportType === "sequence") {
-    const structure = exam?.schoolId
+    structure = exam?.schoolId
       ? await AcademicStructure.findOne({
           schoolId: String(exam.schoolId), academicYear: exam.academicYear,
         }).lean().catch(() => null)
@@ -677,6 +712,14 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       .flatMap((t) => t.sequences)
       .find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
+
+  // No subject counted: there is no figure, and the route stores none
+  // (check:weightednomarks), so the card prints none either rather than a 0
+  // the pupil never scored. A card for an exam-process/1 summary is
+  // unchanged: it prints the 0 its stored result also holds.
+  const weightedAverage = totalCoeff > 0
+    ? Math.round((totalWeighted / totalCoeff) * 100) / 100
+    : (agreed || onSequenceMark ? null : 0);
 
   // The facts about the period, not a sentence about it. The header names the
   // period in the reader's language ("Première Séquence"), so a string built
@@ -822,7 +865,8 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // ✅ Phase 2: single rendering engine. Returns the canonical printable HTML
 //    produced server-side; the web batch print and the mobile PDF export
 //    fetch this instead of keeping their own local builders.
-//    ?lang=fr switches label language (default en).
+//    Printed in the school's language (School.defaultLanguage), whoever
+//    views it; ?lang= is no longer read (docs/41 §7).
 // ─────────────────────────────────────────────────────────
 
 /**
@@ -845,6 +889,7 @@ const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers 
   require("../services/reportCardData.service");
 // Which sections a card prints (docs/39 §10, Phase 2d).
 const reportLayout = require("../services/reportLayout.service");
+const { recordAudit } = require("../services/audit.service");
 
 /**
  * Freeze what was just issued.
@@ -907,8 +952,6 @@ const archiveGeneratedReport = ({
 
 const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const lang =
-    String(req.query.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
 
   const built = await buildStudentReportCardData(examId, studentId, req);
   if (!built?.ok) {
@@ -929,6 +972,9 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // card routes share so they cannot select different fields from each other.
   const letterhead = await loadSchoolForCard(schoolId, req);
   const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  // The school's language, whoever views or reissues the card (docs/41 §7);
+  // a ?lang= or body.lang from the viewer's interface no longer decides it.
+  const lang = letterhead.language;
 
   /**
    * The verification strip: QR + code resolving to a public page that shows
@@ -1039,7 +1085,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
   // overwrote — another school's frozen card.
   const existing = await GeneratedReport.findOne({
     examId, studentId, schoolId,
-  }).select("_id templateVersion deletedAt").lean();
+  }).select("_id templateId templateVersion layoutVersion deletedAt").lean();
 
   if (!existing) {
     return res.status(404).json({
@@ -1057,24 +1103,35 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  const lang =
-    String(req.body.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
-
-  let schoolName = req.user?.schoolName || null;
-  if (!schoolName) {
-    const school = await School.findOne({ _id: schoolId }).select("name").lean();
-    schoolName = school?.name || null;
-  }
+  // The same letterhead and verification strip the issue path prints
+  // (getStudentReportCardHtml). A reissue used to render with the school's
+  // name alone, so the card that superseded an issued one had no logo, motto,
+  // delegations or QR (docs/39 §4.6f).
+  const letterhead = await loadSchoolForCard(schoolId, req);
+  const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  // The school's language, whoever views or reissues the card (docs/41 §7);
+  // a ?lang= or body.lang from the viewer's interface no longer decides it.
+  const lang = letterhead.language;
+  const verify = await cardVerification({
+    data:        built.data,
+    schoolId,
+    studentId,
+    documentKey: examId,
+    req,
+  });
 
   const template = await loadReportTemplate(schoolId, req.body.templateId);
 
   // A reissue is the deliberate act that supersedes an issued card, so it
   // takes the school's CURRENT layout and records it (docs/39 §10).
   const layout = { ...(await reportLayout.currentLayout(schoolId)) };
+  const issued = reportLayout.issuedFields(layout);
 
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
+    school: { ...letterhead.school, name: schoolName || "" },
+    verify,
     template,
     sections: layout.sections,
   });
@@ -1085,7 +1142,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       $set: {
         templateId:      rendered.source === "template" ? String(template._id) : null,
         templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
-        ...reportLayout.issuedFields(layout),
+        ...issued,
         renderedHtml:    rendered.html,
         variablePayload: built.data,
         term:            built.data.term         || null,
@@ -1097,6 +1154,29 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       },
     }
   );
+
+  // The name against it (docs/39 §4.6f): who superseded which card, from
+  // which template and layout to which, and why if they said.
+  await recordAudit(req, {
+    action:   "reportCard.reissued",
+    schoolId,
+    resource: { type: "GeneratedReport", id: existing._id, label: `exam ${examId}` },
+    before: {
+      templateId:      existing.templateId ?? null,
+      templateVersion: existing.templateVersion ?? null,
+      layoutVersion:   existing.layoutVersion ?? null,
+      deleted:         Boolean(existing.deletedAt),
+    },
+    after: {
+      templateId:      rendered.source === "template" ? String(template._id) : null,
+      templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
+      layoutVersion:   issued.layoutVersion ?? null,
+      deleted:         false,
+      verifyCode:      verify?.code ?? null,
+    },
+    reason: typeof req.body.reason === "string" ? req.body.reason
+          : typeof req.body.changeReason === "string" ? req.body.changeReason : null,
+  });
 
   console.log(
     `♻️  Report card reissued: exam=${examId} student=${studentId} ` +
@@ -1120,21 +1200,6 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
 
 const calculateStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const {
-    subjects: inputSubjects,
-    outOf    = 20,
-    passMark = 10,
-  } = req.body;
-
-  if (!Array.isArray(inputSubjects) || inputSubjects.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error:   "subjects[] array is required",
-    });
-  }
-
-  const out  = Number(outOf)    || 20;
-  const pass = Number(passMark) || 10;
 
   // Tenancy: the exam anchors the write. Exam.findById plus an unscoped
   // { examId, studentId } lookup let a results.edit holder rewrite another
@@ -1170,180 +1235,46 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     }
   }
 
-  // Lock and publication apply to a recomputed summary exactly as to a mark:
-  // a published card is not rewritten from body numbers without a recorded
-  // reason, and never by a teacher. This route had no guard.
+  /*
+   * The pupil's summary, computed the decided way (docs/39 §21.1).
+   *
+   * This route used to build the summary from the marks, coefficients, scale
+   * and pass mark the client sent, and keep the row's calcVersion — so an
+   * exam-process/3 row could be rewritten with numbers no calculation of
+   * ours produced. It now runs exactly what POST /exams/:examId/process runs
+   * (examProcess.service), for the pupil's class, on the stored marks and
+   * CA; the body's numbers are not read. A mark is corrected through mark
+   * entry, then recalculated here.
+   *
+   * A published summary is never recomputed: 409 PUBLISHED_RESULTS and
+   * nothing written, as /process answers. The lock guard still applies.
+   */
+  const existing = await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean();
+  if (existing?.isPublished) {
+    return res.status(409).json({
+      success: false, code: "PUBLISHED_RESULTS",
+      error:   "This result is published. Unpublish it first.",
+    });
+  }
   const audit = await guardResultWrite(req, res, { examId, schoolId, studentId });
   if (!audit) return;
 
-  const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+  const classId = existing?.classId ||
+    (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null }).select("classId").lean())?.classId ||
+    exam.classId || null;
 
-  let totalWeightedScore = 0;
-  let totalCoefficients  = 0;
-  let subjectsPassed     = 0;
-  let subjectsFailed     = 0;
-  const subjectBreakdown = [];
-
-  for (const input of inputSubjects) {
-    const {
-      subjectId,
-      subjectName,
-      score,
-      maxScore    = 100,
-      coefficient = 1,
-      isAbsent    = false,
-      isExempt    = false,
-    } = input;
-
-    if (isAbsent || isExempt || score == null) {
-      subjectBreakdown.push({
-        subjectId:      String(subjectId),
-        subjectName:    subjectName || String(subjectId),
-        score:          null,
-        maxScore:       Number(maxScore),
-        coefficient:    Number(coefficient),
-        normalizedMark: null,
-        weightedScore:  null,
-        percentage:     null,
-        grade:          null,
-        points:         null,
-        isPassing:      false,
-        isAbsent:       Boolean(isAbsent),
-        isExempt:       Boolean(isExempt),
-        remark:         isAbsent ? "Absent" : isExempt ? "Exempt" : null,
-      });
-      continue;
-    }
-
-    const numScore = Number(score);
-    const numMax   = Number(maxScore)    || 100;
-    const numCoeff = Number(coefficient) || 1;
-
-    const normalizedMark = Math.round((numScore / numMax) * out * 100) / 100;
-    const weightedScore  = Math.round(normalizedMark * numCoeff * 100) / 100;
-
-    totalWeightedScore += weightedScore;
-    totalCoefficients  += numCoeff;
-
-    const pct        = Math.round((numScore / numMax) * 100);
-    const grades     = gradingConfig?.grades || [];
-    // Grade bands are stored on the /20 scale (same as GradingConfig defaults
-    // and grading.service's GRADE_SCALE), so look the mark up out of 20 — not
-    // the 0-100 percentage. Falling back to the built-in scale keeps a student
-    // from dropping to a wrong letter when a school has no custom config.
-    let gradeMatch = grades.find(
-      (g) => normalizedMark >= g.minMark && normalizedMark <= g.maxMark
-    );
-    if (!gradeMatch) {
-      const fb = lookupGrade(normalizedMark);
-      gradeMatch = fb
-        ? { grade: fb.grade, gpaPoints: fb.points, remark: fb.remark }
-        : null;
-    }
-    const isPassing  = normalizedMark >= pass;
-
-    if (isPassing) subjectsPassed++;
-    else           subjectsFailed++;
-
-    subjectBreakdown.push({
-      subjectId:      String(subjectId),
-      subjectName:    subjectName || String(subjectId),
-      score:          numScore,
-      maxScore:       numMax,
-      coefficient:    numCoeff,
-      normalizedMark,
-      weightedScore,
-      percentage:     pct,
-      grade:          gradeMatch?.grade     || null,
-      points:         gradeMatch?.gpaPoints ?? null,
-      isPassing,
-      isAbsent:       false,
-      isExempt:       false,
-      remark:         gradeMatch?.remark    || null,
-    });
+  const result = await processExam({ exam, schoolId, classId, userId: req.user?._id ?? null });
+  if (result.status !== 200) {
+    return res.status(result.status).json({ ...result.body, error: result.body?.message });
   }
 
-  const average       = totalCoefficients > 0
-    ? Math.round((totalWeightedScore / totalCoefficients) * 100) / 100
-    : 0;
-  const avgPercentage = Math.round((average / out) * 100);
-  const grades        = gradingConfig?.grades || [];
-  // Same scale fix as per-subject: `average` is already out of `out` (default
-  // 20), so it is matched against the /20 bands directly.
-  let overallMatch = grades.find(
-    (g) => average >= g.minMark && average <= g.maxMark
-  );
-  if (!overallMatch) {
-    const fb = lookupGrade(average);
-    overallMatch = fb
-      ? { grade: fb.grade, remark: fb.remark, gpaPoints: fb.points }
-      : null;
-  }
-  const isPassing     = average >= pass;
-
-  // ✅ Phase 0 repoint: persist to ResultSummary (the live pipeline model)
-  //    instead of ExamResult. GET /reportcard reads ResultSummary now, so
-  //    "Calculate & save" must write where the read happens or the saved
-  //    values would never show up on reload.
-  const computedFields = {
-    average,
-    percentage:    avgPercentage,
-    overallGrade:  overallMatch?.grade     || null,
-    overallRemark: overallMatch?.remark    || null,
-    gpa:           overallMatch?.gpaPoints ?? null,
-    subjectsPassed,
-    subjectsFailed,
-    subjectsTotal: subjectBreakdown.length,
-    isPassing,
-    subjectBreakdown,
-    syncStatus:    "synced",
-    lastSyncedAt:  new Date(),
-  };
-
-  const existing = await ResultSummary.findOne({
-    examId, studentId, schoolId, deletedAt: null,
-  });
-
-  let summary;
-  if (existing) {
-    summary = await ResultSummary.findByIdAndUpdate(
-      existing._id,
-      { $set: computedFields },
-      { returnDocument: 'after' }
-    ).lean();
-  } else {
-    // No processed summary yet — create a minimal one. classId and schoolId
-    // are schema-required; take them from the student's score rows, falling
-    // back to the exam.
-    const firstScore = await StudentScore.findOne({
-      examId, studentId, schoolId, deletedAt: null,
-    })
-      .select("classId schoolId studentName admissionNo className academicYear term")
-      .lean();
-
-    const classId = firstScore?.classId || exam?.classId || null;
-    if (!classId || !schoolId) {
-      return res.status(409).json({
-        success: false,
-        error:   "No result summary for this student in this exam",
-        detail:  "Run Results → Compute for this exam first, then retry.",
-      });
-    }
-
-    const created = await ResultSummary.create({
-      _id:          uuidv4(),
-      examId,
-      studentId,
-      schoolId,
-      classId,
-      studentName:  firstScore?.studentName || null,
-      admissionNo:  firstScore?.admissionNo || null,
-      className:    firstScore?.className   || null,
-      academicYear: firstScore?.academicYear || exam?.academicYear || null,
-      term:         firstScore?.term        || exam?.term        || null,
-      ...computedFields,
+  const summary = await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean();
+  if (!summary) {
+    // No paper mark in any subject: no result, not a 0 (check:weightednomarks).
+    return res.status(404).json({
+      success: false, code: "NO_RESULT",
+      error:   "This pupil has no paper mark in this exam, so there is no result to calculate.",
     });
-    summary = created.toObject ? created.toObject() : created;
   }
 
   await logResultChange(audit, {
@@ -1352,34 +1283,30 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     action:   existing ? "updated" : "created",
     field:    "average",
     oldValue: existing?.average ?? null,
-    newValue: average,
+    newValue: summary.average,
   });
 
-  console.log(
-    `✅ Report card: student=${studentId}`,
-    `avg=${average}/${out}`,
-    `pass=${isPassing}`,
-    `subjects=${subjectBreakdown.length}`
-  );
-
+  const counted = (summary.subjectBreakdown || []).filter((b) => b.normalizedMark != null);
+  const gradingConfig = await GradingConfig.findOne({ schoolId }).select("passMark").lean();
   return res.json({
     success: true,
     data: {
       summaryId:          summary._id,
-      average,
-      outOf:              out,
-      passMark:           pass,
-      percentage:         avgPercentage,
-      overallGrade:       overallMatch?.grade     || null,
-      overallRemark:      overallMatch?.remark    || null,
-      gpa:                overallMatch?.gpaPoints ?? null,
-      isPassing,
-      subjectsPassed,
-      subjectsFailed,
-      subjectsTotal:      subjectBreakdown.length,
-      totalCoefficients,
-      totalWeightedScore: Math.round(totalWeightedScore * 100) / 100,
-      subjectBreakdown,
+      average:            summary.average,
+      outOf:              20,
+      passMark:           gradingConfig?.passMark ?? 10,
+      percentage:         summary.percentage,
+      overallGrade:       summary.overallGrade,
+      overallRemark:      summary.overallRemark,
+      gpa:                summary.gpa,
+      isPassing:          summary.isPassing,
+      subjectsPassed:     summary.subjectsPassed,
+      subjectsFailed:     summary.subjectsFailed,
+      subjectsTotal:      summary.subjectsTotal,
+      totalCoefficients:  counted.reduce((n, b) => n + (b.coefficient ?? 1), 0),
+      totalWeightedScore: Math.round(counted.reduce((n, b) => n + (b.weightedMark ?? 0), 0) * 100) / 100,
+      subjectBreakdown:   summary.subjectBreakdown,
+      calcVersion:        summary.calcVersion,
       classPosition:      summary.classPosition,
       gradePosition:      summary.gradePosition,
       schoolPosition:     summary.schoolPosition,
@@ -1388,33 +1315,6 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
       totalInSchool:      summary.totalInSchool,
       promotionStatus:    summary.promotionStatus,
     },
-  });
-});
-
-// ─────────────────────────────────────────────────────────
-// POST /api/results/:examId/compute
-// ─────────────────────────────────────────────────────────
-
-const computeResults = asyncHandler(async (req, res) => {
-  const { examId }                          = req.params;
-  const { schoolId: bodySchoolId, classId } = req.body;
-  const schoolId = resolveSchoolId(req, bodySchoolId);
-
-  if (!schoolId) {
-    return res.status(400).json({ message: "schoolId is required" });
-  }
-
-  // Use the new results.service.js pipeline (Phase 0)
-  const resultsService = require("../services/results.service");
-  const result = await resultsService.processResults({ examId, classId, schoolId });
-
-  return res.json({
-    success:   true,
-    message:   `Results computed for ${result.computed || 0} student(s)`,
-    computed:  result.computed || 0,
-    warnings:  result.warnings || [],
-    isPartial: result.isPartial || false,
-    stats:     result.stats || null,
   });
 });
 
@@ -1670,7 +1570,16 @@ const upsertScore = asyncHandler(async (req, res) => {
    * After authorisation on purpose: somebody who may not write this mark
    * learns that and nothing else.
    */
-  const ceiling = Number(maxScore ?? examSubject?.maxScore ?? 100);
+  //
+  // The ceiling is the exam subject's maxScore whenever there is one — what
+  // processing divides by — and it is also what the row stores. A body's own
+  // maxScore used to win both, so { score: 300, maxScore: 1000 } on a /20
+  // subject passed and processed as 300/20 (docs/39 §4.6a). The body's value
+  // is honoured only for a mark with no exam subject to answer for it.
+  // A ceiling that is not a positive number (a body's "abc") would make every
+  // comparison below false and let any mark through, so it reads as 100.
+  const ceilingRaw = Number(examSubject?.maxScore ?? maxScore ?? existing?.maxScore ?? 100);
+  const ceiling    = Number.isFinite(ceilingRaw) && ceilingRaw > 0 ? ceilingRaw : 100;
   if (!isAbsent && !isExempt) {
     const blank = score === null || score === undefined || score === "";
     const value = Number(score);
@@ -1713,7 +1622,7 @@ const upsertScore = asyncHandler(async (req, res) => {
     }
     Object.assign(existing, {
       score,
-      maxScore:      maxScore      ?? existing.maxScore,
+      maxScore:      ceiling,
       isAbsent:      isAbsent      ?? existing.isAbsent,
       isExempt:      isExempt      ?? existing.isExempt,
       teacherRemark: teacherRemark ?? existing.teacherRemark,
@@ -1747,7 +1656,7 @@ const upsertScore = asyncHandler(async (req, res) => {
     examId, examSubjectId: examSubject?._id ?? examSubjectId ?? null, studentId,
     subjectId, classId: effectiveClassId, schoolId: callerSchoolId,
     score,
-    maxScore:      maxScore      ?? 100,
+    maxScore:      ceiling,
     isAbsent:      isAbsent      ?? false,
     isExempt:      isExempt      ?? false,
     teacherRemark: teacherRemark ?? null,
@@ -1871,7 +1780,6 @@ module.exports = {
   getStudentReportCardHtml,
   reissueStudentReportCard,
   calculateStudentReportCard,
-  computeResults,
   publishResults,
   publishResult,
   upsertScore,

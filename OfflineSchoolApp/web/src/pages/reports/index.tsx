@@ -66,7 +66,6 @@ export default function ReportsOverviewPage() {
         <h1 className="text-lg font-semibold text-gray-900">{t("reports.title")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {t("reports.blurb")}
-          from it.
         </p>
       </div>
 

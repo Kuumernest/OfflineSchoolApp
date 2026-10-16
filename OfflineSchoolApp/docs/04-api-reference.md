@@ -15,8 +15,8 @@ repository at this commit; the count is mechanical, not estimated.
 
 | Deployment | Base |
 |---|---|
-| Direct to the API | `http://<host>:5000/api` |
-| Behind the bundled nginx | `http://<host>/api` |
+| Behind the bundled nginx (production) | `https://<DOMAIN>/api` |
+| Direct to the API (development, or from inside the Docker network) | `http://<host>:5000/api` |
 | Web dev server | `/api` (Vite proxies to `http://localhost:5000`) |
 | Mobile | `EXPO_PUBLIC_API_URL` |
 
@@ -132,13 +132,16 @@ Read the top of each router for its aliases.
 
 ## Routes by area
 
-### `/api/academic-structure` — `academicStructure.routes.js` — 3 routes
+### `/api/academic-structure` — `academicStructure.routes.js` — 6 routes
 
 | Method | Path | Guards |
 |---|---|---|
-| GET | `/:schoolId/:year` | `canRead` |
+| GET | `/:schoolId/:year` | `canReadYear` (`settings.view` or `exams.view`; without `settings.view`, the year's shape only, and nothing is created) |
 | PUT | `/:schoolId/:year` | `canManage` |
 | GET | `/:schoolId` | `canRead` |
+| GET | `/:schoolId/:year/rules` | `canRead` |
+| POST | `/:schoolId/:year/rules/preview` | `canManage` |
+| PUT | `/:schoolId/:year/rules` | `canManage` |
 
 ### `/api/admin` — `admin.routes.js` — 58 routes
 

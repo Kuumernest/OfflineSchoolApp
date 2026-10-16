@@ -87,7 +87,7 @@ const item = (g, c) => g.items.find((i) => i.dimension === Q && i.category === c
   let g = guide([P.EST, P.EST]);
   check("versions: guidance 1.0.0 over development 1.0.0; the engines beneath unchanged",
     [g.guidanceEngineVersion, g.developmentEngineVersion, strengths.STRENGTH_ENGINE_VERSION, exploration.EXPLORATION_ENGINE_VERSION, le.LEARNING_EVIDENCE_VERSION, strengths.LEARNING_INTEGRATION_VERSION, dev.DEVELOPMENT_ENGINE_VERSION],
-    ["1.0.0", "1.0.0", "1.2.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0"]);
+    ["1.0.0", "1.0.0", "1.2.0", "1.0.0", "1.0.0", "1.1.0", "1.0.0"]);
   check("stable established with no independent learning evidence: MAINTAIN, and BUILD_EVIDENCE because the record shows only marks; LIMITED evidence (marks alone), not well supported",
     [cats(g), item(g, "MAINTAIN").reasons, item(g, "MAINTAIN").evidenceQuality], [["BUILD_EVIDENCE", "MAINTAIN"], ["STABLE_ESTABLISHED"], "LIMITED"]);
   g = guide([P.EST_Q, P.EST_Q]);

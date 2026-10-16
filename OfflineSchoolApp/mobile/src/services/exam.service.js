@@ -141,6 +141,27 @@ const getExams = async ({
 };
 
 /**
+ * Every exam of the school, page by page, until a page comes back short.
+ *
+ * The exams screen asked for page 1 (50) and showed only that, so a school
+ * with more exams than one page silently lost the older ones online.
+ * Offline, the first page already answers from the device's whole cache,
+ * so there is nothing further to fetch. A cap keeps a runaway server answer
+ * from looping.
+ */
+const getAllExams = async ({ pageSize = 100, maxPages = 50, ...filters } = {}) => {
+  const byId = new Map();
+  let isStale = false;
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await getExams({ ...filters, page, limit: pageSize });
+    for (const e of res.exams ?? []) byId.set(String(e._id || e.id), e);
+    if (res.isStale) { isStale = true; break; }
+    if ((res.exams?.length ?? 0) < pageSize) break;
+  }
+  return { exams: [...byId.values()], isStale };
+};
+
+/**
  * Get exam dashboard statistics.
  * Counts are derived locally when offline so the screen still renders.
  */
@@ -182,6 +203,7 @@ const getDashboard = async (schoolId) => {
  */
 const getExamById = async (examId, schoolId) => {
   if (!examId) throw new Error("examId is required");
+  ExamCache.markExamOpened(examId).catch(() => {});
 
   const { data, isStale } = await readThrough(
     async () => {
@@ -491,6 +513,7 @@ const getScores = async ({
   classId,
   schoolId,
 } = {}) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId) throw new Error("examId is required");
 
   let isStale = false;
@@ -623,6 +646,7 @@ const saveBulkScores = async ({
  * Returns { results, isStale }
  */
 const getResults = async ({ examId, schoolId, classId } = {}) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId) throw new Error("examId is required");
 
   const { data, isStale } = await readThrough(
@@ -794,6 +818,7 @@ const getStudentResult = async (examId, studentId, schoolId) => {
  * Get a student's report card data.
  */
 const getStudentReportCard = async (examId, studentId, schoolId) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId || !studentId) {
     throw new Error("examId and studentId are required");
   }
@@ -951,6 +976,7 @@ const publishResults = async (examId, schoolId) =>
 export const ExamService = {
   // Exam CRUD
   getExams,
+  getAllExams,
   getDashboard,
   getExamById,
   createExam,

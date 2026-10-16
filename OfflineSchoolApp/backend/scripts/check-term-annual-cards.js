@@ -146,6 +146,16 @@ const main = async () => {
     annual.termAverages.map((t) => t.term), [1, 2, 3]);
   check("and the promotion decision, spelled for a parent",
     annual.summary.promotionStatus, "PROMOTED TO FORM 4");
+  {
+    // docs/39 §4.6h: the French remark is the year's band, even when the row
+    // carries a stray termAverage (an older document might).
+    await Annual.collection.updateOne({ _id: "ar-1" }, { $set: { termAverage: 5 } });
+    const stray = await buildAnnualCard({ schoolId: S, academicYear: YEAR, classId: CLS, studentId: "p1" });
+    await Annual.collection.updateOne({ _id: "ar-1" }, { $unset: { termAverage: "" } });
+    // No school bands here, so the shipped scale: 15 is B+ "Bien"; 5 would be "Échec".
+    check("the French remark is the band of the year's 15, not of a stray term figure",
+      [annual.summary.overallRemarkFr, stray.summary.overallRemarkFr], ["Bien", "Bien"]);
+  }
 
   console.log("--- §8 on the page, not just in the payload ---");
   const th = renderReportCardHtml(term, opts);
@@ -499,6 +509,21 @@ const main = async () => {
   check("nothing to check is not stale",
     (await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: [] })).staleIds.size,
     0);
+
+  // The public verification page speaks both languages throughout: its
+  // banners always did; its page titles and buttons were English only.
+  {
+    const vp = require("../src/print/verifyPage");
+    const title = (html) => (html.match(/<title>([^<]*)<\/title>/) || [])[1];
+    const buttons = (html) => [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
+    const form = vp.renderVerifyForm(), missing = vp.renderVerifyResult({ status: "not_found" });
+    const valid = vp.renderVerifyResult({ status: "valid", kind: "report_card", school: { name: "S" }, snapshot: { facts: [] } });
+    check("verify page titles and buttons in English and French",
+      [title(form), buttons(form), title(missing), buttons(missing), title(valid)],
+      ["Verify a document · Vérifier un document", ["Verify · Vérifier"],
+       "Code not recognised · Code non reconnu", ["Try again · Réessayer"],
+       "Report card — verification · Bulletin de notes — vérification"]);
+  }
 
   console.log(`
   ${pass} passed, ${fail} failed`);

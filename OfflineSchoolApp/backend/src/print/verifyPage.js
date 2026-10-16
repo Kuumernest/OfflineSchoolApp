@@ -103,7 +103,7 @@ const dateLine = (d) => {
 
 /** The form shown at /verify with no code, and linked from failures. */
 const renderVerifyForm = () =>
-  shell("Verify a document", `
+  shell("Verify a document · Vérifier un document", `
     <div class="banner banner--valid" style="background:#1b2945">
       <div class="banner__title">Verify a school document</div>
       <div class="banner__sub">Vérifier un document scolaire</div>
@@ -118,7 +118,7 @@ const renderVerifyForm = () =>
       <form method="get" action="">
         <input name="code" placeholder="XXXX-XXXX-XXXX" autocomplete="off"
                autofocus maxlength="20" />
-        <button type="submit">Verify</button>
+        <button type="submit">Verify · Vérifier</button>
       </form>
     </div>
   `);
@@ -137,7 +137,7 @@ const KIND_TITLES = {
  */
 const renderVerifyResult = (result) => {
   if (result.status === "not_found") {
-    return shell("Code not recognised", `
+    return shell("Code not recognised · Code non reconnu", `
       <div class="banner banner--missing">
         <div class="banner__title">✘ Code not recognised</div>
         <div class="banner__sub">Code non reconnu</div>
@@ -154,7 +154,7 @@ const renderVerifyResult = (result) => {
         </p>
         <form method="get" action="">
           <input name="code" placeholder="XXXX-XXXX-XXXX" autocomplete="off" maxlength="20" />
-          <button type="submit">Try again</button>
+          <button type="submit">Try again · Réessayer</button>
         </form>
       </div>
     `);
@@ -178,7 +178,7 @@ const renderVerifyResult = (result) => {
   const schoolMeta = [school.address, school.phone, school.email]
     .filter(Boolean).map(esc).join(" · ");
 
-  return shell(`${kind.en} — verification`, `
+  return shell(`${kind.en} — verification · ${kind.fr} — vérification`, `
     ${banner}
     <div class="body">
       <div class="school">${esc(school.name ?? "—")}</div>

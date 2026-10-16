@@ -93,12 +93,14 @@ const LABELS = {
     validUntil:  "Valid until",
     ifFound:     "If found, call",
     studentSignature: "Student's signature",
+    emergencyContact: "Emergency contact",
+    sexValues:   { male: "Male", female: "Female", other: "Other" },
   },
 
   fr: {
     printedOn:      "Imprimé le",
     teacher:        "Professeur principal",
-    headTeacher:    "Principal",
+    headTeacher:    "Chef d'établissement",
     registrar:      "Secrétaire",
     student:        "Élève",
     class:          "Classe",
@@ -165,6 +167,8 @@ const LABELS = {
     validUntil:  "Valable jusqu'au",
     ifFound:     "En cas de perte, appeler",
     studentSignature: "Signature de l'élève",
+    emergencyContact: "Contact d'urgence",
+    sexValues:   { male: "Masculin", female: "Féminin", other: "Autre" },
   },
 };
 

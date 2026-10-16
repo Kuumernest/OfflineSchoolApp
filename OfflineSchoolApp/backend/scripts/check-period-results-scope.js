@@ -162,7 +162,11 @@ const check = (label, actual, expected) => {
     r = await maths.post(COMPUTE, { ...body, classId: "form4b" });
     check("a class they do not teach → 403 CLASS_NOT_ASSIGNED", [r.status, r.body?.code], [403, "CLASS_NOT_ASSIGNED"]);
     r = await maths.post(COMPUTE, { ...body, classId: "form3a" });
-    check("their own class → 200", [r.status, r.body?.success], [200, true]);
+    // Allowed past the class check, and then refused because the class holds
+    // a published result (st-a1's): published results are never recomputed
+    // (docs/39 §21.1 D3, decided). A scope failure would be 403.
+    check("their own class → allowed, then 409 PUBLISHED_RESULTS (st-a1's row is published)",
+      [r.status, r.body?.code], [409, "PUBLISHED_RESULTS"]);
 
     console.log(`\n--- ${label} results: the unassigned teacher, the bursar, the pupil ---`);
     r = await idle.get(LIST);

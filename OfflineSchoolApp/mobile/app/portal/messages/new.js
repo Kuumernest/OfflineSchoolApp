@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { participantName, recipientSubtitle } from "../../../src/utils/participantName";
 
 const C = {
@@ -29,6 +30,8 @@ const C = {
 
 export default function PortalNewMessageScreen() {
   const { t } = useTranslation();
+  // Clear the status bar and the navigation bar (edge-to-edge Android, the iOS notch).
+  const pad = useScreenInsets({ top: 0, bottom: 16 });
   const router = useRouter();
 
   const [query,   setQuery]   = useState("");
@@ -116,7 +119,7 @@ export default function PortalNewMessageScreen() {
     <View style={s.screen}>
       <StatusBar barStyle="dark-content" backgroundColor={C.surface} />
 
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: 12 + pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="close" size={23} color={C.ink} />
         </TouchableOpacity>
@@ -142,6 +145,7 @@ export default function PortalNewMessageScreen() {
         <View style={s.center}><ActivityIndicator size="large" color={C.ink} /></View>
       ) : (
         <FlatList
+          contentContainerStyle={{ paddingBottom: pad.paddingBottom }}
           data={people}
           keyExtractor={(r) => `${r.kind}:${r.id}`}
           renderItem={renderItem}

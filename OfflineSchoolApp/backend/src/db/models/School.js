@@ -252,9 +252,11 @@ const settingsSchema = new mongoose.Schema(
       },
     },
 
+    // Cameroon time for a new school (docs/40 0.11). A school created before
+    // keeps what it stored.
     timezone: {
       type:      String,
-      default:   "UTC",
+      default:   "Africa/Douala",
       trim:      true,
       validate: {
         validator: (v) => !v || isValidTimezone(v),
@@ -578,7 +580,7 @@ schoolSchema.virtual("publicProfile").get(function () {
       academicYear:  this.settings?.academicYear  || null,
       currentTerm:   this.settings?.currentTerm   || null,
       currency:      this.settings?.currency      || "USD",
-      timezone:      this.settings?.timezone      || "UTC",
+      timezone:      this.settings?.timezone      || "Africa/Douala",
       gradingSystem: this.settings?.gradingSystem || "percentage",
     },
     createdAt: this.createdAt || null,
