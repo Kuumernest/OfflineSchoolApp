@@ -38,6 +38,7 @@
  */
 
 const { randomUUID } = require("crypto");
+const { effectiveRules } = require("../../../../../shared/academicRules");
 const { computeGrade } = require("../gradeUtils");
 
 /** The statuses PATCH /:id/status accepts. Anything else is the server's to refuse. */
@@ -506,6 +507,21 @@ module.exports = [
       // id, so get(…, schoolId) never found the school's bands and every mark
       // was graded on the built-in scale (docs/39 §4.6b).
       const gradingConfig = docs.find("gradingConfig", { schoolId })[0] ?? null;
+
+      // The year's calculation rules (shared/academicRules, docs/39 Phase 4).
+      // The arithmetic below is the default rule's. Under weighted_20 it would
+      // show figures the server will not store, and under "refuse" it would
+      // overwrite published results the server keeps — so either goes to the
+      // server rather than answering with a different result here.
+      const structure = docs.find("academicStructure",
+        { schoolId, academicYear: exam.academicYear, deletedAt: null })[0] ?? null;
+      const rules = effectiveRules(structure?.rules);
+      if (rules.sequenceAverage !== "raw_mean") return null;
+      if (rules.publishedResults === "refuse"
+          && docs.find("resultSummary", { examId, schoolId, ...(classId ? { classId } : {}) })
+            .some((s) => s.isPublished && !s.deletedAt)) {
+        return null;
+      }
 
       const scoreQuery = { examId, schoolId, deletedAt: null };
       if (classId) scoreQuery.classId = classId;

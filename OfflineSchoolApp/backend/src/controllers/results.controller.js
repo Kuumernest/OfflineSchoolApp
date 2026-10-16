@@ -30,7 +30,7 @@ const { lookupGrade } = require("../services/grading.service");
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
-const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
+const { sequenceAverageIsOn20, effectiveRules } = require("../../../shared/academicRules");
 // The CA half of a sequence. A sequence card shows both assessments and the
 // mark they combine to; the pairing and the arithmetic are shared with the
 // grading engine so the card cannot print a different number from the one the
@@ -683,9 +683,6 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   const totalWeighted = activeRows.reduce(
     (s, r) => s + (r.weightedScore ?? 0), 0
   );
-  const weightedAverage = totalCoeff > 0
-    ? Math.round((totalWeighted / totalCoeff) * 100) / 100
-    : 0;
 
   // ── Report type (§7) ────────────────────────────────────────────────────────
   // sequence → a bound sequence (1–6); annual → the promotion exam, the only
@@ -696,8 +693,9 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // sequence card names its sequence, a term card names its term, and the
   // annual card names neither because it covers the whole year.
   let ownName = null;
+  let structure = null;
   if (reportType === "sequence") {
-    const structure = exam?.schoolId
+    structure = exam?.schoolId
       ? await AcademicStructure.findOne({
           schoolId: String(exam.schoolId), academicYear: exam.academicYear,
         }).lean().catch(() => null)
@@ -707,6 +705,16 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       .flatMap((t) => t.sequences)
       .find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
+
+  // No subject counted: under weighted_20 there is no figure, and the route
+  // stores none (check:weightednomarks), so the card prints none either
+  // rather than a 0 the pupil never scored. The default rule's card is
+  // unchanged: it prints the 0 its stored result also holds.
+  const weightedRule = onSequenceMark
+    || effectiveRules(structure?.rules).sequenceAverage === "weighted_20";
+  const weightedAverage = totalCoeff > 0
+    ? Math.round((totalWeighted / totalCoeff) * 100) / 100
+    : (weightedRule ? null : 0);
 
   // The facts about the period, not a sentence about it. The header names the
   // period in the reader's language ("Première Séquence"), so a string built

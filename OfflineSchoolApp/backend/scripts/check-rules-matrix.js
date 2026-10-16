@@ -420,7 +420,7 @@ const main = async () => {
   const legacyBefore = JSON.stringify(await rows("TermResult", { classId: "f2" }));
   r = await computeYear("f2");
   const gil = (await rows("AnnualResult", { classId: "f2" }))[0];
-  // (11·33.33 + 12·33.33 + 13·33.34)/100 = 12.0034 → 12
+  // (11·33.33 + 12·33.33 + 13·33.34)/100 = 12.0001 → 12
   check("the year read from legacy term rows as stored: 12, stamped with today's snapshot",
     [r.status, gil?.annualAverage, gil?.calcVersion, typeof gil?.policyHash === "string"], [200, 12, "annual/2", true]);
   check("  the legacy term rows keep their null hash and are not rewritten",

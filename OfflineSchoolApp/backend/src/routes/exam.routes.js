@@ -1677,6 +1677,8 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   const classNamesById = new Map(classes.map((c) => [String(c._id), c.name]));
 
   const summaries = [];
+  // weighted_20 pupils with no counted subject: no result, not a 0.
+  const noMarkIds = [];
 
   for (const [studentId, scores] of Object.entries(byStudent)) {
     if (weighted) {
@@ -1684,6 +1686,11 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
         studentId, scores, subjectMap: subjectMapForCard, ca: caContext, exam,
         grade: (mark20) => computeGrade(mark20, 20, gradingConfig),
       });
+      // Absent or exempt in every subject: the rule leaves each one out, so
+      // there is nothing to average. This stored 0, F, ranked last, and the
+      // term averaged that 0 in as a sequence sat — the sequence-level twin
+      // of docs/39 §4.6k, handled the same way (check:weightednomarks).
+      if (r.active === 0) { noMarkIds.push(String(studentId)); continue; }
       const overall = computeGrade(r.average, 20, gradingConfig);
       const stu = studentMap.get(studentId);
       summaries.push({
@@ -1873,6 +1880,15 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
 
   if (summaryOps.length) {
     await ResultSummary.bulkWrite(summaryOps, { ordered: false });
+  }
+
+  // A row an earlier run left for those pupils: an unpublished one goes, so
+  // it is neither ranked nor read by the term; a published one stays exactly
+  // as issued and is outside the places above. As the annual layer does.
+  if (noMarkIds.length) {
+    await ResultSummary.deleteMany({
+      examId, schoolId, studentId: { $in: noMarkIds }, isPublished: { $ne: true },
+    });
   }
 
   await Exam.findByIdAndUpdate(examId, { status: "completed" });

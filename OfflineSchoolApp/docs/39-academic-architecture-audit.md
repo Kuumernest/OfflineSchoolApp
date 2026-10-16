@@ -1902,6 +1902,98 @@ Checked against docs/37:
 
   Not run: anything on a device, emulator, in Electron or in a browser.
 
+- **Calculation and promotion validation pass (2026-10-16).** A re-check of
+  the six cases the validation and defect-closure passes covered, each
+  expected figure re-derived by hand from the configured rules, and two new
+  defects found and fixed. No school's rule, default, published result or
+  promotion outcome changed.
+
+  **Environment.** `school_db` on Atlas, read only (counts and codes): one
+  school (GVA001), 22 active pupils and 49 soft-deleted, 100 summaries, 50
+  term rows, no annual rows or promotion runs, and one structure with
+  `rules: null` (every rule at its default). It is the demo school recorded
+  in the validation pass. Nothing was written to it. Every test ran on an
+  in-memory MongoDB with the database URI and provider keys blanked.
+
+  **The cases, re-derived** (all already pinned; the pins agree with the
+  hand-worked figures):
+
+  | Case | Hand-worked | Pinned by |
+  |---|---|---|
+  | Card 13.67 vs stored 12 (§4.7f) | stored `round((15+9)/2) = 12`; card `(2·15.4 + 10.2)/3 = 13.67`, Maths `0.4·16 + 0.6·15 = 15.4`, English `0.4·12 + 0.6·9 = 10.2`; under `weighted_20` stored = card = 13.67 | `check:academic`, `check:academicrules`, `check:cardstored` |
+  | Live route under `raw_mean` (§4.7 a–d) | no CA, coefficient 1, Cho `round(11/2) = 6` at 28 % (absent as 0, its 20 kept in the maximum), whole numbers. Kept as the documented default | `check:academic` |
+  | Promotion with no results (§4.7e) | `legacy`: no published summary → `unassigned`/`no_results`, never `promoted`; other rules: an incomplete year or no annual average → `pending` → `unassigned` | `check:academic`, `check:rulesmatrix` |
+  | No term results → no annual row (§4.6k) | no row; an unpublished stale row removed, a published one kept and unranked | `check:annualnoterms`, `check:rulesmatrix` (eve) |
+  | `weighted_20`, `school_bands`, all four promotion rules, `refuse` | matrix figures re-worked: ama 12/13, bih 15/14, cho 5/10, dan 5/3.33; places 1,2,2,4,4 and 1,2,2,4,5; dan 7.33 → term 5.33 → year 4.33; `annual_average_at_least` 12 holds cho (10) back, a class bar of 10 does not | `check:rulesmatrix`, `check:academicrules` |
+  | Legacy rows and defaults | `policyHash: null` term rows read as stored; the year `(11·33.33 + 12·33.33 + 13·33.34)/100 = 12.0001 → 12` (the test's comment said 12.0034; corrected) | `check:rulesmatrix`, `check:academic` |
+
+  **Fixed: under `weighted_20`, a pupil absent or exempt in every subject
+  was given a sequence result of 0.** The rule leaves absent subjects out,
+  so such a pupil has nothing to average. The route stored 0, F, failing,
+  ranked last, and the term layer averaged that 0 in as a sequence sat. A
+  pupil absent for one whole sequence and on 13 in the other got a term of
+  6.5 and failed, where the rule gives 13. It is the sequence-level twin of
+  §4.6k and is handled the same way: no summary. An unpublished stale summary
+  is removed. A published one is kept exactly as issued and left out of the
+  places. Under `weighted_20` the sequence card prints no average for that
+  pupil, where it printed a rebuilt 0 (stored and card still agree). The
+  default (`raw_mean`) is unchanged and pinned: absent counts as zero, so the
+  same pupil still gets 0 there. `exam.routes.js` (`/process`, weighted
+  branch); `results.controller.js` (the card's average). Test:
+  `check:weightednomarks` (new, 15; 9 fail on the pre-change code).
+
+  **Fixed: the desktop's offline `/process` ignored the year's rules.** It
+  always computed the default arithmetic, so offline a `weighted_20` school
+  saw raw-mean figures until sync. A `refuse` school overwrote published
+  summaries on the desk, and the queued request was then refused by the
+  server. It now declines (sends the request to the server, the
+  dispatcher's contract for "the server should decide") under `weighted_20`,
+  and under `refuse` when a mirrored summary for the exam is published. On
+  defaults it computes exactly as before. `desktop/src/main/api/writes/exams.js`.
+  Test: desktop `check:process-rules` (new, 7; 2 fail on the pre-change
+  code).
+
+  **Found, not changed (untested or needs a decision):**
+  - **Mirror staleness on deletion.** Removing a no-result row (this fix, and
+    §4.6k's annual one) is a hard delete. The sync feed carries soft deletes
+    only, so an admin's desktop keeps the stale unpublished row until it
+    re-syncs from scratch. A soft delete needs the `/process` upsert to clear
+    `deletedAt`, which touches the default path; not done.
+  - **`weighted_20` with CA, paper absent.** A subject whose paper is marked
+    absent is left out even when the pupil has a CA mark, while a subject with
+    CA and *no* paper row counts the CA alone. The card does the same, so the
+    two agree; whether a recorded absence should discard the CA is the
+    school's rule, not decided here.
+  - **`POST /results/:examId/student/:studentId/reportcard`** (the
+    "calculate & save" route) rewrites a summary from body numbers under an
+    admin's reason, keeps the row's `calcVersion`, and is not subject to
+    `publishedResults: refuse`. It is guarded and audited (`guardResultWrite`,
+    `ResultChangeLog`) but no academic-rules test covers it.
+  - **`averageOutOf20` on a `raw_mean` summary** multiplies by 5 (12 → 60).
+    It is reached only when a sequence card has no rebuilt average, which
+    the live card builder always supplies; not reached by any test on live
+    data.
+  - **Term pass versus annual status under a non-legacy rule.** The annual row
+    re-derives each term's pass from `termAverage ≥ passMark` at annual
+    time, while the promotion run reads the stored `TermResult.isPassing`. They
+    agree unless the pass mark changes between the two computations; not
+    tested.
+  - The decisions listed above (D1, D1b, D2, D3, the `raw_mean` card figure,
+    §4.6d, the card/QR lifecycle, the bulk promotion decision) are unchanged.
+
+  **Commands run** (database URI and provider keys blanked):
+  - backend `npm run check:all`: 6,381 checks in 105 suites, 0 failed: the
+    defect-closure pass's 6,366 in 104 plus exactly the 15 of
+    `check:weightednomarks`, so no existing suite's count moved; `check:desktop`
+    (1,372) re-run separately after the desktop change, 0 failed;
+  - desktop `npm run check`: 273 passed, 0 failed (266 plus
+    `check:process-rules` 7);
+  - each new check also against the pre-change code (9 and 2 failures);
+  - the read-only probe of `school_db` (counts and codes only).
+
+  Not run: mobile and web checks (neither was changed); anything on a
+  device, in Electron or in a browser.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
