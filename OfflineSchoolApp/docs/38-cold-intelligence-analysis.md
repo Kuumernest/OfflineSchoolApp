@@ -622,3 +622,17 @@ measured path.
 Not run: the mobile and desktop suites (neither package changed), the web
 `npm run lint` over the whole app (CI documents pre-existing errors there),
 any browser, any real deployment, any live Anthropic call (not on this path).
+
+**The code-digest pass** (§4, "What the code digest covers"; branch
+`academic-agreed-calculation`, commit `be837eb`; database URI and provider
+keys blanked; Atlas not connected to):
+
+| Command (from `backend/`) | Result |
+|---|---|
+| A runtime probe: the real worker run once with its message wrapped to return its `require.cache`; `reviewCases.caseFor` run in a fresh process | worker: 11 project files; the hand-kept digest list missed `shared/caAssessment.js` and `shared/gradeScale.js`. `caseFor`'s process: 98 project files, the analysis's plus models and utilities (`shared/strengths/**` arrives through `ExplorationEvidence.js`, not the analysis) |
+| `npm run check:analysis` (section 11 added) | **130 passed, 0 failed** (115 + 15) |
+| the same file against the code before the change (`9fe8e6c`, a worktree) | 2 failed (the worker loads files outside the digest set), then stopped: the derived-digest function does not exist there |
+| `npm run check:orphans` | 6 passed, 0 failed |
+| backend `check:all`, every suite one by one | **107 suites, 6,367 checks**; 106 suites passed, `check:access` failed 1 check once on its bare "677" pattern (an id or timestamp containing those digits) and passed 66/66 on three reruns. That check was fixed afterwards (`6334652`: it looks for the fixture's own phone numbers) and passed 66/66 on five consecutive runs |
+
+Not run in that pass: the desktop, mobile and web suites (no change there).

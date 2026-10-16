@@ -68,7 +68,7 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 107 suites, 6,352 checks, 0 failed;
+- **Tests:** backend `check:all`: 108 suites, 6,379 checks, 0 failed;
   desktop `check` 271, 0 failed; mobile `check` 679, 0 failed; web build and
   lint pass, 0 errors.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
@@ -2687,6 +2687,35 @@ Checked against docs/37:
   - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in an
     untouched file).
 
+- **Release tooling: dry run per school, unconfirmed bars (2026-10-16).**
+  Same branch. No calculation, engine, threshold or version changed.
+  - **`backend/scripts/dry-run-agreed-calc.js`:**
+    - copies one school from a source database into a private in-memory
+      MongoDB;
+    - reprocesses its unpublished results for the year with this branch's
+      code;
+    - reports, with salted pseudonymous pupil ids only: averages and
+      positions changed per layer, the largest change, and each annual
+      promotion status that would change.
+
+    It reads the source with `find()` only, on its own connection.
+  - **`backend/scripts/list-unconfirmed-bars.js`** lists, per school, the
+    classes with no confirmed bar for the year. It is read-only, and
+    final-year classes are excepted.
+  - **`check:dryrun` (new, 12):**
+    - the dry run on a synthetic school, every figure hand-worked;
+    - the command line giving the same report;
+    - the bar listing;
+    - the source byte-identical afterwards (`dbHash`, every document, every
+      index).
+  - docs/40 gains steps 1.5 (staged release), 1.7 (dry run) and 7.1
+    (unconfirmed bars).
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,379 checks, 0 failed;
+    - desktop `npm run check` 271/0;
+    - mobile `npm run check` 679/0;
+    - web build and lint, 0 errors.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -2907,8 +2936,8 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the mobile "Calculate & save" pass
-at `9fe8e6c`): backend `check:all`, 107 suites, 6,352 checks, 0 failed;
+branch `academic-agreed-calculation`, the dry-run pass after `6334652`):
+backend `check:all`, 108 suites, 6,379 checks, 0 failed;
 desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 

@@ -42,7 +42,7 @@ has an owner:
   - `2 × 2,048 + 400 + 130 = 4,626 MB` does not.
 - **Expected:** the chosen values leave headroom on the host; set them in
   the backend environment.
-- **If it fails:** an analysis ends `OUT_OF_MEMORY` (the server carries on).
+- **If it fails:** an analysis ends `WORKER_OUT_OF_MEMORY` (the server carries on).
   Lower concurrency first, then raise the heap if memory allows.
 - **From:** docs/38 §7, §10 item 5, §11 prerequisite 4.
 
@@ -86,7 +86,25 @@ has an owner:
 - **If it fails:** do not deploy.
 - **From:** docs/38 §10 item 7, §11; docs/39 §20.0 ("Agreed calculation").
 
-**1.5 Ship backend and web together; plan desktop and mobile** — *operator*
+**1.5 Release to one school first** — *operator, with that school's head*
+- **Do:** release to one school for one week, with a database backup every
+  day of that week. Then widen to the other schools, a few at a time.
+- **Why:** the rollback of the agreed calculation, once a school has
+  reprocessed its results, is a restore from backup (1.3, 1.4). Results
+  recomputed after the release are stamped with the new calculation and the
+  previous code does not read them the same way. One school first keeps a
+  restore small, and a week shows the questions schools ask before everyone
+  asks them.
+- **Expected:** the first school's week ends with no failed analysis runs
+  (7), no unexplained result changes against its dry run (1.7), and a daily
+  backup for each day.
+- **If it fails:** stop widening. Restore that school's backup if its
+  results must go back (1.4), and give the developer the dry-run report and
+  what differed.
+- **From:** docs/39 §20.0 ("Agreed calculation": effective for every
+  unpublished result); this checklist, 1.3 and 1.4.
+
+**1.6 Ship backend and web together; plan desktop and mobile** — *operator*
 - **Do:** deploy the backend and the web console from one build of this
   branch. They ship in one image here; keep it that way.
 - **Desktop and mobile:**
@@ -95,6 +113,11 @@ has an owner:
     "Calculate & save" screen shows editable fields the server now ignores.
   - An older desktop computes a provisional figure offline that the server
     replaces on sync, or refuses (409) if the class has a published result.
+  - **Neither app can be forced to a minimum version.** Neither sends its
+    version to the server, the server checks none, and neither has an
+    automatic updater. So the old builds keep working against the new
+    server, with the limits above: tell schools to install the new builds,
+    and keep this warning until they have.
 - **Expected:** one backend+web version live, and the desktop and mobile
   builds scheduled.
 - **If it fails:** a web build older than the backend reads the analysis's
@@ -102,6 +125,34 @@ has an owner:
   expected to break until the run completes (not tested). Redeploy them
   together.
 - **From:** docs/38 §11 prerequisite 5; docs/39 §20.0.
+
+**1.7 Dry run, per school** — *operator runs it; school head reviews it*
+- **Do:** for each school, before the release reaches it, run the dry run
+  against a copy of production, or read-only against production itself
+  (from `backend/`, with devDependencies installed):
+  `node scripts/dry-run-agreed-calc.js --uri <database URI> --school <schoolId> [--year 2026/2027] [--salt <word>]`.
+
+  It copies that one school into a private in-memory database and
+  reprocesses the year's unpublished results with the new code. Published
+  results are left, as on the server. It never writes to the source:
+  `check:dryrun` proves the source is byte-identical afterwards.
+- **What it reports** (counts and pseudonymous pupil ids only, never names):
+  - how many sequence, term and annual averages change, and the largest
+    change;
+  - how many positions change;
+  - each pupil whose annual promotion status would change, and from what to
+    what.
+
+  `--salt` makes the pupil ids reproducible, so the operator can match them
+  privately if the head asks.
+- **Expected:** the school head reads the report and accepts the changes
+  before the release reaches the school. Large changes are expected where
+  CA or coefficients were not counted before.
+- **If it fails:** the script stops with a message (no school, no year,
+  cannot connect), and nothing is written. If the head does not accept the
+  changes, hold the release for that school and give the report to the
+  developer.
+- **From:** docs/39 Current status and §20.0 ("Agreed calculation").
 
 ---
 
@@ -221,8 +272,10 @@ Send before the release reaches the school. English and French.
 >   process them again. Published results do not change.
 > - To reprocess a term or a year that is already published, unpublish it
 >   first.
-> - If a term contains a sequence calculated before this change, that
->   sequence is read as its percentage ÷ 5.
+> - A sequence calculated before this change keeps its old figure inside a
+>   new term: converted to /20, but still without CA or coefficients.
+> - On annual report cards, pupils in a final-year class show "Graduated"
+>   (DIPLOMÉ(E) on French cards).
 > - Promotion bars are now set for each year, out of 20, on Promotion →
 >   Progression. Please confirm a bar for each class. Old bars (0–100) are
 >   shown there but are not used.
@@ -241,8 +294,11 @@ Send before the release reaches the school. English and French.
 >   lorsque vous les retraiterez. Les résultats publiés ne changent pas.
 > - Pour retraiter un trimestre ou une année déjà publiés, dépubliez-les
 >   d'abord.
-> - Si un trimestre contient une séquence calculée avant ce changement,
->   cette séquence est lue comme son pourcentage ÷ 5.
+> - Une séquence calculée avant ce changement garde son ancienne note dans
+>   un nouveau trimestre : convertie sur 20, mais toujours sans CC ni
+>   coefficients.
+> - Sur les bulletins annuels, les élèves d'une classe terminale sont
+>   indiqués « DIPLOMÉ(E) » (« Graduated » sur les bulletins en anglais).
 > - Les seuils de passage se fixent désormais par année, sur 20, dans
 >   Promotion → Progression. Merci de confirmer un seuil pour chaque classe.
 >   Les anciens seuils (0–100) y sont affichés mais ne sont pas utilisés.
@@ -260,10 +316,27 @@ Send before the release reaches the school. English and French.
 
 | Watch | Where | Act when |
 |---|---|---|
-| Analysis runs failing or timing out | run records (`intelligenceanalysisruns`, `status: "failed"`, `error.code` `TIMEOUT` / `OUT_OF_MEMORY` / `ENGINE_ERROR` / `REPORT_TOO_LARGE`) | any `OUT_OF_MEMORY` or `TIMEOUT`: revisit 1.1; any `ENGINE_ERROR`: escalate to the developer |
+| Analysis runs failing or timing out | run records (`intelligenceanalysisruns`, `status: "failed"`, `error.code` one of `WORKER_OUT_OF_MEMORY`, `TIMEOUT`, `ENGINE_ERROR`, `WORKER_EXITED`, `LOAD_ERROR`, `STORE_ERROR`, `REPORT_TOO_LARGE`, `INTERRUPTED`) | any `WORKER_OUT_OF_MEMORY` or `TIMEOUT`: revisit 1.1; any `ENGINE_ERROR`, `WORKER_EXITED`, `LOAD_ERROR` or `STORE_ERROR`: escalate to the developer; `INTERRUPTED` after a restart is expected (4) |
 | Worker memory | host memory during runs (`docker stats`) | memory near the host's limit: lower `ANALYSIS_CONCURRENCY` |
 | 409 `PUBLISHED_RESULTS` volume | backend access log (morgan, `combined` in production): 409 answers to `/process`, `/term-results/compute`, `/annual-results/compute` and `/reportcard/calculate` | many from one school: that school needs the "unpublish first" step explained (6) |
 | Support questions about promotion bars | support channel | the same question twice: add it to the message in 6 |
+
+**7.1 Before each school's first promotion run: classes with no confirmed bar** — *operator, then the school head*
+- **Do:** list, for every school, the classes with no confirmed bar for the
+  year (read-only; from `backend/`):
+  `node scripts/list-unconfirmed-bars.js --uri <database URI> [--year 2026/2027]`.
+  It prints each school's classes without a bar of their own for the year,
+  final-year classes excepted. Within one school the head sees the same on
+  Promotion → Progression, and the API answers it at
+  `GET /api/promotion/progression?year=…` (`year.classes[id].confirmed`).
+- **Expected:** before a school's first promotion run, every class it lists
+  has a confirmed bar, or the head has decided that the school's bar (or the
+  pass mark) applies to it.
+- **If it fails:** a class without a confirmed bar is judged against the
+  school's bar, or the pass mark if none is set. Its old 0–100 value is
+  never used. Ask the head to confirm a bar on Progression before generating
+  the run.
+- **From:** docs/39 §14 and §20.0 ("Agreed calculation", promotion bars).
 
 ---
 
