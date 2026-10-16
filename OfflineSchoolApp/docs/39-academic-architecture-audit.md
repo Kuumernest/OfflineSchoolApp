@@ -36,6 +36,39 @@ result means.
 > the current behaviour cannot be "represented as configuration" without
 > first deciding which calculation is authoritative (§21 D1, revised).
 
+## Current status (2026-10-16, `academic-phases-4-6` @ `1e5082c`)
+
+- **Phases 1–5 done; Phase 6 partly done** (the table in §20; the detail and
+  every test in §20.0).
+- **Every rule is the school's, and every default is the old behaviour.** No
+  school has switched a rule on. The demo school (`school_db`, GVA001) runs
+  on defaults.
+- **Validation of Phases 4–6 is complete.** Three passes: validation,
+  defect closure, and calculation/promotion (§20.0). Each expected figure was
+  worked out by hand. Backend `check:all` gives 6,381 checks in 105 suites, 0
+  failed. Desktop `check` gives 273, 0 failed. The last mobile and web runs
+  passed (defect-closure pass); neither has changed since.
+- **Fixed and pinned:** §4.6 a, b, c, e, f, g, h, j, k, l (l under
+  `weighted_20`). The promotion run no longer proposes "promoted" without
+  results. `weighted_20` gives no 0/F to a pupil with no counted subject. The
+  desktop's offline processing defers to the server under non-default rules.
+- **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
+  open assessment types, cohort `FORMAT_VERSION` 2.
+- **Not done in Phase 4:** term and annual cards are not archived at issue,
+  and the QR snapshot is refreshed on every render (§20.0, card/QR
+  lifecycle).
+- **Blocked on decisions, not code** (§21.1, §20.0):
+  - D1, D1b, D2, D3;
+  - which figure the default (`raw_mean`) sequence card prints;
+  - the §4.6d CA double count (with cohort format v2);
+  - the term/annual card and QR lifecycle;
+  - a bulk-decision control on the promotion screen.
+  
+  D4 is resolved.
+- **Untested paths** are listed at the end of the latest §20.0 entry.
+- **Never run:** anything on a device, in Electron or in a browser; anything
+  against a real school's data.
+
 ---
 
 ## 1. Current architecture
@@ -1346,13 +1379,13 @@ Checked against docs/37:
 
 | Phase | Content | Behaviour change |
 |---|---|---|
-| **0. Decisions** (no code) | §21 D1–D4, above all D1, the sequence-average scale | none |
+| **0. Decisions** (no code) (**open**: D1, D1b, D2, D3 are per-school rules no school has chosen; D4 resolved) | §21 D1–D4, above all D1, the sequence-average scale | none |
 | **1. Audit** | this document | none |
 | **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
 | **3. Represent today's structure as configuration** (**done**, ahead of D1 on the project owner's instruction; §20.0) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
-| **4. Configuration-driven calculation** (**done** as per-school rules, defaults = today; §20.0) | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
+| **4. Configuration-driven calculation** (**done** as per-school rules, defaults = today, validated; term/annual card archiving and QR at issue **not done**, a decision; §20.0) | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
 | **5. Admin configuration UI** (**done** for the rules and section layouts; §20.0) | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
-| **6. Genuinely custom structures** (**partly done**: flexible periods within today's bounds; §20.0) | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
+| **6. Genuinely custom structures** (**partly done**: flexible periods within today's bounds, validated; the rest not started; §20.0) | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
 
 ### 20.0 Progress
 
