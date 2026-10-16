@@ -11,7 +11,10 @@ together on branch `academic-agreed-calculation`:
   ([docs/39](39-academic-architecture-audit.md), Current status and §20.0).
 
 Nothing below has been done on a real server, a real school's data, a
-browser or a device. Each step is something to do, not a result. Every step
+browser or a device. Tests at this version (2026-10-16, database URI and
+provider keys blanked): backend `check:all`, every suite one by one, 108
+suites, 6,380 checks, 0 failed; `check-revert-previous.js` (1.4), 14 passed
+against each of `origin/master` and `097de9c`. Each step is something to do, not a result. Every step
 has an owner:
 
 - **Operator:** runs the servers and the database.
@@ -94,12 +97,33 @@ has an owner:
       again.
     - Restoring the 1.3 backup is the clean path if results were
       reprocessed.
+    - **A code revert leaves the year on every reprocessed sequence result
+      (tested).** The new code writes `academicYear` and `term` on each
+      sequence result. The previous route's update does not set them, so
+      they stay, even after the previous code reprocesses the exam
+      (`backend/src/routes/exam.routes.js:1760` at `origin/master`, `:1873`
+      at `097de9c`). The previous promotion run selects published sequence
+      results by `academicYear` (`backend/src/services/promotion.service.js:53`
+      at `origin/master`, `:58` at `097de9c`). Its own results carry
+      no year, so today it finds none and proposes on `no_results`. After a
+      revert it finds the left-over results and compares their /20 average
+      with the class's old 0–100 bar: with a bar of 50, every pupil of the
+      class is proposed "repeated". Everything else reads correctly and is
+      overwritten cleanly: cards, terms, years and figures are what the
+      previous code gives on its own.
   - **On the shared server, a restore affects every school.** Restoring
     the shared database puts every school back to that backup, and every
     school loses what it entered after it, not only the school whose
     results went wrong. Nothing restores one school's documents on its own:
-    no tool for it exists. Release to one school first on its own instance
-    (1.6), so that a restore touches that school alone.
+    no tool for it exists. 1.6 keeps a backup of the whole server for each
+    day of the first week, so the loss is at most a day.
+- **Tested:** `node scripts/check-revert-previous.js --ref origin/master`
+  (from `backend/`; not in `check:all`, as it checks out the previous code
+  in a temporary git worktree). On a made-up school, the new code
+  reprocesses, nothing is published, then the previous code reads,
+  reprocesses and runs promotion. 14 passed, 0 failed against
+  `origin/master` (`99d59f4`) and against `097de9c` (this branch just
+  before the agreed calculation).
 - **Expected:** the rollback decision above, read and understood by the
   operator before the deploy.
 - **If it fails:** do not deploy.
@@ -151,68 +175,56 @@ has an owner:
   ```
 
   Not yet run against any real school's data.
-- **Expected:** the school head reads the report and accepts the changes
-  before the release reaches the school. Large changes are expected where
-  CA or coefficients were not counted before.
+- **Expected:** every school's head reads that school's report and accepts
+  the changes before the release. Large changes are expected where CA or
+  coefficients were not counted before.
 - **If it fails:** the script stops with a message (no school, no year,
-  cannot connect), and nothing is written. If the head does not accept the
-  changes, hold the release for that school and give the report to the
-  developer.
+  cannot connect), and nothing is written. If a head does not accept the
+  changes, hold the release, for every school (1.6), and give the report to
+  the developer.
 - **From:** docs/39 Current status and §20.0 ("Agreed calculation").
 
-**1.6 Release to one school first** — *operator, with that school's head*
-- **Do:** release to one school for one week, with a database backup every
-  day of that week. Then widen to the other schools.
-- **On the shared server this cannot be done as it stands.** One backend
-  serves every school (1.4), and the calculation is one calculation for
-  every school (docs/39 §20.0): there is no switch per school, and none is
-  to be added without the project owner. Deploying to the shared server
-  switches every school at once, and restoring it restores every school.
-- **The smallest safe way, proposed (not yet decided or built):** a
-  separate instance for the first school.
-  - A second copy of the stack (`docker-compose.yml`: its own backend,
-    database and nginx), running the new build, holding a copy of that one
-    school's data. The shared server stays on the previous build for every
-    other school.
-  - That school's users point at the new instance: the web console is served
-    by that instance's nginx; the desktop app's server is set in the app
-    (`desktop/src/main/main.js:332`); the mobile app's server is fixed when
-    it is built (`EXPO_PUBLIC_API_URL`, `mobile/src/services/api.js:46`), so
-    that school needs its own mobile build, or uses web and desktop for the
-    week.
-  - A restore then touches only that school, and its daily backup is a
-    backup of its instance.
-  - **What it costs:**
-    - a second server, or room for a second stack on the same host (1.1
-      applies to it too), and the operator's time to run it;
-    - copying one school's documents out of the shared database into the
-      new one: no tool does this yet. The dry run (1.5) copies one school
-      into memory by `schoolId`; a copy into a real database would be new
-      developer work;
-    - at the end of the week, moving that school back: its data, now
-      changed on the new instance, must be copied back into the shared
-      database when the shared server takes the new build. That is the
-      same missing tool, run the other way, while both hold the school;
-    - while the copy exists, the school must not use the shared server, or
-      its entries split between the two.
-  - **If this is not done:** the release reaches every school on the day
-    it is deployed. Then the dry run (1.5) of every school, and the
-    backup (1.3), are the only protection, and a restore takes every
-    school back.
-- **Why:** the rollback of the agreed calculation, once a school has
-  reprocessed its results, is a restore from backup (1.3, 1.4). Results
-  recomputed after the release are stamped with the new calculation and the
-  previous code does not read them the same way. One school first keeps a
-  restore small, and a week shows the questions schools ask before everyone
-  asks them.
-- **Expected:** the first school's week ends with no failed analysis runs
-  (7), no unexplained result changes against its dry run (1.5), and a daily
-  backup for each day.
-- **If it fails:** stop widening. Restore that school's backup if its
-  results must go back (1.4), and give the developer the dry-run report and
-  what differed.
+**1.6 Release to every school, with safeguards** — *operator, with every school's head*
+- **One shared server, so every school switches at once.** One backend and
+  one database serve every school (1.4), and the calculation is one
+  calculation for every school (docs/39 §20.0). There is no switch per
+  school, and none is to be added without the project owner.
+- **Do:**
+  - **Dry run accepted by every head.** Run 1.5 for every school; every
+    head accepts the report before the release.
+  - **Back up the whole server every day for the first week**, on top of
+    the backup before the deploy (1.3). Keep each one, dated, until the
+    release is accepted.
+  - **Prefer the break between terms.** Release when schools are not
+    entering marks or processing results, so that fewer results are
+    reprocessed in the first days, and a restore (1.4) loses as little as
+    possible.
+- **Not included: asking schools not to publish for the first days.** It
+  would only help if a code revert alone were enough once results have been
+  reprocessed. It is not: reprocessed sequence results keep their year
+  after a revert, and the previous promotion run then reads them (1.4,
+  tested). So once anything is reprocessed, rollback is a restore whether
+  or not anything was published.
+- **Expected:** every head's acceptance of their dry run, a backup for each
+  day of the first week, no failed analysis runs (7), and no result
+  changes a school cannot match to its dry run.
+- **If it fails:** decide with the developer whether to roll back (1.4). A
+  rollback after reprocessing is a restore of the whole server, for every
+  school: tell every school first.
+- **Considered, not chosen: a separate instance for the first school.** A
+  second copy of the stack with a copy of one school's data, so that a
+  restore touches that school alone. Its costs:
+  - a second server or stack, and the operator's time to run it;
+  - a tool to copy one school's documents out of the shared database and,
+    after the week, back in: none exists; it would be new developer work;
+  - that school's users pointed at the new instance: the desktop app's
+    server is set in the app (`desktop/src/main/main.js:332`), but the
+    mobile app's is fixed when it is built (`EXPO_PUBLIC_API_URL`,
+    `mobile/src/services/api.js:46`), so the school needs its own mobile
+    build;
+  - the school kept off the shared server while its copy exists.
 - **From:** docs/39 §20.0 ("Agreed calculation": effective for every
-  unpublished result); this checklist, 1.3 and 1.4.
+  unpublished result); this checklist, 1.3 to 1.5.
 
 **1.7 Ship backend and web together; plan desktop and mobile** — *operator*
 - **Do:** deploy the backend and the web console from one build of this
@@ -369,7 +381,7 @@ screen.
 
 ## 6. Tell the schools — *school head, with the operator*
 
-Send before the release reaches the school. English and French.
+Send to every school before the release: it reaches them all at once (1.6). English and French.
 
 **English**
 
@@ -415,9 +427,8 @@ Send before the release reaches the school. English and French.
 > - La première revue Intelligence après le changement peut prendre quelques
 >   minutes à se préparer.
 
-- **Expected:** every school has the message before its first
-  reprocessing.
-- **If it fails:** hold the release for that school.
+- **Expected:** every school has the message before the release.
+- **If it fails:** hold the release, for every school.
 - **From:** docs/39 Current status, §21.1; docs/38 §10.
 
 ---

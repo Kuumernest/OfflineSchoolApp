@@ -2744,6 +2744,41 @@ Checked against docs/37:
     - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
     - desktop, mobile and web: no file changed; not rerun.
 
+- **What a code revert leaves; release to every school (2026-10-16).**
+  Same branch. No calculation, engine, threshold, version or published row
+  changed.
+  - **New `backend/scripts/check-revert-previous.js --ref <git ref>`** (14
+    checks, not in `check:all`: it checks out the previous code in a
+    temporary git worktree). This branch reprocesses a made-up school,
+    nothing is published, then the previous code reads, reprocesses and
+    runs promotion.
+  - **Found** (the same at `origin/master` and at `097de9c`):
+    - Cards, the term layer and the annual rows read the new rows
+      correctly.
+    - Reprocessing overwrites every figure, position, grade and
+      `calcVersion` with the previous code's own.
+    - But every sequence result this branch wrote keeps `academicYear` and
+      `term`: the previous route's `$set` does not include them
+      (`exam.routes.js:1760` at `origin/master`). The previous promotion
+      run selects published summaries by `academicYear`
+      (`promotion.service.js:53`), so after a revert it finds results where
+      it found none before, and compares their /20 average with the old
+      0–100 class bar (50 in the test: every Form 1 pupil proposed
+      "repeated", where before the run proposed `no_results`).
+  - So a code revert is clean only if nothing was reprocessed; docs/40 1.4's
+    decision wording is unchanged.
+  - docs/40 1.6 is now "Release to every school, with safeguards": every
+    head accepts their dry run, a backup of the whole server every day of
+    the first week, the break between terms preferred. The separate
+    instance is kept as "considered, not chosen". No "do not publish"
+    request was added (to 1.6 or §6): it would not keep rollback a code
+    revert.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - `check-revert-previous.js`: 14 passed, 0 failed, with
+      `--ref origin/master` and with `--ref 097de9c`;
+    - desktop, mobile and web: no file changed; not rerun.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -2964,8 +2999,9 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the rollback-decision pass after
-`51b55e2`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
+branch `academic-agreed-calculation`, the revert-check pass after
+`bf2a737`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
+`check-revert-previous.js` 14 passed against `origin/master` and `097de9c`;
 desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 
