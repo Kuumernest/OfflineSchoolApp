@@ -3,7 +3,7 @@
 
 /**
  * scripts/dry-run-agreed-calc.js against an in-memory "source" database
- * holding one school as it would be before the release (docs/40 step 1.7).
+ * holding one school as it would be before the release (docs/40 step 1.5).
  *
  *   1. The report, every figure worked by hand below.
  *   2. No pupil name in it.
@@ -113,6 +113,8 @@ const DOCS = {
   const pid = (id) => `P-${crypto.createHash("sha256").update(`check${id}`).digest("hex").slice(0, 8)}`;
 
   console.log("--- 1. the report ---");
+  check("published for the year: s2's two summaries; no term or annual row", report.published,
+    { sequence: 2, term: 0, annual: 0 });
   check("reprocessed: s1; s2 refused (published); one term and one year per class (2 classes)", report.reprocessed,
     { examsProcessed: 1, examsRefusedPublished: 1, termsComputed: 2, termsRefusedPublished: 0, yearsComputed: 2, yearsRefusedPublished: 0 });
   check("sequence: 4 compared, 2 changed, largest +2 (ama, s1: 12 → 14), 2 positions",

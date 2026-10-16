@@ -68,7 +68,7 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 108 suites, 6,379 checks, 0 failed;
+- **Tests:** backend `check:all`: 108 suites, 6,380 checks, 0 failed;
   desktop `check` 271, 0 failed; mobile `check` 679, 0 failed; web build and
   lint pass, 0 errors.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
@@ -2716,6 +2716,34 @@ Checked against docs/37:
     - mobile `npm run check` 679/0;
     - web build and lint, 0 errors.
 
+- **Rollback decided; release order (2026-10-16).** Same branch. No
+  calculation, engine, threshold, version or published row changed.
+  - **Rollback of the agreed calculation, decided by the project owner:** a
+    restore from backup; no code-only rollback (docs/40 1.4, the wording
+    as given).
+  - **One server for every school.** `docker-compose.yml` runs one backend
+    (line 26) on one database `school_app` (line 37); schools are records
+    (`superAdmin.routes.js:198`), scoped by `schoolId` (`tenant.js:98`). A
+    deploy switches every school, and a restore restores every school.
+    docs/40 1.6 proposes, not decided or built, a separate instance for the
+    first school, and lists what it costs. No per-school switch was added.
+  - **Pilots:** a closed pilot's reviews do not count toward a new one
+    (reviews carry the open pilot's id, `insights.routes.js:713`; a pilot's
+    evidence is its own id, `pilot.service.js:190`). docs/40 §5 says what
+    the head saves before closing.
+  - **Old desktop builds** cannot render, print or issue a report card
+    offline (`desktop/src/main/api/coverage.js:417`, `:427`; no term or
+    annual card route offline). docs/40 1.7.
+  - **Dry run:** the report also counts the year's published sequence,
+    term and annual rows (refused until unpublished); the promotion line
+    says when the year has no annual results. `check:dryrun` 12 → 13.
+  - docs/40: the dry run is now 1.5, before the release to one school
+    (1.6); shipping is 1.7. The 1.4 decision's "daily backup from 1.5"
+    reads "from 1.6" to follow the renumbering.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - desktop, mobile and web: no file changed; not rerun.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -2936,8 +2964,8 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the dry-run pass after `6334652`):
-backend `check:all`, 108 suites, 6,379 checks, 0 failed;
+branch `academic-agreed-calculation`, the rollback-decision pass after
+`51b55e2`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
 desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 

@@ -63,13 +63,25 @@ has an owner:
 - **From:** the rollback steps below.
 
 **1.4 Decide the rollback path, for both changes** — *operator, with the developer*
+- **One server, one database, every school.** Every school runs on the same
+  backend and the same database: `docker-compose.yml` starts one `backend`
+  (line 26) on one database, `school_app` (line 37). Schools are created
+  inside the app by the super admin (`POST /api/super-admin/schools`,
+  `backend/src/routes/superAdmin.routes.js:198`), and every record carries
+  its `schoolId` (`backend/src/utils/tenant.js:98`, `requireSchool`). So
+  deploying switches every school at once, and restoring the database
+  restores every school, not one.
 - **Do:** agree, before deploying, how you would go back:
   - **Cold analysis:** revert the change and redeploy backend and web
     together. The previous code ignores the `intelligenceanalysisruns`
     collection, which can be left or dropped; no other collection changed.
     The four `ANALYSIS_*` variables are ignored (docs/38 §11, Rollback).
-  - **Agreed calculation:** no rollback is written in docs/39. The developer
-    must confirm it before the deploy. What is known from the code:
+  - **Agreed calculation: decided by the project owner, 2026-10-16.** Rollback is a restore from backup. There is no code-only rollback.
+    - If no result has been reprocessed under the new calculation yet: revert backend and web together. Nothing needs restoring. The previous code ignores the per-year bars and refuses format 2 cohort files.
+    - If results have been reprocessed: restore the backup from 1.3, or the latest daily backup from 1.6, then revert backend and web together. Marks and changes entered after that backup are lost and must be entered again. Tell the school before restoring.
+    - This is why the release goes to one school first, with a backup every day.
+
+    The reasons, from the code:
     - **Sequence results:** results computed after the release are stamped
       `exam-process/3`, `term/3` and `annual/3`. The previous code reads only
       `exam-process/2` sequence results as /20, so on a card with no rebuilt
@@ -82,51 +94,18 @@ has an owner:
       again.
     - Restoring the 1.3 backup is the clean path if results were
       reprocessed.
-- **Expected:** a written rollback decision, signed off by the developer.
+  - **On the shared server, a restore affects every school.** Restoring
+    the shared database puts every school back to that backup, and every
+    school loses what it entered after it, not only the school whose
+    results went wrong. Nothing restores one school's documents on its own:
+    no tool for it exists. Release to one school first on its own instance
+    (1.6), so that a restore touches that school alone.
+- **Expected:** the rollback decision above, read and understood by the
+  operator before the deploy.
 - **If it fails:** do not deploy.
 - **From:** docs/38 §10 item 7, §11; docs/39 §20.0 ("Agreed calculation").
 
-**1.5 Release to one school first** — *operator, with that school's head*
-- **Do:** release to one school for one week, with a database backup every
-  day of that week. Then widen to the other schools, a few at a time.
-- **Why:** the rollback of the agreed calculation, once a school has
-  reprocessed its results, is a restore from backup (1.3, 1.4). Results
-  recomputed after the release are stamped with the new calculation and the
-  previous code does not read them the same way. One school first keeps a
-  restore small, and a week shows the questions schools ask before everyone
-  asks them.
-- **Expected:** the first school's week ends with no failed analysis runs
-  (7), no unexplained result changes against its dry run (1.7), and a daily
-  backup for each day.
-- **If it fails:** stop widening. Restore that school's backup if its
-  results must go back (1.4), and give the developer the dry-run report and
-  what differed.
-- **From:** docs/39 §20.0 ("Agreed calculation": effective for every
-  unpublished result); this checklist, 1.3 and 1.4.
-
-**1.6 Ship backend and web together; plan desktop and mobile** — *operator*
-- **Do:** deploy the backend and the web console from one build of this
-  branch. They ship in one image here; keep it that way.
-- **Desktop and mobile:**
-  - Release new desktop and mobile builds from the same branch.
-  - An older mobile app still works against the new server, but its
-    "Calculate & save" screen shows editable fields the server now ignores.
-  - An older desktop computes a provisional figure offline that the server
-    replaces on sync, or refuses (409) if the class has a published result.
-  - **Neither app can be forced to a minimum version.** Neither sends its
-    version to the server, the server checks none, and neither has an
-    automatic updater. So the old builds keep working against the new
-    server, with the limits above: tell schools to install the new builds,
-    and keep this warning until they have.
-- **Expected:** one backend+web version live, and the desktop and mobile
-  builds scheduled.
-- **If it fails:** a web build older than the backend reads the analysis's
-  202 answer as a report. From reading that code, the review page is
-  expected to break until the run completes (not tested). Redeploy them
-  together.
-- **From:** docs/38 §11 prerequisite 5; docs/39 §20.0.
-
-**1.7 Dry run, per school** — *operator runs it; school head reviews it*
+**1.5 Dry run, per school** — *operator runs it; school head reviews it*
 - **Do:** for each school, before the release reaches it, run the dry run
   against a copy of production, or read-only against production itself
   (from `backend/`, with devDependencies installed):
@@ -141,10 +120,37 @@ has an owner:
     change;
   - how many positions change;
   - each pupil whose annual promotion status would change, and from what to
-    what.
+    what;
+  - how many of the year's sequence, term and annual results are already
+    **published**. Those keep their figures: reprocessing them is refused
+    (409 `PUBLISHED_RESULTS`) until the school unpublishes them.
+
+  The promotion section is empty until the year has annual results: before
+  then, it reports no change because there is nothing to compare, not
+  because nothing would change.
 
   `--salt` makes the pupil ids reproducible, so the operator can match them
   privately if the head asks.
+- **Tested:** `check:dryrun` (13 checks, every figure worked by hand in
+  `backend/scripts/check-dry-run-agreed-calc.js`) runs the dry run on a
+  made-up school in an in-memory database, from the module and from the
+  command line, and runs `list-unconfirmed-bars.js` (7.1) on the same
+  database; the source is byte-identical afterwards (dbHash, every
+  document, every index). Its report, as printed (pupil ids are
+  pseudonyms; the school is made up):
+
+  ```
+  Dry run — school 6a00000000000000000000d1, 2026/2027
+  Published for the year (refused until unpublished): 2 sequence, 0 term, 0 annual result(s)
+  Reprocessed: 1 exam(s) (1 published, left), 2 class-term(s) (0 published), 2 class-year(s) (0 published)
+  Sequence averages: 2 of 4 change, 0 new, 0 removed, 2 position(s) move; largest +2 (P-c0ced528, s1: 12 → 14)
+  Term averages: 2 of 2 change, 0 new, 0 removed, 2 position(s) move; largest +1 (P-c0ced528, term 1: 12 → 13)
+  Annual averages: 2 of 2 change, 0 new, 0 removed, 2 position(s) move; largest +1 (P-c0ced528, year: 12 → 13)
+  Promotion status changes: 1
+    P-1665d745: promoted → repeated
+  ```
+
+  Not yet run against any real school's data.
 - **Expected:** the school head reads the report and accepts the changes
   before the release reaches the school. Large changes are expected where
   CA or coefficients were not counted before.
@@ -153,6 +159,94 @@ has an owner:
   changes, hold the release for that school and give the report to the
   developer.
 - **From:** docs/39 Current status and §20.0 ("Agreed calculation").
+
+**1.6 Release to one school first** — *operator, with that school's head*
+- **Do:** release to one school for one week, with a database backup every
+  day of that week. Then widen to the other schools.
+- **On the shared server this cannot be done as it stands.** One backend
+  serves every school (1.4), and the calculation is one calculation for
+  every school (docs/39 §20.0): there is no switch per school, and none is
+  to be added without the project owner. Deploying to the shared server
+  switches every school at once, and restoring it restores every school.
+- **The smallest safe way, proposed (not yet decided or built):** a
+  separate instance for the first school.
+  - A second copy of the stack (`docker-compose.yml`: its own backend,
+    database and nginx), running the new build, holding a copy of that one
+    school's data. The shared server stays on the previous build for every
+    other school.
+  - That school's users point at the new instance: the web console is served
+    by that instance's nginx; the desktop app's server is set in the app
+    (`desktop/src/main/main.js:332`); the mobile app's server is fixed when
+    it is built (`EXPO_PUBLIC_API_URL`, `mobile/src/services/api.js:46`), so
+    that school needs its own mobile build, or uses web and desktop for the
+    week.
+  - A restore then touches only that school, and its daily backup is a
+    backup of its instance.
+  - **What it costs:**
+    - a second server, or room for a second stack on the same host (1.1
+      applies to it too), and the operator's time to run it;
+    - copying one school's documents out of the shared database into the
+      new one: no tool does this yet. The dry run (1.5) copies one school
+      into memory by `schoolId`; a copy into a real database would be new
+      developer work;
+    - at the end of the week, moving that school back: its data, now
+      changed on the new instance, must be copied back into the shared
+      database when the shared server takes the new build. That is the
+      same missing tool, run the other way, while both hold the school;
+    - while the copy exists, the school must not use the shared server, or
+      its entries split between the two.
+  - **If this is not done:** the release reaches every school on the day
+    it is deployed. Then the dry run (1.5) of every school, and the
+    backup (1.3), are the only protection, and a restore takes every
+    school back.
+- **Why:** the rollback of the agreed calculation, once a school has
+  reprocessed its results, is a restore from backup (1.3, 1.4). Results
+  recomputed after the release are stamped with the new calculation and the
+  previous code does not read them the same way. One school first keeps a
+  restore small, and a week shows the questions schools ask before everyone
+  asks them.
+- **Expected:** the first school's week ends with no failed analysis runs
+  (7), no unexplained result changes against its dry run (1.5), and a daily
+  backup for each day.
+- **If it fails:** stop widening. Restore that school's backup if its
+  results must go back (1.4), and give the developer the dry-run report and
+  what differed.
+- **From:** docs/39 §20.0 ("Agreed calculation": effective for every
+  unpublished result); this checklist, 1.3 and 1.4.
+
+**1.7 Ship backend and web together; plan desktop and mobile** — *operator*
+- **Do:** deploy the backend and the web console from one build of this
+  branch. They ship in one image here; keep it that way.
+- **Desktop and mobile:**
+  - Release new desktop and mobile builds from the same branch.
+  - An older mobile app still works against the new server, but its
+    "Calculate & save" screen shows editable fields the server now ignores.
+  - An older desktop computes a provisional figure offline that the server
+    replaces on sync, or refuses (409) if the class has a published result.
+  - **An older desktop cannot render, print or issue a report card
+    offline**, so it cannot print its offline figure on a card. The
+    sequence card and its reissue are server-only
+    (`desktop/src/main/api/coverage.js:417` and `:427`); the desktop has no
+    offline answer for the term or annual card; a route the desktop does
+    not answer goes to the server (`desktop/src/main/api/index.js:111`,
+    `handle`); and printed cards (`GeneratedReport`) are not copied to the
+    desktop (`backend/src/config/syncFeed.js:469`). The cards page asks the
+    server for the rendered card (`web/src/pages/reports/cards.tsx:323`).
+    Offline, the card asks for a connection. The old offline figure shows
+    only in the desktop's own results lists until it syncs. Not a
+    card-printing risk; the results-list risk is the line above.
+  - **Neither app can be forced to a minimum version.** Neither sends its
+    version to the server, the server checks none, and neither has an
+    automatic updater. So the old builds keep working against the new
+    server, with the limits above: tell schools to install the new builds,
+    and keep this warning until they have.
+- **Expected:** one backend+web version live, and the desktop and mobile
+  builds scheduled.
+- **If it fails:** a web build older than the backend reads the analysis's
+  202 answer as a report. From reading that code, the review page is
+  expected to break until the run completes (not tested). Redeploy them
+  together.
+- **From:** docs/38 §11 prerequisite 5; docs/39 §20.0.
 
 ---
 
@@ -250,8 +344,24 @@ screen.
     INSUFFICIENT_EVIDENCE only from ANALYSIS_READY);
   - and opens a new pilot, which records the current versions.
 
-  Whether the closed pilot's reviews count toward the new one was not
-  checked; ask the developer before closing.
+  **The closed pilot's reviews do not count toward the new pilot.** A
+  review is stamped, when it is recorded, with the id of the pilot open at
+  that moment (`backend/src/routes/insights.routes.js:713`;
+  `IntelligenceReview.pilotRunId`, `backend/src/db/models/IntelligenceReview.js:116`).
+  A pilot's evidence is only the reviews stamped with its own id, since it
+  opened, on its engine version
+  (`backend/src/services/intelligence/pilot.service.js:190`, `windowOf`).
+  A new pilot has a new id, so it starts with no evidence. The reviews are
+  not deleted, and the closed pilot stays listed
+  (`GET /api/insights/pilot/history`, `insights.routes.js:871`) with its
+  report (`GET /api/insights/pilot/:id/report`, `insights.routes.js:860`),
+  but that report is worked out again each time it is read, not frozen.
+
+  So, before closing, the head saves:
+  - the pilot's report, `GET /api/insights/pilot/:id/report`;
+  - its current evidence, `GET /api/insights/pilot/evidence`;
+  - a note of who reviewed and how much was covered, for the new pilot's
+    start.
 - **If it fails:** a drifted pilot cannot be closed. Escalate.
 - **From:** docs/39 §20.0 ("Agreed calculation", the version bump).
 

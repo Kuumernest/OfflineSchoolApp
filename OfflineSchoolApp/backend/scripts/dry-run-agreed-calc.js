@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Dry run of the agreed calculation for one school (docs/40, step 1.7).
+ * Dry run of the agreed calculation for one school (docs/40, step 1.5).
  *
  * Copies one school's academic records from a SOURCE database into a private
  * in-memory MongoDB, reprocesses that school's unpublished results for the
@@ -16,6 +16,11 @@
  * the year with no published result (published exams are refused, as on the
  * server), then every class's term and year, each refused where a published
  * row exists. Published rows are compared as unchanged.
+ *
+ * It also counts the year's PUBLISHED sequence, term and annual rows: they
+ * keep their figures, and reprocessing them is refused (409) until the
+ * school unpublishes them. The promotion section is empty until the year has
+ * annual results.
  *
  * The report names no pupil: a pupil is "P-" plus 8 hex characters of
  * sha256(salt + id). Pass --salt to make the ids reproducible.
@@ -124,10 +129,13 @@ const dryRun = async ({ sourceUri, schoolId, year = null, salt = "" }) => {
     }
     promotion.sort((p, q) => (p.pupil < q.pupil ? -1 : 1));
 
+    // Published rows of the year: refused (409) until the school unpublishes them.
+    const publishedOf = (m) => [...m.values()].filter((x) => x.pub).length;
     return {
       schoolId: String(schoolId),
       academicYear,
       copied,
+      published: { sequence: publishedOf(before.seq), term: publishedOf(before.term), annual: publishedOf(before.annual) },
       reprocessed: counts,
       sequence: compare(before.seq, after.seq),
       term: compare(before.term, after.term),
@@ -158,6 +166,7 @@ const text = (r) => {
     (c.largestChange ? `; largest ${c.largestChange.delta > 0 ? "+" : ""}${c.largestChange.delta} (${c.largestChange.pupil}, ${c.largestChange.of}: ${c.largestChange.from} → ${c.largestChange.to})` : "");
   return [
     `Dry run — school ${r.schoolId}, ${r.academicYear}`,
+    `Published for the year (refused until unpublished): ${r.published.sequence} sequence, ${r.published.term} term, ${r.published.annual} annual result(s)`,
     `Reprocessed: ${r.reprocessed.examsProcessed} exam(s) (${r.reprocessed.examsRefusedPublished} published, left), ` +
       `${r.reprocessed.termsComputed} class-term(s) (${r.reprocessed.termsRefusedPublished} published), ` +
       `${r.reprocessed.yearsComputed} class-year(s) (${r.reprocessed.yearsRefusedPublished} published)`,
@@ -165,6 +174,7 @@ const text = (r) => {
     line("Term averages", r.term),
     line("Annual averages", r.annual),
     `Promotion status changes: ${r.promotionStatusChanges.length}` +
+      (r.annual.compared === 0 && r.annual.created === 0 ? " (no annual results for the year yet)" : "") +
       r.promotionStatusChanges.map((p) => `\n  ${p.pupil}: ${p.from} → ${p.to}`).join(""),
     ...r.notes.map((n) => `Note: ${n}`),
   ].join("\n");
