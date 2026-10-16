@@ -252,8 +252,15 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   check("it counts cases selected and awaiting, and the data problems cited",
     [pilot.evidence.casesSelected > 1, pilot.evidence.casesAwaitingReview, pilot.evidence.dataQualityCitations],
     [true, pilot.evidence.casesSelected - 1, { assessment_unusually_difficult: 1 }]);
-  check("and it is counts — no pupil, no mark, no reviewer's words",
-    /st-a1|Pupil|16|hard paper|Ateba|Biya/.test(JSON.stringify(pilot.evidence).replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "")), false);   // timestamps stripped: a run at 16:xx is not a mark
+  // Timestamps, ids and digests stripped first: a run at 16:xx, or a hex id
+  // that happens to contain "16", is not a mark. The mark is 16 standing alone.
+  const leaks = (text) => /st-a1|Pupil|\b16\b|hard paper|Ateba|Biya/.test(String(text)
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "")
+    .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, "")
+    .replace(/\b[0-9a-f]{12,}\b/gi, ""));
+  check("the leak test: a mark of 16 is caught, an id or digest containing 16 is not",
+    [leaks('{"score":16}'), leaks('{"runId":"7c16a0b2-1d16-4e8f-9a16-0b1c2d3e4f16","digest":"ab16cd16ef16ab16cd16"}')], [true, false]);
+  check("and it is counts — no pupil, no mark, no reviewer's words", leaks(JSON.stringify(pilot.evidence)), false);
 
   r = await move(head, "CALIBRATED");
   check("ANALYSIS_READY → CALIBRATED without a decision → 400 DECISION_REQUIRED", [r.status, r.body.code], [400, "DECISION_REQUIRED"]);

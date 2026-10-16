@@ -124,14 +124,27 @@ const main = async () => {
   check("the run agrees with the rows", ["lo", "hi", "mid", "up"].map((id) => outcome[id]),
     ["graduated", "graduated", "repeated", "promoted"]);
 
+  // The structure-level threshold (schema default 10) is read by nothing and
+  // is no longer copied onto annual rows (decided 2026-10-16, docs/41 §7).
+  check("annual rows carry no copy of the structure's threshold",
+    [...new Set((await M("AnnualResult").find({ schoolId: F }).lean()).map((a) => a.promotionThreshold ?? null))], [null]);
+
   const card = async (id, cls) => cards.buildAnnualCard({ schoolId: F, academicYear: YEAR, classId: cls, studentId: id });
   const lo = await card("lo", "f5");
   check("the annual card says GRADUATED for the final-year pupil below the bar", lo?.summary?.promotionStatus, "GRADUATED");
   check("  and REPEATED for Form 4's pupil below it", (await card("mid", "f4"))?.summary?.promotionStatus, "REPEATED");
   const frHtml = renderReportCardHtml(lo, { lang: "fr" });
   const enHtml = renderReportCardHtml(lo, { lang: "en" });
-  check("a French card prints DIPLOMÉ(E), an English one GRADUATED",
-    [frHtml.includes("DIPLOMÉ(E)"), frHtml.includes("GRADUATED"), enHtml.includes("GRADUATED")], [true, false, true]);
+  // Wording decided by the project owner (2026-10-16, docs/41 §7):
+  // DIPLÔMÉ(E) with the circumflex, REDOUBLANT kept, ADMIS(E) SOUS CONDITION.
+  check("a French card prints DIPLÔMÉ(E), an English one GRADUATED",
+    [frHtml.includes("DIPLÔMÉ(E)"), frHtml.includes("DIPLOMÉ(E)"), frHtml.includes("GRADUATED"), enHtml.includes("GRADUATED")], [true, false, false, true]);
+  const conditional = { ...lo, summary: { ...lo.summary, promotionCode: "conditional", promotionStatus: "CONDITIONAL PROMOTION" } };
+  check("a French card prints ADMIS(E) SOUS CONDITION for a conditional promotion; English unchanged",
+    [renderReportCardHtml(conditional, { lang: "fr" }).includes("ADMIS(E) SOUS CONDITION"), renderReportCardHtml(conditional, { lang: "fr" }).includes("CONDITIONAL PROMOTION"),
+     renderReportCardHtml(conditional, { lang: "en" }).includes("CONDITIONAL PROMOTION")], [true, false, true]);
+  check("the French card says Année scolaire, not Année académique",
+    [frHtml.includes("Année scolaire"), frHtml.includes("Année académique")], [true, false]);
   check("a French card prints REDOUBLANT for a pupil who repeats",
     renderReportCardHtml(await card("mid", "f4"), { lang: "fr" }).includes("REDOUBLANT"), true);
 

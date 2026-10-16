@@ -865,7 +865,8 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // ✅ Phase 2: single rendering engine. Returns the canonical printable HTML
 //    produced server-side; the web batch print and the mobile PDF export
 //    fetch this instead of keeping their own local builders.
-//    ?lang=fr switches label language (default en).
+//    Printed in the school's language (School.defaultLanguage), whoever
+//    views it; ?lang= is no longer read (docs/41 §7).
 // ─────────────────────────────────────────────────────────
 
 /**
@@ -951,8 +952,6 @@ const archiveGeneratedReport = ({
 
 const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const lang =
-    String(req.query.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
 
   const built = await buildStudentReportCardData(examId, studentId, req);
   if (!built?.ok) {
@@ -973,6 +972,9 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // card routes share so they cannot select different fields from each other.
   const letterhead = await loadSchoolForCard(schoolId, req);
   const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  // The school's language, whoever views or reissues the card (docs/41 §7);
+  // a ?lang= or body.lang from the viewer's interface no longer decides it.
+  const lang = letterhead.language;
 
   /**
    * The verification strip: QR + code resolving to a public page that shows
@@ -1101,15 +1103,15 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  const lang =
-    String(req.body.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
-
   // The same letterhead and verification strip the issue path prints
   // (getStudentReportCardHtml). A reissue used to render with the school's
   // name alone, so the card that superseded an issued one had no logo, motto,
   // delegations or QR (docs/39 §4.6f).
   const letterhead = await loadSchoolForCard(schoolId, req);
   const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  // The school's language, whoever views or reissues the card (docs/41 §7);
+  // a ?lang= or body.lang from the viewer's interface no longer decides it.
+  const lang = letterhead.language;
   const verify = await cardVerification({
     data:        built.data,
     schoolId,

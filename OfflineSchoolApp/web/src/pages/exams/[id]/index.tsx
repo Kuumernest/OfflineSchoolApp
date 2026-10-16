@@ -12,6 +12,7 @@ import { useExamDetail, useSubmissions,
 import { useExamResults, useExamStats,
          useProcessResults,
          usePublishResults }                 from "@/hooks/useExamResults";
+import { UnpublishButton } from "@/components/results/UnpublishButton";
 import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
               ExamSubject,
@@ -1673,6 +1674,18 @@ const ResultsTab = ({
                   ? t("exams.step3Done")
                   : t("exams.step3Todo")}
               </p>
+              {/* Unpublishing: one class at a time, with a reason (docs/41 §7). */}
+              {resultsPublished && (
+                <div className="mt-2">
+                  <UnpublishButton
+                    layer="sequence"
+                    examId={examId}
+                    classOptions={[...new Map(results
+                      .filter((r) => r.classId)
+                      .map((r) => [String(r.classId), { id: String(r.classId), name: r.className ?? String(r.classId) }])).values()]}
+                  />
+                </div>
+              )}
               {!resultsPublished && currentStep === 3 && (
                 <button
                   onClick={handlePublish}

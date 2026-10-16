@@ -47,7 +47,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import api                from "./api";
 import { getDatabase }    from "../db/database";
-import { MutationQueue, registerReconciler } from "./mutationQueue.service";
+import { MutationQueue, registerReconciler, registerFailureHandler } from "./mutationQueue.service";
 
 // ── Local schema ────────────────────────────────────────────────────────────
 
@@ -415,6 +415,38 @@ export async function markFailed(clientId, reason) {
 }
 
 /**
+ * Send a failed message again: its outbox row back in the queue with a fresh
+ * retry budget, and the bubble back to "queued". False when there is nothing
+ * to retry (already sent, or discarded from the pending-changes screen).
+ */
+export async function retrySend(clientId) {
+  await ensureSchema();
+  const db = await getDatabase();
+  const row = await db.getFirstAsync(
+    `SELECT id FROM mutation_outbox WHERE entity_key = ? AND status IN ('failed', 'conflict')`,
+    [`message:${clientId}`]
+  ).catch(() => null);
+  if (!row) return false;
+  await MutationQueue.retry(row.id);
+  await db.runAsync(
+    `UPDATE ${MESSAGES} SET state = 'queued', error = NULL WHERE id = ?`,
+    [String(clientId)]
+  );
+  return true;
+}
+
+/** One conversation as this device holds it, or null. */
+export async function getConversation(conversationId) {
+  await ensureSchema();
+  const db = await getDatabase();
+  const r = await db.getFirstAsync(
+    `SELECT id, kind, title, is_read_only, is_archived FROM ${CONVERSATIONS} WHERE id = ?`,
+    [String(conversationId)]
+  ).catch(() => null);
+  return r ? { _id: r.id, kind: r.kind, title: r.title, isReadOnly: !!r.is_read_only, isArchived: !!r.is_archived } : null;
+}
+
+/**
  * Move this device's read marker.
  *
  * Queued silently: a read receipt that fails to sync is not the user's work
@@ -591,6 +623,12 @@ export const registerMessageReconcilers = () => {
     // takes the server's seq, which is what fixes its place in the thread.
     await confirmSent(args.clientId, sent);
   });
+
+  // Refused, or out of retries: the bubble turns failed instead of showing
+  // "queued" for ever.
+  registerFailureHandler("message", async ({ args, message }) => {
+    if (args?.clientId) await markFailed(args.clientId, message);
+  });
 };
 
 export default {
@@ -604,6 +642,8 @@ export default {
   sendMessage,
   confirmSent,
   markFailed,
+  retrySend,
+  getConversation,
   markRead,
   markDelivered,
   openDirect,

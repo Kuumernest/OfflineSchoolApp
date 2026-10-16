@@ -216,6 +216,8 @@ router.get("/conversations", asyncHandler(async (req, res) => {
       subjectId:          c.subjectId,
       participants:       c.participants,
       lastMessageAt:      c.lastMessageAt,
+      // The phone derives its badge from this and its own lastReadSeq.
+      lastMessageSeq:     c.lastMessageSeq || 0,
       lastMessagePreview: c.lastMessagePreview,
       lastMessageSender:  c.lastMessageSender,
       isArchived:         c.isArchived,

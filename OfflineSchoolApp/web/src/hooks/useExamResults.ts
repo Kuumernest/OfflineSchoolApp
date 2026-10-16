@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }   from "@/store/auth.store";
 import * as ExamService   from "@/services/exam.service";
 import { examQueryKeys }  from "./useExams";
-import { useToast }       from "@/components/ui/Toast";
+import { useToast }       from "@/components/ui/Toast";
+
 import { useTranslation } from "react-i18next";
+import { getErrorMessage } from "@/lib/axios";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -17,6 +19,13 @@ const resultKeys = {
     ["rankings", examId, scope, classId ?? "all"] as const,
   student:  (examId: string, studentId: string) =>
     ["student-result", examId, studentId] as const,
+};
+
+/** A whole-school compute leaves classes with published results as they are and names them. */
+const refusedClassesText = (data: unknown, t: (k: string, o?: Record<string, unknown>) => string): string | null => {
+  const r = (data as { refusedClasses?: { classId: string; className?: string | null }[] } | null)?.refusedClasses;
+  if (!r?.length) return null;
+  return t("results.refusedPublished", { count: r.length, classes: r.map((c) => c.className ?? c.classId).join(", ") });
 };
 
 // ─── RESULTS LIST ─────────────────────────────────────────────────────────────
@@ -95,7 +104,7 @@ export const useProcessResults = () => {
       toast({ title: t("results.toastCalculated"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errProcessResults"), kind: "error" }),
+      toast({ title: t("exams.errProcessResults"), message: getErrorMessage(e), kind: "error" }),
   });
 };
 
@@ -119,7 +128,32 @@ export const usePublishResults = () => {
       toast({ title: t("results.toastPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errPublishResults"), kind: "error" }),
+      toast({ title: t("exams.errPublishResults"), message: getErrorMessage(e), kind: "error" }),
+  });
+};
+
+// ─── UNPUBLISH (sequence, term, year), with a reason ──────────────────────────
+
+export const useUnpublishResults = (layer: ExamService.UnpublishLayer) => {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
+
+  return useMutation({
+    mutationFn: (p: Omit<ExamService.UnpublishParams, "schoolId">) =>
+      ExamService.unpublishResults(layer, { ...p, schoolId }),
+    onSuccess: (data) => {
+      // Results, exams, terms and years all show the published state.
+      void qc.invalidateQueries();
+      toast({
+        kind: "success",
+        title: t("unpublish.done", { count: data?.unpublished ?? 0 }),
+        message: t("unpublish.issuedStay"),
+      });
+    },
+    onError: (e: Error) =>
+      toast({ kind: "error", title: t("unpublish.failed"), message: getErrorMessage(e) }),
   });
 };
 
@@ -180,17 +214,23 @@ export const useComputeTermResults = () => {
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
+  const refusedToast = (data: unknown) => {
+    const text = refusedClassesText(data, t);
+    if (text) toast({ title: text, kind: "error" });
+  };
+
   return useMutation({
     mutationFn: (payload: { academicYear: string; term: number; classId?: string }) =>
       ExamService.computeTermResults({ ...payload, schoolId }),
-    onSuccess: (_data, payload) => {
+    onSuccess: (data, payload) => {
       qc.invalidateQueries({
         queryKey: termResultKeys.list(schoolId, payload.academicYear, payload.term, payload.classId),
       });
       toast({ title: t("academicStructure.termComputed"), kind: "success" });
+      refusedToast(data);
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errComputeTerm"), kind: "error" }),
+      toast({ title: t("exams.errComputeTerm"), message: getErrorMessage(e), kind: "error" }),
   });
 };
 
@@ -210,7 +250,7 @@ export const usePublishTermResults = () => {
       toast({ title: t("academicStructure.termPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errPublishTerm"), kind: "error" }),
+      toast({ title: t("exams.errPublishTerm"), message: getErrorMessage(e), kind: "error" }),
   });
 };
 
@@ -242,17 +282,23 @@ export const useComputeAnnualResults = () => {
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
+  const refusedToast = (data: unknown) => {
+    const text = refusedClassesText(data, t);
+    if (text) toast({ title: text, kind: "error" });
+  };
+
   return useMutation({
     mutationFn: (payload: { academicYear: string; classId?: string }) =>
       ExamService.computeAnnualResults({ ...payload, schoolId }),
-    onSuccess: (_data, payload) => {
+    onSuccess: (data, payload) => {
       qc.invalidateQueries({
         queryKey: annualResultKeys.list(schoolId, payload.academicYear, payload.classId),
       });
       toast({ title: t("academicStructure.annualComputed"), kind: "success" });
+      refusedToast(data);
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errComputeAnnual"), kind: "error" }),
+      toast({ title: t("exams.errComputeAnnual"), message: getErrorMessage(e), kind: "error" }),
   });
 };
 
@@ -272,6 +318,6 @@ export const usePublishAnnualResults = () => {
       toast({ title: t("academicStructure.annualPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errPublishAnnual"), kind: "error" }),
+      toast({ title: t("exams.errPublishAnnual"), message: getErrorMessage(e), kind: "error" }),
   });
 };

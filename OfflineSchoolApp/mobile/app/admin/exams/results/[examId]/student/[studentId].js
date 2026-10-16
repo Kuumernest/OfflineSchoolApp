@@ -16,6 +16,7 @@ import api                              from "../../../../../../src/services/api
 import ReportCard                       from "../../../../components/ReportCard";
 import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../../../src/utils/appError";
+import { formatDecimal } from "../../../../../../src/i18n/format";
 import { recalculateClass, CONFIRM } from "../../../../../../src/services/reportCardCalc.service";
 
 // ─────────────────────────────────────────────────────────
@@ -91,34 +92,34 @@ function SubjectEditor({ subject }) {
       </View>
 
       <View style={se.scoreCol}>
-        <Text style={[se.score, { color: scoreColor }]}>
+        <Text style={[se.score, { color: scoreColor }]} numberOfLines={1} adjustsFontSizeToFit>
           {isAbsent ? "—" : subject.score ?? "—"}
         </Text>
         <Text style={se.maxScore}>/{subject.maxScore}</Text>
       </View>
 
       <View style={se.coeffCol}>
-        <Text style={[se.coeffInput, isAbsent && se.coeffDisabled]}>
+        <Text style={[se.coeffInput, isAbsent && se.coeffDisabled]} numberOfLines={1}>
           {String(subject.coefficient ?? 1)}
         </Text>
       </View>
 
       <View style={se.normCol}>
-        <Text style={[se.norm, { color: scoreColor }]}>
+        <Text style={[se.norm, { color: scoreColor }]} numberOfLines={1} adjustsFontSizeToFit>
           {isAbsent
             ? "—"
             : subject.normalizedMark != null
-            ? subject.normalizedMark.toFixed(2)
+            ? formatDecimal(subject.normalizedMark, 2)
             : "—"}
         </Text>
         <Text style={se.normLabel}>/20</Text>
       </View>
 
       <View style={se.weightedCol}>
-        <Text style={[se.weighted, { color: scoreColor }]}>
+        <Text style={[se.weighted, { color: scoreColor }]} numberOfLines={1} adjustsFontSizeToFit>
           {isAbsent || subject.weightedScore == null
             ? "—"
-            : subject.weightedScore.toFixed(2)}
+            : formatDecimal(subject.weightedScore, 2)}
         </Text>
       </View>
     </View>
@@ -156,23 +157,20 @@ const se = StyleSheet.create({
   score:    { fontSize: 14, fontWeight: "700" },
   maxScore: { fontSize: 10, color: C.gray400 },
   coeffCol: { flex: 0.7, alignItems: "center" },
+  // Read-only since the agreed calculation (the school's coefficient), so
+  // plain text rather than an input's box; and no fixed width: at 360 px
+  // the column is about 35 px, and a 52 px box covered the next one.
   coeffInput: {
-    borderWidth:       1,
-    borderColor:       C.gray200,
-    borderRadius:      6,
+    minWidth:          20,
     paddingVertical:   4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     fontSize:          13,
     fontWeight:        "700",
     color:             C.primary,
     textAlign:         "center",
-    backgroundColor:   C.primaryBg,
-    width:             52,
   },
   coeffDisabled: {
-    backgroundColor: C.gray100,
     color:           C.gray400,
-    borderColor:     C.gray100,
   },
   normCol: {
     flex:           0.8,
@@ -207,7 +205,7 @@ function SummaryBar({ computed, outOf }) {
       backgroundColor: color + "08",
     }]}>
       <View style={sb.item}>
-        <Text style={[sb.val, { color }]}>{average != null ? average.toFixed(2) : "—"}</Text>
+        <Text style={[sb.val, { color }]} numberOfLines={1} adjustsFontSizeToFit>{average != null ? formatDecimal(average, 2) : "—"}</Text>
         <Text style={sb.lbl}>{t("studentResult.avgOutOf", { outOf })}</Text>
       </View>
       <View style={sb.divider} />
@@ -438,7 +436,7 @@ export default function StudentReportCardScreen() {
         `${t("studentResult.shareClass")} ${d?.className || "—"}\n` +
         `${t("results.my.examLabel")} ${d?.examName || "—"} · ${d?.term || ""} ${d?.academicYear || ""}\n\n` +
         `${t("studentResult.shareResults")}\n` +
-        `${t("studentResult.shareAverage")} ${c?.average?.toFixed(2) ?? "—"}/20\n` +
+        `${t("studentResult.shareAverage")} ${c?.average != null ? formatDecimal(c.average, 2) : "—"}/20\n` +
         `${t("results.my.gradeLabel")} ${c?.overallGrade || "—"}\n` +
         `${t("results.my.resultLabel")} ${c?.isPassing ? t("results.my.passFlag") : t("results.my.failFlag")}`;
       await Share.share({ message: msg });

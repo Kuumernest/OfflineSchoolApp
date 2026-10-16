@@ -8,12 +8,14 @@
  *
  * Computes annual averages from per-term results.
  *
- * Annual Average = (Term 1 Avg + Term 2 Avg + Term 3 Avg) / 3
- * (equal weighting, configurable via AcademicStructure.termWeights)
+ * Annual average = the term averages weighted by the year's term weights
+ * (AcademicStructure).
  *
- * Promotion is determined by:
- *   - Whether the student passed all terms (termAverage >= passMark)
- *   - Whether the student passed promotion exams (if configured)
+ * Promotion status (shared/academicRules promotionUnderRules, docs/39 §21.1):
+ *   - pending until every term of the year has a complete result;
+ *   - then the annual average against the class's bar out of 20 (or the
+ *     school's, or the pass mark): promoted at or above it, repeated below;
+ *   - a final-year class graduates.
  */
 
 const mongoose          = require("mongoose");
@@ -105,8 +107,8 @@ async function annualContextFor({ schoolId, academicYear }) {
 
 /**
  * The annual row for one pupil, from the term results and promotion results
- * already in hand. Pure: no database. The arithmetic and the promotion rule
- * are exactly those of the per-pupil function this replaced.
+ * already in hand. Pure: no database. The promotion status follows the rule
+ * in the file header.
  */
 function annualRowFor(ctx, { termResults, promotionResults, classId = null, isFinalYear = false }) {
   const { passMark, termWeights } = ctx;
@@ -176,7 +178,9 @@ const annualSetFor = ({ studentName, admissionNo, className }, ctx, row) => ({
   overallGrade:        row.annualGrade.grade,
   overallRemark:       row.annualGrade.remark,
   promotionStatus:     row.promotionStatus,
-  promotionThreshold:  ctx.structure.promotionThreshold ?? null,
+  // The structure-level promotionThreshold is no longer copied here: nothing
+  // reads it, and the bar a row was judged by is the year's (rules) — decided
+  // 2026-10-16, docs/41 §7. Rows written before keep what they hold.
   isPassing:           row.isPassing,
   policyHash:          ctx.policyHash ?? null,
   calcVersion:         ctx.calcVersion ?? CALC_VERSIONS.annual,

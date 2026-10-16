@@ -49,6 +49,8 @@ interface SchoolSettings {
   academicYearStart:  string;
   academicYearEnd:    string;
   nextTermResumption: string;
+  /** The language every report card of the school prints in. */
+  defaultLanguage:    "en" | "fr";
   schoolDays:         string[];
   schoolStartTime:    string;
   schoolEndTime:      string;
@@ -333,6 +335,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     region: "", division: "",
     description: "", academicYearStart: "", academicYearEnd: "",
     nextTermResumption: "",
+    defaultLanguage: "en",
     // API values, never translated.
     schoolDays: ["Monday","Tuesday","Wednesday","Thursday","Friday"],
     schoolStartTime: "07:30", schoolEndTime: "15:30", logo: null,
@@ -377,6 +380,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             academicYearStart:  s.academicYearStart  ?? "",
             academicYearEnd:    s.academicYearEnd    ?? "",
             nextTermResumption: s.nextTermResumption ?? "",
+            defaultLanguage:    s.defaultLanguage === "fr" ? "fr" : "en",
             schoolDays:         Array.isArray(s.schoolDays) && s.schoolDays.length
               ? s.schoolDays
               : ["Monday","Tuesday","Wednesday","Thursday","Friday"],
@@ -691,6 +695,21 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <p className="mt-1 text-xs text-ink-muted">
                 {t("settings.nextTermResumptionHint")}
               </p>
+            </div>
+            {/* Every report card prints in this language, whoever views or
+                reissues it (decided 2026-10-16, docs/41 §7). */}
+            <div>
+              <FieldLabel>{t("settings.cardLanguage")}</FieldLabel>
+              <select
+                value={form.defaultLanguage}
+                onChange={(e) => set("defaultLanguage", e.target.value === "fr" ? "fr" : "en")}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
+              >
+                {/* Each language named in itself. */}
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">{t("settings.cardLanguageHint")}</p>
             </div>
           </div>
 

@@ -1,0 +1,350 @@
+[
+ {
+  "file": "app/_layout.js",
+  "text": "Opening database…"
+ },
+ {
+  "file": "app/_layout.js",
+  "text": "Restoring session…"
+ },
+ {
+  "file": "app/_layout.js",
+  "text": "Waiting for auth store…"
+ },
+ {
+  "file": "app/_layout.js",
+  "text": "Navigating…"
+ },
+ {
+  "file": "app/admin/announcements/index.js",
+  "text": "Delete \"${title}\"?\\n\\nThis will remove it for all recipients."
+ },
+ {
+  "file": "app/admin/announcements/index.js",
+  "text": "unread ·"
+ },
+ {
+  "file": "app/admin/announcements/index.js",
+  "text": "· ${stats.fromTeachers} from teachers"
+ },
+ {
+  "file": "app/admin/announcements/index.js",
+  "text": "(Teacher)"
+ },
+ {
+  "file": "app/admin/assignments/[id].js",
+  "text": "Remove \"${subjectName}\" from ${className}?"
+ },
+ {
+  "file": "app/admin/assignments/assign.js",
+  "text": "Section ${classItem.section}"
+ },
+ {
+  "file": "app/admin/assignments/assign.js",
+  "text": "• ${classItem.subjectCount} subjects"
+ },
+ {
+  "file": "app/admin/assignments/assign.js",
+  "text": "Subjects ("
+ },
+ {
+  "file": "app/admin/attendance/report/students.js",
+  "text": "Attendance Records ("
+ },
+ {
+  "file": "app/admin/attendance/report/students.js",
+  "text": "% overall"
+ },
+ {
+  "file": "app/admin/attendance/report/teachers.js",
+  "text": "Attendance Records ("
+ },
+ {
+  "file": "app/admin/attendance/report/teachers.js",
+  "text": "% overall"
+ },
+ {
+  "file": "app/admin/attendance/students.js",
+  "text": "✓ saved"
+ },
+ {
+  "file": "app/admin/classes/edit.js",
+  "text": "✎ Unsaved changes"
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "${actionLabel} Class"
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "Are you sure you want to ${actionLabel.toLowerCase()} \"${classItem.name}\"?"
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "Failed to ${actionLabel.toLowerCase()} class"
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "\"${classItem.name}\" has students enrolled.\\n\\nMove or remove all students first, then try again."
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "· ${stats.inactive} inactive"
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "Active ("
+ },
+ {
+  "file": "app/admin/classes/index.js",
+  "text": "All ("
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "— choose a subject for a class to enter its marks"
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "★ rejected — re-enter marks"
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "${invalid.length} score(s) must be a number between 0 and ${maxScore}."
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "Check: ${names}${invalid.length > 3 ? \" …\" : \"\"}"
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "Stored on this device — they will upload automatically when you're back online."
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "· Max:"
+ },
+ {
+  "file": "app/admin/exams/marks.js",
+  "text": "· Pass:"
+ },
+ {
+  "file": "app/admin/exams/monitor/index.js",
+  "text": "Max: ${item.maxScore}"
+ },
+ {
+  "file": "app/admin/exams/monitor/index.js",
+  "text": "Pass: ${item.passMark}"
+ },
+ {
+  "file": "app/admin/fees/[studentId].js",
+  "text": "MOMO-…"
+ },
+ {
+  "file": "app/admin/fees/structures/new.js",
+  "text": "TUITION"
+ },
+ {
+  "file": "app/admin/periods/add.js",
+  "text": "\"${name.trim()}\" (${startTime}–${endTime}) has been added."
+ },
+ {
+  "file": "app/admin/periods/add.js",
+  "text": "24-hour format — e.g. 08:00 or 13:30"
+ },
+ {
+  "file": "app/admin/periods/add.js",
+  "text": "• Break"
+ },
+ {
+  "file": "app/admin/periods/edit.js",
+  "text": "\"${name.trim()}\" has been updated."
+ },
+ {
+  "file": "app/admin/reports/generate/index.js",
+  "text": "${templates.length} custom template(s) available"
+ },
+ {
+  "file": "app/admin/reports/generate/index.js",
+  "text": "…and"
+ },
+ {
+  "file": "app/admin/reports/templates/index.js",
+  "text": "• ${item.variables.length} placeholders"
+ },
+ {
+  "file": "app/admin/subjects/add.js",
+  "text": "\" — Results"
+ },
+ {
+  "file": "app/admin/subjects/add.js",
+  "text": "✅ Created in"
+ },
+ {
+  "file": "app/admin/subjects/add.js",
+  "text": "❌ Failed in"
+ },
+ {
+  "file": "app/admin/subjects/add.js",
+  "text": "(${form.classIds.length} classes)"
+ },
+ {
+  "file": "app/admin/subjects/index.js",
+  "text": "Permanently delete \"${subject.name}\" from ${subject.className}?\\n\\n"
+ },
+ {
+  "file": "app/admin/subjects/index.js",
+  "text": "• ${stats.unassigned} unassigned"
+ },
+ {
+  "file": "app/admin/sync-overwrites/[id].js",
+  "text": "this record"
+ },
+ {
+  "file": "app/admin/sync-overwrites/[id].js",
+  "text": "'s edit"
+ },
+ {
+  "file": "app/admin/sync-overwrites/[id].js",
+  "text": "Changes ("
+ },
+ {
+  "file": "app/admin/sync-overwrites/index.js",
+  "text": "Unnamed ${item.entity_type}"
+ },
+ {
+  "file": "app/admin/sync-overwrites/index.js",
+  "text": "'s edit replaced yours from"
+ },
+ {
+  "file": "app/admin/teachers/add.js",
+  "text": "📧 Email"
+ },
+ {
+  "file": "app/admin/teachers/add.js",
+  "text": "🔑 Temp Password"
+ },
+ {
+  "file": "app/admin/teachers/add.js",
+  "text": "A temporary password will be generated and emailed to the teacher automatically. They will be prompted to set a personal password on first login."
+ },
+ {
+  "file": "app/auth/select-school.js",
+  "text": "Select ${school.name}"
+ },
+ {
+  "file": "app/portal/index.js",
+  "text": "ABCD-EFGH"
+ },
+ {
+  "file": "app/portal/index.js",
+  "text": "· GPA ${trimMark(r.gpa)}"
+ },
+ {
+  "file": "app/portal/index.js",
+  "text": "Absent"
+ },
+ {
+  "file": "app/portal/index.js",
+  "text": "ABS"
+ },
+ {
+  "file": "app/student/announcements.js",
+  "text": "· ${unreadCount} unread"
+ },
+ {
+  "file": "app/student/homework/index.js",
+  "text": "· Late"
+ },
+ {
+  "file": "app/student/quizzes/attempt.js",
+  "text": "💡 Explanation"
+ },
+ {
+  "file": "app/student/subjects/detail.js",
+  "text": "Downloading… ${progress}%"
+ },
+ {
+  "file": "app/student/subjects/detail.js",
+  "text": "✓ Cached — opens instantly"
+ },
+ {
+  "file": "app/student/subjects/detail.js",
+  "text": "Downloading ${progress}%"
+ },
+ {
+  "file": "app/teacher/announcements/index.js",
+  "text": "\"${item.title}\"\\n\\nThis will remove it for all recipients."
+ },
+ {
+  "file": "app/teacher/attendance/index.js",
+  "text": "% overall attendance rate"
+ },
+ {
+  "file": "app/teacher/attendance/mark.js",
+  "text": "✓ saved"
+ },
+ {
+  "file": "app/teacher/attendance/report.js",
+  "text": "% overall"
+ },
+ {
+  "file": "app/teacher/attendance/report.js",
+  "text": "Records ("
+ },
+ {
+  "file": "app/teacher/content/index.js",
+  "text": "Permanently delete \"${item.title}\"?\\n\\nThis cannot be undone."
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "🔍 DEV:"
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "exams fetched,"
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "teacherId ="
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "\\nFirst submission teacherId = \"${debugInfo.debugRows[0].sampleTeacher}\""
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "No submissions found in any exam"
+ },
+ {
+  "file": "app/teacher/exams/index.js",
+  "text": "⚠️ IDs do NOT match — check extractTeacherId()"
+ },
+ {
+  "file": "app/teacher/explorations/[studentId].js",
+  "text": "· ${ob.codes.map((c) => t(`explore.obsCode.${c}`)).join(\", \")}"
+ },
+ {
+  "file": "app/teacher/subjects/index.js",
+  "text": "· synced from server"
+ },
+ {
+  "file": "app/teacher/subjects/index.js",
+  "text": "🔍 teacherId:"
+ },
+ {
+  "file": "app/teacher/subjects/index.js",
+  "text": "🏫 schoolId:"
+ },
+ {
+  "file": "app/teacher/subjects/index.js",
+  "text": "📋 tables:"
+ },
+ {
+  "file": "src/components/DateField.js",
+  "text": "Select date"
+ },
+ {
+  "file": "src/services/studentApplications.service.js",
+  "text": "Document ${index + 1}"
+ }
+]

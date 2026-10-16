@@ -68,9 +68,11 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 108 suites, 6,380 checks, 0 failed;
-  desktop `check` 271, 0 failed; mobile `check` 679, 0 failed; web build and
-  lint pass, 0 errors.
+- **Tests:** backend `check:all`: 110 suites, 6,430 checks, 0 failed;
+  `check-revert-previous.js` 33 against each of `origin/master` and
+  `097de9c`; desktop `check` 275, 0 failed; mobile `check` 714, 0 failed;
+  web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (89)
+  pass.
 - **Not done in Phase 6:** non-/20 scales, more than 3 terms or 6 sequences,
   open assessment types.
 - **Not done in Phase 4:** term and annual cards are not archived at issue,
@@ -79,7 +81,7 @@ result means.
 - **Still open** (decisions, not code):
   - the term/annual card and QR lifecycle;
   - a bulk-decision control on the promotion screen;
-  - a retention rule for analysis run records (docs/40 §8).
+  - a retention rule for analysis run records (docs/38 §10).
 - **Untested paths** are listed at the end of the "Agreed calculation" and
   "Follow-up" entries in §20.0.
 - **Never run:** anything on a device, in Electron or in a browser; anything
@@ -2841,6 +2843,119 @@ Checked against docs/37:
   the first 5 school days; §6 carries the request in both languages, and
   §7 a daily row for the manifest. Docs only; no code changed.
 
+- **Detail check before release (2026-10-16).** Same branch. Speed,
+  storage, English/French, clients against the backend, the mobile display
+  (the message module first) and loose ends; the findings, measurements and
+  open questions are in [docs/41](41-detail-check.md). No calculation,
+  engine, threshold, version constant, published row or recorded decision
+  changed.
+  - **Fixed, each with a test that failed before:**
+    - the analysis code digest threw in the Docker image (no `backend/`
+      folder there), so every analysis run would fail in production;
+    - the staff/pupil unread badge was always 0; a refused message showed
+      "queued" for ever (now failed, tap to retry); the composer was offered
+      on read-only threads; a guardian's retried send could post twice;
+    - the six message screens had no safe-area insets; the web messages
+      page was unusable at 360 px; the portal tabs wrapped; this branch's
+      pupil-result screen overlapped at 360 px and printed "12.50" in French;
+    - the phone's outbox kept every sent row and a gate phone every scan;
+      `outboxRowsForTable` never found a row (unquoted SQL);
+    - notifications were always English; coded server refusals
+      (PUBLISHED_RESULTS and five others) showed in English or as axios's
+      "Request failed with status code 409" on web and mobile; the
+      verification page's titles and buttons were English only; four
+      strings were wrong since the agreed calculation (promotion basis,
+      promotion-exam hint, admin mark-entry help, French calculate & save);
+    - the desktop's offline exam create and edit accepted any term;
+    - out-of-date comments in `AcademicStructure.js`,
+      `annualGrading.service.js` and `shared/ranking.js`.
+  - **New checks:** backend `check:complexitycalc` (queries per call flat
+    for 5 and 40 pupils, with ceilings, on every path this branch changed);
+    mobile `check-screen-details.js` and `check-hardcoded-strings.js` (any
+    new hard-coded text fails; 87 known ones in its baseline).
+  - **Not fixed (decisions or larger work, docs/41 §6–§7):** no client can
+    unpublish, though the 409 says to (blocks release); report-card
+    language; English emails; the 50-message thread gap; inert structure
+    fields; retention; phone cache trimming.
+  - `check:reportcardcalc` pinned the old French confirmation; its pin now
+    reads the new wording ("L'opération est refusée si…").
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 109 suites, 6,396 checks, 0 failed;
+    - `check-revert-previous.js`: 32 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - `perf:scale` and `perf:analysis` (docs/41 §1);
+    - desktop `npm run check`: 274 passed, 0 failed;
+    - mobile `npm run check`: 709 passed, 0 failed (eslint 0 errors,
+      `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 84 passed.
+
+- **The owner's answers to docs/41 §7 (2026-10-16).** Same branch. No
+  calculation, engine, threshold, version constant or published row's
+  figures changed; §21.1 unchanged.
+  - **Unpublishing** (closes the release blocker in docs/41 §6):
+    `POST /api/results/:examId/unpublish`, `POST /api/term-results/unpublish`,
+    `POST /api/annual-results/unpublish` (`services/unpublish.service.js`).
+    One class at a time, a reason required (400 REASON_REQUIRED),
+    `results.publish` only (school admin), school-scoped. Only `isPublished`
+    and `publishedAt` change; figures, positions and `calcVersion` stay;
+    the answer says issued cards stay as issued. AuditLog action
+    `results.unpublished` (counts before/after, the reason); a sequence also
+    gets a ResultChangeLog row (`entity: "exam"`). ResultChangeLog requires
+    an `examId`, so extending its `entity` with term and annual is not its
+    pattern; those are in the AuditLog only. A year is refused (409
+    PROMOTION_RUN_EXISTS, with the run's state) while a draft or committed
+    promotion run for it exists. When a sequence's last published class is
+    unpublished the exam goes back to `completed`, so it can be published
+    again. Web: "Unpublish…" with a reason dialog beside Publish on the exam,
+    term and annual pages. Mobile: the 409 refusal says where to unpublish.
+    Desktop: the server's (no offline answer).
+  - **French card wording:** DIPLÔMÉ(E); REDOUBLANT kept; ADMIS(E) SOUS
+    CONDITION for a conditional promotion (it printed in English).
+  - **Card language:** every sequence, term and annual card and every
+    reissue prints in `School.defaultLanguage`, whoever views it;
+    `?lang=`/`body.lang` no longer decide. Set on the web school settings
+    screen (`PUT /admin/school-info` accepts `defaultLanguage`, en or fr).
+    No class or section language exists in the data model (`Class.section`
+    is a free-text label), so none is used or added.
+  - **Inert structure fields:** `annualAverageMethod` and the
+    structure-level `promotionThreshold` are no longer shown or sent by the
+    structure screen, and annual rows no longer copy the threshold
+    (`check:academic`'s annual-row pin is now `promotionThreshold: null`;
+    every figure unchanged). Stored data untouched. docs/05, 12, 16, 19
+    corrected: nothing ever read `annualAverageMethod`.
+  - **Phone:** synced attendance before the 30-day window is removed on
+    each pull; an exam's cached marks, results, subjects and cards go when
+    it has not been opened for 60 days (`examCache.evictUnopenedExams`); an
+    exam with anything unsynced, or a request queued for it, is left.
+  - **French terms:** "Année scolaire" (card label and locales, was "Année
+    académique"); "annuler la publication" (was "dépublier/dépubliez");
+    "Chef d'établissement" for `academic.headTeacher` and `doc.headTeacher`
+    (the card already said "chef d'établissement"). The settings field for
+    the head's name still says "Principal".
+  - **Tests:** new `check:unpublish` (29: publish, refused 409, unpublish
+    with a reason, allowed, republish, for each layer; the promotion-run
+    refusal; cards and a reissue in the school's language);
+    `check-revert-previous.js` step Q now unpublishes through the previous
+    code's routed `PUT /results/summary/:id/publish` (33); and additions to
+    `check:agreedfollowup`, `check:schoolctx`, mobile `check:outbox`, desktop
+    `check:process-rules`, web `check:l10n`. `check-pilot-readiness`'s leak
+    test matched "16" inside ids and digests (seen once in a full run); it
+    now strips ids and digests and matches the mark alone, with a fixed
+    sample.
+  - docs/40: §2.5 (one analysis on staging, ends `succeeded`), §3.11–§3.17
+    (message screens on Android and iOS at 360 px, unpublishing, the
+    language setting), §6 in both languages. docs/41: §7 answered, §6 rows
+    closed.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 110 suites, 6,430 checks, 0 failed;
+    - `check-revert-previous.js`: 33 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed, 0 failed;
+    - mobile `npm run check`: 714 passed, 0 failed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 89 passed.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3061,11 +3176,11 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the revert-cleanup pass after
-`d823588`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
-`check-revert-previous.js` 32 passed against `origin/master` and `097de9c`;
-desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
-build and lint, 0 errors.
+branch `academic-agreed-calculation`, the pass on the owner's answers
+after `a780975`): backend `check:all`, 110 suites, 6,430 checks, 0 failed;
+`check-revert-previous.js` 33 passed against `origin/master` and `097de9c`;
+desktop `npm run check`, 275 passed; mobile `npm run check`, 714 passed; web
+build and lint, 0 errors; web `i18n:check` and `check:l10n` (89) pass.
 
 ## Appendix B. Files read (principal)
 

@@ -136,7 +136,7 @@ const LABELS = {
     classLabel:   "Classe",
     gender:       "Sexe",
     dob:          "Date de naissance",
-    academicYear: "Année académique",
+    academicYear: "Année scolaire",
     examLabel:    "Examen",
     average:      "Moyenne",
     percentage:   "Pourcentage",
@@ -151,7 +151,8 @@ const LABELS = {
     decision:     "Décision du Conseil",
     promotedTo:   "ADMIS(E) EN",
     repeated:     "REDOUBLANT",
-    graduated:    "DIPLOMÉ(E)",
+    graduated:    "DIPLÔMÉ(E)",
+    conditional:  "ADMIS(E) SOUS CONDITION",
     generatedOn:  "Généré le",
     official:     "Bulletin officiel",
     noScores:     "Aucune note enregistrée pour cet élève.",
@@ -237,8 +238,8 @@ function resolveAverage20(payload) {
  * reportCardData promotionLabel, which every card printed whatever its
  * language, so a French card said "GRADUATED" and "REPEATED". A French card
  * now prints its own labels (LABELS.fr: ADMIS(E) EN …, REDOUBLANT,
- * DIPLOMÉ(E)); decided 2026-10-16. An English card is unchanged, and a status
- * with no French label (conditional) keeps the English sentence.
+ * DIPLÔMÉ(E), ADMIS(E) SOUS CONDITION); wording decided by the project owner,
+ * 2026-10-16 (docs/41 §7). An English card is unchanged.
  */
 function promotionText(summary, lang) {
   const english = summary?.promotionStatus || null;
@@ -247,6 +248,7 @@ function promotionText(summary, lang) {
   switch (summary.promotionCode) {
     case "graduated": return t.graduated;
     case "repeated":  return t.repeated;
+    case "conditional": return t.conditional;
     case "promoted":  return summary.promotionNextClass
       ? `${t.promotedTo} ${String(summary.promotionNextClass).toUpperCase()}`
       : `${t.promotedTo} CLASSE SUPÉRIEURE`;

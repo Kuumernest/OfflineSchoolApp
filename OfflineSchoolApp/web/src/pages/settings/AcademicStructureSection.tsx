@@ -183,9 +183,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
     try {
       const { data } = await api.put(`/academic-structure/${schoolId}/${encodeURIComponent(academicYear)}`, {
         terms: structure.terms,
-        annualAverageMethod: structure.annualAverageMethod,
         promotionExams: structure.promotionExams,
-        promotionThreshold: structure.promotionThreshold,
         passMark: structure.passMark,
         maxAbsences: structure.maxAbsences,
       });
@@ -498,47 +496,11 @@ export default function AcademicStructureSection({ schoolId }: Props) {
         <CardTitle>{t("academicStructure.globalSettings")}</CardTitle>
         <div className="space-y-4">
 
-          {/* Annual average method */}
-          <div>
-            <FieldLabel>{t("academicStructure.annualAvgMethod")}</FieldLabel>
-            <div className="flex gap-3 mt-1">
-              {(["terms", "sequences"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setStructure({ ...structure, annualAverageMethod: m })}
-                  className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-medium transition border",
-                    structure.annualAverageMethod === m
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  )}
-                >
-                  {t(`academicStructure.method_${m}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Promotion threshold */}
+          {/* The annual average method and a structure-level promotion
+              threshold were offered here; nothing reads them (the year's bars
+              are set on Promotion → Progression), so they are no longer shown
+              or sent (decided 2026-10-16, docs/41 §7). Stored values stay. */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <FieldLabel>{t("academicStructure.promotionThreshold")}</FieldLabel>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={20}
-                  step="0.5"
-                  value={structure.promotionThreshold ?? 10}
-                  onChange={(e) => setStructure({ ...structure, promotionThreshold: Number(e.target.value) })}
-                  className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                />
-                <span className="text-sm text-gray-500">/ 20</span>
-              </div>
-              {/* Promotion exams no longer decide promotion (docs/39 §14, decided 2026-10-16). */}
-              <p className="mt-1 text-xs text-gray-500">{t("academicStructure.promoNotUsed")}</p>
-            </div>
             <div>
               <FieldLabel>{t("academicStructure.passMark")}</FieldLabel>
               <div className="flex items-center gap-2">

@@ -40,6 +40,7 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
 import { conversationMatches, participantName } from "./participants";
+import { currentLocale } from "@/i18n";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,9 +58,10 @@ const timeLabel = (iso?: string | null): string => {
   if (Number.isNaN(d.getTime())) return "";
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
+  // In the console's language, not the browser's.
   return sameDay
-    ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    ? d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short" });
 };
 
 /**
@@ -164,6 +166,9 @@ export default function MessagesPage() {
   const client = useQueryClient();
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Below md the list and the thread take the whole width in turn: side by
+  // side, a 288 px list left the thread about 40 px on a 360 px phone.
+  const [threadOpen, setThreadOpen] = useState(false);
   const [draft,    setDraft]    = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
@@ -308,8 +313,8 @@ export default function MessagesPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between border-b border-gray-200
-                      bg-white px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200
+                      bg-white px-4 py-4 md:px-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{t("messages.title")}</h1>
           <p className="mt-0.5 text-sm text-gray-500">
@@ -330,7 +335,10 @@ export default function MessagesPage() {
       <div className="flex flex-1 min-h-0">
 
         {/* ── Conversation list ──────────────────────────────────────────── */}
-        <aside className="w-72 shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+        <aside className={cn(
+          "w-full md:w-72 shrink-0 border-r border-gray-200 bg-white overflow-y-auto",
+          threadOpen ? "hidden md:block" : "block",
+        )}>
           <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2.5">
             <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200
                             bg-gray-50 px-2.5 py-1.5
@@ -389,7 +397,7 @@ export default function MessagesPage() {
           {visible.map((c) => (
             <button
               key={c._id}
-              onClick={() => { setActiveId(c._id); setSendError(null); }}
+              onClick={() => { setActiveId(c._id); setSendError(null); setThreadOpen(true); }}
               className={cn(
                 "w-full text-left px-4 py-3 border-b border-gray-100",
                 "hover:bg-gray-50 transition-colors",
@@ -421,15 +429,25 @@ export default function MessagesPage() {
         </aside>
 
         {/* ── Thread ─────────────────────────────────────────────────────── */}
-        <section className="flex flex-1 flex-col min-w-0 bg-gray-50">
+        <section className={cn(
+          "flex-1 flex-col min-w-0 bg-gray-50",
+          threadOpen ? "flex" : "hidden md:flex",
+        )}>
           {!active ? (
             <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
               {t("messages.selectOne")}
             </div>
           ) : (
             <>
-              <header className="border-b border-gray-200 bg-white px-5 py-3">
+              <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-5">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setThreadOpen(false)}
+                    className="md:hidden -ml-1 rounded px-1.5 py-0.5 text-sm text-blue-600 hover:bg-gray-100"
+                  >
+                    ← {t("common.back")}
+                  </button>
                   <KindIcon kind={active.kind} />
                   <h2 className="font-semibold text-gray-900">
                     {titleFor(active, myId, t)}
@@ -443,7 +461,7 @@ export default function MessagesPage() {
                 </div>
                 {active.kind !== "direct" && (
                   <p className="mt-0.5 text-xs text-gray-500">
-                    {active.participants?.length ?? 0} participants
+                    {t("messages.participantCount", { count: active.participants?.length ?? 0 })}
                   </p>
                 )}
               </header>
@@ -641,6 +659,7 @@ export default function MessagesPage() {
           onOpened={(c) => {
             setComposing(false);
             setActiveId(c._id);
+            setThreadOpen(true);
             client.invalidateQueries({ queryKey: ["conversations"] });
           }}
         />

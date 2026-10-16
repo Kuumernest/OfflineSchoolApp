@@ -1,4 +1,5 @@
 // web/src/lib/axios.ts
+import { errorCodeKey } from "./errorCodes";
 import axios            from "axios";
 import i18n             from "@/i18n";
 import { getAuthState } from "@/store/auth.store";
@@ -321,6 +322,10 @@ export const getErrorMessage = (error: unknown): string => {
     if (status === 401) return tr("errors.signedOut");
     if (status === 403) return tr("errors.forbidden");
     if (status && status >= 500) return tr("errors.server");
+
+    // A refusal the server names with a code is said in the user's language.
+    const codeKey = errorCodeKey(error.response?.data);
+    if (codeKey) return tr(codeKey);
 
     const serverMsg =
       (error.response?.data as Record<string, unknown>)?.message ||

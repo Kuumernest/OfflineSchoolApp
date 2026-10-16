@@ -71,6 +71,45 @@ const run = async (rows) => {
     check(`${label}: declined (sent to the server), nothing written or queued`, [r, queued, unchanged], [null, 0, true]);
   }
 
+  // An exam's term, offline, as the server takes it: an integer 1-3. A label
+  // ("Term 1") or 4 is the server's 400 to give, so it goes there; "2" from
+  // the web console is stored as the number 2, as the server's schema casts it.
+  {
+    const rows = { exam: [], class: [{ _id: "c1", schoolId: "S1", name: "Form 1" }] };
+    const ctx = {
+      session: { userId: "adm-1", role: "school_admin", schoolId: "S1" },
+      docs: {
+        find: (c, q = {}) => (rows[c] || []).filter((r) => Object.entries(q).every(([k, v]) => String(r[k] ?? null) === String(v))),
+        get:  (c, id) => (rows[c] || []).find((r) => String(r._id) === String(id)),
+        put:  (c, d) => { const list = (rows[c] = rows[c] || []); const i = list.findIndex((r) => String(r._id) === String(d._id)); if (i >= 0) list[i] = d; else list.push(d); return d._id; },
+        tx:   (fn) => fn(),
+      },
+      meta: { get: () => null, set: () => {} },
+      queue: { add: () => ({ seq: 1, duplicate: false }) },
+      state: {},
+    };
+    const create = (term) => api.handle({ method: "POST", path: "/api/exams", query: {}, body: { name: "Seq 1", academicYear: YEAR, term, classIds: ["c1"] } }, ctx);
+    check("offline exam create: \"Term 1\" and 4 go to the server", [await create("Term 1"), await create(4)], [null, null]);
+    const made = await create("2");
+    check("…\"2\" is stored as the number 2", [made != null, rows.exam.map((e) => e.term)], [true, [2]]);
+    const id = rows.exam[0]?._id;
+    const edit = (term) => api.handle({ method: "PUT", path: `/api/exams/${id}`, query: {}, body: { term } }, ctx);
+    check("offline exam edit: term 5 goes to the server; \"3\" is stored as 3",
+      [await edit(5), (await edit("3")) != null, rows.exam[0]?.term], [null, true, 3]);
+  }
+
+  // Unpublishing (decided 2026-10-16) is the server's: a reason, an audit
+  // row, and the promotion-run refusal. No offline answer.
+  {
+    const ctx = { session: { userId: "adm-1", role: "school_admin", schoolId: "S1" }, docs: { find: () => [], get: () => null, put: () => null, tx: (fn) => fn() }, meta: { get: () => null, set: () => {} }, queue: { add: () => ({ seq: 1 }) }, state: {} };
+    const sent = await Promise.all([
+      api.handle({ method: "POST", path: "/api/results/e1/unpublish", query: {}, body: { classId: "c1", reason: "r" } }, ctx),
+      api.handle({ method: "POST", path: "/api/term-results/unpublish", query: {}, body: { academicYear: YEAR, term: 1, classId: "c1", reason: "r" } }, ctx),
+      api.handle({ method: "POST", path: "/api/annual-results/unpublish", query: {}, body: { academicYear: YEAR, classId: "c1", reason: "r" } }, ctx),
+    ]);
+    check("unpublishing a sequence, a term or a year goes to the server", sent, [null, null, null]);
+  }
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error("check failed:", e.stack || e.message); process.exit(1); });

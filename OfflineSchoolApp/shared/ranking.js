@@ -10,10 +10,6 @@
  * weighted sequence route. One copy now, so the places a sequence, a term and
  * a year print cannot drift apart.
  *
- * The live sequence route under the default rule ranks with its own loop over
- * `percentage`, which is the same rule; it is left exactly as it was because
- * its output is pinned byte-for-byte (check:academic).
- *
  * Pure.
  */
 

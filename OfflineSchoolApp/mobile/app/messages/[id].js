@@ -27,6 +27,8 @@ import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { participantName } from "../../src/utils/participantName";
 import { errorText } from "../../src/utils/appError";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
+import { formatTime } from "../../src/i18n/format";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -59,13 +61,9 @@ const C = {
   danger: "#DC2626", dangerBg: "#FEF2F2",
 };
 
-const timeLabel = (iso) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
+// In the app's language, not the phone's (a French app on an English phone
+// showed English times).
+const timeLabel = (iso) => (iso ? formatTime(iso) : "");
 
 /**
  * Read receipts on an outgoing bubble.
@@ -147,6 +145,12 @@ export default function ThreadScreen() {
   const [pending,  setPending]  = useState([]);   // uploaded, not yet sent
   const [attaching, setAttaching] = useState(false);
   const [participantRead, setParticipantRead] = useState({ lastReadSeq: 0, lastDeliveredSeq: 0 });
+  // A read-only conversation (an archived class group, a broadcast) takes no
+  // replies: the server refuses them (403), so no composer is offered.
+  const [readOnly, setReadOnly] = useState(false);
+  // The header under the status bar and the composer above the navigation
+  // bar: Android draws edge-to-edge, iOS has the notch and home indicator.
+  const pad = useScreenInsets({ top: 0, bottom: 0 });
 
   const listRef = useRef(null);
 
@@ -156,6 +160,8 @@ export default function ThreadScreen() {
     try {
       const rows = await MessageService.listMessages(id, { limit: 100 });
       setMessages(rows);
+      const conv = await MessageService.getConversation(id);
+      setReadOnly(!!conv?.isReadOnly);
 
       // Advance the read marker to whatever is now on screen. Only server
       // messages carry a seq; a queued one of ours is not something to mark.
@@ -261,6 +267,12 @@ export default function ThreadScreen() {
     }
   }, [draft, pending, sending, id, myId, user?.name, loadLocal, t]);
 
+  // A failed message, sent again: back in the outbox, shown as queued.
+  const handleRetry = useCallback(async (clientId) => {
+    await MessageService.retrySend(clientId);
+    await loadLocal();
+  }, [loadLocal]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const renderItem = ({ item }) => {
@@ -306,7 +318,7 @@ export default function ThreadScreen() {
                     ]}
                     numberOfLines={1}
                   >
-                    {a.name || "attachment"}
+                    {a.name || t("msgMobile.attachment")}
                   </Text>
                 </View>
               ))}
@@ -327,7 +339,9 @@ export default function ThreadScreen() {
           </View>
 
           {item.state === "failed" && (
-            <Text style={s.failedNote}>{t("msgMobile.failedNote")}</Text>
+            <TouchableOpacity onPress={() => handleRetry(item._id)} hitSlop={8} accessibilityRole="button">
+              <Text style={s.failedNote}>{t("msgMobile.failedNote")}</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -342,7 +356,7 @@ export default function ThreadScreen() {
     >
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
 
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: 12 + pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
@@ -380,7 +394,7 @@ export default function ThreadScreen() {
                 color={C.primary}
               />
               <Text style={s.chipText} numberOfLines={1}>
-                {a.name || "attachment"}
+                {a.name || t("msgMobile.attachment")}
               </Text>
               <TouchableOpacity
                 onPress={() => setPending((p) => p.filter((_, j) => j !== i))}
@@ -393,7 +407,12 @@ export default function ThreadScreen() {
         </View>
       )}
 
-      <View style={s.composer}>
+      {readOnly ? (
+        <View style={[s.readOnlyBar, { paddingBottom: 10 + pad.paddingBottom }]}>
+          <Text style={s.readOnlyText}>{t("msgMobile.readOnlyNote")}</Text>
+        </View>
+      ) : (
+      <View style={[s.composer, { paddingBottom: 10 + pad.paddingBottom }]}>
         <TouchableOpacity
           onPress={handleAttach}
           disabled={attaching || sending}
@@ -431,6 +450,7 @@ export default function ThreadScreen() {
             : <Ionicons name="send" size={18} color={C.white} />}
         </TouchableOpacity>
       </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -474,7 +494,13 @@ const s = StyleSheet.create({
   bubbleTime:     { fontSize: 10, color: C.gray400 },
   bubbleTimeMine: { color: "#BFDBFE" },
 
-  failedNote: { fontSize: 10, color: C.white, marginTop: 3 },
+  failedNote: { fontSize: 10, color: C.white, marginTop: 3, textDecorationLine: "underline" },
+
+  readOnlyBar: {
+    backgroundColor: C.white, paddingHorizontal: 16, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: C.gray200,
+  },
+  readOnlyText: { fontSize: 13, color: C.gray500, textAlign: "center" },
 
   empty:     { alignItems: "center", paddingTop: 60 },
   emptyText: { fontSize: 13, color: C.gray400 },

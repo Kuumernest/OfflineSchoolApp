@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
+import { UnpublishButton } from "@/components/results/UnpublishButton";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { AnnualResult } from "@/types/exam.types";
 
@@ -180,6 +181,14 @@ export default function AnnualResultsPage() {
           )}
           {t("annualResults.publish")}
         </button>}
+        {/* One class at a time, with a reason (docs/41 §7). */}
+        {isAdmin && <UnpublishButton
+          layer="annual"
+          classOptions={classes.map((c) => ({ id: String(c._id), name: c.name }))}
+          classId={classId || undefined}
+          academicYear={academicYear}
+          disabled={!results.some((r) => r.isPublished)}
+        />}
       </div>
 
       {/* Overtaken by the term results behind them.

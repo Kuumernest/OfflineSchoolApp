@@ -40,6 +40,12 @@
 const { randomUUID } = require("crypto");
 const { computeGrade } = require("../gradeUtils");
 
+/** Exam.term as the server's schema holds it: an integer 1-3 (a numeric string casts). */
+const isTermNumber = (term) => {
+  const n = Number(term);
+  return term !== null && term !== "" && Number.isInteger(n) && n >= 1 && n <= 3;
+};
+
 /** The statuses PATCH /:id/status accepts. Anything else is the server's to refuse. */
 const STATUSES = ["draft", "scheduled", "ongoing", "completed", "published", "archived"];
 
@@ -120,6 +126,9 @@ module.exports = [
       if (!String(body.name ?? "").trim()) return null;
       if (!body.academicYear) return null;
       if (!body.term)         return null;
+      // The server's 1-3 (its 400 "term must be 1-3"); a label such as
+      // "Term 1" or a 4 is its refusal to give, not a row to store here.
+      if (!isTermNumber(body.term)) return null;
 
       if (Array.isArray(body.subjects) && body.subjects.length > 0) return null;
 
@@ -137,7 +146,7 @@ module.exports = [
         name:               String(body.name).trim(),
         type:               body.type         || "test",
         academicYear:       body.academicYear,
-        term:               body.term,
+        term:               Number(body.term),
         // Which sequence this is, and so whether the card printed from it is a
         // sequence card. Neither this nor the edit below read it, so an exam
         // created offline came out belonging to no sequence — the same fault
@@ -204,10 +213,14 @@ module.exports = [
         "description", "instructions", "totalMarks", "passMark", "status",
       ];
 
+      if (body.term !== undefined && !isTermNumber(body.term)) return null;
+
       const updates = {};
       for (const field of fields) {
         if (body[field] === undefined) continue;
-        updates[field] = field === "name" ? String(body[field]).trim() : body[field];
+        updates[field] = field === "name" ? String(body[field]).trim()
+          : field === "term" ? Number(body[field])
+          : body[field];
       }
 
       // Separately from the loop, because blank has to become null here rather

@@ -18,6 +18,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
+import { formatTime } from "../../../src/i18n/format";
 import { participantName, conversationName } from "../../../src/utils/participantName";
 
 const C = {
@@ -76,7 +80,7 @@ const timeLabel = (iso) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    : formatTime(d);
 };
 
 export default function PortalThreadScreen() {
@@ -95,6 +99,8 @@ export default function PortalThreadScreen() {
   const [reads,    setReads]    = useState([]);
 
   const listRef = useRef(null);
+  const pendingSend = useRef(null);
+  const pad = useScreenInsets({ top: 0, bottom: 0 });
 
   const load = useCallback(async () => {
     try {
@@ -104,6 +110,7 @@ export default function PortalThreadScreen() {
       setStale(Boolean(res?.stale));
       setMe(payload.me ?? null);
       setReads(payload.participantReads ?? []);
+      setError(null);
 
       // The header named everyone on the thread, this parent included, in the
       // server's English. It read "Parent/Guardian (Bern Constance), Kuum
@@ -153,8 +160,12 @@ export default function PortalThreadScreen() {
     setSending(true);
     setError(null);
     setDraft("");
+    // The same text sent again after a failure keeps its id, so a first
+    // attempt that did reach the server is not posted twice.
+    if (!pendingSend.current || pendingSend.current.body !== body) pendingSend.current = { body, clientId: uuidv4() };
     try {
-      await PortalService.sendMessage(id, body);
+      await PortalService.sendMessage(id, body, pendingSend.current.clientId);
+      pendingSend.current = null;
       await load();
       listRef.current?.scrollToEnd({ animated: true });
     } catch (err) {
@@ -213,7 +224,7 @@ export default function PortalThreadScreen() {
     >
       <StatusBar barStyle="dark-content" backgroundColor={C.surface} />
 
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: 12 + pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="chevron-back" size={24} color={C.ink} />
         </TouchableOpacity>
@@ -246,7 +257,7 @@ export default function PortalThreadScreen() {
 
       {error && <Text style={s.error}>{error}</Text>}
 
-      <View style={s.composer}>
+      <View style={[s.composer, { paddingBottom: 10 + pad.paddingBottom }]}>
         <TextInput
           value={draft}
           onChangeText={setDraft}

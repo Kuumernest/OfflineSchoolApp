@@ -182,6 +182,7 @@ const getDashboard = async (schoolId) => {
  */
 const getExamById = async (examId, schoolId) => {
   if (!examId) throw new Error("examId is required");
+  ExamCache.markExamOpened(examId).catch(() => {});
 
   const { data, isStale } = await readThrough(
     async () => {
@@ -491,6 +492,7 @@ const getScores = async ({
   classId,
   schoolId,
 } = {}) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId) throw new Error("examId is required");
 
   let isStale = false;
@@ -623,6 +625,7 @@ const saveBulkScores = async ({
  * Returns { results, isStale }
  */
 const getResults = async ({ examId, schoolId, classId } = {}) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId) throw new Error("examId is required");
 
   const { data, isStale } = await readThrough(
@@ -794,6 +797,7 @@ const getStudentResult = async (examId, studentId, schoolId) => {
  * Get a student's report card data.
  */
 const getStudentReportCard = async (examId, studentId, schoolId) => {
+  ExamCache.markExamOpened(examId).catch(() => {});
   if (!examId || !studentId) {
     throw new Error("examId and studentId are required");
   }

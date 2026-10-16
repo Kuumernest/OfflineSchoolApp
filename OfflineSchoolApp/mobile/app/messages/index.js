@@ -13,13 +13,15 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, StatusBar,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { participantName } from "../../src/utils/participantName";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
+import { formatTime, formatDateShort } from "../../src/i18n/format";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -35,9 +37,8 @@ const timeLabel = (iso) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const now = new Date();
-  return d.toDateString() === now.toDateString()
-    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString([], { day: "numeric", month: "short" });
+  // In the app's language, not the phone's.
+  return d.toDateString() === now.toDateString() ? formatTime(d) : formatDateShort(d);
 };
 
 /**
@@ -66,6 +67,9 @@ export default function ConversationsScreen() {
   const { t } = useTranslation();
   const user  = useAuthStore((s) => s.user);
   const myId  = String(user?._id ?? "");
+  // Clear the status bar (edge-to-edge Android, the iOS notch) and the
+  // navigation bar below the list.
+  const pad = useScreenInsets({ top: 0, bottom: 16 });
 
   const [conversations, setConversations] = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -93,6 +97,9 @@ export default function ConversationsScreen() {
   useEffect(() => {
     loadLocal().then(refresh);
   }, [loadLocal, refresh]);
+
+  // Back from a thread: its badge and preview have moved.
+  useFocusEffect(useCallback(() => { loadLocal(); }, [loadLocal]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -140,7 +147,7 @@ export default function ConversationsScreen() {
     <View style={s.screen}>
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
 
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: 12 + pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
@@ -169,6 +176,7 @@ export default function ConversationsScreen() {
           data={conversations}
           keyExtractor={(c) => c._id}
           renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: pad.paddingBottom }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
           }
@@ -211,7 +219,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: C.gray50, paddingHorizontal: 16, paddingVertical: 8,
   },
-  noteText: { fontSize: 12, color: C.gray500 },
+  noteText: { flex: 1, fontSize: 12, color: C.gray500 },
 
   row: {
     flexDirection: "row", alignItems: "center", gap: 12,

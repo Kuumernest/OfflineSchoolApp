@@ -716,12 +716,16 @@ async function loadSchoolForCard(schoolId, req) {
   const doc = schoolId
     ? await School.findOne({ _id: String(schoolId) })
         .select("name logo motto region division state city schoolType " +
-                "address phone nextTermResumption")
+                "address phone nextTermResumption defaultLanguage")
         .lean().catch(() => null)
     : null;
 
   return {
     doc,
+    // The language every report card of the school prints in, whoever views
+    // it (decided 2026-10-16, docs/41 §7): School.defaultLanguage. No class
+    // or section carries a language of its own in the data model.
+    language: doc?.defaultLanguage === "fr" ? "fr" : "en",
     school: {
       name:       doc?.name  || "",
       logo:       absoluteLogoUrl(doc?.logo, req),

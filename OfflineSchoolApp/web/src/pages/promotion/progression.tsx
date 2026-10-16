@@ -117,6 +117,8 @@ export default function ProgressionPage() {
       // The server is the truth again, so the local edits are no longer edits.
       setOverrides({}); setBarEdits({}); setSchoolBarEdit(null); setReason("");
       void qc.invalidateQueries({ queryKey: ["promotion"] });
+      // The settings screen shows the same bars (CalculationRulesSection).
+      void qc.invalidateQueries({ queryKey: ["academicRules"] });
     },
     onError: (err) =>
       toast({ kind: "error", title: t("prog.title"), message: getErrorMessage(err) }),

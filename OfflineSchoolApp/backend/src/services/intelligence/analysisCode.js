@@ -34,14 +34,27 @@ const fs     = require("fs");
 const path   = require("path");
 const crypto = require("crypto");
 
-/** The project root: backend/ and shared/ are both under it. */
+/**
+ * The project root: the backend and shared/ are both under it. In the
+ * repository that is the folder holding backend/ and shared/; in the Docker
+ * image, where the backend is /app and shared is /shared (Dockerfile), it is /.
+ */
 const PROJECT = path.join(__dirname, "..", "..", "..", "..");
 
-/** Where the analysis starts, relative to the project root. */
+/**
+ * Where the analysis starts, relative to the project root, found from this
+ * file's own place rather than written as "backend/...": the image has no
+ * backend/ folder. In the repository these are
+ * backend/src/services/intelligence/analysisWorker.js and
+ * backend/scripts/calibration/analyseCohort.js.
+ */
 const ENTRIES = Object.freeze([
-  "backend/src/services/intelligence/analysisWorker.js",
-  "backend/scripts/calibration/analyseCohort.js",
-]);
+  path.join(__dirname, "analysisWorker.js"),
+  path.join(__dirname, "..", "..", "..", "scripts", "calibration", "analyseCohort.js"),
+].map((f) => path.relative(PROJECT, f).split(path.sep).join("/")));
+
+/** Is `file` inside `root`? Also when root is the filesystem root. */
+const isUnder = (root, file) => file.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 
 const EXTS = ["", ".js", ".json"];
 
@@ -98,7 +111,7 @@ const codeFiles = (root = PROJECT) => {
     if (seen.has(f)) continue;
     seen.add(f);
     if (!f.endsWith(".js")) continue;        // a .json is covered, not walked
-    for (const r of referencesOf(f)) if (!seen.has(r) && r.startsWith(root + path.sep)) queue.push(r);
+    for (const r of referencesOf(f)) if (!seen.has(r) && isUnder(root, r)) queue.push(r);
   }
   return [...seen].sort((a, b) => (path.relative(root, a) < path.relative(root, b) ? -1 : 1));
 };
@@ -116,4 +129,4 @@ const codeDigestOf = (root = PROJECT) => {
   return h.digest("hex");
 };
 
-module.exports = { PROJECT, ENTRIES, codeFiles, codeDigestOf, referencesOf };
+module.exports = { PROJECT, ENTRIES, codeFiles, codeDigestOf, referencesOf, isUnder };

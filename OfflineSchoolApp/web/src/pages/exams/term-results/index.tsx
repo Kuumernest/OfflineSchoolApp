@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
+import { UnpublishButton } from "@/components/results/UnpublishButton";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { TermResult, TermNumber } from "@/types/exam.types";
 
@@ -196,6 +197,14 @@ export default function TermResultsPage() {
           )}
           {t("termResults.publish")}
         </button>}
+        {/* One class at a time, with a reason (docs/41 §7). */}
+        {isAdmin && <UnpublishButton
+          layer="term"
+          classOptions={classes.map((c) => ({ id: String(c._id), name: c.name }))}
+          classId={classId || undefined}
+          academicYear={academicYear} term={term}
+          disabled={!results.some((r) => r.isPublished)}
+        />}
       </div>
 
       {/* Overtaken by the marks behind them.

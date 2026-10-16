@@ -151,7 +151,8 @@ const enqueue = async ({
   const school = await School.findById(schoolId).lean().catch(() => null);
   const channel = resolveChannel(school);
 
-  const language = lang ?? school?.settings?.defaultLanguage ?? "en";
+  // School.defaultLanguage is a top-level field (models/School.js), not a setting.
+  const language = lang ?? school?.defaultLanguage ?? "en";
   const schoolName = school?.name ?? "School";
 
   let student = null;

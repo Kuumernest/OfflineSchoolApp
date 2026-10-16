@@ -12,9 +12,12 @@ together on branch `academic-agreed-calculation`:
 
 Nothing below has been done on a real server, a real school's data, a
 browser or a device. Tests at this version (2026-10-16, database URI and
-provider keys blanked): backend `check:all`, every suite one by one, 108
-suites, 6,380 checks, 0 failed; `check-revert-previous.js` (1.4), 32 passed
-against each of `origin/master` and `097de9c`. Each step is something to do, not a result. Every step
+provider keys blanked): backend `check:all`, every suite one by one, 110
+suites, 6,430 checks, 0 failed; `check-revert-previous.js` (1.4), 33 passed
+against each of `origin/master` and `097de9c`; desktop 275 and mobile 714
+passed, 0 failed; web build, lint, `i18n:check` and `check:l10n` pass. The
+detail check before release, and what it left open, is
+[docs/41](41-detail-check.md). Each step is something to do, not a result. Every step
 has an owner:
 
 - **Operator:** runs the servers and the database.
@@ -150,8 +153,13 @@ has an owner:
   without the previous code reprocessing in between; an older row with a
   year, as "Calculate & save" writes one, is left alone. It also covers
   results published under the new code, and published then unpublished.
+  After a revert the class-wide unpublish routes are gone with the new
+  code: the previous code unpublishes one sequence result at a time
+  (`PUT /api/results/summary/:id/publish` with `publish: false`), which the
+  test uses; it has no route for term or annual results, and does not
+  refuse to recompute them when published.
   After the cleanup, the previous promotion run proposes exactly what it
-  proposed before this branch existed, and nothing else changed. 32
+  proposed before this branch existed, and nothing else changed. 33
   passed, 0 failed against `origin/master` (`99d59f4`) and against
   `097de9c` (this branch just before the agreed calculation).
 - **Expected:** the rollback decision above, read and understood by the
@@ -331,6 +339,18 @@ has an owner:
   `chown -R 100:101` on the volume once.
 - **From:** docs/38 §11 "Not verified".
 
+**2.5 One analysis, end to end** — *operator, signed in as a school head*
+- **Do:** on staging, ask for the review queue as a head,
+  `GET /api/insights/review-cases`. A first request may answer 202 (being
+  prepared). Then read the run, `GET /api/insights/analysis-runs/latest`.
+- **Expected:** the run ends with `status: "succeeded"` (within a minute or
+  two for a small school), and a second `GET /api/insights/review-cases`
+  answers 200 from the stored report.
+- **If it fails:** a run that ends `failed` carries `error.code`; give it and
+  the run id to the developer. This is the check that would have caught the
+  code digest failing in the image (docs/41 §6).
+- **From:** docs/38 §10; docs/41 §6.
+
 ---
 
 ## 3. Browser and device checks on staging
@@ -346,11 +366,18 @@ production school.
 | 3.3 | Advancing a development pilot while the analysis is cold | school head | A toast says the analysis is being prepared. The same action succeeds once it is ready. | docs/38 §10 acceptance 4 |
 | 3.4 | Settings → Calculation rules | school head | Read-only: five statements of how results are calculated, the default bar with a link to Progression, and the year's published and unpublished counts. No choices, no Save. | docs/39 §20.0 ("Agreed calculation") |
 | 3.5 | Promotion → Progression | school head | A year selector and a school bar field showing the pass mark as placeholder. Each class has a /20 bar; where none is confirmed for the year, the old 0–100 value shows beneath it, marked "not used". Each class shows its published annual count, with a warning for classes with none. Bars are locked while a draft run exists. Saving a bar change asks for a reason. The "New run" dialog warns about classes with no published annual result. | docs/39 §20.0 |
-| 3.6 | Settings → Academic structure | school head | Under the promotion threshold: "Not used to decide promotion. Promotion uses the annual average and the class bar." The same text appears as the tooltip of each sequence's "Promo" toggle, in English and French. | docs/39 §20.0 ("Follow-up") |
-| 3.7 | An annual report card printed in French, for a final-year pupil and for a pupil who repeats | school head | The council's decision prints in French: DIPLOMÉ(E) for the final-year pupil, REDOUBLANT for the repeat, ADMIS(E) EN … for a promotion. The English card says GRADUATED for the final-year pupil. Average, grade and rank are as before. | docs/39 §20.0 ("Follow-up") |
+| 3.6 | Settings → Academic structure | school head | No "annual average method" and no promotion threshold field (removed; the year's bars are on Progression). Each sequence's "Promo" toggle has the tooltip "Not used to decide promotion. Promotion uses the annual average and the class bar.", in English and French. | docs/39 §20.0 ("Follow-up"; owner's answers) |
+| 3.7 | An annual report card printed in French, for a final-year pupil and for a pupil who repeats | school head | The council's decision prints in French: DIPLÔMÉ(E) for the final-year pupil, REDOUBLANT for the repeat, ADMIS(E) EN … for a promotion, ADMIS(E) SOUS CONDITION for a conditional one; the card says "Année scolaire". The English card says GRADUATED for the final-year pupil. Average, grade and rank are as before. | docs/39 §20.0 ("Follow-up") |
 | 3.8 | Mark entry: web exam marks page; mobile teacher marks screen | teacher | Web: the "A" toggle's tooltip says absent leaves the subject out of the average and 0 counts; saving with a blank mark is blocked with the same explanation. Mobile: the blank-mark message says the same. In English and French. | docs/39 §20.0 ("Agreed calculation") |
 | 3.9 | Mobile: admin pupil result → Calculate & Generate Report Card | school head | Nothing on the screen is editable. Pressing the button first asks to confirm that the whole class is recalculated from the stored marks, and that it is refused if any result in the class is published. With a published result in the class, the refusal says so. | docs/39 §20.0 ("Mobile Calculate & save screen") |
 | 3.10 | Mobile: create and edit an exam | school head | The term picker offers the school's own terms by name (for example two semesters). Offline it offers the last terms it saw, and the three fixed terms if it never saw any. | docs/39 §20.0 (validation and defect-closure passes) |
+| 3.11 | Mobile messages, staff and pupil: list, thread, new conversation; at 360 px, on Android and on iOS | teacher, pupil | The header and the send button sit clear of the status bar and the navigation bar (or home indicator). With the keyboard open, the input and the send button stay visible. The list's unread badge counts messages not yet read and clears after reading. Times are in the app's language (a French app on an English phone shows French). A read-only conversation has no reply box. | docs/41 §5 |
+| 3.12 | Mobile messages: a refused message | teacher | Send a message the server refuses (for example, in a read-only conversation reached before the screen knew it was read-only, or with the server blocking it). The bubble turns red, "Not sent — tap to retry"; a tap puts it back to queued and it is sent when the server accepts it. | docs/41 §5 |
+| 3.13 | Mobile parent portal: Messages tab and a thread; at 360 px, on Android and on iOS | parent | The six tabs fit or scroll sideways without breaking a word. The thread's header and send button clear the system bars; the keyboard does not cover the input. A send that times out and is retried does not appear twice. Times in the app's language. | docs/41 §5 |
+| 3.14 | Web messages at phone width (360 px) | teacher | The list fills the screen; choosing a conversation shows the thread with a Back link; the composer and bubbles are readable. | docs/41 §5 |
+| 3.15 | Unpublish, on the exam page, the term results and the annual results | school head | Beside Publish, "Unpublish…" opens a dialog: a class (when the page shows more than one), a reason of at least 4 characters, and the note that issued cards stay as issued. Confirming unpublishes that class only; its figures do not change; Process / Compute is then allowed. A teacher has no Unpublish. In English and French ("Annuler la publication"). | docs/41 §7 |
+| 3.16 | Unpublishing a year while a promotion run for it exists | school head | With a draft or committed run for the year, unpublishing the year's results is refused, naming the run's state; once the draft is discarded or the run reversed, it is allowed. | docs/41 §7 |
+| 3.17 | Settings → school details: Report card language; then any card from web, mobile and a reissue | school head | The setting offers English and Français. With Français chosen, every sequence, term and annual card prints in French, whoever opens it, including a reissue; with English, in English. | docs/41 §7 |
 
 For each: **if it fails**, note the screen, the account and what was seen,
 and give it to the developer. Do not accept the release with a failing
@@ -424,12 +451,16 @@ Send to every school before the release: it reaches them all at once (1.6). Engl
 >   the average. A mark of 0 counts as 0.
 > - Results that are not yet published for this year will change when you
 >   process them again. Published results do not change.
-> - To reprocess a term or a year that is already published, unpublish it
->   first.
+> - To recalculate results that are already published (a sequence, a term
+>   or a year), unpublish them first: on the web console, open the exam (or
+>   the term or year results), choose Unpublish, and give a reason. Report
+>   cards already issued stay as issued.
 > - A sequence calculated before this change keeps its old figure inside a
 >   new term: converted to /20, but still without CA or coefficients.
 > - On annual report cards, pupils in a final-year class show "Graduated"
->   (DIPLOMÉ(E) on French cards).
+>   (DIPLÔMÉ(E) on French cards).
+> - Report cards print in your school's language, set in Settings (school
+>   details), whoever opens them.
 > - Promotion bars are now set for each year, out of 20, on Promotion →
 >   Progression. Please confirm a bar for each class. Old bars (0–100) are
 >   shown there but are not used.
@@ -447,13 +478,19 @@ Send to every school before the release: it reaches them all at once (1.6). Engl
 >   retirée de la moyenne. Une note de 0 compte comme 0.
 > - Les résultats de cette année qui ne sont pas encore publiés changeront
 >   lorsque vous les retraiterez. Les résultats publiés ne changent pas.
-> - Pour retraiter un trimestre ou une année déjà publiés, dépubliez-les
->   d'abord.
+> - Pour recalculer des résultats déjà publiés (une séquence, un trimestre
+>   ou une année), annulez d'abord leur publication : dans la console web,
+>   ouvrez l'examen (ou les résultats du trimestre ou de l'année), choisissez
+>   « Annuler la publication » et indiquez une raison. Les bulletins déjà
+>   délivrés restent tels quels.
 > - Une séquence calculée avant ce changement garde son ancienne note dans
 >   un nouveau trimestre : convertie sur 20, mais toujours sans CC ni
 >   coefficients.
 > - Sur les bulletins annuels, les élèves d'une classe terminale sont
->   indiqués « DIPLOMÉ(E) » (« Graduated » sur les bulletins en anglais).
+>   indiqués « DIPLÔMÉ(E) » (« Graduated » sur les bulletins en anglais).
+> - Les bulletins sont imprimés dans la langue de l'établissement, choisie
+>   dans Paramètres (informations de l'établissement), quel que soit
+>   l'utilisateur.
 > - Les seuils de passage se fixent désormais par année, sur 20, dans
 >   Promotion → Progression. Merci de confirmer un seuil pour chaque classe.
 >   Les anciens seuils (0–100) y sont affichés mais ne sont pas utilisés.

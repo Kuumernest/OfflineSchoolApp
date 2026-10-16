@@ -185,9 +185,26 @@ const phase = async ({ code, mode, uri, out }) => {
   }
 
   if (mode === "unpublish") {
-    // The previous code's own unpublish.
-    const results = r("src/services/results.service");
-    for (const examId of ["s1", "s2"]) await results.unpublishResults(examId);
+    // The previous code's own routed unpublish, as a head would use it after
+    // the revert: PUT /api/results/summary/:id/publish { publish: false },
+    // one sequence result at a time (the new code's class-wide unpublish
+    // routes go with the revert).
+    const express = r("node_modules/express"), jwt = r("node_modules/jsonwebtoken");
+    const app = express(); app.use(express.json());
+    app.use("/api/results", r("middleware/auth").authenticate, r("src/routes/results.routes"));
+    app.use((err, _q, s2, _n) => s2.status(err.statusCode || 500).json({ message: err.message }));
+    const server = app.listen(0);
+    const token = jwt.sign({ id: "adm", role: "school_admin", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    res.unpublishStatuses = [];
+    for (const row of await M("ResultSummary").find({ schoolId: S, examId: { $in: ["s1", "s2"] }, isPublished: true }).sort({ _id: 1 }).lean()) {
+      const x = await fetch(`http://127.0.0.1:${server.address().port}/api/results/summary/${row._id}/publish`, { method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ publish: false }) });
+      res.unpublishStatuses.push(x.status);
+    }
+    server.close();
+    // The previous code has no route for term and annual results, and does
+    // not refuse to recompute them when published; set back for the rows'
+    // comparison only.
     await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
     await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
   }
@@ -380,14 +397,13 @@ const main = async () => {
 
     console.log("--- 7. published, then unpublished after the revert (Q) ---");
     await step(HEAD, "seed", "Q"); await step(HEAD, "newcalc", "Q"); await step(HEAD, "publishnew", "Q"); await step(HEAD, "record", "Q");
-    await step(PREV, "unpublish", "Q");
+    const unQ = await step(PREV, "unpublish", "Q");
+    check("the previous code's routed unpublish answers for each of the six", unQ.unpublishStatuses, [200, 200, 200, 200, 200, 200]);
     check("after unpublishing, cleanup clears the six", (await step(PREV, "cleanup", "Q")).cleanup.counts.cleared, 6);
     await step(PREV, "reprocess", "Q");
     const Q = await step(PREV, "rows", "Q");
-    // Unpublishing leaves the date it was published: the one trace of it.
-    const qd = rowDiffs(Q, C);
-    check("then every row is the previous code's own, except publishedAt on the six once published",
-      [qd.filter((d) => !/^ResultSummary s[12]\|\w+ publishedAt: "/.test(d)).map((d) => d.slice(0, 160)), qd.length], [[], 6]);
+    // Its routed unpublish clears publishedAt too, so no trace is left.
+    check("then every row is the previous code's own", rowDiffs(Q, C).map((d) => d.slice(0, 160)), []);
     const promQ = await step(PREV, "promote", "Q");
     check("and the previous run proposes what it did before this branch", promQ.decisions, promC.decisions);
   } finally {

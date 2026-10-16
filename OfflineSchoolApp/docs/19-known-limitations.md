@@ -116,7 +116,7 @@ These are not "probably fine". They are unmeasured.
 | D4 | **`KNOWN_GAPS`: a bursar cannot mirror `user`.** They hold `payroll.view` but not `users.manage`, so payslips would mirror without staff names. The desktop declines that view rather than showing a payroll with every name blank. Closing it needs the feed to be able to say "names, not the account directory". | `PLANNED` |
 | D5 | **`KNOWN_GAPS`: a teacher cannot mirror `class`, `subject`, `teacherAssignment`.** No capability grants them. Their screens read through `/api/teacher` and `/sync/pull` instead. | Acknowledged, by design at this commit |
 | D6 | **WhatsApp delivery.** `WHATSAPP_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are read by the code, are absent from `.env.example`, and there is no evidence of a working delivery path. | `NOT IMPLEMENTED` — treat as such until proven |
-| D7 | **`annualAverageMethod: "sequences"`** is implemented but has no end-to-end suite. `"terms"` is the exercised path. | Untested branch |
+| D7 | **`annualAverageMethod`** is read by nothing: the annual average always weights the terms. The structure screen no longer offers or sends it (2026-10-16, docs/41 §7). | Stored only |
 | D8 | **`maxAbsences`** exists as a field; its effect on promotion decisions is not covered by any suite. | Untested |
 
 ---

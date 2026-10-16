@@ -42,6 +42,10 @@ const AUDIT_ACTIONS = [
   // An issued report card was superseded by an admin's reissue (docs/39
   // §4.6f): before/after are its template and layout, never its content.
   "reportCard.reissued",
+  // A class's sequence, term or annual results were unpublished, with a
+  // reason (services/unpublish.service.js): before/after are the counts of
+  // published rows; resourceType says which layer.
+  "results.unpublished",
 ];
 
 const auditLogSchema = new mongoose.Schema(

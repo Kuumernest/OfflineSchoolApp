@@ -855,6 +855,24 @@ const bad = (label, detail) => {
       bad("deliver defaults to true",
         JSON.stringify({ status: plain?.status, skipReason: plain?.skipReason, before }));
     }
+
+    // The school's working language (School.defaultLanguage, a top-level
+    // field) is what a notification falls back to when the producer names
+    // none. It was read from settings.defaultLanguage, which does not exist,
+    // so every notification was English.
+    {
+      const { render } = require(path.join(SRC, "services/notification/templates"));
+      await School.updateOne({ _id: SCHOOL }, { $set: { defaultLanguage: "fr" } });
+      const fr = await notify.enqueue({ schoolId: SCHOOL, kind: "fee.reminder", studentId: STUDENT, data: { amount: 5000, currency: "XAF" } });
+      await School.updateOne({ _id: SCHOOL }, { $set: { defaultLanguage: "en" } });
+      const frRow = await Notification.findById(fr?._id).lean();
+      const expected = render("fee.reminder", { ...(frRow?.data || {}) }, "fr").subject;
+      if (frRow && frRow.subject === expected && expected !== render("fee.reminder", { ...(frRow?.data || {}) }, "en").subject) {
+        ok("a French school's notification is written in French when the producer names no language");
+      } else {
+        bad("the school's defaultLanguage is not used", JSON.stringify({ got: frRow?.subject, expected }));
+      }
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════════

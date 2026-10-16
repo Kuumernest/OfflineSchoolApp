@@ -233,6 +233,25 @@ router.post(
   }
 );
 
+// ── POST /api/term-results/unpublish ───────────────────────────────────────
+// A class's results, with a reason (services/unpublish.service.js). Only
+// isPublished and publishedAt change; issued cards stay as issued.
+router.post(
+  "/unpublish",
+  canPublish,
+  async (req, res) => {
+    try {
+      const { academicYear, term, classId, reason } = req.body || {};
+      const schoolId = resolveSchoolId(req);
+      const r = await require("../services/unpublish.service").unpublishTerm(req, { schoolId, ...{ academicYear, term, classId, reason } });
+      res.status(r.status).json(r.body);
+    } catch (err) {
+      console.error("[term-results] UNPUBLISH error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 // ── GET /api/term-results/:studentId/report-card ───────────────────────────
 /**
  * The term report card, as printable HTML.
@@ -249,7 +268,7 @@ router.get(
   canView,
   async (req, res) => {
     try {
-      const { academicYear, term, classId, lang, templateId } = req.query;
+      const { academicYear, term, classId, templateId } = req.query;
       if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
       if (!schoolId || !academicYear || !term || !classId) {
@@ -300,7 +319,8 @@ router.get(
       ]);
 
       const rendered = renderReportCard(data, {
-        lang:       lang || "en",
+        // The school's language, whoever views the card (docs/41 §7).
+        lang:       letterhead.language,
         schoolName: letterhead.doc?.name || "School",
         school:     letterhead.school,
         template,

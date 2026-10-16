@@ -40,16 +40,17 @@ everything else reads.
 | `terms[].sequences[]` | up to 6 | — | `{number (1–6), name, weight, assessment}` |
 | `sequences[].weight` | Number | `50` | share within the term (equal = 50/50) |
 | `sequences[].assessment` | subdoc | — | `{type, label}` e.g. `"Test 1"`, `"Mid-Term"` |
-| `annualAverageMethod` | enum | `"terms"` | `"terms"` or `"sequences"` |
+| `annualAverageMethod` | enum | `"terms"` | stored only: read by nothing, and no longer offered or sent by the web screen (2026-10-16, docs/41 §7) |
 | `promotionExams[]` | Number[] | `[]` | which sequence numbers count for promotion |
-| `promotionThreshold` | Number | `10` | minimum /20 average to be promoted |
+| `promotionThreshold` | Number | `10` | stored only: read by nothing, no longer offered or sent by the web screen, and no longer copied onto annual results (2026-10-16). The year's bars are `rules.promotionThreshold` and `rules.classThresholds`, set on Promotion → Progression |
 | `passMark` | Number | `10` | pass mark, /20 |
 | `maxAbsences` | Number \| null | `null` | `null` = no limit |
 
-`annualAverageMethod` is the switch that changes the arithmetic: `"terms"`
-averages the three term results by their weights; `"sequences"` averages the
-sequence marks directly. Both are implemented
-(`annualGrading.service.js`).
+The annual average is always the term results weighted by the year's term
+weights (`annualGrading.service.js`). `annualAverageMethod` was meant to
+switch to averaging the sequences directly; no code reads it (docs/39,
+`INERT_FIELDS` in `shared/academicPolicy.js`), so it is no longer offered on
+the structure screen.
 
 **Routes:** `GET /api/academic-structure/:schoolId/:year`,
 `PUT /api/academic-structure/:schoolId/:year`,
@@ -267,7 +268,7 @@ something to fix by hand.
 
 | Item | Classification |
 |---|---|
-| `annualAverageMethod: "sequences"` | **IMPLEMENTED** but far less exercised than `"terms"`; no suite covers it end-to-end. |
+| `annualAverageMethod: "sequences"` | **NOT IMPLEMENTED**: nothing reads the field; no longer offered on the structure screen (2026-10-16). |
 | `maxAbsences` | **IMPLEMENTED** as a field; its effect on promotion decisions is not covered by a check suite. |
 | Results published before the lock check existed | **NOT REMEDIATED.** A data task. See [19](19-known-limitations.md). |
 | Exam routes `/reports/results`, `/submissions/results`, `/submissions/submissions` | Odd doubled paths that resolve; likely historical aliases. Not dead — they register handlers — but worth auditing before treating them as API. |

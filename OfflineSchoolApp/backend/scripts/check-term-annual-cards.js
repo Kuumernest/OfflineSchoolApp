@@ -510,6 +510,21 @@ const main = async () => {
     (await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: [] })).staleIds.size,
     0);
 
+  // The public verification page speaks both languages throughout: its
+  // banners always did; its page titles and buttons were English only.
+  {
+    const vp = require("../src/print/verifyPage");
+    const title = (html) => (html.match(/<title>([^<]*)<\/title>/) || [])[1];
+    const buttons = (html) => [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
+    const form = vp.renderVerifyForm(), missing = vp.renderVerifyResult({ status: "not_found" });
+    const valid = vp.renderVerifyResult({ status: "valid", kind: "report_card", school: { name: "S" }, snapshot: { facts: [] } });
+    check("verify page titles and buttons in English and French",
+      [title(form), buttons(form), title(missing), buttons(missing), title(valid)],
+      ["Verify a document · Vérifier un document", ["Verify · Vérifier"],
+       "Code not recognised · Code non reconnu", ["Try again · Réessayer"],
+       "Report card — verification · Bulletin de notes — vérification"]);
+  }
+
   console.log(`
   ${pass} passed, ${fail} failed`);
   await mongoose.disconnect();

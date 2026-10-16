@@ -124,5 +124,36 @@ for (const f of files) {
 check("none of the audited literals survive", found, []);
 check("no hand-rolled English plural remains", plurals, []);
 
+// ── Refusals by code, and strings the agreed calculation changed ─────────
+console.log("--- refusals by code; the agreed calculation's strings ---");
+{
+  const babel = require("@babel/core");
+  const { code } = babel.transformFileSync(path.join(ROOT, "src/utils/appError.js"), {
+    presets: [require.resolve("babel-preset-expo")], caller: { name: "check", supportsStaticESM: false }, babelrc: false, configFile: false,
+  });
+  const mod = { exports: {} };
+  new Function("module", "exports", "require", code)(mod, mod.exports, require);
+  const { errorText, SERVER_CODE_KEYS } = mod.exports;
+  const axios409 = Object.assign(new Error("Request failed with status code 409"), { response: { status: 409, data: { code: "PUBLISHED_RESULTS", message: "2 published result(s) would be recomputed. Unpublish them first." } } });
+  check("fr: a 409 PUBLISHED_RESULTS is said in French, not axios's English",
+    errorText((k) => T("fr", k), axios409),
+    "Refusé : certains de ces résultats sont publiés, et un résultat publié n'est jamais recalculé. Annulez d'abord leur publication dans la console web (ouvrez l'examen, ou les résultats du trimestre ou de l'année, choisissez « Annuler la publication » et indiquez une raison), puis relancez le calcul.");
+  check("an uncoded error still shows its own message", errorText((k) => T("en", k), new Error("boom")), "boom");
+  check("every refusal code has its sentence in both languages",
+    Object.values(SERVER_CODE_KEYS).filter((k) => /missing/.test(T("en", k)) || /missing/.test(T("fr", k)) || T("en", k) === T("fr", k)), []);
+}
+check("en/fr: a pupil below the class's bar",
+  [T("en", "promo.basis_average_fail"), T("fr", "promo.basis_average_fail")], ["Below the class's promotion bar", "Sous le seuil de passage de la classe"]);
+check("admin mark entry says what absent and 0 do, as the teacher screen does (en, fr)",
+  [T("en", "marksEntry.unenteredBody", { count: 2 }), T("fr", "marksEntry.unenteredBody", { count: 1 })],
+  ["2 students have no score — enter a mark or mark each student absent. Absent leaves the subject out of the pupil's average; 0 counts as a mark.",
+   "1 élève n'a pas de note — saisissez une note ou marquez l'élève absent. Absent retire la matière de la moyenne de l'élève ; 0 compte comme une note."]);
+check("fr: calculate & save, confirmation and result",
+  [T("fr", "studentResult.calcConfirmBody").endsWith("L'opération est refusée si un résultat de la classe est publié."), T("fr", "studentResult.calcDoneBody")],
+  [true, "Les résultats de la classe ont été recalculés à partir des notes enregistrées, puis sauvegardés."]);
+check("messages: a failed send is retried by a tap, a read-only thread says so, delivered is not 'sent' (fr)",
+  [T("en", "msgMobile.failedNote"), T("fr", "msgMobile.failedNote"), T("fr", "msgMobile.readOnlyNote"), T("fr", "msgMobile.delivered")],
+  ["Not sent — tap to retry", "Non envoyé — touchez pour réessayer", "Cette conversation est en lecture seule.", "Distribué"]);
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

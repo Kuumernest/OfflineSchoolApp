@@ -608,6 +608,27 @@ const row = (subjectId, subjectName, normalizedMark) => ({
     }
     check("restored copy, same digest again", codeDigestOf(tmp), d0);
 
+    // The Docker image's layout (Dockerfile): backend/src at /app/src, the
+    // calibration scripts at /app/scripts/calibration, shared at /shared, so
+    // the project root is /. The module is loaded from the copy, as the image
+    // loads it, and must cover the same files under their image paths.
+    const img = fs.mkdtempSync(path.join(os.tmpdir(), "osa-image-"));
+    const cp = (from, to) => fs.cpSync(path.join(PROJECT, from), path.join(img, to),
+      { recursive: true, filter: (src) => !src.split(path.sep).includes("node_modules") });
+    cp("backend/src", "app/src"); cp("backend/scripts/calibration", "app/scripts/calibration"); cp("shared", "shared");
+    fs.symlinkSync(path.join(PROJECT, "backend", "node_modules"), path.join(img, "app", "node_modules"), "dir");
+    const imageFiles = await new Promise((resolve) => execFile(process.execPath, ["-e",
+      `const m = require(${JSON.stringify(path.join(img, "app/src/services/intelligence/analysisCode.js"))});` +
+      `process.stdout.write(JSON.stringify(m.codeFiles().map((f) => require("path").relative(m.PROJECT, f).split(require("path").sep).join("/"))))`],
+      { env: { ...process.env, MONGODB_URI: "" } }, (err, out, errOut) => resolve(err ? `failed: ${String(errOut || err.message).split("\n").find((l) => /Error/.test(l))}` : JSON.parse(out))));
+    const asImage = (f) => f.replace(/^backend\/src\//, "app/src/").replace(/^backend\/scripts\//, "app/scripts/");
+    check("in the image's layout the digest covers the same files, under their image paths",
+      imageFiles, covered.map(asImage).sort((a, b) => (a < b ? -1 : 1)));
+    fs.rmSync(img, { recursive: true, force: true });
+    const { isUnder } = require(path.join(SRC, "services/intelligence/analysisCode"));
+    check("a file under the filesystem root counts as inside it (the image's root is /)",
+      [isUnder("/", "/shared/gradeScale.js"), isUnder("/app", "/app/src/x.js"), isUnder("/app", "/application/x.js")], [true, true, false]);
+
     // Two processes on the same code agree.
     const childDigest = (backendDir) => new Promise((resolve, reject) => execFile(process.execPath, ["-e",
       `process.stdout.write(require(${JSON.stringify(path.join(backendDir, "src/services/intelligence/analysisRuns.service"))})._internals.codeDigest())`],

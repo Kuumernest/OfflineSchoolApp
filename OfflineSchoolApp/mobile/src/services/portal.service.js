@@ -265,10 +265,15 @@ export const openConversation = async (id, kind = "user") => {
 export const fetchThread = (conversationId) =>
   load(`thread:${conversationId}`, `/messages/conversations/${conversationId}`);
 
-export const sendMessage = async (conversationId, body) => {
+/**
+ * `clientId` makes a resend of the same text safe: if the first attempt did
+ * reach the server before the connection dropped, the server recognises the
+ * id and does not post it twice.
+ */
+export const sendMessage = async (conversationId, body, clientId = null) => {
   const { data } = await client.post(
     `/messages/conversations/${conversationId}`,
-    { body }
+    clientId ? { body, clientId } : { body }
   );
   return data?.data ?? null;
 };

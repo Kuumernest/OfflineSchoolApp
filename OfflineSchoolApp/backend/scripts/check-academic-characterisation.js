@@ -374,12 +374,16 @@ const main = async () => {
      * termGrading.service.js). Until the fix she was written average 0, F,
      * "pending", ranked 5 of 5. Nobody else's place moves (she was last);
      * totalInClass is 4, not 5.
+     *
+     * [decided 2026-10-16, docs/41 §7] promotionThreshold: null — the
+     * structure-level threshold (10 here) is no longer copied onto annual
+     * rows; nothing read it. Every figure is unchanged.
      */
     check("annual rows", all, {
-      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 4 },
-      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 1, totalInClass: 4 },
-      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 4, totalInClass: 4 },
-      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 4 },
+      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
+      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 1, totalInClass: 4 },
+      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 4, totalInClass: 4 },
+      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
       "stu-eve": null,
     });
     const ama = await AnnualResult.findOne({ schoolId: SCHOOL, academicYear: YEAR, studentId: "stu-ama" }).lean();

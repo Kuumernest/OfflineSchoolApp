@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { participantName, recipientSubtitle } from "../../src/utils/participantName";
 import { errorText } from "../../src/utils/appError";
 
@@ -34,6 +35,8 @@ const C = {
 
 export default function NewConversationScreen() {
   const { t } = useTranslation();
+  // Clear the status bar and the navigation bar (edge-to-edge Android, the iOS notch).
+  const pad = useScreenInsets({ top: 0, bottom: 16 });
   const user = useAuthStore((s) => s.user);
   const myId = String(user?._id ?? "");
 
@@ -129,7 +132,7 @@ export default function NewConversationScreen() {
     <View style={s.screen}>
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
 
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: 12 + pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="close" size={24} color={C.gray900} />
         </TouchableOpacity>
@@ -167,6 +170,7 @@ export default function NewConversationScreen() {
         </View>
       ) : (
         <FlatList
+          contentContainerStyle={{ paddingBottom: pad.paddingBottom }}
           data={recipients}
           keyExtractor={(r) => `${r.kind}:${r.id}`}
           renderItem={renderItem}

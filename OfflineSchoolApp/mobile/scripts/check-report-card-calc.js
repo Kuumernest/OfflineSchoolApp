@@ -150,7 +150,7 @@ const loadModule = (rel, stubs = {}) => {
     [/every pupil of this class/.test(en.calcConfirmBody), /stored marks/.test(en.calcConfirmBody), /refused if any result in the class is published/.test(en.calcConfirmBody)],
     [true, true, true]);
   check("FR: la classe entière, à partir des notes enregistrées ; refusé si un résultat est publié",
-    [/tous les élèves de cette classe/.test(fr.calcConfirmBody), /notes enregistrées/.test(fr.calcConfirmBody), /refusé si un résultat de la classe est publié/.test(fr.calcConfirmBody)],
+    [/tous les élèves de cette classe/.test(fr.calcConfirmBody), /notes enregistrées/.test(fr.calcConfirmBody), /opération est refusée si un résultat de la classe est publié/.test(fr.calcConfirmBody)],
     [true, true, true]);
   check("both languages carry every new key", ["calcConfirmTitle", "calcConfirmBody", "calcConfirm", "calcRefusedPublished", "calcFixedHint"]
     .every((k) => typeof en[k] === "string" && typeof fr[k] === "string" && en[k] !== fr[k]), true);

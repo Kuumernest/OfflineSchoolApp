@@ -206,6 +206,25 @@ router.post(
   }
 );
 
+// ── POST /api/annual-results/unpublish ───────────────────────────────────────
+// A class's results, with a reason (services/unpublish.service.js). Only
+// isPublished and publishedAt change; issued cards stay as issued.
+router.post(
+  "/unpublish",
+  canPublish,
+  async (req, res) => {
+    try {
+      const { academicYear, classId, reason } = req.body || {};
+      const schoolId = resolveSchoolId(req);
+      const r = await require("../services/unpublish.service").unpublishAnnual(req, { schoolId, ...{ academicYear, classId, reason } });
+      res.status(r.status).json(r.body);
+    } catch (err) {
+      console.error("[annual-results] UNPUBLISH error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 // ── GET /api/annual-results/:studentId/report-card ─────────────────────────
 /**
  * The final annual report card, as printable HTML.
@@ -219,7 +238,7 @@ router.get(
   canView,
   async (req, res) => {
     try {
-      const { academicYear, classId, lang, templateId } = req.query;
+      const { academicYear, classId, templateId } = req.query;
       const schoolId = resolveSchoolId(req);
       if (!schoolId || !academicYear || !classId) {
         return res.status(400).json({
@@ -269,7 +288,8 @@ router.get(
       ]);
 
       const rendered = renderReportCard(data, {
-        lang:       lang || "en",
+        // The school's language, whoever views the card (docs/41 §7).
+        lang:       letterhead.language,
         schoolName: letterhead.doc?.name || "School",
         school:     letterhead.school,
         template,

@@ -259,5 +259,57 @@ for (const [file, text] of sources) {
 }
 check("no hand-rolled English plural remains", handRolled, []);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Refusals by code, and the strings the agreed calculation changed (docs/39
+// §20.0, detail-check pass).
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { ERROR_CODE_KEYS, errorCodeKey } = await import("../src/lib/errorCodes.ts");
+  check("a 409 PUBLISHED_RESULTS body maps to its key; an unknown code to nothing",
+    [errorCodeKey({ code: "PUBLISHED_RESULTS", error: "English" }), errorCodeKey({ code: "SOMETHING_ELSE" }), errorCodeKey(null)],
+    ["errors.code.PUBLISHED_RESULTS", null, null]);
+  check("every refusal code has its sentence in both languages",
+    Object.values(ERROR_CODE_KEYS).filter((k) => T("en", k) === k || T("fr", k) === k || T("fr", k) === T("en", k)), []);
+  check("fr: the published refusal",
+    T("fr", "errors.code.PUBLISHED_RESULTS"),
+    "Refusé : certains de ces résultats sont publiés, et un résultat publié n'est jamais recalculé. Utilisez « Annuler la publication » (avec une raison) sur cette page, puis relancez le calcul.");
+  check("en: classes left as they were, two",
+    T("en", "results.refusedPublished", { count: 2, classes: "Form 1, Form 2" }), "Not recalculated, results published in 2 classes: Form 1, Form 2");
+  check("fr: one class left",
+    T("fr", "results.refusedPublished", { count: 1, classes: "6e A" }), "Non recalculée, résultats publiés : 6e A");
+  const axiosSrc = read("src/lib/axios.ts"), hook = read("src/hooks/useExamResults.ts");
+  check("getErrorMessage says a coded refusal from the locale files, before the server's English",
+    axiosSrc.indexOf("errorCodeKey(error.response?.data)") > 0 && axiosSrc.indexOf("errorCodeKey(error.response?.data)") < axiosSrc.indexOf("const serverMsg"), true);
+  check("process, compute and publish (sequence, term, year) no longer toast the raw error (\"Request failed with status code 409\")",
+    [/title: e\.message/.test(hook), (hook.match(/message: getErrorMessage\(e\)/g) || []).length >= 6, (hook.match(/refusedToast\(data\)/g) || []).length], [false, true, 2]);
+  check("en/fr: a pupil below the class's bar",
+    [T("en", "promo.basis_average_fail"), T("fr", "promo.basis_average_fail")], ["Below the class's promotion bar", "Sous le seuil de passage de la classe"]);
+  check("the promotion-exam hint no longer says sequences 5 and 6 can be configured",
+    [/5 and 6/.test(T("en", "examCreate.promoSequenceHint")), /5 et 6/.test(T("fr", "examCreate.promoSequenceHint"))], [false, false]);
+  const msgs = read("src/pages/messages/index.tsx");
+  check("messages at phone width: list and thread in turn below md, a way back, no hard-coded 'participants'",
+    [/threadOpen \? "hidden md:block" : "block"/.test(msgs), /threadOpen \? "flex" : "hidden md:flex"/.test(msgs), /md:hidden[^"]*"\s*>\s*← \{t\("common\.back"\)\}/.test(msgs), /\} participants/.test(msgs)],
+    [true, true, true, false]);
+  check("en/fr: participant count", [T("en", "messages.participantCount", { count: 1 }), T("fr", "messages.participantCount", { count: 5 })], ["1 participant", "5 participants"]);
+  check("message times in the console's language, not the browser's", /toLocale(Time|Date)String\(undefined/.test(msgs), false);
+  check("saving bars on Progression refreshes the settings screen's copy of them",
+    /invalidateQueries\(\{ queryKey: \["academicRules"\] \}\)/.test(read("src/pages/promotion/progression.tsx")), true);
+  // Unpublishing (decided 2026-10-16): an action with a reason wherever publish is offered.
+  const pages = ["src/pages/exams/[id]/index.tsx", "src/pages/exams/term-results/index.tsx", "src/pages/exams/annual-results/index.tsx"];
+  check("an Unpublish action beside Publish for sequences, terms and years",
+    pages.map((f) => (read(f).match(/<UnpublishButton\s+layer="(sequence|term|annual)"/) || [])[1] ?? null), ["sequence", "term", "annual"]);
+  const btn = read("src/components/results/UnpublishButton.tsx");
+  check("the dialog asks for a reason (4+ characters) and says issued cards stay as issued",
+    [/reason\.trim\(\)\.length >= 4/.test(btn), /unpublish\.issuedStay/.test(btn)], [true, true]);
+  check("fr: unpublishing is 'annuler la publication'",
+    [T("fr", "unpublish.action"), T("fr", "unpublish.done", { count: 3 }), T("en", "unpublish.done", { count: 1 })],
+    ["Annuler la publication…", "Publication annulée pour 3 résultats", "1 result unpublished"]);
+  const settings = read("src/pages/settings/SettingsPage.tsx");
+  check("the school's report card language is set on the settings screen, and sent with the school's details",
+    [/value=\{form\.defaultLanguage\}/.test(settings), /defaultLanguage: +"en"/.test(settings), /\.\.\.form,/.test(settings)], [true, true, true]);
+  check("en/fr: the setting's label", [T("en", "settings.cardLanguage"), T("fr", "settings.cardLanguage")], ["Report card language", "Langue des bulletins"]);
+  check("no stray English after the reports blurb", /\{t\("reports\.blurb"\)\}\s*\n\s*from it\./.test(read("src/pages/reports/index.tsx")), false);
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -196,6 +196,31 @@ export const registerReconciler = (name, handler) => {
 
 export const hasReconciler = (name) => reconcilers.has(name);
 
+/** @type {Map<string, (ctx: object) => Promise<void>>} */
+const failureHandlers = new Map();
+
+/**
+ * Registers what to do when a kind of mutation fails for good: refused by
+ * the server, or out of retries. Without one, the row is parked as failed and
+ * only the pending-changes screen knows (a queued message showed "queued"
+ * for ever). The handler receives { payload, args, row, message }.
+ */
+export const registerFailureHandler = (name, handler) => {
+  if (typeof handler !== "function") throw new Error(`Failure handler "${name}" must be a function`);
+  failureHandlers.set(name, handler);
+};
+
+const notifyFailed = async (row, payload, message) => {
+  const spec = payload?.__reconcile;
+  const handler = spec?.kind ? failureHandlers.get(spec.kind) : null;
+  if (!handler) return;
+  try {
+    await handler({ payload, args: spec, row, message });
+  } catch (err) {
+    console.warn(`[MutationQueue] failure handler "${spec.kind}" failed:`, err.message);
+  }
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 // ID MAP — local id → server id, applied at send time
 // ═════════════════════════════════════════════════════════════════════════════
@@ -312,7 +337,7 @@ export const outboxRowsForTable = async (table) => {
   await ensureSchema(db);
 
   const rows = await db.getAllAsync(
-    `SELECT status, payload FROM ${TABLE} WHERE status != synced`
+    `SELECT status, payload FROM ${TABLE} WHERE status != 'synced'`
   ).catch(() => []);
 
   const out = [];
@@ -524,6 +549,7 @@ export class MutationQueue {
             [(row.retry_count || 0) + 1, message, row.id]
           );
           summary.failed++;
+          await notifyFailed(row, payload, message);
           continue;
         }
 
@@ -538,7 +564,7 @@ export class MutationQueue {
           `UPDATE ${TABLE} SET status = ?, retry_count = ?, error = ?, next_attempt_at = ? WHERE id = ?`,
           [exhausted ? "failed" : "retrying", retries, message, nextAt, row.id]
         );
-        if (exhausted) summary.failed++;
+        if (exhausted) { summary.failed++; await notifyFailed(row, payload, message); }
         else summary.retried++;
       }
     }
@@ -553,6 +579,11 @@ export class MutationQueue {
       [new Date().toISOString()]
     ).catch(() => null);
     summary.deferred = deferred?.n ?? 0;
+
+    // Sent rows have settled everything they covered; nothing reads them
+    // again. Kept a week for the pending-changes history, then removed, or
+    // the table grows with every register and mark sheet the phone sends.
+    await MutationQueue.pruneSynced().catch(() => 0);
 
     return summary;
   }

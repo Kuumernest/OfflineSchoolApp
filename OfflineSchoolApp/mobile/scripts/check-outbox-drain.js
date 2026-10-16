@@ -130,7 +130,8 @@ const makeLoader = (stubs, pkgStubs) => {
     ["@react-native-community/netinfo", { __esModule: true, default: { addEventListener: () => () => {}, fetch: async () => ({ isConnected: true }) } }],
   ]);
   const load = makeLoader(stubs, pkgStubs);
-  const { MutationQueue, classifyError } = load("src/services/mutationQueue.service.js");
+  const outbox = load("src/services/mutationQueue.service.js");
+  const { MutationQueue, classifyError } = outbox;
 
   // A local table the queue clears flags on, as attendance.service creates it.
   raw.exec(`CREATE TABLE attendance (id TEXT PRIMARY KEY, schoolId TEXT, class_id TEXT, student_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, _synced INTEGER DEFAULT 0, _synced_at TEXT)`);
@@ -278,6 +279,120 @@ const makeLoader = (stubs, pkgStubs) => {
   console.log(`       ${N} rows in ${ms} ms (${(ms / N).toFixed(1)} ms/row, fake network)`);
   const stats = await MutationQueue.getStats();
   check("  the pending-changes surface reads zero", stats?.pending ?? stats?.total ?? 0, 0);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- H. rows for a table, a failed send reported, sent rows pruned ---");
+  server.log.length = 0; server.mode = "offline";
+  await enqueue("scores:ex-1:sub-1", { endpoint: "/exams/ex-1/scores/bulk", __local: { table: "exam_scores", ids: [] } });
+  await drain();
+  const forTable = await outbox.outboxRowsForTable("exam_scores");
+  check("outboxRowsForTable names the queued marks (the SQL compared status with a column called synced)",
+    forTable.map((r) => r.status), ["retrying"]);
+
+  // A message the server refuses for good: the thread must hear of it, or it
+  // shows "queued" for ever.
+  const failedHeard = [];
+  outbox.registerFailureHandler("message", async ({ args, message }) => { failedHeard.push([args.clientId, message]); });
+  server.mode = "ok"; server.perUrl.set("/messages/conversations/cv-1/messages", "400");
+  await enqueue("message:m-1", { endpoint: "/messages/conversations/cv-1/messages", __reconcile: { kind: "message", clientId: "m-1" } });
+  raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL`).run();
+  await drain();
+  check("a refused message reaches its failure handler, with the server's reason", failedHeard, [["m-1", "HTTP 400"]]);
+
+  // Retries used up count as failed too.
+  server.perUrl.set("/messages/conversations/cv-2/messages", "500");
+  await enqueue("message:m-2", { endpoint: "/messages/conversations/cv-2/messages", __reconcile: { kind: "message", clientId: "m-2" } });
+  raw.prepare(`UPDATE mutation_outbox SET retry_count = 7, next_attempt_at = NULL WHERE entity_key = 'message:m-2'`).run();
+  await drain();
+  check("…and so does one whose retries ran out", failedHeard.map((f) => f[0]), ["m-1", "m-2"]);
+  server.perUrl.clear();
+
+  // The real messaging service on the same outbox: a refused message turns
+  // its bubble failed; a retry sends it, and the bubble is then sent.
+  pkgStubs.set("react-native-get-random-values", {});
+  const msg = load("src/services/message.service.js");
+  msg.registerMessageReconcilers();
+  server.perUrl.set("/messages/conversations/cv-3/messages", "400");
+  const sentLocal = await msg.sendMessage({ conversationId: "cv-3", body: "Hello", sender: { kind: "user", id: "teacher-a", name: "T" } });
+  await drain();
+  const stateOf = (id) => raw.prepare(`SELECT state FROM messages WHERE id = ?`).get(id)?.state;
+  check("a message the server refuses shows failed, not queued", stateOf(sentLocal._id), "failed");
+  server.perUrl.clear();
+  check("retrySend puts it back in the queue and the bubble back to queued",
+    [await msg.retrySend(sentLocal._id), stateOf(sentLocal._id)], [true, "queued"]);
+  await drain();
+  check("…and the next drain sends it", stateOf(sentLocal._id), "sent");
+  check("nothing left to retry once sent", await msg.retrySend(sentLocal._id), false);
+
+  // The gate phone: synced scans of earlier days go; today's, and anything
+  // unsynced, stay.
+  const gate = load("src/services/gate.service.js");
+  const today = gate.dayKey();
+  await gate.todayLocal();   // creates the table
+  const ins = raw.prepare(`INSERT INTO gate_events (id, school_id, student_id, student_name, token, direction, date, at, station, _synced) VALUES (?, 's', 'st', 'N', 't', 'in', ?, ?, 'g', ?)`);
+  ins.run("g-old-synced", "2026-01-05", "2026-01-05T07:00:00Z", 1);
+  ins.run("g-old-unsynced", "2026-01-05", "2026-01-05T07:05:00Z", 0);
+  ins.run("g-today", today, new Date().toISOString(), 1);
+  const todays = await gate.todayLocal();
+  check("old synced scans removed; old unsynced and today's kept",
+    [raw.prepare(`SELECT id FROM gate_events ORDER BY id`).all().map((r) => r.id), todays.events.map((e) => e.id)],
+    [["g-old-unsynced", "g-today"], ["g-today"]]);
+
+  // Attendance outside the 30-day window: synced rows go, unsynced stay.
+  const att = load("src/services/attendance.service.js");
+  const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const insAtt = raw.prepare(`INSERT INTO attendance (id, schoolId, class_id, student_id, date, status, _synced) VALUES (?, 'sch-a', 'c3a', 'st-9', ?, 'present', ?)`);
+  insAtt.run("att-old-synced", day(40), 1); insAtt.run("att-old-unsynced", day(40), 0); insAtt.run("att-recent", day(3), 1);
+  const realGet = fakeApi.get;
+  fakeApi.get = async () => ({ data: { records: [] } });
+  await att.pullRecent({ schoolId: "sch-a" });
+  fakeApi.get = realGet;
+  check("attendance: synced registers before the 30-day window removed; unsynced and recent kept",
+    raw.prepare(`SELECT id FROM attendance WHERE id LIKE 'att-%' ORDER BY id`).all().map((r) => r.id), ["att-old-unsynced", "att-recent"]);
+
+  // Exam caches not opened for 60 days: evicted, unless anything is unsynced.
+  const examCache = load("src/services/examCache.service.js");
+  await examCache.ensureExamTables();
+  const ago = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  for (const id of ["e-old", "e-dirty", "e-queued", "e-recent", "e-new"]) {
+    raw.prepare(`INSERT INTO exams (id, schoolId, name) VALUES (?, 'sch-a', ?)`).run(id, id);
+    raw.prepare(`INSERT INTO exam_scores (id, examId, studentId, subjectId, _synced) VALUES (?, ?, 'st-1', 'sub-1', ?)`).run(`sc-${id}`, id, id === "e-dirty" ? 0 : 1);
+    raw.prepare(`INSERT INTO exam_results (id, examId, studentId) VALUES (?, ?, 'st-1')`).run(`rs-${id}`, id);
+    raw.prepare(`INSERT INTO exam_blobs (key, payload, cached_at) VALUES (?, '{}', ?)`).run(`reportcard:${id}:st-1`, ago(1));
+  }
+  raw.prepare(`INSERT INTO exam_blobs (key, payload, cached_at) VALUES ('dashboard:sch-a', '{}', ?)`).run(ago(1));
+  for (const [id, n] of [["e-old", 70], ["e-dirty", 70], ["e-queued", 70], ["e-recent", 10]]) {
+    raw.prepare(`INSERT INTO exam_cache_opened (examId, opened_at) VALUES (?, ?)`).run(id, ago(n));
+  }
+  server.mode = "offline";
+  await MutationQueue.enqueue({ entityKey: "scores:e-queued", method: "POST", endpoint: "/exams/e-queued/scores/bulk", payload: { scores: [] } });
+  server.mode = "ok";
+  const ev = await examCache.evictUnopenedExams();
+  check("exam caches: only the exam unopened for 70 days with nothing unsynced is evicted",
+    [ev.evicted, ev.keptUnsynced.sort()], [["e-old"], ["e-dirty", "e-queued"]]);
+  check("…its marks, results and cards go; the exam stays listed; other exams and the dashboard untouched",
+    [raw.prepare(`SELECT COUNT(*) AS n FROM exam_scores WHERE examId = 'e-old'`).get().n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM exam_results WHERE examId = 'e-old'`).get().n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM exam_blobs WHERE key LIKE 'reportcard:e-old:%'`).get().n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM exams WHERE id = 'e-old'`).get().n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM exam_scores`).get().n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM exam_blobs WHERE key = 'dashboard:sch-a'`).get().n],
+    [0, 0, 0, 1, 4, 1]);
+  check("an exam cached before opening was recorded starts its 60 days now",
+    !!raw.prepare(`SELECT opened_at FROM exam_cache_opened WHERE examId = 'e-new'`).get()?.opened_at, true);
+  raw.prepare(`DELETE FROM mutation_outbox WHERE entity_key = 'scores:e-queued'`).run();   // done with it
+  await examCache.markExamOpened("e-dirty");
+  check("opening an exam resets its clock", raw.prepare(`SELECT opened_at FROM exam_cache_opened WHERE examId = 'e-dirty'`).get().opened_at > ago(1), true);
+
+  // Sent rows are kept a week, then removed by the drain.
+  const old = new Date(Date.now() - 30 * 86400_000).toISOString();
+  raw.prepare(`UPDATE mutation_outbox SET created_at = ? WHERE status = 'synced' AND rowid IN (SELECT rowid FROM mutation_outbox WHERE status = 'synced' LIMIT 3)`).run(old);
+  const syncedBefore = raw.prepare(`SELECT COUNT(*) AS n FROM mutation_outbox WHERE status = 'synced'`).get().n;
+  await drain();
+  check("the drain removes sent rows older than a week, and only those",
+    [raw.prepare(`SELECT COUNT(*) AS n FROM mutation_outbox WHERE status = 'synced' AND created_at < ?`).get(new Date(Date.now() - 7 * 86400_000).toISOString()).n,
+     raw.prepare(`SELECT COUNT(*) AS n FROM mutation_outbox WHERE status = 'synced'`).get().n],
+    [0, syncedBefore - 3]);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

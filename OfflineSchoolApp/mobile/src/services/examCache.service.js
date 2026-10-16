@@ -171,6 +171,13 @@ export const ensureExamTables = async () => {
       "CREATE INDEX IF NOT EXISTS idx_exam_results_exam      ON exam_results(examId, classId)",
       "CREATE INDEX IF NOT EXISTS idx_exam_results_student   ON exam_results(studentId)",
     ];
+
+    // When each exam's cached data was last opened on this device, so what
+    // nobody has looked at for 60 days can go (evictUnopenedExams).
+    await database.execAsync(`CREATE TABLE IF NOT EXISTS exam_cache_opened (
+      examId    TEXT PRIMARY KEY,
+      opened_at TEXT NOT NULL
+    )`);
     for (const sql of indexes) await database.execAsync(sql).catch(() => {});
 
     /*
@@ -805,6 +812,81 @@ export const getResultsCachedAt = async (examId) => {
 // ═════════════════════════════════════════════════════════════════════════════
 // BLOBS — server-computed aggregates with no local equivalent
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EVICTION — exams nobody has opened for a while
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Note that an exam's data was opened on this device now. */
+export const markExamOpened = async (examId) => {
+  if (!examId) return;
+  await ensureExamTables();
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO exam_cache_opened (examId, opened_at) VALUES (?, ?)
+     ON CONFLICT(examId) DO UPDATE SET opened_at = excluded.opened_at`,
+    [String(examId), nowIso()]
+  ).catch(() => {});
+};
+
+/**
+ * The cached marks, results, subjects and cards of every exam not opened for
+ * `days` days, removed (decided 2026-10-16, docs/41 §7). The exam itself
+ * stays in the list; opening it again fetches its data afresh.
+ *
+ * Never anything unsynced: an exam is left whole when any of its marks or
+ * subjects, or the exam itself, has a change not yet sent, or the outbox
+ * holds a request for it. An exam with no record of being opened (cached
+ * before this existed) starts its 60 days now rather than going at once.
+ *
+ * @returns {Promise<{ evicted: string[], keptUnsynced: string[] }>}
+ */
+export const evictUnopenedExams = async ({ days = 60, now = new Date() } = {}) => {
+  await ensureExamTables();
+  const db = await getDatabase();
+  const stamp = now.toISOString();
+  const cutoff = new Date(now.getTime() - days * 86400000).toISOString();
+
+  // Start the clock for exams cached before opening was recorded.
+  await db.runAsync(
+    `INSERT OR IGNORE INTO exam_cache_opened (examId, opened_at)
+     SELECT examId, ? FROM (
+       SELECT examId FROM exam_scores UNION SELECT examId FROM exam_results UNION SELECT examId FROM exam_subjects
+     )`,
+    [stamp]
+  ).catch(() => {});
+
+  const stale = await db.getAllAsync(
+    `SELECT examId FROM exam_cache_opened WHERE opened_at < ?`, [cutoff]
+  ).catch(() => []);
+
+  const evicted = [], keptUnsynced = [];
+  for (const { examId } of stale ?? []) {
+    const dirty = await db.getFirstAsync(
+      `SELECT
+         (SELECT COUNT(*) FROM exam_scores   WHERE examId = ? AND _synced = 0) +
+         (SELECT COUNT(*) FROM exam_subjects WHERE examId = ? AND _synced = 0) +
+         (SELECT COUNT(*) FROM exams         WHERE id     = ? AND _synced = 0) AS n`,
+      [examId, examId, examId]
+    ).catch(() => ({ n: 1 }));
+    const queued = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM mutation_outbox WHERE status != 'synced' AND endpoint LIKE ?`,
+      [`%/exams/${examId}%`]
+    ).catch(() => ({ n: 0 }));   // no outbox table: nothing queued
+    if ((dirty?.n ?? 1) > 0 || (queued?.n ?? 0) > 0) { keptUnsynced.push(examId); continue; }
+
+    await db.runAsync(`DELETE FROM exam_scores   WHERE examId = ?`, [examId]);
+    await db.runAsync(`DELETE FROM exam_results  WHERE examId = ?`, [examId]);
+    await db.runAsync(`DELETE FROM exam_subjects WHERE examId = ?`, [examId]);
+    await db.runAsync(
+      `DELETE FROM exam_blobs WHERE key LIKE ? OR key LIKE ? OR key LIKE ?`,
+      [`stats:${examId}:%`, `rankings:${examId}:%`, `reportcard:${examId}:%`]
+    );
+    await db.runAsync(`DELETE FROM exam_cache_opened WHERE examId = ?`, [examId]);
+    evicted.push(examId);
+  }
+  return { evicted, keptUnsynced };
+};
 
 export const putBlob = async (key, payload) => {
   await ensureExamTables();
