@@ -18,7 +18,7 @@ live. Their tools stay in `backend/scripts/` and their history in docs/39
 
 Nothing below has been done on a real server, a browser or a device. Tests
 at this version (2026-10-16, database URI and provider keys blanked):
-backend `check:all`, every suite one by one, 111 suites, 6,454 checks, 0
+backend `check:all`, every suite one by one, 112 suites, 6,467 checks, 0
 failed; `check-revert-previous.js` 41 passed against each of
 `origin/master` and `097de9c`; desktop 275 and mobile 721 passed, 0 failed;
 web build, lint, `i18n:check` and `check:l10n` pass. The detail check
@@ -75,7 +75,9 @@ In the order to do them; 0.20 is on the day.
   - `MONGODB_URI` (0.3);
   - `ALLOWED_ORIGINS` (CORS): exactly the production web address(es);
   - `ANALYSIS_*` values (1.1);
-  - the TLS certificate and its expiry date (more than a month ahead);
+  - `DOMAIN`, the name the certificate is for, pointing at the server; the
+    first certificate issued once (docs/17, TLS), then its expiry date
+    checked (more than a month ahead; the `certbot` service renews it);
   - free disk space on the host, for the database, the uploads volume and
     the logs.
 - **Expected:** each value set, checked by a second person, none copied
@@ -99,10 +101,10 @@ In the order to do them; 0.20 is on the day.
 - **Do:** check:
   - MongoDB is not reachable from the internet (the compose file publishes
     no port for it);
-  - only 80 and 443 are open. Note that `docker-compose.yml` publishes the
-    backend's port 5000 as well (lines 46–47) and nginx listens only on 80
-    (`nginx.conf`): close 5000 at the firewall (or stop publishing it) and
-    put TLS (443) in front of nginx or in it;
+  - only 80 and 443 are open. The stack publishes only those two (the
+    backend's 5000 is no longer published, and nginx serves HTTPS on 443,
+    port 80 redirecting; `check:deployconfig`); check the host firewall
+    agrees, from outside: `nc -z <server> 5000` and `27017` refuse;
   - no seed or test accounts with known passwords
     (`scripts/seed-form1-students.js` creates pupils with the password
     "student123": never run it against production);
@@ -341,7 +343,8 @@ In the order to do them; 0.20 is on the day.
 - **From:** docs/38 §7, §10 acceptance 1.
 
 **2.3 Health through nginx** — *operator*
-- **Do:** `GET /api/health` through nginx, not directly to the backend.
+- **Do:** `GET https://$DOMAIN/api/health` through nginx (the backend's
+  port is not published); and `http://$DOMAIN/` answers 301 to `https://`.
 - **Expected:** `200` with `"status":"ok","database":"connected"`.
 - **If it fails:** check 2.1 first. Escalate to the developer.
 - **From:** docs/38 §11.

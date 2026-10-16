@@ -15,8 +15,8 @@ repository at this commit; the count is mechanical, not estimated.
 
 | Deployment | Base |
 |---|---|
-| Direct to the API | `http://<host>:5000/api` |
-| Behind the bundled nginx | `http://<host>/api` |
+| Behind the bundled nginx (production) | `https://<DOMAIN>/api` |
+| Direct to the API (development, or from inside the Docker network) | `http://<host>:5000/api` |
 | Web dev server | `/api` (Vite proxies to `http://localhost:5000`) |
 | Mobile | `EXPO_PUBLIC_API_URL` |
 

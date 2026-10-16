@@ -58,11 +58,12 @@ Inlined at build time. A release built without it has no server to talk to.
 There is no `eas.json` in the repository — production mobile build configuration
 lives outside this repo and is **NOT CONFIGURED HERE**.
 
-### A5. No TLS in the bundled configuration
+### A5. TLS in the bundled configuration — RESOLVED (2026-10-16)
 
-`nginx.conf` listens on port 80 only. A TLS terminator must sit in front.
-`X-Forwarded-Proto` is already forwarded and `trust proxy` is set in production,
-so the app is ready for one — but nothing here provides it.
+`nginx.conf` now serves HTTPS on 443 with a Let's Encrypt certificate kept
+by a `certbot` service; port 80 only answers the certificate challenge and
+redirects. The backend no longer publishes port 5000. The first certificate
+is issued once by hand (docs/17, TLS). Held by `check:deployconfig`.
 
 ---
 

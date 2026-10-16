@@ -43,8 +43,12 @@ services:
       JWT_EXPIRES_IN: 30d
       JWT_REFRESH_EXPIRES: 90d
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set — it is the CORS allow-list}
-    ports:
-      - "5000:5000"
+    # No host port, on purpose (docs/40 0.7): only nginx reaches the backend,
+    # over the Docker network, and nginx is the one door, on 80 and 443.
+    # Publishing 5000 let anyone skip TLS and nginx altogether. For a look
+    # from the server itself, `docker compose exec backend wget -qO- http://localhost:5000/api/health`.
+    expose:
+      - "5000"
     volumes:
       # /app/src/uploads, because that is where the application reads and
       # writes — see the note in the Dockerfile. Mounted at /app/uploads
@@ -64,13 +68,36 @@ services:
       - backend
     ports:
       - "80:80"
+      - "443:443"
+    environment:
+      # The public name the certificate is for, e.g. ecole.example.cm.
+      DOMAIN: ${DOMAIN:?DOMAIN must be set — the name the TLS certificate is issued for}
+    # Reload every 6 hours so a certificate certbot has renewed is picked up.
+    command: ["/bin/sh", "-c", "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # A template: the image renders it to conf.d/default.conf with ${DOMAIN}.
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
       # The uploads volume is deliberately NOT mounted here any more. nginx
       # proxies /uploads/ to the backend so the signature gate is consulted;
       # giving nginx the files as well would leave a second, ungated way to
       # reach them one edited location block away.
 
+  # ── Certbot (TLS certificate renewal) ──────────────────────────────────────
+  # Renews the Let's Encrypt certificate through nginx's port 80 (webroot).
+  # The first certificate is issued once by hand before nginx starts
+  # (docs/17, TLS); after that this checks twice a day and renews when due.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+
 volumes:
   mongo_data:
   uploads_data:
+  letsencrypt:
+  certbot_webroot:

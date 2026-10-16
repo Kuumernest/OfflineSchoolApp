@@ -17,7 +17,7 @@ Every fix has a test that failed before it and passes after, or, for text,
 the exact before and after. The project owner's answers to §7 (same day)
 are recorded there and closed the rows they cover in §6; a follow-up pass
 closed four more (marked "follow-up"). Totals after it: backend
-`check:all` 111 suites, 6,454 checks, 0 failed; `check-revert-previous.js`
+`check:all` 112 suites, 6,467 checks, 0 failed; `check-revert-previous.js`
 41 against each of `origin/master` and `097de9c`; desktop 275, mobile 721,
 0 failed; web build, lint, `i18n:check` and `check:l10n` (93) pass. Nothing here ran on a device, in Electron or in
 a browser: no browser is installed in this environment, and the phone app
@@ -277,6 +277,7 @@ Severity: **B** blocks release, **S** should fix, **N** nice to have.
 | l10n | The head called "Principal" in French in settings, lists, the template builder and printed documents, while the card says "chef d'établissement" | web/mobile `fr.json`; `backend/src/print/labels.js` | S | yes (follow-up) | web/mobile `check:l10n`; `check:idcard`. English unchanged: the card and the settings field both say "Principal" |
 | ID card | Printed a "Principal" placeholder in script in the head's signature space (removed; the title stays as the label under the line); lacked sex, date of birth, validity date, emergency contact and the school's address and phone; printed in the viewer's language | `backend/src/print/idCard.js`, `routes/documents.routes.js` | S | yes (follow-up) | `check:idcard` (both languages, long name, missing photo, the route in the school's language) |
 | ID card | No signature or stamp image in the data model; no health fields printed (the model's `bloodGroup` left off) | `School`, `Student` models | — | not added (by decision) | for the project owner if wanted |
+| Deployment | The backend published port 5000 beside nginx, and nginx served HTTP only (no TLS) | `docker-compose.yml`, `nginx.conf` | B | yes (follow-up) | `check:deployconfig`; nginx run by hand with a self-signed certificate |
 | Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, beside step Q; 41 vs `origin/master` and `097de9c`. Not needed for this launch (docs/40 1.4) |
 | Clients | After one class of an exam was unpublished while another stayed published, the exam still said "published": the web hid Publish, so that class could not be published back, and offered no Unpublish for the rest | `unpublish.service.js`; `web/src/pages/exams/[id]/index.tsx` | S | yes (follow-up) | `check:unpublish` (an exam of two classes); web `check:l10n` |
 | Speed | Both locales preloaded (160 kB gzip) | `web/src/i18n/index.ts` | N | no | lazy-load the other |

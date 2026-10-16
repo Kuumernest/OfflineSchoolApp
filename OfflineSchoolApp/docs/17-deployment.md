@@ -160,17 +160,49 @@ public staging host at `NODE_ENV != production`.
 
 ```bash
 cd OfflineSchoolApp
-export MONGO_USER=… MONGO_PASSWORD=… JWT_SECRET=… JWT_REFRESH_SECRET=… ALLOWED_ORIGINS=…
+export MONGO_USER=… MONGO_PASSWORD=… JWT_SECRET=… JWT_REFRESH_SECRET=… ALLOWED_ORIGINS=… DOMAIN=…
 docker compose up -d --build
 ```
 
-Three services:
+The first time, issue the certificate before nginx starts (below, TLS).
+
+Four services:
 
 | Service | Image | Ports | Volumes |
 |---|---|---|---|
 | `mongo` | `mongo:7` | **none published** | `mongo_data:/data/db` |
-| `backend` | built from `Dockerfile` | `5000:5000` | `uploads_data:/app/src/uploads` |
-| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80` | `./nginx.conf` only |
+| `backend` | built from `Dockerfile` | **none published** (5000 on the Docker network only) | `uploads_data:/app/src/uploads` |
+| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80`, `443:443` | `./nginx.conf` as a template; `letsencrypt` and `certbot_webroot`, read-only |
+| `certbot` | `certbot/certbot` | none | `letsencrypt`, `certbot_webroot` |
+
+### TLS
+
+nginx serves the app on 443 only (TLS 1.2 and 1.3, HTTP/2, HSTS). Port 80
+answers the Let's Encrypt challenge (`/.well-known/acme-challenge/`) and
+redirects everything else to `https://`. `nginx.conf` is a template: the
+nginx image fills in `${DOMAIN}` at start-up, and reads the certificate
+from `/etc/letsencrypt/live/${DOMAIN}/`.
+
+**First certificate, once** (nginx cannot start without one). With `DOMAIN`
+pointing at this server and port 80 free:
+
+```bash
+docker compose up -d mongo backend
+docker compose run --rm -p 80:80 --entrypoint certbot certbot \
+  certonly --standalone -d "$DOMAIN" -m <operator email> --agree-tos --no-eff-email
+docker compose up -d
+```
+
+**Renewal:** the `certbot` service tries `certbot renew` twice a day through
+the webroot, and nginx reloads every 6 hours to pick up a renewed
+certificate. Check the expiry with
+`docker compose run --rm --entrypoint certbot certbot certificates`.
+
+**Clients:** every client uses `https://$DOMAIN/api`: the mobile build's
+`EXPO_PUBLIC_API_URL`, the desktop app's server address, and
+`ALLOWED_ORIGINS` (`https://$DOMAIN`). The backend's port 5000 is not
+reachable from outside; from the server itself,
+`docker compose exec backend wget -qO- http://localhost:5000/api/health`.
 
 ### The Dockerfile
 

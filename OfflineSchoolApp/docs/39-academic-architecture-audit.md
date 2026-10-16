@@ -77,7 +77,7 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 111 suites, 6,454 checks, 0 failed;
+- **Tests:** backend `check:all`: 112 suites, 6,467 checks, 0 failed;
   `check-revert-previous.js` 41 against each of `origin/master` and
   `097de9c`; desktop `check` 275, 0 failed; mobile `check` 721, 0 failed;
   web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (93)
@@ -3115,6 +3115,34 @@ Checked against docs/37:
     changed here.
   - docs/41 notes the first launch. No suite was run: no code changed.
 
+- **The stack's doors: port 5000 closed, TLS (2026-10-16).** Deployment
+  configuration; no application code changed.
+  - `docker-compose.yml`: the backend no longer publishes 5000 (`expose`
+    only; nginx reaches it on the Docker network). nginx publishes 80 and
+    443. A `certbot` service renews the Let's Encrypt certificate twice a day
+    through the webroot; nginx reloads every 6 hours to pick it up. New
+    required variable `DOMAIN`.
+  - `nginx.conf` is now a template (`${DOMAIN}`, rendered by the nginx
+    image): port 80 serves only `/.well-known/acme-challenge/` and
+    redirects the rest to `https://`; 443 serves TLS 1.2/1.3 with HTTP/2 and
+    HSTS, with the web console, `/api/` and `/uploads/` blocks unchanged.
+  - Run by hand in `nginx:alpine` with a self-signed certificate: `nginx -t`
+    passed; 80 → 301 `https://…` with the path kept, the challenge file
+    served; 443 served the web console over HTTP/2 and TLS 1.3 with HSTS;
+    TLS 1.1 refused; the reload loop running. The `/api/` proxy could not be
+    exercised: this environment drops container-to-container traffic (as
+    docs/40 2.1 records), so a stand-in backend was unreachable even
+    directly.
+  - New `check:deployconfig` (13; 11 fail on the previous files): only 80
+    and 443 published by any service; the 443 server's TLS, certificate,
+    protocols, HSTS and locations; port 80 only redirects and answers the
+    challenge; the template, volumes, reload and renewal.
+  - docs/17 (TLS section: first certificate, renewal, clients on
+    `https://$DOMAIN/api`), docs/19 A5 resolved, docs/02 and docs/04, docs/40
+    0.5, 0.7 and 2.3, docs/41.
+  - Commands run: backend `check:all` one by one, 112 suites, 6,467 checks,
+    0 failed (no other suite's files changed).
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3336,7 +3364,7 @@ the audit itself* no check suite was run, because no code changed.
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
 branch `academic-agreed-calculation`, the ID-card pass after `f8926ed`):
-backend `check:all`, 111 suites, 6,454 checks, 0 failed;
+backend `check:all`, 112 suites, 6,467 checks, 0 failed;
 `check-revert-previous.js` 41 passed against `origin/master` and `097de9c`;
 desktop `npm run check`, 275 passed; mobile `npm run check`, 721 passed; web
 build and lint, 0 errors; web `i18n:check` and `check:l10n` (93) pass.
