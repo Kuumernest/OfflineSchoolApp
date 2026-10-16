@@ -4008,7 +4008,7 @@
     "calculating": "Calculating…",
     "calcAndGenerate": "Calculate & Generate Report Card",
     "calcDoneTitle": "Done",
-    "calcDoneBody": "Report card calculated and saved.",
+    "calcDoneBody": "Calculated from the saved marks, the school's coefficients and CA, and saved. Changes made on this screen are not saved: correct a mark in mark entry, then calculate again.",
     "calcFailed": "Calculation failed",
     "errorTitle": "Error",
     "reissueTitle": "Reissue report card?",

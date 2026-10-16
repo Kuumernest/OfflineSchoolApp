@@ -3115,7 +3115,8 @@
     "removeSequence": "Remove this sequence",
     "newTermName": "Term {{n}}",
     "newSequenceName": "Sequence {{n}}",
-    "shapeHint": "A year has 1 to {{terms}} terms (for example semesters) and up to {{sequences}} sequences in all; every term needs at least one. A term or sequence that already has exams cannot be removed or moved."
+    "shapeHint": "A year has 1 to {{terms}} terms (for example semesters) and up to {{sequences}} sequences in all; every term needs at least one. A term or sequence that already has exams cannot be removed or moved.",
+    "promoNotUsed": "Not used to decide promotion. Promotion uses the annual average and the class bar."
   },
   "termResults": {
     "title": "Term Results",

@@ -325,7 +325,10 @@ const check = (label, actual, expected) => {
   check("a teacher not assigned to the pupil's class → 403 CLASS_NOT_ASSIGNED", [r.status, r.body?.code], [403, "CLASS_NOT_ASSIGNED"]);
   r = await calc(physics);
   check("a teacher of the class (any subject) → 200", r.status, 200);
-  check("  the summary is the school's and updated", (await ResultSummary.findOne({ _id: "sum-a1" }).lean())?.average, 12);
+  // Computed from the STORED marks by the decided calculation, not from the
+  // body's 12 (docs/39 §20.0, follow-up): Mathematics 14 (set above) and
+  // Physics 16 (set above), coefficient 1 each → (14 + 16)/2 = 15.
+  check("  the summary is the school's and recomputed from the stored marks: 15", (await ResultSummary.findOne({ _id: "sum-a1" }).lean())?.average, 15);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- N4/N5: publish, retract and delete are one school's ---");
@@ -337,9 +340,11 @@ const check = (label, actual, expected) => {
   check("the school's own admin → 200, published", [r.status, (await ResultSummary.findOne({ _id: "sum-a1" }).lean())?.isPublished], [200, true]);
 
   r = await calc(physics);
-  check("a published summary is not recomputed by a teacher → 423", r.status, 423);
+  // A published summary is never recomputed (docs/39 §21.1 D3, decided):
+  // 409 for everyone, before the lock guard's 423 / admin-with-reason path.
+  check("a published summary is not recomputed by a teacher → 409 PUBLISHED_RESULTS", [r.status, r.body?.code], [409, "PUBLISHED_RESULTS"]);
   r = await calc(adminA, "ex-a", "st-a1", { changeReason: "Transcription error in Mathematics" });
-  check("  an administrator may, with a reason → 200", r.status, 200);
+  check("  nor by an administrator, even with a reason → 409", [r.status, r.body?.code], [409, "PUBLISHED_RESULTS"]);
 
   const a1Maths = await scoreOf("st-a1", "maths-3a");
   r = await adminB.delete(`/results/score/${a1Maths._id}`);

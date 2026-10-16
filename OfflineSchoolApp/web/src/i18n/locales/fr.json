@@ -3115,7 +3115,8 @@
     "removeSequence": "Supprimer cette séquence",
     "newTermName": "Trimestre {{n}}",
     "newSequenceName": "Séquence {{n}}",
-    "shapeHint": "Une année compte de 1 à {{terms}} périodes (par exemple des semestres) et au plus {{sequences}} séquences au total ; chaque période en a au moins une. Une période ou une séquence qui a déjà des examens ne peut être ni supprimée ni déplacée."
+    "shapeHint": "Une année compte de 1 à {{terms}} périodes (par exemple des semestres) et au plus {{sequences}} séquences au total ; chaque période en a au moins une. Une période ou une séquence qui a déjà des examens ne peut être ni supprimée ni déplacée.",
+    "promoNotUsed": "N'est pas utilisé pour décider du passage. Le passage utilise la moyenne annuelle et le seuil de la classe."
   },
   "termResults": {
     "title": "Résultats trimestriels",

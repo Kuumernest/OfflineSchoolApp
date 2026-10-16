@@ -422,6 +422,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                             <button
                               type="button"
                               onClick={() => togglePromotionExam(seq.number)}
+                              title={t("academicStructure.promoNotUsed")}
                               className={cn(
                                 "rounded-lg px-2 py-1.5 text-xs font-medium transition",
                                 isPromo
@@ -535,6 +536,8 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                 />
                 <span className="text-sm text-gray-500">/ 20</span>
               </div>
+              {/* Promotion exams no longer decide promotion (docs/39 §14, decided 2026-10-16). */}
+              <p className="mt-1 text-xs text-gray-500">{t("academicStructure.promoNotUsed")}</p>
             </div>
             <div>
               <FieldLabel>{t("academicStructure.passMark")}</FieldLabel>

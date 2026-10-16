@@ -108,7 +108,7 @@ async function annualContextFor({ schoolId, academicYear }) {
  * already in hand. Pure: no database. The arithmetic and the promotion rule
  * are exactly those of the per-pupil function this replaced.
  */
-function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
+function annualRowFor(ctx, { termResults, promotionResults, classId = null, isFinalYear = false }) {
   const { passMark, termWeights } = ctx;
   // The school's bands; the built-in scale only for a context built by hand.
   const gradeOf = ctx.gradeOf || lookupGrade;
@@ -150,13 +150,18 @@ function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
   // by (shared/academicRules promotionUnderRules, docs/39 §14). The annual
   // average against the class's bar, the school's pass mark when no bar is
   // set; pending until every term of the year is complete.
-  const { status: promotionStatus } = promotionUnderRules(ctx.rawRules, {
+  const { status: decided } = promotionUnderRules(ctx.rawRules, {
     annualAverage,
     terms: termAverages.map((ta) => ({ isComplete: ta.isComplete })),
     termsInYear: termWeights.length,
     classId,
     passMark,
   });
+  // A final-year class graduates, whatever the average — as the promotion
+  // run proposes (promotion.service proposeUnderRules). The row said
+  // "promoted" or "repeated" against the bar while the run graduated the
+  // pupil (decided 2026-10-16). Average, grade and place are unchanged.
+  const promotionStatus = isFinalYear ? "graduated" : decided;
 
   return { termAverages, annualAverage, annualGrade, promotionStatus, isPassing };
 }
@@ -233,7 +238,8 @@ async function computeStudentAnnualAverage({
     throw err;
   }
 
-  const row = annualRowFor(ctx, { termResults, promotionResults, classId });
+  const cls = await mongoose.model("Class").findOne({ _id: classId, schoolId }).select("isFinalYear").lean();
+  const row = annualRowFor(ctx, { termResults, promotionResults, classId, isFinalYear: Boolean(cls?.isFinalYear) });
 
   // 8. Upsert AnnualResult
   const filter = {
@@ -283,7 +289,7 @@ async function computeClassAnnualAverages({
   // the class the term was actually sat in.
   const classDoc = await mongoose.model("Class")
     .findOne({ _id: classId, schoolId })
-    .select("_id name")
+    .select("_id name isFinalYear")
     .lean()
     .catch(() => null);
   const resolvedClassName = classDoc?.name ?? null;
@@ -356,6 +362,7 @@ async function computeClassAnnualAverages({
           termResults:      termsByStudent.get(k) ?? [],
           promotionResults: promoByStudent.get(k) ?? [],
           classId,
+          isFinalYear:      Boolean(classDoc?.isFinalYear),
         });
         ops.push({
           updateOne: {

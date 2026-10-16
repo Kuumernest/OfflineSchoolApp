@@ -590,6 +590,11 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
       isPassing:      record.isPassing,
       isPublished:    record.isPublished ?? false,
       promotionStatus: promotionLabel(record),
+      // The machine value and the destination, so a French card can print
+      // the decision in French (reportHtml promotionText); the English
+      // sentence above is unchanged.
+      promotionCode:      record.promotionStatus || null,
+      promotionNextClass: record.nextClassName || record.promotedToClassName || null,
     },
     annualResult: {
       average:       record.annualAverage,

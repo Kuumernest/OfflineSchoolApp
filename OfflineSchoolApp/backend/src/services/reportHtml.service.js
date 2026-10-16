@@ -230,6 +230,30 @@ function resolveAverage20(payload) {
   return averageOutOf20(summary.average, payload.reportType, summary.calcVersion);
 }
 
+/**
+ * The council's decision in the card's language.
+ *
+ * The payload carries an English sentence ("PROMOTED TO FORM 5") built by
+ * reportCardData promotionLabel, which every card printed whatever its
+ * language, so a French card said "GRADUATED" and "REPEATED". A French card
+ * now prints its own labels (LABELS.fr: ADMIS(E) EN …, REDOUBLANT,
+ * DIPLOMÉ(E)); decided 2026-10-16. An English card is unchanged, and a status
+ * with no French label (conditional) keeps the English sentence.
+ */
+function promotionText(summary, lang) {
+  const english = summary?.promotionStatus || null;
+  if (lang !== "fr" || !summary?.promotionCode) return english;
+  const t = LABELS.fr;
+  switch (summary.promotionCode) {
+    case "graduated": return t.graduated;
+    case "repeated":  return t.repeated;
+    case "promoted":  return summary.promotionNextClass
+      ? `${t.promotedTo} ${String(summary.promotionNextClass).toUpperCase()}`
+      : `${t.promotedTo} CLASSE SUPÉRIEURE`;
+    default:          return english;
+  }
+}
+
 const esc = (str) =>
   String(str ?? "")
     .replace(/&/g, "&amp;")
@@ -509,7 +533,7 @@ function renderReportCardHtml(payload, opts = {}) {
   // The promotion decision appears ONLY on the final annual report card —
   // never on sequence or intermediate term reports (see requirements section 8).
   const isAnnual    = payload.reportType === "annual";
-  const promoStatus = isAnnual ? summary?.promotionStatus || null : null;
+  const promoStatus = isAnnual ? promotionText(summary, lang) : null;
 
   /*
    * The table's last two rows.
@@ -1202,7 +1226,7 @@ function toTemplateData(payload, opts = {}) {
       // §8: promotion only exists on the final annual report — never leaked
       // onto sequence or term templates regardless of what the payload holds.
       promotionStatus:   payload.reportType === "annual"
-        ? (summary?.promotionStatus || "")
+        ? (promotionText(summary, lang) || "")
         : "",
       subjectsPassed:    summary?.subjectsPassed  ?? 0,
       subjectsFailed:    summary?.subjectsFailed  ?? 0,

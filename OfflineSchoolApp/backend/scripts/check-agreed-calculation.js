@@ -252,8 +252,8 @@ const main = async () => {
   //       none (no term result) → no annual row → needs a decision
   //       part (terms 1 and 2 only) → annual 12.5 but the year is incomplete → needs a decision
   //   p2  ok 11 → promoted (school bar);  low 10.99 → repeated
-  //   p5  grad 8 → graduated by the run (final year, whatever the average);
-  //       its annual row still compares 8 with the school bar 11 → "repeated"
+  //   p5  grad 8 → graduated (final year, whatever the average), on the
+  //       annual row and in the run
   // School Q (pass mark 10.5, no bars at all), class q1:
   //   q1  pass 10.5 → promoted;  fail 10.49 → repeated
   // ═══════════════════════════════════════════════════════════════════════
@@ -308,10 +308,9 @@ const main = async () => {
   check("annual rows [average, status, version]", annuals, {
     at: [12, "promoted", "annual/3"], above: [12.01, "promoted", "annual/3"], below: [11.99, "repeated", "annual/3"],
     none: null, part: [12.5, "pending", "annual/3"],
-    // grad: the annual row knows nothing of final years: 8 < the school bar 11
-    // → "repeated" on the row, while the run graduates the pupil (below).
-    // Reported as a gap (docs/39 §20.0); not changed here.
-    ok: [11, "promoted", "annual/3"], low: [10.99, "repeated", "annual/3"], grad: [8, "repeated", "annual/3"],
+    // grad: a final-year class graduates, on the row as in the run, whatever
+    // the average (8 < the school bar 11); decided 2026-10-16, follow-up pass.
+    ok: [11, "promoted", "annual/3"], low: [10.99, "repeated", "annual/3"], grad: [8, "graduated", "annual/3"],
     pass: [10.5, "promoted", "annual/3"], fail: [10.49, "repeated", "annual/3"],
   });
 

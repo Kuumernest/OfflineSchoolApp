@@ -4008,7 +4008,7 @@
     "calculating": "Calcul en cours…",
     "calcAndGenerate": "Calculer et générer le bulletin",
     "calcDoneTitle": "Terminé",
-    "calcDoneBody": "Bulletin calculé et enregistré.",
+    "calcDoneBody": "Calculé à partir des notes enregistrées, des coefficients et du CC de l'école, puis enregistré. Les modifications faites sur cet écran ne sont pas enregistrées : corrigez une note dans la saisie des notes, puis recalculez.",
     "calcFailed": "Échec du calcul",
     "errorTitle": "Erreur",
     "reissueTitle": "Rééditer le bulletin ?",

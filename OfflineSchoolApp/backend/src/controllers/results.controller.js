@@ -7,6 +7,7 @@ const ResultSummary   = require("../db/models/ResultSummary");
 const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
+const { processExam } = require("../services/examProcess.service");
 const GeneratedReport = require("../db/models/GeneratedReport");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
@@ -1197,21 +1198,6 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
 
 const calculateStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const {
-    subjects: inputSubjects,
-    outOf    = 20,
-    passMark = 10,
-  } = req.body;
-
-  if (!Array.isArray(inputSubjects) || inputSubjects.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error:   "subjects[] array is required",
-    });
-  }
-
-  const out  = Number(outOf)    || 20;
-  const pass = Number(passMark) || 10;
 
   // Tenancy: the exam anchors the write. Exam.findById plus an unscoped
   // { examId, studentId } lookup let a results.edit holder rewrite another
@@ -1247,180 +1233,46 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     }
   }
 
-  // Lock and publication apply to a recomputed summary exactly as to a mark:
-  // a published card is not rewritten from body numbers without a recorded
-  // reason, and never by a teacher. This route had no guard.
+  /*
+   * The pupil's summary, computed the decided way (docs/39 §21.1).
+   *
+   * This route used to build the summary from the marks, coefficients, scale
+   * and pass mark the client sent, and keep the row's calcVersion — so an
+   * exam-process/3 row could be rewritten with numbers no calculation of
+   * ours produced. It now runs exactly what POST /exams/:examId/process runs
+   * (examProcess.service), for the pupil's class, on the stored marks and
+   * CA; the body's numbers are not read. A mark is corrected through mark
+   * entry, then recalculated here.
+   *
+   * A published summary is never recomputed: 409 PUBLISHED_RESULTS and
+   * nothing written, as /process answers. The lock guard still applies.
+   */
+  const existing = await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean();
+  if (existing?.isPublished) {
+    return res.status(409).json({
+      success: false, code: "PUBLISHED_RESULTS",
+      error:   "This result is published. Unpublish it first.",
+    });
+  }
   const audit = await guardResultWrite(req, res, { examId, schoolId, studentId });
   if (!audit) return;
 
-  const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+  const classId = existing?.classId ||
+    (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null }).select("classId").lean())?.classId ||
+    exam.classId || null;
 
-  let totalWeightedScore = 0;
-  let totalCoefficients  = 0;
-  let subjectsPassed     = 0;
-  let subjectsFailed     = 0;
-  const subjectBreakdown = [];
-
-  for (const input of inputSubjects) {
-    const {
-      subjectId,
-      subjectName,
-      score,
-      maxScore    = 100,
-      coefficient = 1,
-      isAbsent    = false,
-      isExempt    = false,
-    } = input;
-
-    if (isAbsent || isExempt || score == null) {
-      subjectBreakdown.push({
-        subjectId:      String(subjectId),
-        subjectName:    subjectName || String(subjectId),
-        score:          null,
-        maxScore:       Number(maxScore),
-        coefficient:    Number(coefficient),
-        normalizedMark: null,
-        weightedScore:  null,
-        percentage:     null,
-        grade:          null,
-        points:         null,
-        isPassing:      false,
-        isAbsent:       Boolean(isAbsent),
-        isExempt:       Boolean(isExempt),
-        remark:         isAbsent ? "Absent" : isExempt ? "Exempt" : null,
-      });
-      continue;
-    }
-
-    const numScore = Number(score);
-    const numMax   = Number(maxScore)    || 100;
-    const numCoeff = Number(coefficient) || 1;
-
-    const normalizedMark = Math.round((numScore / numMax) * out * 100) / 100;
-    const weightedScore  = Math.round(normalizedMark * numCoeff * 100) / 100;
-
-    totalWeightedScore += weightedScore;
-    totalCoefficients  += numCoeff;
-
-    const pct        = Math.round((numScore / numMax) * 100);
-    const grades     = gradingConfig?.grades || [];
-    // Grade bands are stored on the /20 scale (same as GradingConfig defaults
-    // and grading.service's GRADE_SCALE), so look the mark up out of 20 — not
-    // the 0-100 percentage. Falling back to the built-in scale keeps a student
-    // from dropping to a wrong letter when a school has no custom config.
-    let gradeMatch = grades.find(
-      (g) => normalizedMark >= g.minMark && normalizedMark <= g.maxMark
-    );
-    if (!gradeMatch) {
-      const fb = lookupGrade(normalizedMark);
-      gradeMatch = fb
-        ? { grade: fb.grade, gpaPoints: fb.points, remark: fb.remark }
-        : null;
-    }
-    const isPassing  = normalizedMark >= pass;
-
-    if (isPassing) subjectsPassed++;
-    else           subjectsFailed++;
-
-    subjectBreakdown.push({
-      subjectId:      String(subjectId),
-      subjectName:    subjectName || String(subjectId),
-      score:          numScore,
-      maxScore:       numMax,
-      coefficient:    numCoeff,
-      normalizedMark,
-      weightedScore,
-      percentage:     pct,
-      grade:          gradeMatch?.grade     || null,
-      points:         gradeMatch?.gpaPoints ?? null,
-      isPassing,
-      isAbsent:       false,
-      isExempt:       false,
-      remark:         gradeMatch?.remark    || null,
-    });
+  const result = await processExam({ exam, schoolId, classId, userId: req.user?._id ?? null });
+  if (result.status !== 200) {
+    return res.status(result.status).json({ ...result.body, error: result.body?.message });
   }
 
-  const average       = totalCoefficients > 0
-    ? Math.round((totalWeightedScore / totalCoefficients) * 100) / 100
-    : 0;
-  const avgPercentage = Math.round((average / out) * 100);
-  const grades        = gradingConfig?.grades || [];
-  // Same scale fix as per-subject: `average` is already out of `out` (default
-  // 20), so it is matched against the /20 bands directly.
-  let overallMatch = grades.find(
-    (g) => average >= g.minMark && average <= g.maxMark
-  );
-  if (!overallMatch) {
-    const fb = lookupGrade(average);
-    overallMatch = fb
-      ? { grade: fb.grade, remark: fb.remark, gpaPoints: fb.points }
-      : null;
-  }
-  const isPassing     = average >= pass;
-
-  // ✅ Phase 0 repoint: persist to ResultSummary (the live pipeline model)
-  //    instead of ExamResult. GET /reportcard reads ResultSummary now, so
-  //    "Calculate & save" must write where the read happens or the saved
-  //    values would never show up on reload.
-  const computedFields = {
-    average,
-    percentage:    avgPercentage,
-    overallGrade:  overallMatch?.grade     || null,
-    overallRemark: overallMatch?.remark    || null,
-    gpa:           overallMatch?.gpaPoints ?? null,
-    subjectsPassed,
-    subjectsFailed,
-    subjectsTotal: subjectBreakdown.length,
-    isPassing,
-    subjectBreakdown,
-    syncStatus:    "synced",
-    lastSyncedAt:  new Date(),
-  };
-
-  const existing = await ResultSummary.findOne({
-    examId, studentId, schoolId, deletedAt: null,
-  });
-
-  let summary;
-  if (existing) {
-    summary = await ResultSummary.findByIdAndUpdate(
-      existing._id,
-      { $set: computedFields },
-      { returnDocument: 'after' }
-    ).lean();
-  } else {
-    // No processed summary yet — create a minimal one. classId and schoolId
-    // are schema-required; take them from the student's score rows, falling
-    // back to the exam.
-    const firstScore = await StudentScore.findOne({
-      examId, studentId, schoolId, deletedAt: null,
-    })
-      .select("classId schoolId studentName admissionNo className academicYear term")
-      .lean();
-
-    const classId = firstScore?.classId || exam?.classId || null;
-    if (!classId || !schoolId) {
-      return res.status(409).json({
-        success: false,
-        error:   "No result summary for this student in this exam",
-        detail:  "Run Results → Compute for this exam first, then retry.",
-      });
-    }
-
-    const created = await ResultSummary.create({
-      _id:          uuidv4(),
-      examId,
-      studentId,
-      schoolId,
-      classId,
-      studentName:  firstScore?.studentName || null,
-      admissionNo:  firstScore?.admissionNo || null,
-      className:    firstScore?.className   || null,
-      academicYear: firstScore?.academicYear || exam?.academicYear || null,
-      term:         firstScore?.term        || exam?.term        || null,
-      ...computedFields,
+  const summary = await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean();
+  if (!summary) {
+    // No paper mark in any subject: no result, not a 0 (check:weightednomarks).
+    return res.status(404).json({
+      success: false, code: "NO_RESULT",
+      error:   "This pupil has no paper mark in this exam, so there is no result to calculate.",
     });
-    summary = created.toObject ? created.toObject() : created;
   }
 
   await logResultChange(audit, {
@@ -1429,34 +1281,30 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     action:   existing ? "updated" : "created",
     field:    "average",
     oldValue: existing?.average ?? null,
-    newValue: average,
+    newValue: summary.average,
   });
 
-  console.log(
-    `✅ Report card: student=${studentId}`,
-    `avg=${average}/${out}`,
-    `pass=${isPassing}`,
-    `subjects=${subjectBreakdown.length}`
-  );
-
+  const counted = (summary.subjectBreakdown || []).filter((b) => b.normalizedMark != null);
+  const gradingConfig = await GradingConfig.findOne({ schoolId }).select("passMark").lean();
   return res.json({
     success: true,
     data: {
       summaryId:          summary._id,
-      average,
-      outOf:              out,
-      passMark:           pass,
-      percentage:         avgPercentage,
-      overallGrade:       overallMatch?.grade     || null,
-      overallRemark:      overallMatch?.remark    || null,
-      gpa:                overallMatch?.gpaPoints ?? null,
-      isPassing,
-      subjectsPassed,
-      subjectsFailed,
-      subjectsTotal:      subjectBreakdown.length,
-      totalCoefficients,
-      totalWeightedScore: Math.round(totalWeightedScore * 100) / 100,
-      subjectBreakdown,
+      average:            summary.average,
+      outOf:              20,
+      passMark:           gradingConfig?.passMark ?? 10,
+      percentage:         summary.percentage,
+      overallGrade:       summary.overallGrade,
+      overallRemark:      summary.overallRemark,
+      gpa:                summary.gpa,
+      isPassing:          summary.isPassing,
+      subjectsPassed:     summary.subjectsPassed,
+      subjectsFailed:     summary.subjectsFailed,
+      subjectsTotal:      summary.subjectsTotal,
+      totalCoefficients:  counted.reduce((n, b) => n + (b.coefficient ?? 1), 0),
+      totalWeightedScore: Math.round(counted.reduce((n, b) => n + (b.weightedMark ?? 0), 0) * 100) / 100,
+      subjectBreakdown:   summary.subjectBreakdown,
+      calcVersion:        summary.calcVersion,
       classPosition:      summary.classPosition,
       gradePosition:      summary.gradePosition,
       schoolPosition:     summary.schoolPosition,
