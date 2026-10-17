@@ -504,8 +504,8 @@ function renderReportCardHtml(payload, opts = {}) {
 
     return `
       <tr>
-        <td>${esc(s.subjectName || "—")}</td>
-        <td class="teacher-cell">${s.teacherName ? esc(s.teacherName) : "—"}</td>
+        <td>${esc(s.subjectName || "—")}${s.teacherName
+          ? `<div class="subject-teacher">${esc(s.teacherName)}</div>` : ""}</td>
         ${caCells}
         ${sequenceCells(s, absent, flag)}
         ${showRawScore ? `<td style="text-align:center;color:${color}">${esc(scoreCell)}</td>` : ""}
@@ -550,7 +550,7 @@ function renderReportCardHtml(payload, opts = {}) {
    * promotion decision keeps its own line on the annual card because passing
    * an exam and being promoted are different things a council decides.
    */
-  const columnCount = 7 + (showRawScore ? 1 : 0) + (showGrades ? 1 : 0) +
+  const columnCount = 6 + (showRawScore ? 1 : 0) + (showGrades ? 1 : 0) +
                       (showCa ? 2 : 0) + sequenceColumns.length;
   const totalCoeff  = computed.totalCoefficients;
   const totalMarks  = computed.totalWeighted;
@@ -563,7 +563,7 @@ function renderReportCardHtml(payload, opts = {}) {
   const totalRow = (hasTotals || isPassing != null || promoStatus) ? `
     <tfoot>
       ${!hasTotals ? "" : `<tr class="total-row">
-        <td colspan="${2 + (showRawScore ? 1 : 0) + (showCa ? 2 : 0) + sequenceColumns.length}">${t.totalRow}</td>
+        <td colspan="${1 + (showRawScore ? 1 : 0) + (showCa ? 2 : 0) + sequenceColumns.length}">${t.totalRow}</td>
         <td style="text-align:center">${totalMarks != null ? Number(totalMarks).toFixed(2) : "—"}</td>
         <td style="text-align:center">${totalCoeff != null ? Number(totalCoeff) : "—"}</td>
         <td colspan="${3 + (showGrades ? 1 : 0)}"></td>
@@ -792,10 +792,9 @@ function renderReportCardHtml(payload, opts = {}) {
     /* How the sequence mark was made. Small, under the table, and
        printed only when the school marks a sequence both ways. */
     .ca-note { font-size: 9.5px; color: #6b7280; margin: 4px 0 0; text-align: right; }
-    /* The teacher of each subject, in its own column: a name, or the card's
-       dash. Allowed to wrap — some are long — while the marks beside them
-       stay on one line. */
-    .teacher-cell { color: #4b5563; font-size: 10.5px; }
+    /* The teacher of each subject, on a line under its name; none when no
+       one is assigned. Allowed to wrap — some are long. */
+    .subject-teacher { color: #6b7280; font-size: 9.5px; font-weight: normal; margin-top: 1px; }
 
     /* The table's last rows. A tfoot so a table that breaks across two
        sheets carries its totals on the sheet its last subject is on. */
@@ -903,7 +902,7 @@ ${watermark.css}
       th, td             { padding: 3px 6px; }
       thead th           { font-size: 9.5px; }
 
-      .teacher-cell      { font-size: 9px; }
+      .subject-teacher   { font-size: 8px; }
       tfoot td           { padding: 3px 6px; }
       .total-row td,
       .status-row td     { font-size: 9.5px; }
@@ -978,7 +977,6 @@ ${watermark.css}
     <thead>
       <tr>
         <th>${t.subject}</th>
-        <th>${t.teacherCol}</th>
         ${showCa ? `<th style="text-align:center">${t.caCol}</th>
         <th style="text-align:center">${t.testCol}</th>` : ""}
         ${sequenceColumns.map((c) => `<th style="text-align:center">${esc(c.name)}</th>`).join("")}
@@ -1403,6 +1401,10 @@ function wrapTemplateHtml(body, css, { lang, title, school, sections }) {
        grey — an invisible header. */
     .subjects-table th { font-weight: bold; }
     .subjects-table thead { background: #f0f0f0; }
+    /* The teacher under the subject (placeholder.engine), here so a saved
+       template's own CSS need not know the class. */
+    .subjects-table .subject-teacher { color: #6b7280; font-size: 9.5px; font-weight: normal; margin-top: 1px; }
+    @media print { .subjects-table .subject-teacher { font-size: 8px; } }
     .student-photo { width: 80px; height: 100px; object-fit: cover; }
     .school-logo { max-height: 80px; max-width: 200px; }
 

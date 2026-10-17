@@ -253,17 +253,17 @@ const check = (label, actual, expected) => {
   // ═══════════════════════════════════════════════════════════════════════
   console.log("\n--- every subject names the teacher assigned to teach it ---");
 
-  /** The teacher cell of one subject's row. */
+  /** The teacher line under one subject's name, or null for none. */
   const teacherOf = (html, subject) => {
-    const m = html.match(new RegExp(`<td>${subject}</td>\\s*<td class="teacher-cell">([^<]*)</td>`));
+    const m = html.match(new RegExp(`<td>${subject}<div class="subject-teacher">([^<]*)</div></td>`));
     return m ? m[1].trim() : null;
   };
   check("the subject's own teacher, not the class teacher",
     teacherOf(html, "Mathematics"), "Mr Buh, Mrs Ade");
-  check("  a subject with nobody assigned shows the card's dash",
-    teacherOf(html, "Physics"), "—");
+  check("  a subject with nobody assigned shows its name alone",
+    [teacherOf(html, "Physics"), /<td>Physics<\/td>/.test(html)], [null, true]);
   check("  and the class teacher is not printed against any subject",
-    /teacher-cell">Mr Kum/.test(html), false);
+    /subject-teacher">Mr Kum/.test(html), false);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("\n--- the table ends with the totals it was averaged from ---");
@@ -383,10 +383,13 @@ const check = (label, actual, expected) => {
     [[mathsRow.score, mathsRow.isPassing], [physicsRow.score, physicsRow.isPassing]],
     [[15, true], [8, false]]);
   const termHtml = renderReportCardHtml(termCard, { school: { name: "Alpha Academy" } });
-  const physicsCells = (termHtml.match(/<tr>\s*<td>Physics<\/td>[\s\S]*?<\/tr>/) || [""])[0];
+  // A subject's cell may carry its teacher on a line under the name.
+  const rowOf = (subject) => (termHtml.match(new RegExp(
+    `<tr>\\s*<td>${subject}(?:<div class="subject-teacher">[^<]*</div>)?</td>[\\s\\S]*?</tr>`)) || [""])[0];
+  const physicsCells = rowOf("Physics");
   check("  and the failed subject is printed in the card's red, as on a sequence card",
     [/color:#DC2626/.test(physicsCells), />\s*Fail\s*</.test(physicsCells)], [true, true]);
-  const mathsCells = (termHtml.match(/<tr>\s*<td>Mathematics<\/td>[\s\S]*?<\/tr>/) || [""])[0];
+  const mathsCells = rowOf("Mathematics");
   check("  while the one above it stays green", /color:#059669/.test(mathsCells), true);
 
   // The rank, the average and the grade are the term's own, from the term
