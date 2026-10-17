@@ -18,6 +18,7 @@ const { generateTempPassword } = require("../utils/tempPassword");
 const { sendEmail }            = require("../services/email.service");
 const mail                     = require("../services/email.transport");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
+const { YEAR_FORMAT }                         = require("../services/rankingScope.service");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
 const { parseFilters, computePlatformStats, availableFilters } =
@@ -267,6 +268,18 @@ router.patch("/schools/:schoolId", canManage, asyncHandler(async (req, res) => {
 
   const { fields, error } = pickIdentity(req.body ?? {}, { requireName: false });
   if (error) return sendError(res, 400, error);
+
+  // The school's current year, as POST /schools takes it. Promotion moves it
+  // on from one year to the next (rankingScope.service); this is how a school
+  // created without one is given it, or a wrong one is corrected.
+  const year = req.body?.settings?.academicYear;
+  if (year !== undefined) {
+    const value = year == null ? "" : String(year).trim();
+    if (value && !YEAR_FORMAT.test(value)) {
+      return sendError(res, 400, "settings.academicYear must look like 2026/2027 or 2026-2027");
+    }
+    fields["settings.academicYear"] = value || null;
+  }
   if (!Object.keys(fields).length) return sendError(res, 400, "Nothing to change");
 
   let after;
@@ -282,7 +295,11 @@ router.patch("/schools/:schoolId", canManage, asyncHandler(async (req, res) => {
   }
   invalidateSchool(id);
 
-  const d = auditDiff(before, after, Object.keys(fields));
+  // The audit diff reads top-level keys, and a key with a dot in it is not
+  // one to store: the nested year is recorded as academicYear.
+  const flat = (s) => ({ ...s, academicYear: s?.settings?.academicYear ?? null });
+  const keys = Object.keys(fields).map((k) => (k === "settings.academicYear" ? "academicYear" : k));
+  const d = auditDiff(flat(before), flat(after), keys);
   if (d.changed.length) {
     await recordAudit(req, {
       action: "school.updated", schoolId: id, schoolName: after.name,

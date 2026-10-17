@@ -118,7 +118,7 @@ does not exist, on **any** route, is answered 404 `SCHOOL_NOT_FOUND` by
 | GET | `/super-admin/schools` | `platform.schools` | `?search=&status=all\|active\|inactive&page=&limit=` — with pupil and staff counts. |
 | POST | `/super-admin/schools` | `platform.manageSchools` | Create. 409 on a duplicate code/email. Audited `school.created`. |
 | GET | `/super-admin/schools/:schoolId` | `platform.schools` | Details, administrators and bursars, recent audit. |
-| PATCH | `/super-admin/schools/:schoolId` | `platform.manageSchools` | Identity fields only (name, code, contact, address, website, principal, verified). Audited with before/after. |
+| PATCH | `/super-admin/schools/:schoolId` | `platform.manageSchools` | Identity fields (name, code, contact, address, website, principal, verified) and `settings.academicYear`, the school's current year (`YYYY/YYYY` or `YYYY-YYYY`; committing a promotion also moves it on). Audited with before/after. |
 | POST | `/super-admin/schools/:schoolId/activate` | `platform.manageSchools` | Audited `school.activated`. |
 | POST | `/super-admin/schools/:schoolId/deactivate` | `platform.manageSchools` | `{ reason }` required. Audited. There is deliberately no delete route. |
 | POST | `/super-admin/schools/:schoolId/enter` | `platform.schools` | Records `school.entered`; returns the context the client displays. |

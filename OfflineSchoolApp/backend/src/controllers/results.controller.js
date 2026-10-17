@@ -1217,11 +1217,18 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
   // A teacher recomputes the summaries of the classes they teach and no
   // other — the class-level question, because a summary spans every subject.
   // Admins pass. Same boundary as the register.
+  //
+  // The class is the one the pupil's marks were sat in, ahead of the stored
+  // summary's: a summary written by a run that ranked several classes as one
+  // carries another class's id, and trusting it first would both keep the
+  // pupil there and let that class's teacher in.
+  const sittingClassId =
+    (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null })
+      .select("classId").lean())?.classId || null;
   if (req.user?.role === "teacher") {
     const summaryClassId =
+      sittingClassId ||
       (await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null })
-        .select("classId").lean())?.classId ||
-      (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null })
         .select("classId").lean())?.classId ||
       exam.classId || null;
     const ok = summaryClassId && await teacherAssigned(TeacherAssignment, {
@@ -1259,9 +1266,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
   const audit = await guardResultWrite(req, res, { examId, schoolId, studentId });
   if (!audit) return;
 
-  const classId = existing?.classId ||
-    (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null }).select("classId").lean())?.classId ||
-    exam.classId || null;
+  const classId = sittingClassId || existing?.classId || exam.classId || null;
 
   const result = await processExam({ exam, schoolId, classId, userId: req.user?._id ?? null });
   if (result.status !== 200) {

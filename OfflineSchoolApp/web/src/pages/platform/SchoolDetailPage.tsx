@@ -27,7 +27,7 @@ import { MetricTile, MetricGrid } from "@/components/platform/MetricTile";
 import {
   fetchSchool, updateSchool, activateSchool, deactivateSchool,
   appointSchoolAdmin, resetSchoolAdminPassword,
-  type SchoolIdentity, type PlatformSchool, type AuditEntry,
+  type SchoolIdentity, type SchoolPatch, type PlatformSchool, type AuditEntry,
 } from "@/services/platform.service";
 
 const IDENTITY: (keyof SchoolIdentity)[] = [
@@ -62,6 +62,10 @@ export default function SchoolDetailPage() {
 
   // ── Identity form ─────────────────────────────────────────────────────────
   const [form, setForm]       = useState<SchoolIdentity | null>(null);
+  // The school's current year, edited beside its identity. It decides which
+  // year's class rankings count only the pupils still in the class; a
+  // promotion moves it on, and this sets it for a school created without one.
+  const [year, setYear]       = useState("");
   const [saving, setSaving]   = useState(false);
   // Seeded from the school, and re-seeded when the server sends a newer copy
   // (after a save or a status change). Derived during render rather than in an
@@ -72,6 +76,7 @@ export default function SchoolDetailPage() {
   if (school && formKey !== formFor) {
     setFormFor(formKey);
     setForm(pick(school));
+    setYear(school.settings?.academicYear ?? "");
   }
 
   const save = async (e: React.FormEvent) => {
@@ -80,9 +85,10 @@ export default function SchoolDetailPage() {
     if (!form.name?.trim()) { toast({ title: s("nameRequired"), kind: "warning" }); return; }
     // Send only what differs; the server audits exactly those fields.
     const current = pick(school);
-    const patch: SchoolIdentity = {};
+    const patch: SchoolPatch = {};
     for (const k of IDENTITY) if ((form[k] ?? "") !== (current[k] ?? "")) (patch as Record<string, unknown>)[k] = form[k];
     if (Boolean(form.verified) !== Boolean(current.verified)) patch.verified = Boolean(form.verified);
+    if (year.trim() !== (school.settings?.academicYear ?? "")) patch.settings = { academicYear: year.trim() || null };
     if (!Object.keys(patch).length) return;
     setSaving(true);
     try {
@@ -232,6 +238,9 @@ export default function SchoolDetailPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label={s("code")} hint={s("codeHint")}><Input value={form.code ?? ""} onChange={setField("code")} maxLength={10} /></FormField>
               <FormField label={s("principal")}><Input value={form.principalName ?? ""} onChange={setField("principalName")} /></FormField>
+              <FormField label={s("academicYear")} hint={s("academicYearHint")}>
+                <Input value={year} onChange={(e) => setYear(e.target.value)} placeholder="2026/2027" />
+              </FormField>
               <FormField label={s("email")}><Input type="email" value={form.email ?? ""} onChange={setField("email")} /></FormField>
               <FormField label={s("phone")}><Input value={form.phone ?? ""} onChange={setField("phone")} /></FormField>
               <FormField label={s("city")}><Input value={form.city ?? ""} onChange={setField("city")} /></FormField>

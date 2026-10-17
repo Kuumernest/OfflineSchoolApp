@@ -26,6 +26,7 @@ const GradingConfig    = require("../db/models/GradingConfig");
 const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
 const academicPolicy   = require("./academicPolicy.service");
+const { rosterDecides } = require("./rankingScope.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, sequenceFigureOn20 } = require("../../../shared/academicRules");
 
@@ -337,6 +338,8 @@ async function computeClassTermAverages({
 
   const ops = [];
   let noMarks = 0;
+  const computedIds = [];
+  const noMarkIds   = [];
 
   for (const student of students) {
     const studentId = studentKey(student);
@@ -348,8 +351,9 @@ async function computeClassTermAverages({
       className:   student.className || resolvedClassName,
     });
 
-    if (!hasAnyMark) { noMarks += 1; continue; }
+    if (!hasAnyMark) { noMarks += 1; noMarkIds.push(studentId); continue; }
 
+    computedIds.push(studentId);
     ops.push({
       updateOne: {
         filter: { schoolId, academicYear, term, classId, studentId },
@@ -361,8 +365,33 @@ async function computeClassTermAverages({
 
   if (ops.length) {
     await TermResult.bulkWrite(ops);
-    // Positions only mean something once there is something to rank.
-    await computeTermPositions({ schoolId, academicYear, term, classId });
+  }
+
+  /*
+   * Rows an earlier run left, which the positions below would otherwise rank
+   * and count: a class of two printed "5th of 8".
+   *
+   * A pupil of the class who no longer has a sequence mark: the row goes, in
+   * any year, as the annual layer removes one for a pupil with no term. This
+   * year, so does a pupil no longer on the roster — inactive, deleted or
+   * moved (rankingScope.service says why only this year): the positions keep
+   * exactly the pupils computed here. Unpublished rows only; a published one
+   * was already refused above (D3), for the class.
+   */
+  if (await rosterDecides({ schoolId, academicYear, classId })) {
+    await computeTermPositions({ schoolId, academicYear, term, classId, keep: computedIds });
+  } else {
+    let removed = 0;
+    if (noMarkIds.length) {
+      removed = (await TermResult.deleteMany({
+        schoolId, academicYear, term, classId, studentId: { $in: noMarkIds }, isPublished: { $ne: true },
+      })).deletedCount;
+    }
+    // Positions only mean something once there is something to rank, or
+    // once a row the last places counted has gone.
+    if (ops.length || removed) {
+      await computeTermPositions({ schoolId, academicYear, term, classId });
+    }
   }
 
   return {
@@ -390,9 +419,13 @@ const { competitionPlaces } = require("../../../shared/ranking");
 
 /**
  * Compute term positions (dense ranking) for a class.
+ *
+ * `keep`: when given, the pupils the class ranks. Any other unpublished row is
+ * removed, and any other published one is left exactly as issued, outside the
+ * places and the class size — so both always count the same pupils.
  */
-async function computeTermPositions({ schoolId, academicYear, term, classId }) {
-  const results = await TermResult.find({
+async function computeTermPositions({ schoolId, academicYear, term, classId, keep = null }) {
+  let results = await TermResult.find({
     schoolId,
     academicYear,
     term,
@@ -401,6 +434,15 @@ async function computeTermPositions({ schoolId, academicYear, term, classId }) {
   })
     .sort({ termAverage: -1 })
     .lean();
+
+  if (keep) {
+    const kept = new Set(keep.map(String));
+    const stale = results.filter((r) => !kept.has(String(r.studentId)) && !r.isPublished);
+    if (stale.length) {
+      await TermResult.deleteMany({ _id: { $in: stale.map((r) => r._id) }, isPublished: { $ne: true } });
+    }
+    results = results.filter((r) => kept.has(String(r.studentId)));
+  }
 
   const totalInClass = results.length;
 

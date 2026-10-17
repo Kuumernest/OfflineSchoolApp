@@ -32,15 +32,21 @@ const check = (label, actual, expected) => {
 };
 
 // Measured when written (a class of 5 and of 40 alike).
+//
+// Raised once, looked at first: process, term compute and calculate & save
+// each read the school's current year and whether a promotion has closed it
+// (+2, rankingScope.service), the one test that decides whether a departed
+// pupil's row is dropped from a class ranking. Calculate & save also reads
+// the class the pupil's marks were sat in before the stored summary's (+1).
 const CEILING = {
-  "process one exam, one class": 11,
-  "term compute, one class": 10,
+  "process one exam, one class": 13,
+  "term compute, one class": 12,
   "sequence card payload": 12,
   "term card": 11,
   "annual card": 11,
   "promotion generateRun": 10,
   "progression?year (HTTP)": 8,
-  "calculate & save (HTTP)": 20,
+  "calculate & save (HTTP)": 23,
 };
 (async () => {
   const { MongoMemoryServer } = require(B + "/node_modules/mongodb-memory-server");
