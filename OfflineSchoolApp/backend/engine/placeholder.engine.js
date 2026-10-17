@@ -330,6 +330,12 @@ function buildReplacementMap(data) {
     average:            Number(performance.average ?? 0).toFixed(1),
     position:           formatPosition(performance.position, lang),
     total_students:     String(performance.totalStudents ?? 0),
+    // Blank, not "0", where the period has no such place (no Level set, or
+    // not computed since): a template gates them with {{if grade_position}}.
+    grade_position:     performance.gradePosition != null ? formatPosition(performance.gradePosition, lang) : "",
+    total_in_grade:     String(performance.totalInGrade ?? ""),
+    school_position:    performance.schoolPosition != null ? formatPosition(performance.schoolPosition, lang) : "",
+    total_in_school:    String(performance.totalInSchool ?? ""),
     grade:              performance.grade            || "",
     remark:             performance.remark           || "",
     promotion_status:   performance.promotionStatus  || "",
@@ -445,6 +451,8 @@ function buildReplacementMap(data) {
     label_attendance:    labels.attendPanel   || "",
     label_conduct:       labels.conductPanel  || "",
     label_rank:          labels.rank          || "",
+    label_grade_rank:    labels.gradeRank     || "",
+    label_school_rank:   labels.schoolRank    || "",
     label_average:       labels.average       || "",
     label_grade:         labels.grade         || "",
     label_decision:      labels.decision      || "",

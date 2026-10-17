@@ -384,6 +384,8 @@ const INFO_PANEL_HTML = `  <!-- What the pupil did, what the class did, what the
     <div class="panel-col">
       <div class="panel-head">{{label_performance}}</div>
       <div class="panel-row"><span class="panel-lbl">{{label_rank}}</span><span class="panel-val">{{position}} / {{total_students}}</span></div>
+      {{if grade_position}}<div class="panel-row"><span class="panel-lbl">{{label_grade_rank}}</span><span class="panel-val">{{grade_position}} / {{total_in_grade}}</span></div>{{endif}}
+      {{if school_position}}<div class="panel-row"><span class="panel-lbl">{{label_school_rank}}</span><span class="panel-val">{{school_position}} / {{total_in_school}}</span></div>{{endif}}
       <div class="panel-row"><span class="panel-lbl">{{label_average}}</span><span class="panel-val">{{average}} / 20</span></div>
       <div class="panel-row"><span class="panel-lbl">{{label_grade}}</span><span class="panel-val">{{grade}}</span></div>
       {{if is_annual}}

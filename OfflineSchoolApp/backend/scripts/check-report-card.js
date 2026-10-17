@@ -464,6 +464,13 @@ check("  a school place: School Rank 41 / 280, after the class's Rank",
 check("  on a term and an annual card too",
   ["term", "annual"].map((reportType) => cellOf(schoolPlaced({ reportType }), "School Rank")),
   ["41 / 280", "41 / 280"]);
+check("  a grade place: Grade Rank 3 / 60, between the class's and the school's",
+  (() => { const h = schoolPlaced({ summary: { ...payload().summary, gradePosition: 3, totalInGrade: 60,
+    schoolPosition: 41, totalInSchool: 280 } });
+    return [cellOf(h, "Grade Rank"), h.indexOf(">Rank<") < h.indexOf(">Grade Rank<"),
+      h.indexOf(">Grade Rank<") < h.indexOf(">School Rank<")]; })(),
+  ["3 / 60", true, true]);
+check("  no grade place (no Level set): no Grade Rank line", cellOf(schoolPlaced({}), "Grade Rank"), null);
 check("  and in French", cellOf(renderReportCardHtml(payload({ ...PANELLED,
   summary: { ...payload().summary, schoolPosition: 41, totalInSchool: 280 } }), { ...SCHOOL, lang: "fr" }),
   "Rang dans l'établissement"), "41 / 280");
@@ -556,6 +563,17 @@ check("a school template's own table is headed in French too",
     .every((w) => frTemplate.includes(w)), true);
 check("  with none of the English headings left",
   [">Subject<", ">Teacher<", ">Coeff<", ">Position<"].some((w) => frTemplate.includes(w)), false);
+
+// ── The grade and school places on a school template ──────────────────────
+const tplPlaced = renderReportCard(payload({ ...PANELLED, summary: { ...payload().summary,
+  gradePosition: 3, totalInGrade: 60, schoolPosition: 41, totalInSchool: 280 } }), tplOpts).html;
+check("the seeded template prints Grade Rank and School Rank from the new tokens",
+  [cellOf(tplPlaced, "Grade Rank"), cellOf(tplPlaced, "School Rank")], ["3rd / 60", "41st / 280"]);
+check("  and leaves both out where the card has neither",
+  [cellOf(renderReportCard(payload(PANELLED), tplOpts).html, "Grade Rank"),
+   cellOf(renderReportCard(payload(PANELLED), tplOpts).html, "School Rank")], [null, null]);
+check("  the seeded template has no token the template routes call unknown",
+  require("../../shared/reportTokens").unknownTokens(DEFAULT_TEMPLATE_HTML), []);
 
 // ── The same on a school template ─────────────────────────────────────────
 const tplWithPanel = renderReportCard(payload(PANELLED), tplOpts).html;

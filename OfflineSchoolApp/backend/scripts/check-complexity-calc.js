@@ -43,11 +43,12 @@ const check = (label, actual, expected) => {
 // process and calculate & save read the exam's summaries and their classes'
 // levels (+2), and write the places that moved (+1, when any did).
 //
-// And for term school places (schoolRanking.service): term compute reads the
-// term's rows (+1) and writes the places that moved (+1, when any did).
+// And for term grade and school places (schoolRanking.service): term compute
+// reads the term's rows and their classes' levels (+2) and writes the places
+// that moved (+1, when any did).
 const CEILING = {
   "process one exam, one class": 16,
-  "term compute, one class": 14,
+  "term compute, one class": 15,
   "sequence card payload": 12,
   "term card": 11,
   "annual card": 11,

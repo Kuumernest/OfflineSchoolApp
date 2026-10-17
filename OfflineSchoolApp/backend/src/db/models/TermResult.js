@@ -47,8 +47,10 @@ const termResultSchema = new mongoose.Schema(
 
     // Rankings
     classPosition:  { type: Number, default: null },
+    gradePosition:  { type: Number, default: null },
     schoolPosition: { type: Number, default: null },
     totalInClass:   { type: Number, default: null },
+    totalInGrade:   { type: Number, default: null },
     totalInSchool:  { type: Number, default: null },
 
     // Pass / fail

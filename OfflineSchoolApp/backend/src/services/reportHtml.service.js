@@ -96,6 +96,7 @@ const LABELS = {
     attendPanel:  "Attendance",
     conductPanel: "Conduct",
     rank:         "Rank",
+    gradeRank:    "Grade Rank",
     schoolRank:   "School Rank",
     termAverage:  "Term Average",
     annualAverage: "Annual Average",
@@ -171,6 +172,7 @@ const LABELS = {
     attendPanel:  "Assiduité",
     conductPanel: "Conduite",
     rank:         "Rang",
+    gradeRank:    "Rang dans le niveau",
     schoolRank:   "Rang dans l'établissement",
     termAverage:  "Moyenne du trimestre",
     annualAverage: "Moyenne annuelle",
@@ -629,8 +631,12 @@ function renderReportCardHtml(payload, opts = {}) {
     summary?.classPosition != null
       ? row(t.rank, `${summary.classPosition}${summary.totalInClass != null ? ` / ${summary.totalInClass}` : ""}`)
       : "",
-    // Every pupil in the school with a result for the period; absent until
-    // the period has been computed with school places.
+    // The classes sharing the pupil's class's Level, then every pupil in the
+    // school with a result for the period (schoolRanking.service). Each is
+    // absent when there is none: no Level set, or not computed since.
+    summary?.gradePosition != null
+      ? row(esc(t.gradeRank), `${summary.gradePosition}${summary.totalInGrade != null ? ` / ${summary.totalInGrade}` : ""}`)
+      : "",
     summary?.schoolPosition != null
       ? row(esc(t.schoolRank), `${summary.schoolPosition}${summary.totalInSchool != null ? ` / ${summary.totalInSchool}` : ""}`)
       : "",
@@ -1173,6 +1179,8 @@ function toTemplateData(payload, opts = {}) {
       attendPanel:  t.attendPanel,
       conductPanel: t.conductPanel,
       rank:         t.rank,
+      gradeRank:    t.gradeRank,
+      schoolRank:   t.schoolRank,
       average:      payload.reportType === "term"   ? t.termAverage
                   : payload.reportType === "annual" ? t.annualAverage
                   : t.average,
@@ -1225,6 +1233,11 @@ function toTemplateData(payload, opts = {}) {
       totalWeighted:     computed.totalWeighted     ?? null,
       position:          summary?.classPosition   ?? null,
       totalStudents:     summary?.totalInClass    ?? null,
+      // The card's own period, whichever kind it is: blank where there is none.
+      gradePosition:     summary?.gradePosition   ?? null,
+      totalInGrade:      summary?.totalInGrade    ?? null,
+      schoolPosition:    summary?.schoolPosition  ?? null,
+      totalInSchool:     summary?.totalInSchool   ?? null,
       grade:             summary?.overallGrade    || "",
       remark:            remarkOf({
         remark:   summary?.overallRemark,
