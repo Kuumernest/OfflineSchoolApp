@@ -581,8 +581,8 @@ function resolveSubjectsTable(html, data) {
 
     return `
     <tr>
-      <td>${escapeHtml(s.subjectName || s.name || "")}</td>
-      <td class="teacher-cell">${s.teacherName ? escapeHtml(s.teacherName) : "—"}</td>
+      <td>${escapeHtml(s.subjectName || s.name || "")}${s.teacherName
+        ? `<div class="subject-teacher">${escapeHtml(s.teacherName)}</div>` : ""}</td>
       ${sequenceCells}
       ${showRawScore ? `<td style="text-align:center;color:${color}"><strong>${
         absent ? flag : s.examScore != null ? s.examScore : "—"
@@ -606,12 +606,12 @@ function resolveSubjectsTable(html, data) {
   const lbl = (key, fallback) => escapeHtml(L[key] || fallback);
 
   const perf = data.performance || {};
-  const columnCount = 7 + (showRawScore ? 1 : 0) + seqCols.length;
+  const columnCount = 6 + (showRawScore ? 1 : 0) + seqCols.length;
   const totals = perf.totalCoefficients != null || perf.totalWeighted != null
     ? `
       <tfoot>
         <tr class="total-row">
-          <td colspan="${2 + (showRawScore ? 1 : 0) + seqCols.length}">${lbl("total", "TOTAL")}</td>
+          <td colspan="${1 + (showRawScore ? 1 : 0) + seqCols.length}">${lbl("total", "TOTAL")}</td>
           <td style="text-align:center">${
             perf.totalWeighted != null ? Number(perf.totalWeighted).toFixed(2) : "—"
           }</td>
@@ -637,7 +637,6 @@ function resolveSubjectsTable(html, data) {
       <thead>
         <tr>
           <th style="text-align:left">${lbl("subject", "Subject")}</th>
-          <th style="text-align:left">${lbl("teacher", "Teacher")}</th>
           ${seqCols.map((c) => `<th style="text-align:center">${escapeHtml(c.name)}</th>`).join("")}
           ${showRawScore ? `<th style="text-align:center">${lbl("score", "Score")}</th>` : ""}
           <th style="text-align:center">${lbl("result", "/20")}</th>

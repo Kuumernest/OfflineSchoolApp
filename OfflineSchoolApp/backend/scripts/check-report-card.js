@@ -453,18 +453,18 @@ check("the pupil's standing is stated once, in the panel",
   [cellOf(panelCard, "Rank"), cellOf(panelCard, "Average"), cellOf(panelCard, "Overall Grade")],
   ["5 / 35", "13.50 /20", "B"]);
 
-// ── The teacher of each subject, in its own column ────────────────────────
+// ── The teacher of each subject, under its name ───────────────────────────
 const taughtCard = render({ ...PANELLED, subjects: [
   { ...SUBJECTS[0], teacherName: "Mr Rolland" },
   SUBJECTS[1],
 ] });
 const taughtTable = tableOf(taughtCard);
-check("the table has a Teacher column, after the subject",
-  /<th>Subject<\/th>\s*<th>Teacher<\/th>/.test(taughtTable), true);
-check("  each subject naming its own teacher",
-  /<td>Mathematics<\/td>\s*<td class="teacher-cell">Mr Rolland<\/td>/.test(taughtTable), true);
-check("  and a subject nobody is assigned to showing the card's dash",
-  /<td>Physics<\/td>\s*<td class="teacher-cell">—<\/td>/.test(taughtTable), true);
+check("the table has no Teacher column: the subject's is the first",
+  [/<th>Subject<\/th>/.test(taughtTable), /<th>Teacher<\/th>/.test(taughtTable)], [true, false]);
+check("  each subject naming its own teacher on a line under it",
+  /<td>Mathematics<div class="subject-teacher">Mr Rolland<\/div><\/td>/.test(taughtTable), true);
+check("  and a subject nobody is assigned to showing its name alone",
+  /<td>Physics<\/td>/.test(taughtTable), true);
 
 // ── The totals, and the decision, at the foot of the table ────────────────
 const totalled = render({ ...PANELLED, subjects: [
@@ -527,9 +527,9 @@ check("  with a rule to sign over",
 // ── French ────────────────────────────────────────────────────────────────
 const frPanelCard = renderReportCardHtml(payload(PANELLED), { ...SCHOOL, lang: "fr" });
 check("the French card labels the new parts in French",
-  ["Enseignant", "TOTAL", "Décision", "Profil de la classe",
+  ["TOTAL", "Décision", "Profil de la classe",
    "Observation du chef d&#39;établissement"].every((w) => frPanelCard.includes(w)) ||
-  ["Enseignant", "TOTAL", "Décision", "Profil de la classe"].every((w) => frPanelCard.includes(w)), true);
+  ["TOTAL", "Décision", "Profil de la classe"].every((w) => frPanelCard.includes(w)), true);
 check("  and leaves no English label in them",
   ["Teacher</th>", ">Status<", "Principal&#39;s Remark", "Class Average"]
     .some((w) => frPanelCard.includes(w)), false);
@@ -537,15 +537,15 @@ check("  and leaves no English label in them",
 // localised from the same place the built-in card's are.
 const frTemplate = renderReportCard(payload(PANELLED), { ...tplOpts, lang: "fr" }).html;
 check("a school template's own table is headed in French too",
-  ["Matière", "Enseignant", "Coef", "Mention", "Observation", "Rang"]
+  ["Matière", "Coef", "Mention", "Observation", "Rang"]
     .every((w) => frTemplate.includes(w)), true);
 check("  with none of the English headings left",
   [">Subject<", ">Teacher<", ">Coeff<", ">Position<"].some((w) => frTemplate.includes(w)), false);
 
 // ── The same on a school template ─────────────────────────────────────────
 const tplWithPanel = renderReportCard(payload(PANELLED), tplOpts).html;
-check("a school template gets the teacher column and the totals from the engine",
-  [/<th[^>]*>Teacher<\/th>/.test(tplWithPanel), tplWithPanel.includes("TOTAL")], [true, true]);
+check("a school template gets the engine's table: no Teacher column, and the totals",
+  [/<th[^>]*>Teacher<\/th>/.test(tplWithPanel), tplWithPanel.includes("TOTAL")], [false, true]);
 check("  the same class figures",
   [cellOf(tplWithPanel, "Class Average"), cellOf(tplWithPanel, "Best")], ["11.86 /20", "17.60 /20"]);
 check("  no band over its marks",

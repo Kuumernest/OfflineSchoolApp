@@ -345,8 +345,7 @@ const REMARKS_BLOCK_CSS = `
     color:       #9ca3af;
   }
 
-  /* The teacher of each subject, and the totals the table ends with. */
-  .subjects-table .teacher-cell { color: #4b5563; font-size: 10.5px; }
+  /* The totals the table ends with. */
   .subjects-table tfoot td { border-top: 1px solid #d1d5db; background: #f9fafb;
                              font-weight: bold; }
   .subjects-table .status-pass { color: #059669; }
@@ -362,7 +361,6 @@ const REMARKS_BLOCK_CSS = `
     .remark-head { font-size: 8px; margin-bottom: 3px; }
     .remark-body { font-size: 9.5px; min-height: 24px; line-height: 1.35; }
     .remark-sign { margin-top: 8px; font-size: 8px; }
-    .subjects-table .teacher-cell { font-size: 9px; }
   }
 `;
 

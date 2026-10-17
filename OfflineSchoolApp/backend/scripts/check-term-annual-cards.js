@@ -366,7 +366,7 @@ const main = async () => {
   // the result they combine to, never the CA and the paper each sequence was
   // marked from — those belong to the sequence card one level below.
   check("in this order",
-    headers, ["Subject", "Teacher", "Sequence 1", "Sequence 2", "Term Result",
+    headers, ["Subject", "Sequence 1", "Sequence 2", "Term Result",
               "Coeff", "Grade", "Remark", "Position"]);
   check("the always-empty CA column is gone", headers.includes("CA"), false);
   check("and Total, which duplicated Exam", headers.includes("Total"), false);
@@ -378,7 +378,7 @@ const main = async () => {
     ...opts, template: { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
   }).html.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1].trim());
   check("an annual card states the year's result, not a term's sequences",
-    annualHeaders, ["Subject", "Teacher", "Annual Result", "Coeff", "Grade",
+    annualHeaders, ["Subject", "Annual Result", "Coeff", "Grade",
                     "Remark", "Position"]);
   // The data keeps the fields, so a school template reading them still works.
   check("the fields survive for a template that addresses them",
