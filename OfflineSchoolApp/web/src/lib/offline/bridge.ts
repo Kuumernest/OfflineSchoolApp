@@ -11,6 +11,9 @@
 // scattered through the app, each occurrence its own small lie about what is
 // guaranteed to be there.
 
+/** The school server address, checked or saved (desktop serverAddress.js). */
+export type ServerAddressResult = { ok: true; url: string } | { ok: false; url?: string; error: string };
+
 /** What the request layer needs to know about a locally-answered call. */
 export interface LocalResponse {
   status: number;
@@ -87,6 +90,7 @@ interface SchoolBridge {
     list:    () => Promise<OutboxEntry[]>;
     unblock: (seq: number) => Promise<OutboxSummary>;
     discard: (seq: number) => Promise<OutboxSummary>;
+    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string }>;
   };
   sync: {
     state:    () => Promise<Array<{ collection: string; cursor: string | null; last_pull_at: string | null; last_error: string | null }>>;
@@ -96,8 +100,9 @@ interface SchoolBridge {
     onStatus: (handler: (status: SyncStatus) => void) => () => void;
   };
   server: {
-    get: () => Promise<string | null>;
-    set: (url: string) => Promise<string | null>;
+    get:   () => Promise<string | null>;
+    set:   (url: string) => Promise<ServerAddressResult>;
+    check: (url: string) => Promise<ServerAddressResult>;
   };
 }
 

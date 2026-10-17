@@ -415,43 +415,42 @@ read-only except for the final job (`contents: write`, to create the draft).
   publisher" (More info → Run anyway) until a certificate builds reputation;
   macOS Gatekeeper refuses the app until allowed in System Settings → Privacy &
   Security. No auto-update is configured or enabled.
-- **Does not work when packaged yet — launch blocker.** See "Desktop: API
-  connectivity" below. Keep `DESKTOP_RELEASE_ENABLED` unset until fixed.
+- **Connectivity fixed** ("Desktop: reaching the server" below) and **hard
+  deletes reach the desktop** (docs/10). Test an installer against staging,
+  then set `DESKTOP_RELEASE_ENABLED`.
 - Rollback caution (unchanged): a machine that has run a newer build refuses an
   older one against the same local database (`store.js` schema version).
 
-### Desktop: API connectivity (findings, not yet changed)
+### Desktop: reaching the server (fixed 2026-10-17)
 
-Under `win.loadFile(web/dist/index.html)` (`desktop/src/main/main.js`):
+The packaged app opened to a blank window: under `loadFile` (file://) the
+absolute asset paths pointed at the drive root, `BrowserRouter` saw a disk path,
+requests the mirror could not answer went to `file:///api/…` (or, with an
+absolute `VITE_API_URL`, bypassed the offline layer), they carried
+`Origin: null`, and sync had no server address.
 
-1. **Blank window.** Vite builds absolute asset paths (`/assets/…`), which
-   under `file://` point at the drive root.
-2. **`BrowserRouter`** sees the on-disk path as the URL and renders the
-   not-found page; hard redirects go to `file:///login`.
-3. **Network fallback runs in the renderer** (`web/src/lib/offline/adapter.ts`
-   → the renderer's own axios, base `VITE_API_URL ?? "/api"`): unset, every
-   request the mirror cannot answer goes to `file:///api/…`.
-4. **An absolute `VITE_API_URL` disables the offline layer:**
-   `shared/requestPath.js` keeps the origin in the path, so no local route
-   (`^/api/…`) matches.
-5. **CORS:** renderer requests from `file://` send `Origin: null`, which the
-   production allow-list rejects — correctly. Allowing `null` would also admit
-   sandboxed iframes and `data:` pages; it is not an acceptable workaround.
-6. **Sync has no server address** in an installed build: `client.js` reads
-   `serverUrl` (settable only through an IPC call no screen makes) or
-   `SCHOOL_SERVER_URL`.
+Now (`desktop/src/main/appProtocol.js`): the window is served from a privileged
+`app://school/` scheme — `web/dist` with an `index.html` fallback, so assets and
+routes work as on the web — and `app://school/api/…` and `/uploads/…` are
+relayed by the main process to the school's server (Chromium's network stack:
+the machine's proxy and certificates). The web build is unchanged, with its
+relative `/api` base, so the offline layer still matches every path. No browser
+origin reaches the server, so `ALLOWED_ORIGINS` needs nothing for the desktop;
+authentication is the request's own bearer token.
 
-**Recommended design** (to be agreed before the change, as it moves where
-network requests are made): serve `web/dist` from a privileged custom protocol
-(`app://school/`, `protocol.handle`) with an `index.html` fallback — fixes 1
-and 2 without `HashRouter`, and keeps web routing unchanged; route **every**
-renderer API request through the existing `api:request` IPC seam, with the
-main process answering locally or forwarding to a configured absolute server
-URL with Node `fetch` (no browser origin, so no CORS change); store that URL
-in the desktop's meta table and set it from a first-run settings screen —
-fixes 3, 4 (paths stay relative), 5 and 6. Authentication and authorisation
-stay server-side exactly as now. Test the packaged app against a **staging**
-API, never production.
+**Server address:** set on a first-run screen (checked against `/api/health`
+before it is saved; changeable from the login page), or shipped in the
+installer as `package.json config.defaultServerUrl` (the release workflow writes
+it from `DESKTOP_API_URL`). Sync uses the same address.
+
+**Tests:** `npm run check:protocol` (Node: static serving, routing, traversal,
+relay of headers, JSON, multipart, binary, gzip, errors, no server, offline) and
+`npm run check:launch` (the real Electron app under xvfb: renders on
+app://school/, `fetch` and `XMLHttpRequest` and a POST reach the server with no
+Origin, deep links route, the first-run screen, offline = network error).
+Needs the web build, the Electron binary and `xvfb-run`.
+
+Before desktop installers ship: test one against **staging**, never production.
 
 ### Mobile
 
@@ -597,7 +596,7 @@ anything.
 [ ] Cloudflare Pages: VITE_API_URL set; Pages domain(s) in ALLOWED_ORIGINS; login works end to end
 [ ] Backups: timer enabled; one successful run seen in the bucket; one restore drill into staging passed; alert configured
 [ ] Android: eas init + keystore generated and backed up offline; EXPO_TOKEN + PRODUCTION_API_URL set; a test tag produces an installable APK
-[ ] Desktop: either fix the packaged-app connectivity (above) or ship without the desktop app — DESKTOP_RELEASE_ENABLED stays unset
+[ ] Desktop: an installer tested against staging (school_db) — until then DESKTOP_RELEASE_ENABLED stays unset
 [ ] npm run check:all passes on the deployment commit
 ```
 

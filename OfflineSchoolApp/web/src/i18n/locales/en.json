@@ -3077,6 +3077,10 @@
     "settingsDesc": "System configuration"
   },
   "sync": {
+    "saveCopy": "Save a copy",
+    "copySaved": "Saved to {{path}}",
+    "copyFailed": "The copy could not be saved.",
+    "recordDeleted": "This record was deleted on the server, so this change cannot be applied. Save a copy if you need what was typed, then discard it.",
     "title": "Sending to the school",
     "allSent": "Everything here has reached the school.",
     "waiting": "{{count}} waiting",
@@ -5320,5 +5324,17 @@
     "done": "{{count}} result unpublished",
     "done_other": "{{count}} results unpublished",
     "failed": "Could not unpublish"
+  },
+  "desktopServer": {
+    "title": "Connect to your school's server",
+    "intro": "This computer keeps working offline, and syncs with the school's server when it can.",
+    "label": "Server address",
+    "hint": "The address your school was given, e.g. https://api.example.cm",
+    "connect": "Connect",
+    "checking": "Checking…",
+    "keep": "Keep {{url}}",
+    "failed": "The address could not be checked. Try again.",
+    "current": "Server: {{url}}",
+    "change": "Change server"
   }
 }

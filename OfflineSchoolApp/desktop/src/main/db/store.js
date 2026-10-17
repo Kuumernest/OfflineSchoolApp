@@ -345,6 +345,44 @@ const documents = (db) => {
       });
     },
 
+    /**
+     * Hard deletes from the server: the feed's syncTombstone collection, one
+     * { entity, docId } per subject, teacher assignment or pupil the server
+     * deleted outright.
+     *
+     * The named row is REMOVED, not marked: the server no longer has it, and
+     * several endpoints this mirror answers for (GET /admin/subjects) apply no
+     * deleted filter — a marked row would still be listed there. A row the
+     * mirror never held is left alone (nothing is ever created from a
+     * tombstone). A row with a local write still waiting is HELD, exactly as
+     * merge() holds one, and reported the same way so the cursor stops before
+     * it: that write is about a record the server has deleted, and it will be
+     * refused (410) and resolved by a person before the deletion is applied.
+     */
+    applyTombstones(tombstones) {
+      return tx(() => {
+        const held = [];
+        let stored = 0;
+        let firstHeldIndex = -1;
+        for (const [i, t] of tombstones.entries()) {
+          const collection = String(t.entity ?? "");
+          const id = String(t.docId ?? "");
+          if (!collection || !id) { stored++; continue; }
+          const existing = db.prepare(
+            "SELECT pending FROM docs WHERE collection = ? AND id = ?"
+          ).get(collection, id);
+          if (existing?.pending === 1) {
+            held.push(`${collection}/${id}`);
+            if (firstHeldIndex === -1) firstHeldIndex = i;
+            continue;
+          }
+          db.prepare("DELETE FROM docs WHERE collection = ? AND id = ?").run(collection, id);
+          stored++;
+        }
+        return { stored, held, firstHeldIndex };
+      });
+    },
+
     /** Exposed so a caller can bracket several writes into one commit. */
     tx,
 
@@ -357,8 +395,9 @@ const documents = (db) => {
     /**
      * Remove a row outright.
      *
-     * For undoing a local write the server rejected — NOT for deletions, which
-     * are soft everywhere in this system and arrive as a deletedAt.
+     * For undoing a local write the server rejected. Deletions arrive two ways:
+     * soft ones as a row with deletedAt (merge), HARD ones — subjects, teacher
+     * assignments, pupils — as tombstones (applyTombstones, below).
      */
     forget(collection, id) {
       db.prepare("DELETE FROM docs WHERE collection = ? AND id = ?").run(collection, id);

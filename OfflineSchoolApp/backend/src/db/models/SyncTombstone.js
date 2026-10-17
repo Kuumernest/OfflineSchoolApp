@@ -33,15 +33,22 @@ const syncTombstoneSchema = new mongoose.Schema(
     schoolId:  { type: String, default: null },
     entity:    { type: String, required: true, enum: ENTITIES },
     docId:     { type: String, required: true },
+    // The deleted row's class, where it had one: a teacher's desktop mirrors
+    // only the pupils of the classes they teach, and once the row is gone this
+    // is the only place that says which class a deleted pupil was in.
+    classId:   { type: String, default: null },
     deletedAt: { type: Date, required: true, default: () => new Date() },
   },
-  { versionKey: false }
+  // updatedAt: the desktop feed pages every collection on (updatedAt, _id).
+  { versionKey: false, timestamps: true }
 );
 
 // One tombstone per deleted record; written by upsert, so repeating is harmless.
 syncTombstoneSchema.index({ entity: 1, docId: 1 }, { unique: true, name: "sync_tombstone_entity_doc" });
 // The pull's query: this school's deletions since the cursor.
 syncTombstoneSchema.index({ schoolId: 1, deletedAt: 1 }, { name: "sync_tombstone_school_time" });
+// The desktop feed's cursor (/sync/changes), as every mirrored collection has.
+syncTombstoneSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
 
 module.exports =
   mongoose.models.SyncTombstone || mongoose.model("SyncTombstone", syncTombstoneSchema);

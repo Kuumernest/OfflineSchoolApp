@@ -90,33 +90,38 @@ The 410 guard also covers the bulk paths that skip save middleware —
 is refused whole, naming the ids (`err.deletedIds`); nothing is silently
 dropped. Only raw driver writes (`Model.collection.*`) bypass both.
 
-### Desktop: hard deletes do not reach the mirror — OPEN
+### Desktop: hard deletes reach the mirror (2026-10-17)
 
-`/sync/changes` serves rows by `(updatedAt, _id)` per collection and includes
-soft-deleted ones; the desktop store applies `deletedAt`. A hard-deleted
-subject, teacher assignment or student leaves no row, so the desktop keeps it
-for good (`desktop/src/main/db/store.js` `forget()` even documents deletions as
-"soft everywhere", which is not true for these three). Required before desktop
-installers ship:
+`/sync/changes` carries a `syncTombstone` collection: one row per hard-deleted
+subject, teacher assignment or pupil, paged on `(updatedAt, _id)` like every
+collection. Scoped to what the caller may mirror — subject and assignment
+tombstones with `subjects.view`; pupils with `students.view`, or for a teacher
+with only `students.viewTaught` the pupils of the classes they teach (the
+tombstone keeps `classId`); refused by name to anyone else. A tombstone whose
+row still exists is not sent (`postFilter`), and the cursor still passes it.
 
-1. A `syncTombstone` feed collection in `src/config/syncFeed.js`, scoped by
-   school (a student's own record only) and paged on `(deletedAt, _id)`, or the
-   tombstones merged into each collection's page as `{ _id, deletedAt }`.
-2. The desktop engine marking the named row deleted in its own collection
-   (`docs` `deleted_at`), never inserting one it does not hold.
-3. Tests as in `check:syncdeletions`, against the feed and the desktop engine:
-   delete → mirror marks it; offline catch-up across pages; a tombstone for a
-   live row ignored; another school's never sent.
+The desktop engine **removes** the named row (`store.applyTombstones`) — the
+server no longer has it, and some endpoints the mirror answers for apply no
+deleted filter — never creates one, and **holds** a row with a local write
+still waiting (as `merge()` does): the cursor stops there until that write is
+resolved, so nothing typed is lost.
+
+Also fixed on the way: the feed controller assigned the cursor's `$or` over a
+scope's own `$or`, which would have sent every row past the cursor regardless
+of scope. No scope used `$or` before; now the two are combined under `$and`.
+`check:feedtombstones` (backend) and `check:tombstones` (desktop) pin it.
 
 ### Stale queued creates that fail with 410
 
 Phone: the outbox classifies a 410 on a create as permanent and parks it as
 failed, shown to the user. Desktop: a 410 blocks the queue at that entry; the
-sync indicator shows the server's message with **Retry** (cannot succeed for a
-410) and **Discard** (confirmed, then deletes the queued request and its local
-row). Discard loses what the user typed — there is no copy. Recommended before
-desktop release: on a 410 `RECORD_DELETED`, offer to save the queued payload
-(e.g. a JSON export) before discarding, and say which record was deleted.
+sync indicator shows the server's message and, for a 410, says the record was
+deleted on the server. **Try again** is not offered (it cannot succeed);
+**Save a copy** writes the queued request — method, path, the body as typed,
+when it was queued, the server's refusal — to a JSON file the person chooses
+(`desktop/src/main/unsentCopy.js`); **Discard** (confirmed) then removes the
+entry and its local row. Nothing is discarded without the person choosing to.
+`check:unsent` (desktop) pins it.
 
 ### The cursor, and the one-millisecond hole that was closed
 
@@ -339,7 +344,7 @@ and well inside budget, but the ratio is the thing to watch as data grows — se
 
 | Item | Classification |
 |---|---|
-| Deletions in `/sync/pull` | **IMPLEMENTED (2026-10-17)** — soft deletes, roster departures and hard deletes (tombstones) reach phones on an incremental pull; stale creates of a deleted id are refused 410. Desktop feed: soft deletes only. |
+| Deletions | **IMPLEMENTED (2026-10-17)** — phones (`/sync/pull`) and desktops (`/sync/changes`, `syncTombstone`) receive soft and hard deletes; stale creates of a deleted id are refused 410. |
 | `POST /api/sync/push` | **UNUSED / DEAD CODE** — implemented server-side, called by nothing. |
 | Future-`updatedAt` documents can be skipped by the desktop cursor | **KNOWN, UNGUARDED, DELIBERATE.** Mitigated operationally by clearing the cursor. |
 | Two protocols with no convergence plan | **BY DESIGN at this commit.** Neither is deprecated. |

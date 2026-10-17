@@ -8,6 +8,8 @@ import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
 
 import { useAuthStore, useMustResetPassword } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import { desktop } from "@/lib/offline/bridge";
+import { CHANGE_SERVER_EVENT } from "@/components/offline/DesktopServerGate";
 // The 0.22 MB JPEG the phone uses, not the 2.61 MB PNG this pointed at.
 // A login page is the one screen every user loads before anything is
 // cached, over the same school connection the rest of the app now
@@ -30,6 +32,19 @@ import loginBg from "@/assets/login-bg.jpg";
  */
 type Translate = (key: string) => string;
 
+/** The desktop's server address, for the line under the form; null in a browser. */
+function useDesktopServer(): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const bridge = desktop();
+    if (!bridge) return;
+    let live = true;
+    bridge.server.get().then((u) => { if (live) setUrl(u); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  return url;
+}
+
 const buildLoginSchema = (t: Translate) => z.object({
   identifier: z.string().min(1, t("login.errIdentifierRequired")).transform((v) => v.trim()),
   password:   z.string().min(1, t("login.errPasswordRequired")),
@@ -42,6 +57,7 @@ type LoginForm = z.infer<ReturnType<typeof buildLoginSchema>>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
+  const desktopServer = useDesktopServer();
   const { t } = useTranslation();
   const navigate        = useNavigate();
   const login           = useAuthStore((s) => s.login);
@@ -220,6 +236,17 @@ export default function LoginPage() {
               : t("login.forgottenStudent")}
           </p>
         </div>
+
+        {/* Desktop only: which server this computer signs in to, and a way to change it. */}
+        {desktopServer && (
+          <p className="text-center text-primary-200 text-xs mt-4">
+            {t("desktopServer.current", { url: desktopServer })}{" · "}
+            <button type="button" className="underline hover:text-white"
+              onClick={() => window.dispatchEvent(new Event(CHANGE_SERVER_EVENT))}>
+              {t("desktopServer.change")}
+            </button>
+          </p>
+        )}
 
         <p className="text-center text-primary-300 text-sm mt-6">
           {t("login.copyright", { year: new Date().getFullYear() })}

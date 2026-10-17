@@ -4,8 +4,8 @@
 #   - the Android APK, through EAS Build (profile production-apk), for direct
 #     distribution to schools;
 #   - the desktop installers (Windows, Linux, macOS), ONLY when the repository
-#     variable DESKTOP_RELEASE_ENABLED is "true" — the packaged desktop app does
-#     not yet work (docs/17, launch blockers), so it is off by default;
+#     variable DESKTOP_RELEASE_ENABLED is "true" — off by default until an
+#     installer has been tested against staging (docs/17);
 # and attaches them, with SHA256SUMS, to a DRAFT GitHub Release. A person
 # reviews and publishes the draft. Nothing here deploys the server, publishes
 # to a store, or turns on auto-update.
@@ -14,7 +14,8 @@
 #   secret   EXPO_TOKEN               an Expo access token (robot user) for EAS Build
 #   variable PRODUCTION_API_URL       https://<api-domain>/api — baked into the APK
 #   variable DESKTOP_RELEASE_ENABLED  "true" to build desktop installers
-#   variable DESKTOP_API_URL          https://<api-domain>/api — for the desktop build
+#   variable DESKTOP_API_URL          https://<api-domain>/api — the server an installer
+#                                     starts with (the user can change it on first run)
 # A missing one fails the run at the start, by name.
 #
 # Third-party actions are pinned to the commit of a reviewed release tag.
@@ -159,7 +160,7 @@ jobs:
         shell: bash
     env:
       VERSION: ${{ needs.preflight.outputs.version }}
-      VITE_API_URL: ${{ vars.DESKTOP_API_URL }}
+      DESKTOP_API_URL: ${{ vars.DESKTOP_API_URL }}
       # No certificates are configured: build unsigned, and say so (docs/17).
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
@@ -173,9 +174,16 @@ jobs:
         run: |
           npm ci --prefix OfflineSchoolApp/web
           npm ci --prefix OfflineSchoolApp/desktop
-      - name: Stamp the version from the tag
+      - name: Stamp the version and the default server
         working-directory: OfflineSchoolApp/desktop
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+        # The web build keeps its relative /api base: the desktop serves it
+        # over app://school/ and relays /api to the server itself
+        # (src/main/appProtocol.js). The server an installer starts with goes in
+        # package.json config.defaultServerUrl, as an origin (no /api); the
+        # school can change it on the first-run screen.
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm pkg set "config.defaultServerUrl=${DESKTOP_API_URL%/api}"
       - name: Package (web build, then electron-builder; never publishes)
         working-directory: OfflineSchoolApp/desktop
         run: npm run package -- --publish never

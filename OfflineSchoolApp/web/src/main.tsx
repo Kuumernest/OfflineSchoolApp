@@ -31,6 +31,7 @@ import {
 
 
 import App                   from "@/App";
+import DesktopServerGate from "./components/offline/DesktopServerGate";
 import { ToastProvider }     from "@/components/ui/Toast";
 import { useAuthStore }      from "@/store/auth.store";
 
@@ -95,7 +96,10 @@ createRoot(container).render(
           other page and the dependency is gone.
         */}
         <ToastProvider>
-          <App />
+          {/* Desktop only: asks for the school's server once (a browser renders App as is). */}
+          <DesktopServerGate>
+            <App />
+          </DesktopServerGate>
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -3077,6 +3077,10 @@
     "settingsDesc": "Configuration du système"
   },
   "sync": {
+    "saveCopy": "Enregistrer une copie",
+    "copySaved": "Enregistré dans {{path}}",
+    "copyFailed": "La copie n'a pas pu être enregistrée.",
+    "recordDeleted": "Cet enregistrement a été supprimé sur le serveur : cette modification ne peut pas être appliquée. Enregistrez une copie si vous avez besoin de ce qui a été saisi, puis abandonnez-la.",
     "title": "Envoi vers l'école",
     "allSent": "Tout a bien été transmis à l'école.",
     "waiting": "{{count}} en attente",
@@ -5320,5 +5324,17 @@
     "done": "Publication annulée pour {{count}} résultat",
     "done_other": "Publication annulée pour {{count}} résultats",
     "failed": "Impossible d'annuler la publication"
+  },
+  "desktopServer": {
+    "title": "Connexion au serveur de l'établissement",
+    "intro": "Cet ordinateur continue de fonctionner hors ligne et se synchronise avec le serveur de l'établissement dès que possible.",
+    "label": "Adresse du serveur",
+    "hint": "L'adresse communiquée à votre établissement, par ex. https://api.example.cm",
+    "connect": "Se connecter",
+    "checking": "Vérification…",
+    "keep": "Garder {{url}}",
+    "failed": "Impossible de vérifier l'adresse. Réessayez.",
+    "current": "Serveur : {{url}}",
+    "change": "Changer de serveur"
   }
 }

@@ -83,14 +83,13 @@ keys, and readiness answers 503 `INDEXES_INCOMPLETE` in production until this
 is done. The four unique + sparse-over-null definitions are corrected (partial,
 new names); old copies on a live database must be dropped by hand first.
 
-### A7. The packaged desktop app does not reach the server — CONFIRMED DEFECT (2026-10-17)
+### A7. The packaged desktop app does not reach the server — FIXED (2026-10-17)
 
-Under `loadFile`, absolute asset paths give a blank window, `BrowserRouter`
-lands on not-found, unhandled requests go to `file:///api/…` (or, with an
-absolute `VITE_API_URL`, bypass the offline layer), `Origin: null` is refused
-by CORS, and sync has no server address. Recommended design in docs/17,
-"Desktop: API connectivity". The release workflow builds no desktop
-installers until `DESKTOP_RELEASE_ENABLED` is set.
+The window is now served from `app://school/` and relays `/api` and `/uploads`
+to the configured server from the main process (docs/17, "Desktop: reaching the
+server"); verified by launching the real app under xvfb (`check:launch`).
+Hard deletes now reach the desktop feed too (docs/10). Desktop installers stay
+disabled until one has been tested against staging.
 
 ## B. Data remediation outstanding
 

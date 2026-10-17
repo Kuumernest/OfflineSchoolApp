@@ -38,7 +38,7 @@ import { cn } from "@/utils/cn";
 
 export default function SyncIndicator() {
   const { t } = useTranslation();
-  const { confirm } = useToast();
+  const { confirm, toast } = useToast();
   const bridge = desktop();
 
   const [status,  setStatus]  = useState<SyncStatus | null>(null);
@@ -195,7 +195,31 @@ export default function SyncIndicator() {
                         {item.last_error || t("sync.refused")}
                         {item.last_status ? ` (${item.last_status})` : ""}
                       </p>
-                      <div className="mt-2 flex gap-2">
+                      {/* 410: the record was deleted on the server. Retrying can
+                          never succeed, so it is not offered; what was typed can
+                          be saved to a file before the change is discarded. */}
+                      {item.last_status === 410 && (
+                        <p className="mt-1 text-xs text-amber-700">{t("sync.recordDeleted")}</p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          disabled={busy === item.seq}
+                          onClick={async () => {
+                            setBusy(item.seq);
+                            try {
+                              const saved = await bridge.outbox.saveCopy(item.seq);
+                              if (saved.ok) {
+                                toast({ kind: "success", title: t("sync.saveCopy"), message: t("sync.copySaved", { path: saved.path }) });
+                              } else if (!saved.cancelled) {
+                                toast({ kind: "error", title: t("sync.saveCopy"), message: t("sync.copyFailed") });
+                              }
+                            } finally { setBusy(null); }
+                          }}
+                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {t("sync.saveCopy")}
+                        </button>
+                        {item.last_status !== 410 && (
                         <button
                           disabled={busy === item.seq}
                           onClick={async () => {
@@ -207,6 +231,7 @@ export default function SyncIndicator() {
                         >
                           {t("sync.tryAgain")}
                         </button>
+                        )}
                         <button
                           disabled={busy === item.seq}
                           onClick={async () => {

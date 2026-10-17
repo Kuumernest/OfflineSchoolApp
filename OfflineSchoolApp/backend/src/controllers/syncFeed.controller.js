@@ -205,10 +205,19 @@ exports.changes = async (req, res) => {
       if (cursor) {
         // The pair comparison. See the note at the top of the file for why this
         // is not simply { updatedAt: { $gt: t } }.
-        filter.$or = [
+        const after = [
           { updatedAt: { $gt: cursor.at } },
           { updatedAt: cursor.at, _id: { $gt: cursor.id } },
         ];
+        // A scope may carry its own $or (syncTombstone's does). Assigned over
+        // it, the cursor would silently REPLACE the scope — every row of the
+        // collection, past the cursor, for whoever asked. Both, under $and.
+        if (filter.$or) {
+          filter.$and = [...(filter.$and || []), { $or: filter.$or }, { $or: after }];
+          delete filter.$or;
+        } else {
+          filter.$or = after;
+        }
       }
 
       // Soft deletes are INCLUDED on purpose. A row the school removed must
@@ -224,9 +233,13 @@ exports.changes = async (req, res) => {
       const rows    = await query;
       const hasMore = rows.length > limit;
       const page    = hasMore ? rows.slice(0, limit) : rows;
+      // An entry may drop rows from what is SENT (syncTombstone: one whose row
+      // still exists). The cursor below is still the page's last row, so a
+      // dropped row is passed, not re-fetched.
+      const documents = entry.postFilter ? await entry.postFilter(page, models) : page;
 
       out[entry.collection] = {
-        documents: page,
+        documents,
         hasMore,
         // The cursor to send next time. Null on an empty page so the client
         // keeps the one it had rather than resetting to the beginning.
