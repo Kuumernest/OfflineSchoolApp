@@ -26,6 +26,7 @@ const GradingConfig     = require("../db/models/GradingConfig");
 const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
 const academicPolicy    = require("./academicPolicy.service");
+const { rosterDecides } = require("./rankingScope.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, promotionUnderRules } = require("../../../shared/academicRules");
 
@@ -310,24 +311,27 @@ async function computeClassAnnualAverages({
   let skipped  = 0;
   let noTerms  = 0;
   let excluded = [];
+  const computedIds = [];
+
+  // A published annual row is never recomputed in place (D3, decided). Asked
+  // before anything else, roster or none: a class whose pupils have all left
+  // still reaches the positions below, which would re-rank a published row.
+  {
+    const published = await AnnualResult.countDocuments({
+      schoolId, academicYear, classId, isPublished: true, deletedAt: null,
+    });
+    if (published > 0) {
+      const err = new Error(`${published} published annual result(s) would be recomputed. Unpublish them first.`);
+      err.status = 409; err.code = "PUBLISHED_RESULTS"; err.published = published;
+      throw err;
+    }
+  }
 
   if (students.length > 0) {
     // One context for the class (an absent structure fails the whole class,
     // as it failed every pupil of it before), one read of the class's term
     // results grouped by pupil, one read of the promotion results, one write.
     const ctx = await annualContextFor({ schoolId, academicYear });
-
-    // A published annual row is never recomputed in place (D3, decided).
-    {
-      const published = await AnnualResult.countDocuments({
-        schoolId, academicYear, classId, isPublished: true, deletedAt: null,
-      });
-      if (published > 0) {
-        const err = new Error(`${published} published annual result(s) would be recomputed. Unpublish them first.`);
-        err.status = 409; err.code = "PUBLISHED_RESULTS"; err.published = published;
-        throw err;
-      }
-    }
     // Student._id, which is what TermResult.studentId holds and what
     // buildAnnualCard looks the pupil up by. Reading the login id here
     // matched no term results at all for any pupil who had an account.
@@ -380,6 +384,7 @@ async function computeClassAnnualAverages({
           },
         });
         computed++;
+        computedIds.push(k);
       } catch (err) {
         console.error(`[annualGrading] Skipped ${student.studentName}:`, err.message);
         skipped++;
@@ -400,8 +405,15 @@ async function computeClassAnnualAverages({
     }
   }
 
+  // This year only, a row for a pupil no longer on the roster — inactive,
+  // deleted or moved — goes too, so it is neither ranked nor counted in the
+  // class size (rankingScope.service says why only this year): the positions
+  // keep exactly the pupils computed here. Unpublished only; a published row
+  // refused the class above.
+  const keep = await rosterDecides({ schoolId, academicYear, classId }) ? computedIds : null;
+
   // Compute class positions
-  await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded });
+  await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded, keep });
 
   return { computed, skipped: skipped + noTerms, noTerms };
 }
@@ -411,10 +423,14 @@ async function computeClassAnnualAverages({
  *
  * `exclude`: pupils whose row is not ranked and not touched — a published
  * row kept for a pupil who no longer has a term result (docs/39 §4.6k).
+ *
+ * `keep`: when given, the pupils the class ranks. Any other unpublished row is
+ * removed, and any other published one is left exactly as issued, outside the
+ * places and the class size — as termGrading's computeTermPositions does.
  */
-async function computeAnnualPositions({ schoolId, academicYear, classId, exclude = [] }) {
+async function computeAnnualPositions({ schoolId, academicYear, classId, exclude = [], keep = null }) {
   const skip = new Set(exclude.map(String));
-  const results = (await AnnualResult.find({
+  let results = (await AnnualResult.find({
     schoolId,
     academicYear,
     classId,
@@ -422,6 +438,15 @@ async function computeAnnualPositions({ schoolId, academicYear, classId, exclude
   })
     .sort({ annualAverage: -1 })
     .lean()).filter((r) => !skip.has(String(r.studentId)));
+
+  if (keep) {
+    const kept = new Set(keep.map(String));
+    const stale = results.filter((r) => !kept.has(String(r.studentId)) && !r.isPublished);
+    if (stale.length) {
+      await AnnualResult.deleteMany({ _id: { $in: stale.map((r) => r._id) }, isPublished: { $ne: true } });
+    }
+    results = results.filter((r) => kept.has(String(r.studentId)));
+  }
 
   const totalInClass = results.length;
 

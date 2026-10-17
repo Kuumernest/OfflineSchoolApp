@@ -77,10 +77,12 @@ export async function publishResults(examId, classId = null) {
 }
 
 // ── Unpublish Results ─────────────────────────────────────
-// PATCH /api/exams/:examId/status { status: "completed" }
+// POST /api/results/:examId/unpublish { classId, reason }
+//
+// This set the exam's status back to "completed", which unpublished no
+// result at all. One class at a time, with a reason (ExamService).
 
-export async function unpublishResults(examId, classId = null) {
+export async function unpublishResults(examId, classId, reason) {
   if (!examId) throw new Error("unpublishResults: examId required");
-  void classId;
-  return ExamService.updateExamStatus(examId, "completed");
+  return ExamService.unpublishResults({ examId, classId, reason });
 }

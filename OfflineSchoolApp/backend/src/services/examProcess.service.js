@@ -25,6 +25,7 @@ const academicPolicy = require("./academicPolicy.service");
 const { calcVersionFor } = require("../../../shared/academicRules");
 const { weightedSequenceResult } = require("./weightedSequence.service");
 const { competitionPlaces } = require("../../../shared/ranking");
+const { rosterDecides } = require("./rankingScope.service");
 
 const computeGrade = (score, maxScore, gradingConfig) => {
   if (score === null || score === undefined) {
@@ -65,6 +66,12 @@ const computeGrade = (score, maxScore, gradingConfig) => {
 /**
  * Process an exam (optionally one class of it).
  *
+ * Every class is ranked on its own. An exam sat by several classes and
+ * processed without a classId used to be ranked as one group, every summary
+ * stamped with the exam's single class: two pupils of Form 1A came 7th and 8th
+ * "of 8" because Form 1B's six were counted with them. Each class now runs
+ * exactly what processing it by name runs.
+ *
  * @param {object} p
  * @param {object} p.exam       the Exam, already scoped to the school
  * @param {string} p.schoolId
@@ -91,15 +98,128 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   // computed anywhere; rows it wrote are read through their calcVersion.
   const calcVersion = calcVersionFor("examProcess");
 
-  const scoreQuery    = { examId, schoolId, deletedAt: null };
-  if (classId) scoreQuery.classId = classId;
+  // The class a mark belongs to is the one it was sat in: StudentScore.classId
+  // is required, and is the class mark entry was opened for.
+  const classIds = classId
+    ? [String(classId)]
+    : (await StudentScore.distinct("classId", { examId, schoolId, deletedAt: null }))
+        .filter(Boolean).map(String);
 
-  const allScores    = await StudentScore.find(scoreQuery).lean();
+  // Every class is planned before anything is written, so a published summary
+  // in any of them refuses the whole run with nothing written, as before.
+  const plans = [];
+  for (const cId of classIds) {
+    plans.push(await planClass({ exam, examId, schoolId, classId: cId, gradingConfig, policy, calcVersion }));
+  }
+
+  // A published result is never recomputed in place, for any school (D3,
+  // decided): unpublishing first is the deliberate, visible act. Nothing is
+  // written here.
+  const published = plans.reduce((n, p) => n + p.published, 0);
+  if (published > 0) {
+    return { status: 409, body: {
+      success: false,
+      code:    "PUBLISHED_RESULTS",
+      message: `${published} published result(s) would be recomputed. Unpublish them first.`,
+      published,
+    } };
+  }
+
+  const summaries  = plans.flatMap((p) => p.summaries);
+  const noMarkIds  = plans.flatMap((p) => p.noMarkIds);
+  const departedIds = plans.flatMap((p) => p.departedIds);
+
+  // Collected here and sent as one bulkWrite.
+  const summaryOps = [];
+  for (const s of summaries) {
+    const { _id, examId: eId, studentId: sId, schoolId: schId, ...fields } = s;
+    summaryOps.push({
+      updateOne: {
+        // Keyed on the natural identity rather than the generated _id, so
+        // a concurrent run cannot insert a second summary for one pupil.
+        filter: { examId: eId, studentId: sId, schoolId: schId },
+        update: {
+          $set: fields,
+          $setOnInsert: { _id, examId: eId, studentId: sId, schoolId: schId },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  if (summaryOps.length) {
+    await ResultSummary.bulkWrite(summaryOps, { ordered: false });
+  }
+
+  // A row an earlier run left for those pupils: an unpublished one goes, so
+  // it is neither ranked nor read by the term; a published one stays exactly
+  // as issued and is outside the places above. As the annual layer does.
+  // Pupils who have left the class this year (see rankingScope.service) go
+  // the same way, for the same reason.
+  const unranked = [...noMarkIds, ...departedIds];
+  if (unranked.length) {
+    await ResultSummary.deleteMany({
+      examId, schoolId, studentId: { $in: unranked }, isPublished: { $ne: true },
+    });
+  }
+
+  // A row filed under one of these classes whose pupil has no mark in it.
+  // When the pupil has none anywhere in the exam — every score withdrawn —
+  // the row goes too. When the marks are in another class, it is that
+  // class's row: its own run rewrites it (in this same run, when no class
+  // was named), and processing one class never removes another's.
+  //
+  // With no class named, a row can also be filed under a class with no mark
+  // left in the exam at all, or under none: no class's plan reads it, so it is
+  // read here.
+  const unfiled = classId ? [] : await ResultSummary.find({
+    examId, schoolId, classId: { $nin: classIds },
+  }).select("studentId isPublished").lean();
+  const unscoredIds = [...new Set([
+    ...plans.flatMap((p) => p.unscoredIds),
+    ...unfiled.filter((s) => !s.isPublished).map((s) => String(s.studentId)),
+  ])];
+  if (unscoredIds.length) {
+    const stillScored = new Set((await StudentScore.distinct("studentId", {
+      examId, schoolId, deletedAt: null, studentId: { $in: unscoredIds },
+    })).map(String));
+    const withdrawn = unscoredIds.filter((id) => !stillScored.has(id));
+    if (withdrawn.length) {
+      await ResultSummary.deleteMany({
+        examId, schoolId, studentId: { $in: withdrawn }, isPublished: { $ne: true },
+      });
+    }
+  }
+
+  // A published summary in these classes that this run did not rank: kept
+  // exactly as issued, its place and class size included, and named here
+  // rather than silently left to disagree with the places just written.
+  const publishedNotRanked = plans.reduce((n, p) => n + p.publishedNotRanked, 0)
+    + unfiled.filter((s) => s.isPublished).length;
+
+  await Exam.findByIdAndUpdate(examId, { status: "completed" });
+  console.log(`✅ Results processed: ${summaries.length} students`);
+
+  return { status: 200, summaries, body: {
+    success:   true,
+    processed: summaries.length,
+    message:   `Results processed for ${summaries.length} student(s)`,
+    ...(departedIds.length ? { departed: departedIds.length } : {}),
+    ...(publishedNotRanked ? { publishedNotRanked } : {}),
+  } };
+}
+
+/**
+ * One class of an exam: its summaries, ranked within the class, and who was
+ * left out. Writes nothing.
+ */
+async function planClass({ exam, examId, schoolId, classId, gradingConfig, policy, calcVersion }) {
+  const allScores    = await StudentScore.find({ examId, schoolId, classId, deletedAt: null }).lean();
   const examSubjects = await ExamSubject.find({
     examId,
     schoolId,
     deletedAt: null,
-    ...(classId ? { classId } : {}),
+    classId,
   }).lean();
 
   const byStudent  = {};
@@ -113,7 +233,7 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   const Student = require("../db/models/Student");
   const Class   = require("../db/models/Class");
   const students = await Student.find({ _id: { $in: studentIds }, schoolId })
-    .select("_id studentName firstName lastName enrollmentNo classId className")
+    .select("_id studentName firstName lastName enrollmentNo classId className isActive deletedAt")
     .lean();
   const studentMap = new Map(students.map((s) => [String(s._id), s]));
 
@@ -126,29 +246,25 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   // 10.5s for 1,200 pupils; against Atlas, where every one of those trips
   // pays real latency, it is minutes. This is the whole reason processing
   // an exam felt like it hung.
+  //
+  // Also every summary already filed under this class, so a row whose pupil
+  // has no mark in it any more is found in the same read.
   const existingSummaries = await ResultSummary.find({
-    examId, schoolId, studentId: { $in: studentIds },
+    examId, schoolId, $or: [{ studentId: { $in: studentIds } }, { classId }],
   }).select("_id studentId isPublished").lean();
   const existingByStudent = new Map(
     existingSummaries.map((s) => [String(s.studentId), s])
   );
+  const scoredHere = new Set(studentIds.map(String));
+  const unscored   = existingSummaries.filter((s) => !scoredHere.has(String(s.studentId)));
 
-  // A published result is never recomputed in place, for any school (D3,
-  // decided): unpublishing first is the deliberate, visible act. Nothing is
-  // written here.
-  const published = existingSummaries.filter((s) => s.isPublished).length;
-  if (published > 0) {
-    return { status: 409, body: {
-      success: false,
-      code:    "PUBLISHED_RESULTS",
-      message: `${published} published result(s) would be recomputed. Unpublish them first.`,
-      published,
-    } };
-  }
+  // Counted, not refused here: processExam refuses the whole run (D3).
+  const published = existingSummaries
+    .filter((s) => s.isPublished && scoredHere.has(String(s.studentId))).length;
 
   // The CA beside the paper, as the card reads it (inactive when the school
   // has CA off: the paper then counts in full).
-  const caContext = await sequenceAssessment.loadSequenceContext(exam, classId || null);
+  const caContext = await sequenceAssessment.loadSequenceContext(exam, classId);
   const subjectMapForCard = new Map();
   for (const es of examSubjects) {
     subjectMapForCard.set(String(es._id), es);
@@ -161,8 +277,16 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
     ? { academicYear: exam.academicYear ?? null, term: exam.term != null ? String(exam.term) : null }
     : {};
 
-  // Collected here and sent as one bulkWrite after the loop.
-  const summaryOps = [];
+  // This year, a pupil who has left the class (inactive, deleted, moved) is
+  // not ranked with it; in any other year every pupil who sat the paper is
+  // (rankingScope.service). Read off the pupils already loaded, by the roster
+  // test the term and annual layers query with: in this class, active, not
+  // deleted.
+  const rosterCounts = await rosterDecides({ schoolId, academicYear: exam.academicYear, classId });
+  const onRoster = (id) => {
+    const s = studentMap.get(String(id));
+    return Boolean(s) && s.isActive === true && !s.deletedAt && String(s.classId) === classId;
+  };
 
   // Fetch class names for all classes represented
   const classIds = [...new Set(students.map((s) => s.classId).filter(Boolean))];
@@ -174,8 +298,10 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   const summaries = [];
   // Pupils with no counted subject: no result, not a 0.
   const noMarkIds = [];
+  const departedIds = [];
 
   for (const [studentId, scores] of Object.entries(byStudent)) {
+    if (rosterCounts && !onRoster(studentId)) { departedIds.push(String(studentId)); continue; }
     const r = weightedSequenceResult({
       studentId, scores, subjectMap: subjectMapForCard, ca: caContext, exam,
       grade: (mark20) => computeGrade(mark20, 20, gradingConfig),
@@ -189,7 +315,7 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
     const stu = studentMap.get(studentId);
     summaries.push({
       _id:            existingByStudent.get(String(studentId))?._id || uuidv4(),
-      classId:        classId || exam.classId,
+      classId,
       className:      stu?.className || classNamesById.get(String(stu?.classId)) || null,
       studentName:    stu?.studentName || [stu?.firstName, stu?.lastName].filter(Boolean).join(" ") || null,
       admissionNo:    stu?.enrollmentNo || null,
@@ -215,59 +341,20 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   }
 
   // ── Class positions ──────────────────────────────────────
-  const grouped = {};
-  for (const s of summaries) {
-    const cId = s.classId || "unknown";
-    if (!grouped[cId]) grouped[cId] = [];
-    grouped[cId].push(s);
-  }
+  // Ranked on the official figure itself, competition style (1, 1, 3), and
+  // the class size is the same population the places were counted over.
+  const places = competitionPlaces(summaries.map((s) => s.average));
+  summaries.forEach((s, i) => {
+    s.classPosition = places[i];
+    s.totalInClass  = summaries.length;
+  });
 
-  for (const classSummaries of Object.values(grouped)) {
-    // Ranked on the official figure itself, competition style (1, 1, 3).
-    const places = competitionPlaces(classSummaries.map((s) => s.average));
-    classSummaries.forEach((s, i) => {
-      s.classPosition = places[i];
-      s.totalInClass  = classSummaries.length;
-    });
-  }
-
-  for (const s of summaries) {
-    const { _id, examId: eId, studentId: sId, schoolId: schId, ...fields } = s;
-    summaryOps.push({
-      updateOne: {
-        // Keyed on the natural identity rather than the generated _id, so
-        // a concurrent run cannot insert a second summary for one pupil.
-        filter: { examId: eId, studentId: sId, schoolId: schId },
-        update: {
-          $set: fields,
-          $setOnInsert: { _id, examId: eId, studentId: sId, schoolId: schId },
-        },
-        upsert: true,
-      },
-    });
-  }
-
-  if (summaryOps.length) {
-    await ResultSummary.bulkWrite(summaryOps, { ordered: false });
-  }
-
-  // A row an earlier run left for those pupils: an unpublished one goes, so
-  // it is neither ranked nor read by the term; a published one stays exactly
-  // as issued and is outside the places above. As the annual layer does.
-  if (noMarkIds.length) {
-    await ResultSummary.deleteMany({
-      examId, schoolId, studentId: { $in: noMarkIds }, isPublished: { $ne: true },
-    });
-  }
-
-  await Exam.findByIdAndUpdate(examId, { status: "completed" });
-  console.log(`✅ Results processed: ${summaries.length} students`);
-
-  return { status: 200, summaries, body: {
-    success:   true,
-    processed: summaries.length,
-    message:   `Results processed for ${summaries.length} student(s)`,
-  } };
+  return {
+    published, summaries, noMarkIds, departedIds,
+    // Filed under this class, but the pupil has no mark in it.
+    unscoredIds:        unscored.filter((s) => !s.isPublished).map((s) => String(s.studentId)),
+    publishedNotRanked: unscored.filter((s) => s.isPublished).length,
+  };
 }
 
 module.exports = { processExam, computeGrade };

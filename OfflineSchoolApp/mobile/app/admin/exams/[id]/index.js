@@ -347,6 +347,114 @@ const rm = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
+// UNPUBLISH MODAL — one class's results, with a reason
+// ─────────────────────────────────────────────────────────
+//
+// The web has "Unpublish…" beside Publish; the phone had none, so a published
+// exam could never be corrected from here. Same rule as the web: one class at
+// a time, a reason that is recorded, figures unchanged until processed again.
+
+const UnpublishModal = ({ visible, classes, onConfirm, onCancel }) => {
+  const { t } = useTranslation();
+  const [classId, setClassId] = useState(null);
+  const [reason,  setReason]  = useState("");
+
+  // Reset when opened; a single published class is chosen for you.
+  useEffect(() => {
+    if (visible) {
+      setReason("");
+      setClassId(classes.length === 1 ? classes[0].classId : null);
+    }
+  }, [visible, classes]);
+
+  const ready = Boolean(classId) && Boolean(reason.trim());
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={rm.overlay}>
+        <View style={rm.box}>
+          <Text style={rm.title}>{t("examDetail.unpublishTitle")}</Text>
+          <Text style={rm.sub}>{t("examDetail.unpublishBody")}</Text>
+          <Text style={rm.sub}>{t("examDetail.unpublishIssued")}</Text>
+
+          {classes.length > 1 && (
+            <View style={um.chips}>
+              <Text style={um.label}>{t("examDetail.unpublishClass")}</Text>
+              <View style={um.chipRow}>
+                {classes.map((c) => (
+                  <TouchableOpacity
+                    key={c.classId}
+                    style={[um.chip, classId === c.classId && um.chipOn]}
+                    onPress={() => setClassId(c.classId)}
+                  >
+                    <Text style={[um.chipText, classId === c.classId && um.chipTextOn]}>
+                      {c.className}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <TextInput
+            style={rm.input}
+            placeholder={t("examDetail.unpublishReasonPh")}
+            placeholderTextColor="#9CA3AF"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            numberOfLines={3}
+          />
+          <View style={rm.actions}>
+            <TouchableOpacity style={rm.cancelBtn} onPress={onCancel}>
+              <Text style={rm.cancelText}>{t("examDetail.cancel")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[rm.rejectBtn, !ready && { opacity: 0.4 }]}
+              onPress={() => {
+                if (!ready) {
+                  Alert.alert(
+                    t("examDetail.requiredTitle"),
+                    t("examDetail.unpublishNeedBoth")
+                  );
+                  return;
+                }
+                onConfirm(classId, reason.trim());
+              }}
+              disabled={!ready}
+            >
+              <Text style={rm.rejectText}>{t("examDetail.unpublishConfirm")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const um = StyleSheet.create({
+  chips:      { gap: 6 },
+  label:      { fontSize: 12, fontWeight: "600", color: "#374151" },
+  chipRow:    { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    paddingVertical:   6,
+    paddingHorizontal: 12,
+    borderRadius:      16,
+    borderWidth:       1,
+    borderColor:       "#D1D5DB",
+    backgroundColor:   "#FFF",
+  },
+  chipOn:     { borderColor: "#DC2626", backgroundColor: "#FEF2F2" },
+  chipText:   { fontSize: 13, color: "#374151" },
+  chipTextOn: { color: "#B91C1C", fontWeight: "700" },
+});
+
+// ─────────────────────────────────────────────────────────
 // COEFFICIENT MODAL
 // ─────────────────────────────────────────────────────────
 
@@ -1016,6 +1124,7 @@ export default function ExamDetailScreen() {
   // ✅ Cross-platform — replaces Alert.prompt (Android crash)
   const [rejectModal,   setRejectModal]   = useState(null); // null | subject
   const [coeffModal,    setCoeffModal]    = useState(null); // null | subject
+  const [unpublishOpen, setUnpublishOpen] = useState(false);
   const [coeffSaving,   setCoeffSaving]   = useState(false);
   const [rejectLoading, setRejectLoading] = useState(false);
 
@@ -1106,6 +1215,16 @@ export default function ExamDetailScreen() {
   const resultGroups = useMemo(
     () => groupByClass(results, exam, t, classNameById),
     [results, exam, t, classNameById]
+  );
+
+  // The classes with any result out, which is what can be unpublished — and,
+  // while there is one, processing is refused (a published result is never
+  // recomputed, docs/39 §21.1 D3).
+  const publishedClasses = useMemo(
+    () => resultGroups
+      .filter((g) => g.classId && g.items.some((r) => r.isPublished))
+      .map((g) => ({ classId: String(g.classId), className: g.className })),
+    [resultGroups]
   );
 
   // ── Mark entry navigation ─────────────────────────────────
@@ -1250,6 +1369,25 @@ export default function ExamDetailScreen() {
   }, [t, id, schoolId, loadData]);
 
   // ── Publish ───────────────────────────────────────────────
+
+  // ── Unpublish ─────────────────────────────────────────────
+
+  const confirmUnpublish = useCallback(async (classId, reason) => {
+    setUnpublishOpen(false);
+    try {
+      const res = await ExamService.unpublishResults({ examId: id, classId, reason, schoolId });
+      Alert.alert(
+        t("examDetail.doneTitle"),
+        `${t("examDetail.unpublishDone", { count: res?.unpublished ?? 0 })}\n${t("examDetail.unpublishIssued")}`,
+        [{ text: t("examDetail.ok"), onPress: () => loadData(true) }]
+      );
+    } catch (err) {
+      Alert.alert(
+        t("examDetail.failedTitle"),
+        errorText(t, err, "examDetail.unpublishFailed")
+      );
+    }
+  }, [t, id, schoolId, loadData]);
 
   const handlePublish = useCallback(() => {
     Alert.alert(
@@ -1422,6 +1560,12 @@ export default function ExamDetailScreen() {
         subjectName={rejectModal?.subjectName}
         onConfirm={confirmReject}
         onCancel={() => setRejectModal(null)}
+      />
+      <UnpublishModal
+        visible={unpublishOpen}
+        classes={publishedClasses}
+        onConfirm={confirmUnpublish}
+        onCancel={() => setUnpublishOpen(false)}
       />
 
       {/* ── Header ───────────────────────────────────────── */}
@@ -1754,10 +1898,10 @@ export default function ExamDetailScreen() {
               style={[
                 styles.enterMarksBtn,
                 { backgroundColor: "#059669" },
-                processing && { opacity: 0.6 },
+                (processing || publishedClasses.length > 0) && { opacity: 0.6 },
               ]}
               onPress={handleProcess}
-              disabled={processing}
+              disabled={processing || publishedClasses.length > 0}
               activeOpacity={0.8}
             >
               {processing
@@ -1770,6 +1914,24 @@ export default function ExamDetailScreen() {
                   : t("examDetail.processResults")}
               </Text>
             </TouchableOpacity>
+
+            {publishedClasses.length > 0 && (
+              <>
+                <Text style={styles.unpublishHint}>
+                  {t("examDetail.reprocessUnpublishFirst")}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.enterMarksBtn, styles.unpublishBtn]}
+                  onPress={() => setUnpublishOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="arrow-undo-outline" size={18} color="#B91C1C" />
+                  <Text style={[styles.enterMarksBtnText, { color: "#B91C1C" }]}>
+                    {t("examDetail.unpublishAction")}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             {results.length === 0 ? (
               <View style={styles.empty}>
@@ -1951,6 +2113,12 @@ const styles = StyleSheet.create({
     marginBottom:    12,
   },
   enterMarksBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
+  unpublishBtn: {
+    backgroundColor: "#FFF",
+    borderWidth:     1,
+    borderColor:     "#FCA5A5",
+  },
+  unpublishHint: { fontSize: 12, color: "#6B7280", marginTop: -4, marginBottom: 10 },
 
   // Per-class sections (multi-class exam — subjects & results grouped)
   classSection: { marginBottom: 14 },

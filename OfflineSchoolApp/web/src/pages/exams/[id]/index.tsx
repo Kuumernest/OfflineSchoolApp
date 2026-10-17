@@ -1554,6 +1554,10 @@ const ResultsTab = ({
     );
   const resultsProcessed = results.length > 0;
   const resultsPublished = examStatus === "published";
+  // Any class out, not only the whole exam: one published class is enough for
+  // the server to refuse a recalculation (a published result is never
+  // recomputed, docs/39 §21.1 D3).
+  const anyPublished     = results.some((r) => r.isPublished);
 
   const currentStep =
     !allMarksEntered  ? 1 :
@@ -1564,6 +1568,18 @@ const ResultsTab = ({
     const ok = await confirm({
       title:   t("common.confirm"),
       message: t("exams.processConfirm"),
+    });
+    if (!ok) return;
+    processResults.mutate({ examId });
+  };
+
+  // After marks are corrected: the same processing, from the marks as they
+  // stand now. The first calculation's button goes once results exist, so
+  // without this a changed mark could never reach the results.
+  const handleRecalculate = async () => {
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.recalculateConfirm"),
     });
     if (!ok) return;
     processResults.mutate({ examId });
@@ -1649,6 +1665,19 @@ const ResultsTab = ({
                   {processResults.isPending ? t("exams.calculating") : t("exams.calculateResults")}
                 </button>
               )}
+              {resultsProcessed && (anyPublished ? (
+                <p className="mt-2 text-xs text-gray-500">{t("exams.recalculateUnpublishFirst")}</p>
+              ) : (
+                <button
+                  onClick={handleRecalculate}
+                  disabled={processResults.isPending}
+                  className="mt-2 px-4 py-1.5 bg-white border border-indigo-300 text-indigo-700
+                             text-xs font-bold rounded-lg hover:bg-indigo-50
+                             disabled:opacity-60 transition-colors"
+                >
+                  {processResults.isPending ? t("exams.calculating") : t("exams.recalculateResults")}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1678,7 +1707,7 @@ const ResultsTab = ({
               {/* Whenever any class's results are out: after one class is
                   unpublished the exam is no longer "published", but the
                   others may still be. */}
-              {results.some((r) => r.isPublished) && (
+              {anyPublished && (
                 <div className="mt-2">
                   <UnpublishButton
                     layer="sequence"

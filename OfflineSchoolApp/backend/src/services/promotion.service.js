@@ -13,6 +13,7 @@ const TermResult        = require("../db/models/TermResult");
 const { promotionUnderRules } = require("../../../shared/academicRules");
 const GradingConfig     = require("../db/models/GradingConfig");
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
+const { moveCurrentYear } = require("./rankingScope.service");
 
 /**
  * End-of-year rollover: who moves up, who repeats, who leaves.
@@ -339,6 +340,9 @@ const commitRun = async ({ schoolId, runId, committedBy }) => {
   run.committedAt = now;
   await run.save();
 
+  // The school is in its new year now (rankingScope.service).
+  await moveCurrentYear({ schoolId, from: run.fromYear, to: run.toYear, orUnset: true });
+
   return { run, applied: decisions.length };
 };
 
@@ -398,6 +402,9 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
   run.reversedAt     = now;
   run.reversalReason = reason ?? null;
   await run.save();
+
+  // And back in the year the run closed, unless it has moved on since.
+  await moveCurrentYear({ schoolId, from: run.toYear, to: run.fromYear });
 
   return { run, restored: decisions.length, enrollmentsRemoved: removed.deletedCount ?? 0 };
 };

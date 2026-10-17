@@ -969,6 +969,27 @@ const submitMarks = async ({ examId, examSubjectId, schoolId }) =>
 const publishResults = async (examId, schoolId) =>
   updateExamStatus(examId, "published", schoolId);
 
+/**
+ * Unpublish one class's results for this exam, with a reason.
+ *
+ * POST /results/:examId/unpublish (backend services/unpublish.service.js):
+ * only the published flag changes — figures stay as they are until the exam
+ * is processed again, and report cards already issued stay as issued. The
+ * reason is recorded. A server act, so not queued offline.
+ */
+const unpublishResults = async ({ examId, classId, reason, schoolId }) => {
+  if (!examId)  throw new Error("examId is required");
+  if (!classId) throw new Error("classId is required");
+  try {
+    const res = await api.post(`/results/${examId}/unpublish`, { classId, reason, schoolId });
+    await getResults({ examId, schoolId }).catch(() => {});
+    return res.data;
+  } catch (err) {
+    if (isOfflineError(err)) throw offlineOnly("Unpublishing results");
+    throw err;
+  }
+};
+
 // ─────────────────────────────────────────────────────────
 // EXPORT — Named object for tree-shaking safety
 // ─────────────────────────────────────────────────────────
@@ -1010,6 +1031,7 @@ export const ExamService = {
 
   // Publishing
   publishResults,
+  unpublishResults,
 
   // Offline helpers
   countUnsyncedScores: ExamCache.countUnsyncedScores,

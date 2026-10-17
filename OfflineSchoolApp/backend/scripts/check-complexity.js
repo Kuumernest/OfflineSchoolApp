@@ -119,7 +119,10 @@ const check = (label, actual, expected) => {
   // ≤ 9: the published-row check (one count) runs for every school since
   // published results are never recomputed (docs/39 §21.1 D3, decided); it ran
   // only under the opt-in "refuse" rule before, when the ceiling was 8.
-  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 9, small.r.computed, large.r.computed], [true, true, 5, 40]);
+  // ≤ 11: the school's current year and whether a promotion has closed it
+  // (rankingScope.service), which decide whether a departed pupil's row is
+  // dropped from the ranking — one read here, two when the year is current.
+  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 11, small.r.computed, large.r.computed], [true, true, 5, 40]);
   if (small.n !== large.n) console.log("       small: " + small.cmds.map((c) => c.commandName).join(" ") + " | large: " + large.cmds.map((c) => c.commandName).join(" "));
   const fast = await M("AnnualResult").find({ schoolId: A, classId: "cls-l" }).sort({ studentId: 1 }).lean();
   await M("AnnualResult").deleteMany({ schoolId: A, classId: "cls-l" });

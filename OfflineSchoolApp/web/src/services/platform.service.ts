@@ -187,7 +187,10 @@ export async function createSchool(input: CreateSchoolInput): Promise<PlatformSc
   return data.school;
 }
 
-export async function updateSchool(schoolId: string, patch: SchoolIdentity): Promise<PlatformSchool> {
+/** The identity fields, and the school's current year beside them. */
+export type SchoolPatch = SchoolIdentity & { settings?: { academicYear: string | null } };
+
+export async function updateSchool(schoolId: string, patch: SchoolPatch): Promise<PlatformSchool> {
   const { data } = await api.patch(`${BASE}/schools/${schoolId}`, patch);
   return data.school;
 }
