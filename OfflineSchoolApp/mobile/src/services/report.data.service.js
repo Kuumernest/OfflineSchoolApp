@@ -666,6 +666,9 @@ export async function assembleReportData({
         asnSql += ` AND ta.${asnCols.schoolCol} = ?`;
         asnPrms.push(schoolId);
       }
+      asnSql += ` ${deletedFilter(
+        await resolveColumnOptional("teacher_assignments", COL.DELETED_AT), "ta"
+      )}`;
 
       const asns = await DB.query(asnSql, asnPrms);
       for (const a of asns) {

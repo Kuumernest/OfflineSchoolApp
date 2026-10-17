@@ -56,11 +56,11 @@ const servers = `${nginx}\n${nginx80}`.split(/\nserver \{/).slice(1);
 const serverOn = (port) => servers.find((b) => new RegExp(`listen ${port}\\b`).test(b)) ?? "";
 
 console.log("--- published ports ---");
-check("mongo publishes nothing", published(service("mongo")), []);
+check("no database in the stack: MongoDB is Atlas, outside it", [service("mongo"), /mongo:\d/.test(compose)], ["", false]);
 check("the backend publishes nothing (5000 is reached over the Docker network only)", published(service("backend")), []);
 check("nginx publishes 80 and 443", published(service("nginx")).sort(), ["443", "80"]);
 check("every port published by the stack is 80 or 443",
-  ["mongo", "backend", "nginx", "certbot"].flatMap((s) => published(service(s))).filter((p) => !["80", "443"].includes(p)), []);
+  ["backend", "nginx", "certbot"].flatMap((s) => published(service(s))).filter((p) => !["80", "443"].includes(p)), []);
 
 console.log("--- HTTPS ---");
 const https = serverOn(443), http = serverOn(80);
@@ -68,8 +68,12 @@ check("a server on 443 with TLS and HTTP/2", [/listen 443 ssl;/.test(https), /ht
 check("its certificate from the letsencrypt volume, for ${DOMAIN}",
   [/ssl_certificate\s+\/etc\/letsencrypt\/live\/\$\{DOMAIN\}\/fullchain\.pem;/.test(https), /ssl_certificate_key\s+\/etc\/letsencrypt\/live\/\$\{DOMAIN\}\/privkey\.pem;/.test(https)], [true, true]);
 check("TLS 1.2 and 1.3 only, and HSTS", [/ssl_protocols TLSv1\.2 TLSv1\.3;/.test(https), /Strict-Transport-Security "max-age=31536000" always/.test(https)], [true, true]);
-check("the web console, the API and uploads are served on 443",
-  [/location \/ \{\s*root \/app\/public\/web;/.test(https), /location \/api\/ \{\s*proxy_pass http:\/\/backend:5000;/.test(https), /location \/uploads\/ \{\s*proxy_pass http:\/\/backend:5000;/.test(https)], [true, true, true]);
+check("443 is the API only: /api/ and /uploads/ proxied, everything else 404 (the console is on Cloudflare Pages)",
+  [/location \/ \{\s*return 404;/.test(https), /\/app\/public\/web/.test(https),
+   /location \/api\/ \{\s*proxy_pass http:\/\/backend:5000;/.test(https), /location \/uploads\/ \{\s*proxy_pass http:\/\/backend:5000;/.test(https)],
+  [true, false, true, true]);
+check("  debug routes closed at the door", [/location \/api\/debug\/ \{\s*return 404;/.test(https), /location \/api\/admin\/debug\/ \{\s*return 404;/.test(https)], [true, true]);
+check("  long requests are not cut at 60s: 600s, as the backend allows", /proxy_read_timeout\s+600s;/.test(https), true);
 
 console.log("--- port 80 ---");
 check("80 answers the certificate challenge and redirects everything else to https",
@@ -90,8 +94,17 @@ check("nginx reloads periodically, so a renewed certificate is picked up", /RELO
 check("a certbot service renews through the webroot, sharing both volumes",
   [/certbot renew --webroot -w \/var\/www\/certbot/.test(cb), /letsencrypt:\/etc\/letsencrypt\n/.test(cb), /certbot_webroot:\/var\/www\/certbot\n/.test(cb)], [true, true, true]);
 
+console.log("--- the backend container ---");
+const be = service("backend");
+check("its environment comes from a protected file, not from compose", /env_file:\n      - \$\{BACKEND_ENV_FILE:-\.\/deploy\/backend\.env\}/.test(be), true);
+check("  healthy means ready (the database answers), checked from inside",
+  /healthcheck:\n      test: \["CMD", "wget", "-q", "-O", "\/dev\/null", "http:\/\/127\.0\.0\.1:5000\/api\/health\/ready"\]/.test(be), true);
+check("  tini as PID 1, and time for the graceful shutdown", [/\n    init: true\n/.test(be), /\n    stop_grace_period: 20s\n/.test(be)], [true, true]);
+check("  nginx waits for it to start, not to be healthy (so the ACME challenge is always answered)",
+  /depends_on:\n      backend:\n        condition: service_started/.test(service("nginx")), true);
+
 console.log("--- logs and time ---");
-const SERVICES = ["mongo", "backend", "nginx", "certbot"];
+const SERVICES = ["backend", "nginx", "certbot"];
 check("every service logs to json-file capped at 10 MB × 5 files",
   SERVICES.filter((n) => !/\n    logging:\n      driver: json-file\n      options:\n        max-size: "10m"\n        max-file: "5"\n/.test(service(n))), []);
 check("the backend and nginx run on Cameroon time", ["backend", "nginx"].filter((n) => !/\n      TZ: Africa\/Douala\n/.test(service(n))), []);

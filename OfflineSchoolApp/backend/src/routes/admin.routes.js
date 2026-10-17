@@ -99,6 +99,13 @@ const notDeletedClause = () => ({
   ],
 });
 
+// Class and subject names compare case-insensitively, as their unique indexes
+// do (db/nameCollation.js).
+const { NAME_COLLATION } = require("../db/nameCollation");
+
+/** Was this write refused by a unique index? (Two requests at once, past the check.) */
+const isDuplicateKey = (err) => err?.code === 11000;
+
 const addNotDeleted = (query) => {
   const ndClause = notDeletedClause();
 
@@ -1421,13 +1428,14 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
 
   const resolvedSchoolId = resolveSchoolId(req, schoolId);
 
+  // Any class not deleted holds its name — active or not — compared without
+  // case, exactly as class_name_unique_per_school does.
   const existing = await Class.findOne(
     addNotDeleted({
       name:     name.trim(),
       schoolId: resolvedSchoolId,
-      isActive: true,
     })
-  ).lean();
+  ).collation(NAME_COLLATION).lean();
 
   if (existing) {
     return sendError(res, 409, "Class already exists", {
@@ -1437,16 +1445,25 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
     });
   }
 
-  const cls = await Class.create({
-    ...(id ? { _id: String(id).trim() } : {}),
-    name:      name.trim(),
-    level:     level || null,
-    section:   section?.trim() || "",
-    schoolId:  resolvedSchoolId,
-    isActive:  true,
-    deletedAt: null,
-    ...(await classTeacherFields(req, classTeacherId)),
-  });
+  let cls;
+  try {
+    cls = await Class.create({
+      ...(id ? { _id: String(id).trim() } : {}),
+      name:      name.trim(),
+      level:     level || null,
+      section:   section?.trim() || "",
+      schoolId:  resolvedSchoolId,
+      isActive:  true,
+      deletedAt: null,
+      ...(await classTeacherFields(req, classTeacherId)),
+    });
+  } catch (err) {
+    // Another request created the name between the check above and this.
+    if (isDuplicateKey(err)) {
+      return sendError(res, 409, "Class already exists", { code: "DUPLICATE_NAME", clientId: id ? String(id).trim() : null });
+    }
+    throw err;
+  }
 
   console.log(`✅ Class created: ${cls.name} [${cls._id}]`);
   return sendSuccess(res, {
@@ -1463,6 +1480,21 @@ router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(asy
   // offline queue would retry for ever. Refused as the input error it is.
   if (name !== undefined && typeof name !== "string") {
     return sendError(res, 400, "name must be a string", { code: "INVALID_NAME" });
+  }
+
+  // A rename onto a name another class holds (any case) is refused here, as
+  // a create is, rather than by the index as a raw duplicate-key error.
+  if (name && name.trim()) {
+    const current = await Class.findOne(getTenantQuery(req, req.params.id)).select("_id schoolId").lean();
+    if (!current) return sendError(res, 404, "Class not found");
+    const clash = await Class.findOne(addNotDeleted({
+      schoolId: current.schoolId, name: name.trim(), _id: { $ne: current._id },
+    })).collation(NAME_COLLATION).select("_id name").lean();
+    if (clash) {
+      return sendError(res, 409, `Another class is already called "${clash.name}"`, {
+        code: "DUPLICATE_NAME", serverId: String(clash._id),
+      });
+    }
   }
 
   let cls;
@@ -1482,6 +1514,9 @@ router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(asy
     // A blank name trims to "" and fails required; an over-long one fails
     // maxlength. Both are the caller's to fix, not the server's to retry.
     if (sentAsBadRequest(res, err, "INVALID_CLASS")) return;
+    if (isDuplicateKey(err)) {
+      return sendError(res, 409, "Another class already has this name", { code: "DUPLICATE_NAME" });
+    }
     throw err;
   }
   if (!cls) return sendError(res, 404, "Class not found");
@@ -1695,11 +1730,12 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
     );
   }
 
+  // Compared without case, as subject_name_unique_per_class does.
   const existing = await Subject.findOne({
     name:     name.trim(),
     schoolId: resolvedSchoolId,
     $or: [{ class: classIdStr }, { classId: classIdStr }],
-  }).lean();
+  }).collation(NAME_COLLATION).lean();
 
   if (existing) {
     return sendError(res, 409, "Subject already exists in this class", {
@@ -1709,16 +1745,25 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
     });
   }
 
-  const subject = await Subject.create({
-    ...(id ? { _id: String(id).trim() } : {}),
-    name:     name.trim(),
-    code:     code?.trim() || "",
-    class:    classIdStr,
-    classId:  classIdStr,
-    schoolId: resolvedSchoolId,
-    // Optional — the schema default (1) applies when the admin leaves it blank.
-    ...(coeff.value !== undefined && { coefficient: coeff.value }),
-  });
+  let subject;
+  try {
+    subject = await Subject.create({
+      ...(id ? { _id: String(id).trim() } : {}),
+      name:     name.trim(),
+      code:     code?.trim() || "",
+      class:    classIdStr,
+      classId:  classIdStr,
+      schoolId: resolvedSchoolId,
+      // Optional — the schema default (1) applies when the admin leaves it blank.
+      ...(coeff.value !== undefined && { coefficient: coeff.value }),
+    });
+  } catch (err) {
+    // Another request created the name between the check above and this.
+    if (isDuplicateKey(err)) {
+      return sendError(res, 409, "Subject already exists in this class", { code: "DUPLICATE_NAME", clientId: id ? String(id).trim() : null });
+    }
+    throw err;
+  }
 
   const populated = {
     ...normaliseSubject(subject.toObject()),
@@ -1774,16 +1819,42 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
   const before = await Subject.findOne(getTenantQuery(req, req.params.id)).lean();
   if (!before) return sendError(res, 404, "Subject not found");
 
-  const subject = await Subject.findOneAndUpdate(
-    getTenantQuery(req, req.params.id),
-    {
-      ...(name               && { name: name.trim()        }),
-      ...(code !== undefined && { code: code?.trim() || "" }),
-      ...(classIdStr         && { class: classIdStr, classId: classIdStr }),
-      ...(coeff.value !== undefined && { coefficient: coeff.value }),
-    },
-    { returnDocument: 'after', runValidators: true }
-  ).lean();
+  // A rename, or a move to another class, onto a name that class already has
+  // (any case) is refused here, as a create is.
+  if ((name && name.trim()) || classIdStr) {
+    const targetClass = classIdStr || before.classId || before.class;
+    const targetName  = name ? name.trim() : before.name;
+    if (targetClass) {
+      const clash = await Subject.findOne({
+        _id: { $ne: before._id }, schoolId: before.schoolId, name: targetName,
+        $or: [{ class: targetClass }, { classId: targetClass }],
+      }).collation(NAME_COLLATION).select("_id name").lean();
+      if (clash) {
+        return sendError(res, 409, `This class already has a subject called "${clash.name}"`, {
+          code: "DUPLICATE_NAME", serverId: String(clash._id),
+        });
+      }
+    }
+  }
+
+  let subject;
+  try {
+    subject = await Subject.findOneAndUpdate(
+      getTenantQuery(req, req.params.id),
+      {
+        ...(name               && { name: name.trim()        }),
+        ...(code !== undefined && { code: code?.trim() || "" }),
+        ...(classIdStr         && { class: classIdStr, classId: classIdStr }),
+        ...(coeff.value !== undefined && { coefficient: coeff.value }),
+      },
+      { returnDocument: 'after', runValidators: true }
+    ).lean();
+  } catch (err) {
+    if (isDuplicateKey(err)) {
+      return sendError(res, 409, "This class already has a subject with this name", { code: "DUPLICATE_NAME" });
+    }
+    throw err;
+  }
 
   if (!subject) return sendError(res, 404, "Subject not found");
 
@@ -4143,6 +4214,9 @@ router.use((err, req, res, next) => {
   return res.status(status).json({
     success: false,
     message,
+    // A refusal's own code, so a client can act on it (410 RECORD_DELETED
+    // from db/plugins/syncTombstones.js). Only for 4xx: never a driver's code.
+    ...(status >= 400 && status < 500 && typeof err.code === "string" ? { code: err.code } : {}),
     ...(process.env.NODE_ENV === "development" && {
       error: err.message,
       stack: err.stack,

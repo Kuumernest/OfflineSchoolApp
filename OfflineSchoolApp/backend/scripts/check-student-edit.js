@@ -83,6 +83,9 @@ const bad = (label, detail) => {
   const reset = async () => {
     await Student.deleteMany({});
     await History.deleteMany({});
+    // A test reset, not a deletion: the fixture recreates the same ids, which
+    // the sync tombstones the delete above just wrote would refuse (410).
+    await require("../src/db/models/SyncTombstone").deleteMany({});
     await Student.create({
       _id: "st-1", userId: "stu-a", schoolId: A, classId: "cls-a",
       firstName: "Bern", lastName: "Constanse",           // the misspelling

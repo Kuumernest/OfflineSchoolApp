@@ -136,11 +136,15 @@ const conversationSchema = new mongoose.Schema(
 
 // ── Indexes ─────────────────────────────────────────────────────────────────
 
-// One direct thread per pair. Sparse so the null on every group row does not
-// collide with every other group row.
+// One direct thread per pair. Partial on strings, not sparse: directKey
+// defaults to null, and a compound sparse index indexes a row that has ANY of
+// its keys — schoolId always — so every group/class/subject conversation was
+// (schoolId, null) and the second one in a school collided. The partial
+// filter leaves every non-direct conversation out of the index. New name, so
+// the old schoolId_1_directKey_1 is never mistaken for it.
 conversationSchema.index(
   { schoolId: 1, directKey: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { directKey: { $type: "string" } }, name: "conversation_direct_pair_unique" }
 );
 
 // "My conversations, most recent first" — the list screen's only query.

@@ -437,6 +437,12 @@ const EXCLUDED = {
   SyncLog:
     "A record of other devices' syncs. Operational, not school data.",
 
+  SyncTombstone:
+    "The record that a subject, assignment or student was hard-deleted. GET " +
+    "/sync/pull turns it into the deleted row the phone applies; mirrored as " +
+    "itself it would be a list of ids with nothing to apply them to. The " +
+    "desktop feed does not carry these deletions yet (docs/10).",
+
   SyncOverwrite:
     "An instruction to one specific device, consumed by the existing mobile " +
     "sync engine. Not state to mirror.",

@@ -312,7 +312,9 @@ export const ClassService = {
 
       const studentCountExpr =
         hasStudents && studentClassCol
-          ? `(SELECT COUNT(*) FROM students st WHERE st.${studentClassCol} = c.id) AS studentCount`
+          ? `(SELECT COUNT(*) FROM students st WHERE st.${studentClassCol} = c.id${
+              studentCols.includes("deleted_at") ? " AND (st.deleted_at IS NULL OR st.deleted_at = '')" : ""
+            }) AS studentCount`
           : "0 AS studentCount";
 
       const params = [];
@@ -658,7 +660,7 @@ export const ClassService = {
     if (!existing) throw appError("svcErr.classNotFound", "Class not found");
 
     const hasStudents = await db.getFirstAsync(
-      `SELECT id FROM students WHERE class_id = ? LIMIT 1`,
+      `SELECT id FROM students WHERE class_id = ? AND (deleted_at IS NULL OR deleted_at = '') LIMIT 1`,
       [id]
     ).catch(() => null);
 

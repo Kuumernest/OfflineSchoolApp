@@ -1,5 +1,8 @@
 # ── Stage 1: Build the React web app ──────────────────────────────────────────
-FROM node:20-alpine AS web-builder
+# Node 24, the version CI tests on (.github/workflows). Node 20 reached end of
+# life in April 2026. Multi-arch: the same tag runs on Oracle's ARM64 (aarch64)
+# VMs, and the backend has no native addons to build (bcryptjs is pure JS).
+FROM node:24-alpine AS web-builder
 
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json* ./
@@ -11,6 +14,11 @@ COPY shared/requestPath.js /app/shared/requestPath.js
 RUN npm run build
 
 # ── Stage 2: Nginx with the web build ─────────────────────────────────────────
+#
+# Optional, single-host mode only. The production stack (docker-compose.yml)
+# no longer builds it: the web console is served by Cloudflare Pages and nginx
+# is API-only (docs/17). Kept so a school that wants the console on the same
+# host can still `docker build --target web`.
 #
 # The `nginx` service in docker-compose.yml builds this target. nginx.conf
 # roots `location /` at /app/public/web; without the build there, try_files
@@ -25,7 +33,7 @@ FROM nginx:alpine AS web
 COPY --from=web-builder /app/web/dist /app/public/web
 
 # ── Stage 3: Production backend ───────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 
 WORKDIR /app
 
@@ -51,8 +59,9 @@ COPY backend/engine/ ./engine/
 COPY backend/scripts/calibration/ ./scripts/calibration/
 COPY shared/ /shared/
 
-# Copy built web assets into a path the backend can serve
-COPY --from=web-builder /app/web/dist ./public/web
+# No web build in this image. It was copied to ./public/web "for the backend
+# to serve", but nothing in the backend serves that path — and building the
+# whole web app is the slowest step of an ARM64 build on the server.
 
 # Create the upload directories the server bootstraps at startup.
 #

@@ -36,6 +36,10 @@ to `/index.html`, which matched `location /` again, and nginx logged
 console (verified); Compose networking itself remains unverified in the
 Codespace where it was tested.
 
+**Superseded (2026-10-17).** The web console is now served by Cloudflare
+Pages, and the Compose stack's nginx is API-only (`/` answers 404 by
+design). See docs/17, "Web: Cloudflare Pages".
+
 ### A2. Production credentials have not been rotated
 
 The credentials in the working `.env` are development credentials. `MONGODB_URI`
@@ -66,6 +70,27 @@ redirects. The backend no longer publishes port 5000. The first certificate
 is issued once by hand (docs/17, TLS). Held by `check:deployconfig`.
 
 ---
+
+### A6. Unique indexes are not built in production — CONFIRMED DEFECT (2026-10-17)
+
+`autoIndex` is off in production and mongoose's `Model.init()` then builds
+nothing: of 52 declared unique indexes, only 3 are built at boot. The rest
+(receipts, marks, attendance, results, enrolment, payroll, timetable) exist
+only if created by hand, and the boot report compares key patterns only.
+**Fix:** `scripts/provision-indexes.js` — plan, resolve duplicates, apply;
+docs/17, "Index provisioning". The boot check now compares options as well as
+keys, and readiness answers 503 `INDEXES_INCOMPLETE` in production until this
+is done. The four unique + sparse-over-null definitions are corrected (partial,
+new names); old copies on a live database must be dropped by hand first.
+
+### A7. The packaged desktop app does not reach the server — CONFIRMED DEFECT (2026-10-17)
+
+Under `loadFile`, absolute asset paths give a blank window, `BrowserRouter`
+lands on not-found, unhandled requests go to `file:///api/…` (or, with an
+absolute `VITE_API_URL`, bypass the offline layer), `Origin: null` is refused
+by CORS, and sync has no server address. Recommended design in docs/17,
+"Desktop: API connectivity". The release workflow builds no desktop
+installers until `DESKTOP_RELEASE_ENABLED` is set.
 
 ## B. Data remediation outstanding
 

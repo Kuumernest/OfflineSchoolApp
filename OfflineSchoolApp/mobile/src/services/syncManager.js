@@ -2045,6 +2045,19 @@ class SyncManagerClass {
           const local = await db.getFirstAsync("SELECT dirty FROM periods WHERE id = ?", [id]).catch(() => null);
           if (local?.dirty) continue;
 
+          // A period deleted on the server arrives with deletedAt (GET
+          // /sync/pull sends removals on an incremental pull). Marked, not
+          // removed, as every other collection here does; the period readers
+          // filter on isactive / deletedat.
+          if (p.deletedAt || p.deleted_at) {
+            await db.runAsync(
+              "UPDATE periods SET deletedat = ?, isactive = 0, dirty = 0, updated_at = ? WHERE id = ?",
+              [p.deletedAt || p.deleted_at, ts, String(id)]
+            );
+            ok++;
+            continue;
+          }
+
           await db.runAsync(
             `INSERT OR REPLACE INTO periods
                (id, schoolId, name, starttime, endtime, sortorder, isbreak, isactive, version, dirty, updated_at)

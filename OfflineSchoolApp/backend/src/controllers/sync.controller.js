@@ -12,6 +12,7 @@ const User              = require("../db/models/User");
 const Subject           = require("../db/models/Subject");
 const Period            = require("../db/models/Period");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
+const SyncTombstone     = require("../db/models/SyncTombstone");
 
 // ── Optional models ───────────────────────────────────────────────────────────
 
@@ -239,52 +240,120 @@ exports.pullChanges = async (req, res) => {
     // period and is unreadable without them — and loses everything else. An
     // email address and a mustResetPassword flag together tell a pupil which
     // staff accounts have never been signed into.
+    // deletedAt for a student too: it is how a deleted teacher leaves the
+    // timetable on their device, and it says nothing about the account.
     const teacherFields = isStudent
-      ? "name role schoolId createdAt updatedAt"
-      : "name email role schoolId isActive mustResetPassword enrollmentNo createdAt updatedAt";
+      ? "name role schoolId deletedAt createdAt updatedAt"
+      : "name email role schoolId isActive mustResetPassword enrollmentNo deletedAt createdAt updatedAt";
+
+    // ── Removals: how a deletion reaches a device ────────────────────────
+    //
+    // The contract is the one the desktop feed already keeps and every apply
+    // function on the phone already reads: a row that arrives with deletedAt
+    // set is marked deleted locally (syncManager syncClasses … syncStudents).
+    // This route never sent one. Each query excluded soft-deleted rows, so a
+    // deletion moved the row's updatedAt and then hid it; hard deletes
+    // (subjects, assignments, students) left no row at all; and deletedItems
+    // was always []. A device kept every deleted record for good.
+    //
+    // On an INCREMENTAL pull (a cursor was sent), so, three kinds of removal:
+    //   - soft-deleted rows changed since the cursor, sent as they are;
+    //   - students who left the roster this pull serves (no longer approved
+    //     and active), sent as { _id, deletedAt };
+    //   - hard deletes, from their tombstones (models/SyncTombstone.js),
+    //     sent the same way — except where the row still exists (a delete
+    //     that failed after its tombstone was written).
+    // A FIRST pull (no cursor) is unchanged: the device has nothing to remove.
+    // The cursor contract is unchanged too: the same inclusive `since`, so a
+    // removal stamped on the cursor is sent twice rather than never, and
+    // applying one twice is a no-op.
+    const incremental = Boolean(lastSync) && effectiveDate.getTime() > 0;
+    const live = incremental ? {} : NOT_DELETED;
+
+    // A student caller gets their own row and nobody else's. Matched on either
+    // key because the link between a User and a Student is recorded as userId
+    // on most rows and as the shared _id on older ones. Under $and: spread
+    // beside NOT_DELETED, whose key is also $or, this filter was overwritten,
+    // and a student's token received every pupil in the school with their
+    // guardians' names and phone numbers.
+    const ownStudent = isStudent ? { $or: [{ userId: callerId }, { _id: callerId }] } : null;
+    const studentFilter = {
+      schoolId,
+      ...since,
+      ...(incremental ? {} : { status: "approved", isActive: true }),
+      $and: [ownStudent, incremental ? null : NOT_DELETED].filter(Boolean),
+    };
+    if (!studentFilter.$and.length) delete studentFilter.$and;
 
     // ── Fetch all entity types in parallel ───────────────────────────────
-    const [classes, teachers, subjects, periods, assignments, rawStudents] =
+    const [classes, teachers, subjects, periods, assignments, rawStudents, tombstones] =
       await Promise.all([
-        Class.find({ schoolId, ...since, ...NOT_DELETED }).lean(),
+        Class.find({ schoolId, ...since, ...live }).lean(),
 
         User.find({ schoolId, role: "teacher", ...since })
           .select(teacherFields)
           .lean(),
 
-        Subject.find({ schoolId, ...since, ...NOT_DELETED }).lean(),
+        Subject.find({ schoolId, ...since, ...live }).lean(),
 
-        Period.find({ schoolId, ...since, ...NOT_DELETED }).lean(),
+        Period.find({ schoolId, ...since, ...live }).lean(),
 
-        TeacherAssignment.find({ schoolId, ...since, ...NOT_DELETED })
-          .populate("teacher", "name email")
+        TeacherAssignment.find({ schoolId, ...since, ...live })
+          // Name only for a student: teacherFields above keeps staff emails
+          // off a pupil's device, and this join handed them back.
+          .populate("teacher", isStudent ? "name" : "name email")
           .populate("class",   "name")
           .populate("subject", "name")
           .lean(),
 
-        Student
-          ? Student.find({
-              schoolId,
-              status:   "approved",
-              isActive: true,
-              // A student gets their own row and nobody else's. Their own is
-              // still sent rather than dropped, because the local students
-              // table is what several student screens read their class and
-              // admission number from — an empty table would break them.
-              //
-              // Matched on either key because the link between a User and a
-              // Student is recorded as userId on most rows and as the shared
-              // _id on older ones.
-              ...(isStudent
-                ? { $or: [{ userId: callerId }, { _id: callerId }] }
-                : {}),
-              ...since,
-              ...NOT_DELETED,
-            }).lean()
+        // Their own row is still sent to a student rather than dropped,
+        // because the local students table is what several student screens
+        // read their class and admission number from.
+        Student ? Student.find(studentFilter).lean() : Promise.resolve([]),
+
+        incremental
+          // The same bound as every row above (sinceFilter: a cursor from the
+          // future reads from the beginning), on the deletion's own time.
+          ? SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }).lean()
           : Promise.resolve([]),
       ]);
 
-    const students = rawStudents.map(normaliseStudentForSync).filter(Boolean);
+    // Students: on the roster → the full row; off it → a removal.
+    const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
+    const removal  = (id, sid, at) => ({ _id: String(id), id: String(id), schoolId: sid ?? null, deletedAt: at });
+    const students = [];
+    for (const s of rawStudents) {
+      if (onRoster(s)) {
+        const row = normaliseStudentForSync(s);
+        if (row) students.push(row);
+      } else {
+        students.push(removal(s._id, s.schoolId, s.deletedAt || s.updatedAt || pulledAt));
+      }
+    }
+
+    // Hard deletes. A student caller hears only of their own record.
+    const stoneFor = { subject: subjects, teacherAssignment: assignments, student: students };
+    const stoneModel = { subject: Subject, teacherAssignment: TeacherAssignment, student: Student };
+    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (!isStudent || t.entity !== "student" || t.docId === callerId));
+    for (const entity of Object.keys(stoneFor)) {
+      const ids = relevant.filter((t) => t.entity === entity).map((t) => t.docId);
+      if (!ids.length || !stoneModel[entity]) continue;
+      const stillThere = new Set((await stoneModel[entity].find({ _id: { $in: ids } }).distinct("_id")).map(String));
+      const already = new Set(stoneFor[entity].map((r) => String(r._id)));
+      for (const t of relevant) {
+        if (t.entity !== entity || stillThere.has(t.docId) || already.has(t.docId)) continue;
+        stoneFor[entity].push(removal(t.docId, t.schoolId, t.deletedAt));
+      }
+    }
+
+    // The same removals, listed: informational, for a client that wants
+    // them in one place. The rows above are what the phone applies.
+    const deletedItems = [];
+    for (const [collection, rows] of Object.entries({ classes, teachers, subjects, periods, assignments, students })) {
+      for (const r of rows) {
+        if (r.deletedAt) deletedItems.push({ collection, id: String(r._id), deletedAt: r.deletedAt });
+      }
+    }
 
     console.log(
       `📦 Pull results (${role ?? "unknown"}) — classes: ${classes.length}, ` +
@@ -302,7 +371,7 @@ exports.pullChanges = async (req, res) => {
         periods,
         assignments,
         students,
-        deletedItems: [],
+        deletedItems,
       },
       timestamp: pulledAt,
     });

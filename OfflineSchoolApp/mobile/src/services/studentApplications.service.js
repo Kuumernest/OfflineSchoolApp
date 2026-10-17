@@ -577,6 +577,9 @@ const getLocalPending = async (db, schoolId) => {
       params.push(schoolId);
     }
   }
+  if (studentCols.includes("deleted_at")) {
+    where += ` AND (s.deleted_at IS NULL OR s.deleted_at = '')`;
+  }
 
   const rows = await db.getAllAsync(
     `SELECT s.*

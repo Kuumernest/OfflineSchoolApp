@@ -143,6 +143,14 @@ function validateEnv({ env = process.env, exit = true } = {}) {
     if (REFUSED_SECRETS.has(secret.toLowerCase())) {
       problems.push("JWT_SECRET is still a placeholder value");
     }
+
+    // docker-compose.yml refused to start without it (`:?`) while it built the
+    // backend's environment itself; the environment now comes from an env file
+    // (docs/17), so the requirement is held here. Without it /auth/refresh
+    // falls through to a handler that refreshes against the access token.
+    if (!String(env.JWT_REFRESH_SECRET ?? "").trim()) {
+      problems.push("JWT_REFRESH_SECRET is not set");
+    }
   }
 
   // Printed here so it is seen even when everything required is present.

@@ -295,8 +295,9 @@ const schoolSchema = new mongoose.Schema(
 
     /**
      * FIXED (#M5):
-     * code is now sparse-unique — two schools cannot share a code, but
-     * a school may have code: null (sparse allows multiple nulls).
+     * code is unique where set — two schools cannot share a code, but
+     * a school may have code: null (the partial index skips nulls). A code
+     * generated from the name is made unique (see the save hook).
      * Index defined below in SECTION 5.
      */
     code: {
@@ -613,15 +614,22 @@ schoolSchema.index({ isActive: 1, deletedAt: 1, applicationsOpen: 1 });
 // Verified badge queries
 schoolSchema.index({ verified: 1, isActive: 1 });
 
-// Sparse unique — allows null but prevents duplicate non-null values
+// Unique where set. These were `sparse`, under schools_email_unique and
+// schools_code_unique, on the belief that sparse lets many schools have none.
+// It does not: both fields default to null, and a sparse index still indexes a
+// field that is present with value null — so the second school without an
+// email (or a code) was refused with E11000 once the index existed. A partial
+// index on strings skips null and absent alike. New names, so it is never
+// confused with the old index on a database that has one: drop that one by
+// hand once this is built (scripts/provision-indexes.js reports it).
 schoolSchema.index(
   { email: 1 },
-  { unique: true, sparse: true, name: "schools_email_unique" }
+  { unique: true, partialFilterExpression: { email: { $type: "string" } }, name: "schools_email_unique_present" }
 );
 
 schoolSchema.index(
   { code: 1 },
-  { unique: true, sparse: true, name: "schools_code_unique" }
+  { unique: true, partialFilterExpression: { code: { $type: "string" } }, name: "schools_code_unique_present" }
 );
 
 // Soft-delete audit trail
@@ -652,7 +660,23 @@ schoolSchema.pre("save", async function () {
       .map((word) => word[0].toUpperCase())
       .join("");
 
-    this.code = initials.slice(0, 6) || null;
+    const base = initials.slice(0, 6);
+
+    // Unique among every school, deleted ones included (the unique index
+    // counts them). Initials collide constantly — "Government Bilingual High
+    // School Bamenda" and "… Buea" are both GBHSB — and with the unique index
+    // built, the second such school could not be created without someone
+    // typing a code. So a generated code takes the next free number:
+    // GBHSB, GBHSB2, GBHSB3 … (10 characters at most). A code an operator TYPES is
+    // left alone: a duplicate there is refused, as it should be. Two schools
+    // created at the same instant can still pick the same number; the second
+    // is then refused with "A school with this code already exists"
+    // (superAdmin.routes) and simply submitted again.
+    let code = base || null;
+    for (let n = 2; code && await this.constructor.exists({ code, _id: { $ne: this._id } }); n++) {
+      code = `${base}${n}`.length <= 10 ? `${base}${n}` : null;
+    }
+    this.code = code;
   }
 
   // ── Stamp applicationClosedAt / applicationOpenedAt ────────────────────────

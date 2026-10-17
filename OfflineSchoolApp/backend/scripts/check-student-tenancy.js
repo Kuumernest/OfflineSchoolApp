@@ -92,6 +92,9 @@ const main = async () => {
   const seed = async () => {
     await Student.deleteMany({});
     await Class.deleteMany({});
+    // A test reset, not a deletion: the fixture recreates the same ids, which
+    // the sync tombstones the delete above just wrote would refuse (410).
+    await require("../src/db/models/SyncTombstone").deleteMany({});
     await Class.collection.insertMany([
       { _id: "a-cls-1", schoolId: SCHOOL_A, name: "A Form 1", isActive: true,
         deletedAt: null, updatedAt: new Date() },

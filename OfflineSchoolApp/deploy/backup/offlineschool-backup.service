@@ -1,0 +1,25 @@
+# /etc/systemd/system/offlineschool-backup.service — one backup run.
+# Installed and scheduled as described in docs/17, "Backups".
+[Unit]
+Description=OfflineSchoolApp — MongoDB Atlas backup to off-VM storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# A dedicated, unprivileged user that owns /etc/offlineschool/backup.env (600)
+# and its rclone config. Not root, not the deploy user.
+User=offlineschool-backup
+Group=offlineschool-backup
+Environment=BACKUP_ENV_FILE=/etc/offlineschool/backup.env
+ExecStart=/opt/offlineschool/deploy/backup/mongo-backup.sh
+# Output goes to the journal: journalctl -u offlineschool-backup
+# The script prints no secrets.
+Nice=10
+IOSchedulingClass=best-effort
+TimeoutStartSec=2h
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/offlineschool
+ProtectHome=read-only

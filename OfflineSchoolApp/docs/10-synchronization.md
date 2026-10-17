@@ -49,14 +49,74 @@ Authorization: Bearer <JWT>
 }
 ```
 
-Six collections. `teachers` is `User` filtered to `role: "teacher"`; `students`
-is filtered to `status: "approved", isActive: true`. Every collection except
-`teachers` also filters `deletedAt: null`.
+Six collections. `teachers` is `User` filtered to `role: "teacher"`. A
+student's token receives only their own `students` row, and teacher names
+without email or account state — in `teachers` and in the teacher joined to
+each assignment.
 
-**`deletedItems` is always an empty array.** Deletions are not propagated by this
-endpoint. `PARTIALLY IMPLEMENTED` — the field is a placeholder, and a record
-soft-deleted on the server simply stops being sent, leaving the device's copy in
-place until something else overwrites it.
+### Deletions — how a removal reaches a phone (2026-10-17)
+
+The contract is **in-row tombstones**, the same as the desktop feed: a row
+that arrives with `deletedAt` set is marked deleted on the phone (each
+`sync*` apply function in `mobile/src/services/syncManager.js`), and a row
+that arrives without it is upserted and un-deleted.
+
+| Pull | What is sent |
+|---|---|
+| **First** (no `lastSync`) | live records only, as before: `deletedAt: null`; students `status: "approved", isActive: true`. `deletedItems: []`. |
+| **Incremental** (`lastSync` sent) | every row changed since the cursor, **including** soft-deleted ones (classes, periods, teachers); students who left the roster (no longer approved and active) as `{ _id, schoolId, deletedAt }`; and **hard deletes** from their tombstones, in the same shape. `deletedItems` lists every removal as `{ collection, id, deletedAt }` (informational). |
+
+**Hard deletes** (subjects, teacher assignments, students — including the
+subjects and assignments a class delete cascades to) leave no row, so the
+`syncTombstones` plugin (`src/db/plugins/syncTombstones.js`) writes a
+`SyncTombstone` (`schoolId, entity, docId, deletedAt`) **before** each delete,
+on the model, for every delete path. A tombstone whose row still exists (a
+delete that failed after writing it) is never sent. Tombstones are **never
+discarded**: a device offline for a term still receives every removal.
+
+**Stale uploads:** creating a subject, assignment or student under the `_id` of
+a tombstone is refused `410 RECORD_DELETED` — several create routes accept the
+client's `_id`, and a queued create would otherwise bring the record back. The
+phone's outbox treats a 410 on a create as permanent (parked as failed, shown);
+the desktop blocks its queue on it until a person discards the change.
+
+**Cursor:** unchanged — the inclusive `since` and the timestamp taken before
+the queries. A removal stamped exactly on the cursor is sent twice rather than
+never; applying it twice is a no-op. `check:syncdeletions` pins all of this.
+
+The 410 guard also covers the bulk paths that skip save middleware —
+`Model.insertMany`, and `Model.bulkWrite` insertOne and upserts on `_id` — and
+`bulkWrite` deleteOne/deleteMany write tombstones. A batch holding a deleted id
+is refused whole, naming the ids (`err.deletedIds`); nothing is silently
+dropped. Only raw driver writes (`Model.collection.*`) bypass both.
+
+### Desktop: hard deletes do not reach the mirror — OPEN
+
+`/sync/changes` serves rows by `(updatedAt, _id)` per collection and includes
+soft-deleted ones; the desktop store applies `deletedAt`. A hard-deleted
+subject, teacher assignment or student leaves no row, so the desktop keeps it
+for good (`desktop/src/main/db/store.js` `forget()` even documents deletions as
+"soft everywhere", which is not true for these three). Required before desktop
+installers ship:
+
+1. A `syncTombstone` feed collection in `src/config/syncFeed.js`, scoped by
+   school (a student's own record only) and paged on `(deletedAt, _id)`, or the
+   tombstones merged into each collection's page as `{ _id, deletedAt }`.
+2. The desktop engine marking the named row deleted in its own collection
+   (`docs` `deleted_at`), never inserting one it does not hold.
+3. Tests as in `check:syncdeletions`, against the feed and the desktop engine:
+   delete → mirror marks it; offline catch-up across pages; a tombstone for a
+   live row ignored; another school's never sent.
+
+### Stale queued creates that fail with 410
+
+Phone: the outbox classifies a 410 on a create as permanent and parks it as
+failed, shown to the user. Desktop: a 410 blocks the queue at that entry; the
+sync indicator shows the server's message with **Retry** (cannot succeed for a
+410) and **Discard** (confirmed, then deletes the queued request and its local
+row). Discard loses what the user typed — there is no copy. Recommended before
+desktop release: on a 410 `RECORD_DELETED`, offer to save the queued payload
+(e.g. a JSON export) before discarding, and say which record was deleted.
 
 ### The cursor, and the one-millisecond hole that was closed
 
@@ -279,7 +339,7 @@ and well inside budget, but the ratio is the thing to watch as data grows — se
 
 | Item | Classification |
 |---|---|
-| `data.deletedItems` in `/sync/pull` | **PARTIALLY IMPLEMENTED** — always `[]`. Deletions are not propagated to mobile. |
+| Deletions in `/sync/pull` | **IMPLEMENTED (2026-10-17)** — soft deletes, roster departures and hard deletes (tombstones) reach phones on an incremental pull; stale creates of a deleted id are refused 410. Desktop feed: soft deletes only. |
 | `POST /api/sync/push` | **UNUSED / DEAD CODE** — implemented server-side, called by nothing. |
 | Future-`updatedAt` documents can be skipped by the desktop cursor | **KNOWN, UNGUARDED, DELIBERATE.** Mitigated operationally by clearing the cursor. |
 | Two protocols with no convergence plan | **BY DESIGN at this commit.** Neither is deprecated. |

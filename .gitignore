@@ -25,3 +25,22 @@ OfflineSchoolApp/backend/backups/
 
 # Local editor settings.
 .vscode/
+
+# Deployment secrets — never committed. The server's environment file
+# (OfflineSchoolApp/deploy/backend.env, from backend.env.example), any other
+# .env, Android signing keys and certificates, and database backups.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+OfflineSchoolApp/deploy/**/*.env
+!OfflineSchoolApp/deploy/**/*.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+OfflineSchoolApp/deploy/backups/
+*.archive.gz

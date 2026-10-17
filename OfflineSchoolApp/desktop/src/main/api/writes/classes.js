@@ -88,8 +88,9 @@ module.exports = [
       if (!body?.id) return null;
       const id = String(body.id).trim();
       if (docs.get("class", id)) return null;
-      const existing = docs.find("class", { name, schoolId, isActive: true })[0];
-      if (existing) return null;
+      // Any class not deleted holds its name, compared without case, as the
+      // server's unique index does (../names.js): the server's 409 is its own.
+      if (require("../names").classNameTaken(docs, schoolId, name)) return null;
 
       // The form master. A teacher this mirror cannot see declines the create
       // (the server's 403 is its own to give); the other two shapes are

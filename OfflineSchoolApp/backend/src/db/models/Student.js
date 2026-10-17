@@ -46,9 +46,7 @@ const studentSchema = new mongoose.Schema(
         function () { return this.status === "approved"; },
         "User ID is required for an enrolled student",
       ],
-      index:    true,
-      unique:   true,
-      sparse:   true,
+      // Unique where set: see the partial index below.
     },
 
     applicationId: {
@@ -81,9 +79,7 @@ const studentSchema = new mongoose.Schema(
         function () { return this.status === "approved"; },
         "Enrollment number is required for an enrolled student",
       ],
-      unique:   true,
-      sparse:   true,
-      index:    true,
+      // Unique where set: see the partial index below.
     },
 
     // ── Personal Info ─────────────────────────────────────────────────────
@@ -245,6 +241,21 @@ studentSchema.index({ schoolId: 1, isActive:  1 });
 studentSchema.index({ schoolId: 1, status:    1 }); // ✅ defined ONCE
 studentSchema.index({ createdAt: -1             });
 studentSchema.index({ enrollmentNo: 1, schoolId: 1 });
+// userId and enrollmentNo: unique where set. These were field-level
+// `unique + sparse`, and sparse skips only a MISSING field — an application
+// with no account yet is saved with userId: null, and the second such pupil
+// was refused once the index existed (two did exist, on the demo database).
+// Partial on strings skips null and absent alike, as gateToken below does.
+// New names, beside any old userId_1 / enrollmentNo_1 on a live database
+// (scripts/provision-indexes.js reports those as legacy, for dropping by hand).
+studentSchema.index(
+  { userId: 1 },
+  { unique: true, partialFilterExpression: { userId: { $type: "string" } }, name: "students_userId_unique_present" }
+);
+studentSchema.index(
+  { enrollmentNo: 1 },
+  { unique: true, partialFilterExpression: { enrollmentNo: { $type: "string" } }, name: "students_enrollmentNo_unique_present" }
+);
 // Unique ONLY over real token strings. NOTE: a plain `sparse: true` index is
 // NOT enough here — sparse only excludes documents where the field is MISSING,
 // while this schema stores an explicit `gateToken: null` on every student, and
@@ -402,5 +413,9 @@ studentSchema.statics.findActiveBySchool = function (schoolId) {
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 studentSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so devices learn of them through GET /sync/pull,
+// and a deleted id cannot be recreated (db/plugins/syncTombstones.js).
+studentSchema.plugin(require("../plugins/syncTombstones"), { entity: "student" });
+
 module.exports =
   mongoose.models.Student || mongoose.model("Student", studentSchema);

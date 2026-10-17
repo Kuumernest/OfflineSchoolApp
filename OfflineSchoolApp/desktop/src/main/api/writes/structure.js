@@ -278,14 +278,13 @@ module.exports = [
      * body that arrived, so a colleague's change to a field this user did not
      * touch survives.
      *
-     * ── There is NO uniqueness check on this path ─────────────────────────
+     * ── Names are unique per school ───────────────────────────────────────
      *
-     * POST /admin/classes refuses a duplicate name with a 409. This does not,
-     * and there is no unique index on { schoolId, name } to catch it either — the
-     * Class model declares { schoolId: 1, name: 1 } without `unique`. So renaming
-     * "Form 2" to "Form 1" is accepted and the school ends up with two. No local
-     * check, because a check the server does not make would decline a write it
-     * would have accepted, and the whole screen would then need a connection.
+     * The server refuses a rename onto a name another class holds — any case,
+     * any class not deleted — with a 409, and a unique index
+     * (class_name_unique_per_school) stands behind it. It used to accept one,
+     * and this handler matched it. Now a clash the mirror can see declines
+     * (../names.js), so a rename certain to be refused is never queued.
      *
      * ── The 500s ─────────────────────────────────────────────────────────
      *
@@ -323,6 +322,8 @@ module.exports = [
         if (name === null) return null;        // a TypeError on the server
         if (!name)         return null;        // required — a 500, and retryable
         if (name.length > 100) return null;    // maxlength — the same
+        // Another class already called that: the server's 409 is its own.
+        if (require("../names").classNameTaken(docs, schoolId, name, row._id)) return null;
         updates.name = name;
       }
 
@@ -439,6 +440,14 @@ module.exports = [
         if (name === null) return null;   // a TypeError on the server
         if (!name)         return null;   // required, raised as a 500
         updates.name = name;
+      }
+
+      // A rename, or a move to another class, onto a name that class already
+      // has (any case): the server refuses it with a 409, so declined here.
+      if (updates.name || classIdStr) {
+        const targetClass = classIdStr || row.classId || row.class;
+        const targetName  = updates.name || row.name;
+        if (targetClass && require("../names").subjectNameTaken(docs, schoolId, targetClass, targetName, row._id)) return null;
       }
 
       if (body.code !== undefined) {

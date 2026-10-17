@@ -47,6 +47,25 @@ const check = (label, actual, expected) => {
   check("on its own line, then the summary",
     lines, [`[indexes] missing on students: { ${spec} }${target.unique ? " (unique)" : ""}`, `[indexes] Indexes verified: ${declared - 1}, missing: 1`]);
 
+  // A unique index replaced by a plain one on the same key: the key pattern
+  // matches, so this used to count as "verified". It enforces nothing.
+  const { indexState } = require("../src/services/indexCheck.service");
+  const ExamMark = mongoose.model("ExamMark");
+  const uniq = (await ExamMark.collection.indexes()).find((ix) => ix.unique);
+  await ExamMark.collection.dropIndex(uniq.name);
+  await ExamMark.collection.createIndex(uniq.key, { name: "plain_lookalike" });
+  lines.length = 0;
+  const lookalike = await verifyDeclaredIndexes({ log: (l) => lines.push(l) });
+  check("a plain index where a unique one is declared: INCOMPATIBLE, not verified",
+    [lookalike.incompatible.map((m) => [m.collection, m.unique]), lookalike.verified, lookalike.criticalProblems],
+    [[["exammarks", true]], declared - 2, 1]);
+  check("  said as an error with what to run, and in the summary",
+    [lines.some((l) => l.startsWith("[indexes] INCOMPATIBLE on exammarks") && l.includes("plain_lookalike")),
+     lines.some((l) => l.includes("Indexes verified:") && l.endsWith("incompatible: 1")),
+     lines.some((l) => l.includes("unique/TTL index(es) missing or incompatible") && l.includes("provision-indexes"))],
+    [true, true, true]);
+  check("  and kept for the readiness check", [indexState().criticalProblems, indexState().checkedAt instanceof Date], [1, true]);
+
   // A collection that does not exist yet: its indexes are missing, and nothing throws.
   await mongoose.connection.db.dropCollection("students");
   let threw = false, r = null;
