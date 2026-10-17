@@ -37,10 +37,10 @@ async function candidates(query, single) {
   const filter = query.getFilter();
   if (single) {
     const sort = query.getOptions()?.sort;
-    const one = await query.model.findOne(filter).sort(sort || {}).select("_id schoolId").lean();
+    const one = await query.model.findOne(filter).sort(sort || {}).select("_id schoolId classId class").lean();
     return one ? [one] : [];
   }
-  return query.model.find(filter).select("_id schoolId").lean();
+  return query.model.find(filter).select("_id schoolId classId class").lean();
 }
 
 async function writeTombstones(entity, rows) {
@@ -49,7 +49,11 @@ async function writeTombstones(entity, rows) {
   await tombstoneModel().bulkWrite(rows.map((r) => ({
     updateOne: {
       filter: { entity, docId: String(r._id) },
-      update: { $set: { schoolId: r.schoolId != null ? String(r.schoolId) : null, deletedAt: now } },
+      update: { $set: {
+        schoolId: r.schoolId != null ? String(r.schoolId) : null,
+        classId:  r.classId != null ? String(r.classId) : (r.class != null ? String(r.class) : null),
+        deletedAt: now,
+      } },
       upsert: true,
     },
   })), { ordered: false });
@@ -96,7 +100,7 @@ module.exports = function syncTombstones(schema, { entity }) {
   schema.post("findOneAndDelete", { query: true, document: false }, queryUndo);
 
   schema.pre("deleteOne", { document: true, query: false }, async function preDoc() {
-    await writeTombstones(entity, [{ _id: this._id, schoolId: this.schoolId }]);
+    await writeTombstones(entity, [{ _id: this._id, schoolId: this.schoolId, classId: this.classId ?? this.class }]);
   });
   schema.post("deleteOne", { document: true, query: false }, function undoDoc(err, _res, next) {
     withdrawTombstones(entity, [{ _id: this._id }]).finally(() => next(err));
@@ -134,9 +138,9 @@ module.exports = function syncTombstones(schema, { entity }) {
     // above (a tombstone for a row that survives is never sent by the pull).
     const doomed = [];
     for (const op of ops || []) {
-      if (op?.deleteMany?.filter) doomed.push(...await this.find(op.deleteMany.filter).select("_id schoolId").lean());
+      if (op?.deleteMany?.filter) doomed.push(...await this.find(op.deleteMany.filter).select("_id schoolId classId class").lean());
       if (op?.deleteOne?.filter) {
-        const one = await this.findOne(op.deleteOne.filter).select("_id schoolId").lean();
+        const one = await this.findOne(op.deleteOne.filter).select("_id schoolId classId class").lean();
         if (one) doomed.push(one);
       }
     }

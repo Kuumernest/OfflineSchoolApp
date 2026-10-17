@@ -61,6 +61,44 @@ const wholeSchool = () => ({});
  * every guardian's name and phone number for the school — which is precisely
  * what the capability students.viewTaught exists to prevent.
  */
+/**
+ * Which hard deletes this caller hears of (models/SyncTombstone.js): those of
+ * the records it may mirror at all. Subject and teacher-assignment deletions
+ * with subjects.view (both collections are read under it); a pupil's deletion
+ * with students.view, or — for a teacher holding only students.viewTaught —
+ * for pupils of the classes they teach (the tombstone keeps the class, the
+ * pupil's row being gone).
+ */
+const tombstonesVisible = async (req, models) => {
+  if (req.user?.role === ROLES.SUPER_ADMIN) return {};
+  if (!req._heldForTombstones) {
+    req._heldForTombstones = new Set(
+      await require("../services/permissions.service").effectiveFor(req.user?.role, req.user?.schoolId)
+    );
+  }
+  const held = req._heldForTombstones;
+  const visible = [];
+  if (held.has("subjects.view")) visible.push({ entity: { $in: ["subject", "teacherAssignment"] } });
+  if (held.has("students.view")) {
+    visible.push({ entity: "student" });
+  } else if (held.has("students.viewTaught")) {
+    visible.push({ entity: "student", ...(await taughtStudentsOnly(req, models)) });
+  }
+  return visible.length ? { $or: visible } : { entity: { $in: [] } };
+};
+
+/** A tombstone whose row still exists (a delete that failed after writing it) is not sent. */
+const dropTombstonesOfLiveRows = async (rows, models) => {
+  const modelOf = { subject: models.Subject, teacherAssignment: models.TeacherAssignment, student: models.Student };
+  const live = new Set();
+  for (const [entity, Model] of Object.entries(modelOf)) {
+    const ids = rows.filter((r) => r.entity === entity).map((r) => r.docId);
+    if (!ids.length || !Model) continue;
+    for (const id of await Model.find({ _id: { $in: ids } }).distinct("_id")) live.add(`${entity}:${id}`);
+  }
+  return rows.filter((r) => !live.has(`${r.entity}:${r.docId}`));
+};
+
 const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
   // Six collections carry this scope, and a page of the feed asks each of
@@ -164,6 +202,8 @@ const marksAsReadOnline = async (req, models) => {
  *           collection with something loosely related.
  * @property {Function} [scope]     Extra filter, given (req, models).
  * @property {string[]} [omit]      Fields never sent, whatever the caller holds.
+ * @property {Function} [postFilter]  (page, models) → the rows actually sent; the cursor
+ *           still follows the page, so a dropped row is passed, not refetched.
  * @property {string}   [why]       Only where the pairing is not obvious.
  */
 
@@ -182,6 +222,16 @@ const FEED = [
          "carries no more than the names those three things already have.",
   },
   { collection: "timetableSlot", model: "TimetableSlot", permission: "timetable.view" },
+  {
+    collection: "syncTombstone", model: "SyncTombstone",
+    permission: ["subjects.view", "students.view", "students.viewTaught"],
+    scope: tombstonesVisible,
+    postFilter: dropTombstonesOfLiveRows,
+    why: "How a HARD delete (subject, teacher assignment, pupil) reaches the " +
+         "mirror: the row is gone, so its tombstone is sent instead and the " +
+         "desktop removes its copy. Only for records the caller may mirror " +
+         "(the scope); a tombstone whose row still exists is never sent.",
+  },
   { collection: "gradingConfig", model: "GradingConfig", permission: "results.view" },
   {
     collection: "announcement", model: "Announcement",
@@ -437,11 +487,6 @@ const EXCLUDED = {
   SyncLog:
     "A record of other devices' syncs. Operational, not school data.",
 
-  SyncTombstone:
-    "The record that a subject, assignment or student was hard-deleted. GET " +
-    "/sync/pull turns it into the deleted row the phone applies; mirrored as " +
-    "itself it would be a list of ids with nothing to apply them to. The " +
-    "desktop feed does not carry these deletions yet (docs/10).",
 
   SyncOverwrite:
     "An instruction to one specific device, consumed by the existing mobile " +

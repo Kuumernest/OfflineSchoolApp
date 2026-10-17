@@ -223,9 +223,14 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
           let cursor = slice.cursor;
 
           if (slice.documents?.length) {
-            const { stored, held, firstHeldIndex } = docs.merge(name, slice.documents);
+            // Tombstones are not rows to keep: each removes the row it names
+            // (a hard delete on the server), under the same hold rule.
+            const tombstones = name === "syncTombstone";
+            const { stored, held, firstHeldIndex } = tombstones
+              ? docs.applyTombstones(slice.documents)
+              : docs.merge(name, slice.documents);
             pulled += stored;
-            for (const id of held) heldBack.push(`${name}/${id}`);
+            for (const id of held) heldBack.push(tombstones ? id : `${name}/${id}`);
 
             // THE CURSOR MAY NOT PASS A DOCUMENT THAT WAS NOT STORED.
             //

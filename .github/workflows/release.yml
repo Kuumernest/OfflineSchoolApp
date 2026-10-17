@@ -4,8 +4,8 @@
 #   - the Android APK, through EAS Build (profile production-apk), for direct
 #     distribution to schools;
 #   - the desktop installers (Windows, Linux, macOS), ONLY when the repository
-#     variable DESKTOP_RELEASE_ENABLED is "true" — the packaged desktop app does
-#     not yet work (docs/17, launch blockers), so it is off by default;
+#     variable DESKTOP_RELEASE_ENABLED is "true" — off by default until an
+#     installer has been tested against staging (docs/17);
 # and attaches them, with SHA256SUMS, to a DRAFT GitHub Release. A person
 # reviews and publishes the draft. Nothing here deploys the server, publishes
 # to a store, or turns on auto-update.

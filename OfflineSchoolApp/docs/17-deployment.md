@@ -415,8 +415,9 @@ read-only except for the final job (`contents: write`, to create the draft).
   publisher" (More info → Run anyway) until a certificate builds reputation;
   macOS Gatekeeper refuses the app until allowed in System Settings → Privacy &
   Security. No auto-update is configured or enabled.
-- **Connectivity fixed** ("Desktop: reaching the server" below). Keep
-  `DESKTOP_RELEASE_ENABLED` unset until hard deletes reach the desktop (docs/10).
+- **Connectivity fixed** ("Desktop: reaching the server" below) and **hard
+  deletes reach the desktop** (docs/10). Test an installer against staging,
+  then set `DESKTOP_RELEASE_ENABLED`.
 - Rollback caution (unchanged): a machine that has run a newer build refuses an
   older one against the same local database (`store.js` schema version).
 
@@ -449,8 +450,7 @@ app://school/, `fetch` and `XMLHttpRequest` and a POST reach the server with no
 Origin, deep links route, the first-run screen, offline = network error).
 Needs the web build, the Electron binary and `xvfb-run`.
 
-Still open before desktop installers ship: hard deletes in the desktop feed
-(docs/10). Test an installer against **staging**, never production.
+Before desktop installers ship: test one against **staging**, never production.
 
 ### Mobile
 
@@ -596,7 +596,7 @@ anything.
 [ ] Cloudflare Pages: VITE_API_URL set; Pages domain(s) in ALLOWED_ORIGINS; login works end to end
 [ ] Backups: timer enabled; one successful run seen in the bucket; one restore drill into staging passed; alert configured
 [ ] Android: eas init + keystore generated and backed up offline; EXPO_TOKEN + PRODUCTION_API_URL set; a test tag produces an installable APK
-[ ] Desktop: hard deletes reach the desktop feed (docs/10) and an installer is tested against staging — until then DESKTOP_RELEASE_ENABLED stays unset
+[ ] Desktop: an installer tested against staging (school_db) — until then DESKTOP_RELEASE_ENABLED stays unset
 [ ] npm run check:all passes on the deployment commit
 ```
 

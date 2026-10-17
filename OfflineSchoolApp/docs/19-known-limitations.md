@@ -88,8 +88,8 @@ new names); old copies on a live database must be dropped by hand first.
 The window is now served from `app://school/` and relays `/api` and `/uploads`
 to the configured server from the main process (docs/17, "Desktop: reaching the
 server"); verified by launching the real app under xvfb (`check:launch`).
-Desktop installers stay disabled until hard deletes reach the desktop feed
-(docs/10).
+Hard deletes now reach the desktop feed too (docs/10). Desktop installers stay
+disabled until one has been tested against staging.
 
 ## B. Data remediation outstanding
 
