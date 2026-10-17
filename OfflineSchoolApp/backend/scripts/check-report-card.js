@@ -453,6 +453,21 @@ check("the pupil's standing is stated once, in the panel",
   [cellOf(panelCard, "Rank"), cellOf(panelCard, "Average"), cellOf(panelCard, "Overall Grade")],
   ["5 / 35", "13.50 /20", "B"]);
 
+// The school place, under the class's, once the period has one.
+check("no school place computed: no School Rank line", cellOf(panelCard, "School Rank"), null);
+const schoolPlaced = (over) => render({ ...PANELLED,
+  summary: { ...payload().summary, schoolPosition: 41, totalInSchool: 280 }, ...over });
+check("  a school place: School Rank 41 / 280, after the class's Rank",
+  [cellOf(schoolPlaced({}), "Rank"), cellOf(schoolPlaced({}), "School Rank"),
+   schoolPlaced({}).indexOf(">Rank<") < schoolPlaced({}).indexOf(">School Rank<")],
+  ["5 / 35", "41 / 280", true]);
+check("  on a term and an annual card too",
+  ["term", "annual"].map((reportType) => cellOf(schoolPlaced({ reportType }), "School Rank")),
+  ["41 / 280", "41 / 280"]);
+check("  and in French", cellOf(renderReportCardHtml(payload({ ...PANELLED,
+  summary: { ...payload().summary, schoolPosition: 41, totalInSchool: 280 } }), { ...SCHOOL, lang: "fr" }),
+  "Rang dans l'établissement"), "41 / 280");
+
 // ── The teacher of each subject, under its name ───────────────────────────
 const taughtCard = render({ ...PANELLED, subjects: [
   { ...SUBJECTS[0], teacherName: "Mr Rolland" },

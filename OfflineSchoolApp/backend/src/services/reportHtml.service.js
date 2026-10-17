@@ -96,6 +96,7 @@ const LABELS = {
     attendPanel:  "Attendance",
     conductPanel: "Conduct",
     rank:         "Rank",
+    schoolRank:   "School Rank",
     termAverage:  "Term Average",
     annualAverage: "Annual Average",
     classAverage: "Class Average",
@@ -170,6 +171,7 @@ const LABELS = {
     attendPanel:  "Assiduité",
     conductPanel: "Conduite",
     rank:         "Rang",
+    schoolRank:   "Rang dans l'établissement",
     termAverage:  "Moyenne du trimestre",
     annualAverage: "Moyenne annuelle",
     classAverage: "Moyenne de la classe",
@@ -626,6 +628,11 @@ function renderReportCardHtml(payload, opts = {}) {
   const perfRows = [
     summary?.classPosition != null
       ? row(t.rank, `${summary.classPosition}${summary.totalInClass != null ? ` / ${summary.totalInClass}` : ""}`)
+      : "",
+    // Every pupil in the school with a result for the period; absent until
+    // the period has been computed with school places.
+    summary?.schoolPosition != null
+      ? row(esc(t.schoolRank), `${summary.schoolPosition}${summary.totalInSchool != null ? ` / ${summary.totalInSchool}` : ""}`)
       : "",
     avg20 != null ? row(averageLabel, `${avg20.toFixed(2)} ${t.outOf20}`) : "",
     summary?.overallGrade ? row(t.overallGrade, esc(summary.overallGrade)) : "",
