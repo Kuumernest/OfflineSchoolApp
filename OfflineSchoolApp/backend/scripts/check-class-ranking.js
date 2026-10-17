@@ -585,6 +585,43 @@ const main = async () => {
   check("  k1a's term and annual cards carry both places: 1/2 in the class, 1/5 in the school",
     [placed(termCard), placed(annualCard)], [[1, 2, 1, 5], [1, 2, 1, 5]]);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- grade places for a term and a year ---");
+  // el1 sat by L1A (la1 15, la2 11) and L1B (lb1 13), both level Form 1,
+  // and L2 (lc1 17), no level. A whole-school compute, then L1B alone.
+  const LV = await school(YEAR);
+  await cls(LV, "L1A", ["la1", "la2"]);
+  await cls(LV, "L1B", ["lb1"]);
+  await cls(LV, "L2",  ["lc1"]);
+  await M("Class").updateMany({ _id: { $in: ["L1A", "L1B"] } }, { $set: { level: "Form 1" } });
+  await exam(LV, "el1", ["L1A", "L1B", "L2"]);
+  await marks(LV, "el1", "L1A", { la1: 15, la2: 11 });
+  await marks(LV, "el1", "L1B", { lb1: 13 });
+  await marks(LV, "el1", "L2",  { lc1: 17 });
+  // [grade place, of, school place, of] per pupil.
+  const gradeOf = async (model, ids) => Object.fromEntries(await Promise.all(ids.map(async (id) => {
+    const filter = { schoolId: LV, academicYear: YEAR, studentId: id, deletedAt: null, ...(model === "TermResult" ? { term: 1 } : {}) };
+    const r = await M(model).findOne(filter).lean();
+    return [id, r ? [r.gradePosition, r.totalInGrade, r.schoolPosition, r.totalInSchool] : null];
+  })));
+  const L = ["la1", "la2", "lb1", "lc1"];
+  await processExam(LV, "el1");
+  await call(LV, "POST", "/term-results/compute", { academicYear: YEAR, term: 1 });
+  await annual.computeAllClassAnnualAverages({ schoolId: LV, academicYear: YEAR });
+  const lvPlaces = { la1: [1, 3, 2, 4], la2: [3, 3, 4, 4], lb1: [2, 3, 3, 4], lc1: [null, null, 1, 4] };
+  check("Form 1 over L1A and L1B: 15, 13, 11 → 1, 2, 3 of 3; L2 has no level, no grade; school 17, 15, 13, 11",
+    [await gradeOf("TermResult", L), await gradeOf("AnnualResult", L)], [lvPlaces, lvPlaces]);
+  await M("StudentScore").updateMany({ examId: "el1", studentId: "lb1" }, { $set: { score: 16 } });
+  await processExam(LV, "el1", "L1B");
+  await computeTerm(LV, "L1B");
+  await annual.computeClassAnnualAverages({ schoolId: LV, academicYear: YEAR, classId: "L1B" });
+  const lvMoved = { la1: [2, 3, 3, 4], la2: [3, 3, 4, 4], lb1: [1, 3, 2, 4], lc1: [null, null, 1, 4] };
+  check("  L1B alone recomputed with lb1's 16: L1A's grade places move with it, at the term and the year",
+    [await gradeOf("TermResult", L), await gradeOf("AnnualResult", L)], [lvMoved, lvMoved]);
+  const lbCard = await cards.buildTermCard({ schoolId: LV, academicYear: YEAR, term: 1, classId: "L1B", studentId: "lb1" });
+  check("  lb1's term card carries the grade place: 1/3",
+    [lbCard?.summary?.gradePosition, lbCard?.summary?.totalInGrade], [1, 3]);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();
   await mongoose.disconnect();

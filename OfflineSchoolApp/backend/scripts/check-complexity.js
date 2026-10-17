@@ -128,8 +128,8 @@ const check = (label, actual, expected) => {
   // ≤ 11: the school's current year and whether a promotion has closed it
   // (rankingScope.service), which decide whether a departed pupil's row is
   // dropped from the ranking — one read here, two when the year is current.
-  // ≤ 13: the school places (schoolRanking.service), one read of the year's
-  // rows and one write of those that moved.
+  // ≤ 13: the grade and school places (schoolRanking.service), reads of the
+  // year's rows and their classes' levels, and one write of those that moved.
   check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 13, small.r.computed, large.r.computed], [true, true, 5, 40]);
   if (small.n !== large.n) console.log("       small: " + small.cmds.map((c) => c.commandName).join(" ") + " | large: " + large.cmds.map((c) => c.commandName).join(" "));
   const fast = await M("AnnualResult").find({ schoolId: A, classId: "cls-l" }).sort({ studentId: 1 }).lean();
