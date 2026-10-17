@@ -30,13 +30,19 @@
 const path = require("path");
 const fs   = require("fs");
 
-const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog, protocol, net } = require("electron");
 
 const store        = require("./db/store");
 const { outbox }   = require("./db/outbox");
 const { client }   = require("./sync/client");
 const { engine }   = require("./sync/engine");
 const localApi     = require("./api");
+const appProtocol  = require("./appProtocol");
+const { normaliseServerUrl, checkServer } = require("./serverAddress");
+
+// app://school/ — the window's origin (appProtocol.js says why not file://).
+// Privileges must be registered before the app is ready.
+protocol.registerSchemesAsPrivileged([appProtocol.SCHEME]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STARTUP
@@ -92,6 +98,10 @@ let sync    = null;
 let session = null;
 
 const DB_FILE = () => path.join(app.getPath("userData"), "data", "school.db");
+
+// The built web app. From a checkout: OfflineSchoolApp/web/dist. Packaged:
+// resources/web/dist (electron-builder extraResources), the same relative path.
+const WEB_DIST = path.join(__dirname, "..", "..", "..", "web", "dist");
 
 /**
  * Open the database, or explain why not and stop.
@@ -185,15 +195,19 @@ const createWindow = () => {
   // duplicated — this reads web/dist directly, so a `vite build` in the web
   // package is immediately what the desktop shows.
   const devServer = process.env.VITE_DEV_SERVER_URL;
-  const built     = path.join(__dirname, "..", "..", "..", "web", "dist", "index.html");
+  const built     = path.join(WEB_DIST, "index.html");
 
   if (devServer) {
     console.log(`[window] ${devServer}`);
     win.loadURL(devServer);
     win.webContents.openDevTools({ mode: "detach" });
   } else if (fs.existsSync(built)) {
-    console.log(`[window] ${built}`);
-    win.loadFile(built);
+    // Served by the app:// scheme (registered in whenReady), not loadFile.
+    console.log(`[window] ${appProtocol.ORIGIN}/ ← ${WEB_DIST}`);
+    // A smoke run may start on a deep link, to prove the router takes it.
+    const start = process.env.SCHOOL_DESKTOP_SMOKE && process.env.SCHOOL_DESKTOP_START_PATH
+      ? process.env.SCHOOL_DESKTOP_START_PATH : "/";
+    win.loadURL(`${appProtocol.ORIGIN}${start}`);
   } else {
     // Said plainly rather than showing a blank window, because this is the
     // first thing that will go wrong for anybody building this.
@@ -327,12 +341,24 @@ const registerHandlers = () => {
     return sync.status();
   });
 
-  /** Which server this installation belongs to. Persisted. */
+  /**
+   * Which server this installation belongs to. Persisted.
+   *
+   * Every request the local mirror cannot answer, and all of sync, goes to it
+   * (appProtocol.js, sync/client.js). Set from the first-run screen, or
+   * shipped as the package default (package.json config.defaultServerUrl).
+   */
   ipcMain.handle("server:get", () => api.serverUrl() || null);
   ipcMain.handle("server:set", (_e, url) => {
-    api.setServerUrl(url);
-    return api.serverUrl() || null;
+    const normalised = normaliseServerUrl(url);
+    if (!normalised.ok) return { ok: false, error: normalised.error };
+    api.setServerUrl(normalised.url);
+    // A new server is a new school's data: sync starts over against it.
+    if (sync && session) void sync.cycle();
+    return { ok: true, url: api.serverUrl() };
   });
+  /** Is there a school server at this address? Before it is saved. */
+  ipcMain.handle("server:check", (_e, url) => checkServer(url, (u, init) => net.fetch(u, init)));
 
   /** Sync now — a button, or straight after a local write. */
   ipcMain.handle("sync:now", () => sync.cycle());
@@ -344,6 +370,15 @@ app.whenReady().then(() => {
   if (!openDatabase()) { app.quit(); return; }
 
   registerHandlers();
+
+  protocol.handle("app", appProtocol.createAppProtocolHandler({
+    distDir:   WEB_DIST,
+    serverUrl: () => api?.serverUrl() || "",
+    // Chromium's network stack: the machine's proxy and certificate settings,
+    // as a browser on it would use.
+    fetchImpl: (url, init) => net.fetch(url, { ...init, bypassCustomProtocolHandlers: true }),
+  }));
+
   createWindow();
 
   // A smoke mode, so a build can be checked without a person watching. Opens
@@ -359,8 +394,39 @@ app.whenReady().then(() => {
       ? path.join(app.getPath("temp"), "school-desktop-smoke.txt")
       : path.join(__dirname, "..", "..", "smoke-result.txt");
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const win = BrowserWindow.getAllWindows()[0];
+
+      // What the window itself sees: where it is, whether the app rendered,
+      // and what a request from the page to /api gets — through app://, to the
+      // server (or 503 NO_SERVER with none set). The proof the packaged app
+      // reaches its server, which a window merely existing never was.
+      let renderer = "-";
+      if (win) {
+        try {
+          renderer = JSON.stringify(await win.webContents.executeJavaScript(`(async () => {
+            const health = await fetch("/api/health").then(
+              async (r) => ({ status: r.status, body: (await r.text()).slice(0, 120) }),
+              (e) => ({ error: String(e) }));
+            // What axios actually uses in the window, and a write with a body.
+            const xhr = await new Promise((done) => {
+              const x = new XMLHttpRequest();
+              x.open("GET", "/api/health");
+              x.onload  = () => done({ status: x.status });
+              x.onerror = () => done({ error: "network error" });
+              x.send();
+            });
+            const post = await fetch("/api/echo", { method: "POST",
+              headers: { "content-type": "application/json" }, body: JSON.stringify({ probe: 1 }) }).then(
+              async (r) => ({ status: r.status, body: (await r.text()).slice(0, 120) }),
+              (e) => ({ error: String(e) }));
+            return { href: location.href, xhr, post,
+                     mounted: (document.getElementById("root")?.childElementCount || 0) > 0,
+                     text: document.body.innerText.replace(/\\s+/g, " ").slice(0, 160),
+                     health };
+          })()`));
+        } catch (err) { renderer = `FAILED — ${err.message}`; }
+      }
 
       // How many routes the local API registered. This is the line that proves
       // the shared modules resolved: every handler requires at least one of
@@ -380,6 +446,7 @@ app.whenReady().then(() => {
         `title          ${win ? JSON.stringify(win.getTitle()) : "-"}`,
         `url            ${win ? win.webContents.getURL().slice(0, 160) : "-"}`,
         `local routes   ${routes}`,
+        `renderer       ${renderer}`,
         `schema         ${store.SCHEMA_VERSION}`,
         `result file    ${out}`,
       ].join("\n") + "\n");

@@ -44,12 +44,18 @@ class SyncError extends Error {
   }
 }
 
+let PACKAGED_DEFAULT = "";
+try { PACKAGED_DEFAULT = String(require("../../../package.json").config?.defaultServerUrl || ""); } catch { /* none */ }
+
 const client = ({ meta }) => {
   // Never persisted. See the note above.
   let token = null;
 
+  // Set on the first-run screen (meta, persisted); or for a test run, the
+  // environment; or the address this installer was built for
+  // (package.json config.defaultServerUrl, written by the release workflow).
   const baseUrl = () =>
-    (meta.get("serverUrl") || process.env.SCHOOL_SERVER_URL || "").replace(/\/+$/, "");
+    (meta.get("serverUrl") || process.env.SCHOOL_SERVER_URL || PACKAGED_DEFAULT || "").replace(/\/+$/, "");
 
   /**
    * @param {string} [idemKey] Sent as Idempotency-Key. See replay() below.
