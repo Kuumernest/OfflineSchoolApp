@@ -46,6 +46,10 @@ teacherAssignmentSchema.index({ schoolId: 1, subject: 1 });
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 teacherAssignmentSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so devices learn of them through GET /sync/pull,
+// and a deleted id cannot be recreated (db/plugins/syncTombstones.js).
+teacherAssignmentSchema.plugin(require("../plugins/syncTombstones"), { entity: "teacherAssignment" });
+
 module.exports =
   mongoose.models.TeacherAssignment ||
   mongoose.model("TeacherAssignment", teacherAssignmentSchema);

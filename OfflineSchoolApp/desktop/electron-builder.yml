@@ -54,6 +54,34 @@ extraResources:
 #
 # The schools this is for run Windows, and the machine is usually a single office
 # computer that somebody sets up once.
+# One name per platform and architecture, so the release workflow can put
+# every installer side by side without one overwriting another.
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+
+# Linux and macOS (added for the tagged-release workflow). The app has no
+# native modules (SQLite is node:sqlite), so each builds on its own runner.
+linux:
+  category: Education
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+
+# UNSIGNED. No Apple Developer ID is configured, so identity is null:
+# electron-builder does not sign, and macOS Gatekeeper will refuse to open the
+# app until the user allows it (System Settings → Privacy & Security → Open
+# Anyway). Notarisation needs the Developer ID; see docs/17.
+mac:
+  category: public.app-category.education
+  identity: null
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+
+portable:
+  artifactName: "${productName}-${version}-win-${arch}-portable.${ext}"
+
 win:
   target:
     # An installer for the office machine...
@@ -68,6 +96,8 @@ win:
 nsis:
   # Per-user, so no administrator password is needed. A school where the person
   # setting this up does not have the admin account is not an edge case.
+  # Both Windows targets are .exe: named apart so neither overwrites the other.
+  artifactName: "${productName}-${version}-win-${arch}-setup.${ext}"
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

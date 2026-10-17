@@ -1,0 +1,12 @@
+# /etc/systemd/system/offlineschool-backup.timer — nightly at 02:30 server time.
+[Unit]
+Description=Nightly OfflineSchoolApp MongoDB Atlas backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15min
+# Runs at the next boot if the VM was off at 02:30.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

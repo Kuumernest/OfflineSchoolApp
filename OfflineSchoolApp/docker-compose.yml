@@ -1,40 +1,35 @@
-version: "3.9"
+# docker-compose.yml — the production stack on one VM (docs/17).
+#
+#   backend   the Express API, built from ./Dockerfile (target `production`)
+#   nginx     the only public door: 80 (ACME challenge + redirect) and 443
+#   certbot   renews the Let's Encrypt certificate twice a day
+#
+# The database is MongoDB Atlas, outside this stack: there is no mongo service.
+# The web console is served by Cloudflare Pages, not by this stack: nginx
+# proxies /api/ and /uploads/ and answers 404 for everything else.
+#
+# Configuration comes from two places, neither of them in git:
+#   - the backend's environment file, BACKEND_ENV_FILE (default
+#     ./deploy/backend.env, from deploy/backend.env.example; chmod 600) —
+#     MONGODB_URI, JWT secrets, ALLOWED_ORIGINS, Brevo, Sentry, Anthropic …
+#     The backend refuses to start without the required ones (src/config/env.js).
+#   - the shell or ./.env next to this file, for compose itself: DOMAIN.
 
 services:
-  # ── MongoDB ──────────────────────────────────────────────────────────────────
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
-    # logs cannot fill the disk (docs/40 0.9).
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-    volumes:
-      - mongo_data:/data/db
-    environment:
-      # Required with no default: a database reachable with a guessed password
-      # is not a default, it is an outage waiting for a port scan. Put real
-      # values in the deployment environment, never in git.
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?MONGO_USER must be set}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD must be set}
-    # No host port mapping, on purpose. Only the backend reaches Mongo, over
-    # the Docker network; publishing 27017 to the host invites the internet
-    # to try the password.
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ── Backend API ──────────────────────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
+    image: offlineschool-backend:${APP_VERSION:-local}
     restart: unless-stopped
+    # tini as PID 1: forwards SIGTERM to node and reaps the analysis workers
+    # (src/services/intelligence) if one is ever orphaned.
+    init: true
+    # server.js closes HTTP, then MongoDB, and forces an exit after 10s; give
+    # it that and a margin before Docker sends SIGKILL.
+    stop_grace_period: 20s
     # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
     # logs cannot fill the disk (docs/40 0.9).
     logging:
@@ -42,58 +37,56 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    depends_on:
-      mongo:
-        condition: service_healthy
+    env_file:
+      - ${BACKEND_ENV_FILE:-./deploy/backend.env}
     environment:
+      # Fixed for this stack, whatever the env file says.
       NODE_ENV: production
       PORT: 5000
       # Cameroon time (UTC+1) for printed dates and logs (docs/40 0.11).
       TZ: Africa/Douala
-      MONGODB_URI: mongodb://${MONGO_USER:?MONGO_USER must be set}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set}@mongo:27017/school_app?authSource=admin
-      # Required with no default — src/config/env.js refuses a short or
-      # placeholder secret at boot, so the container starts only once a real
-      # one (32+ characters) is in the environment.
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (32+ characters)}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set}
-      JWT_EXPIRES_IN: 30d
-      JWT_REFRESH_EXPIRES: 90d
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set — it is the CORS allow-list}
     # No host port, on purpose (docs/40 0.7): only nginx reaches the backend,
     # over the Docker network, and nginx is the one door, on 80 and 443.
-    # Publishing 5000 let anyone skip TLS and nginx altogether. For a look
-    # from the server itself, `docker compose exec backend wget -qO- http://localhost:5000/api/health`.
+    # For a look from the server itself:
+    #   docker compose exec backend wget -qO- http://127.0.0.1:5000/api/health/ready
     expose:
       - "5000"
     volumes:
       # /app/src/uploads, because that is where the application reads and
-      # writes — see the note in the Dockerfile. Mounted at /app/uploads
-      # this volume stayed empty and uploads did not survive a restart.
+      # writes — see the note in the Dockerfile. The only state on this VM.
       - uploads_data:/app/src/uploads
+    # Readiness: the database answers a ping (/api/health/ready). Compose does
+    # not restart an unhealthy container, so an Atlas outage shows as
+    # "unhealthy" in `docker compose ps` instead of a restart loop. A crashed
+    # process is restarted by `restart:` above.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/api/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
 
-  # ── Nginx (reverse proxy) ────────────────────────────────────────────────────
+  # ── Nginx (reverse proxy, TLS) ───────────────────────────────────────────────
   nginx:
-    # nginx:alpine with the web build at /app/public/web, where nginx.conf
-    # serves it from (Dockerfile, target `web`).
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
+    # Plain nginx: the configuration is mounted, and there is no web build to
+    # bake in any more. Multi-arch, so it runs on ARM64 as it is.
+    image: nginx:stable-alpine
     restart: unless-stopped
-    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
-    # logs cannot fill the disk (docs/40 0.9).
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "5"
+    # Started, not healthy: nginx must come up to answer the ACME challenge
+    # even while the backend waits for Atlas.
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     ports:
       - "80:80"
       - "443:443"
     environment:
-      # The public name the certificate is for, e.g. ecole.example.cm.
+      # The public name the certificate is for, e.g. api.example.cm.
       DOMAIN: ${DOMAIN:?DOMAIN must be set — the name the TLS certificate is issued for}
       TZ: Africa/Douala
     # Port 80 at once; 443 as soon as the certificate exists; a reload every
@@ -105,10 +98,10 @@ services:
       - ./nginx.conf:/etc/nginx/site/https.conf.template:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
-      # The uploads volume is deliberately NOT mounted here any more. nginx
-      # proxies /uploads/ to the backend so the signature gate is consulted;
-      # giving nginx the files as well would leave a second, ungated way to
-      # reach them one edited location block away.
+      # The uploads volume is deliberately NOT mounted here. nginx proxies
+      # /uploads/ to the backend so the signature gate is consulted; giving
+      # nginx the files as well would leave a second, ungated way to reach
+      # them one edited location block away.
 
   # ── Certbot (TLS certificate renewal) ──────────────────────────────────────
   # Renews the Let's Encrypt certificate through nginx's port 80 (webroot).
@@ -118,8 +111,6 @@ services:
   certbot:
     image: certbot/certbot:latest
     restart: unless-stopped
-    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
-    # logs cannot fill the disk (docs/40 0.9).
     logging:
       driver: json-file
       options:
@@ -131,7 +122,6 @@ services:
     entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
 
 volumes:
-  mongo_data:
   uploads_data:
   letsencrypt:
   certbot_webroot:

@@ -19,6 +19,11 @@
       "autoIncrement": true,
       "android": { "buildType": "app-bundle" },
       "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-PRODUCTION-HOST/api" }
+    },
+    "production-apk": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
     }
   },
   "submit": {

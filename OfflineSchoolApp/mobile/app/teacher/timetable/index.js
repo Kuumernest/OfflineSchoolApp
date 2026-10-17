@@ -99,6 +99,7 @@ const fetchPeriods = async (db, schoolId, t) => {
                   ${pStart} AS startTime, ${pEnd} AS endTime,
                   ${pSort} AS sortOrder, ${pBreak} AS isBreak
            FROM periods
+           ${pColSet.has("deletedat") ? "WHERE (deletedat IS NULL OR deletedat = '')" : ""}
            ORDER BY COALESCE(${pSort}, 0) ASC`
         );
 

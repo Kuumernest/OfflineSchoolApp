@@ -62,6 +62,9 @@ function errorHandler(err, req, res, next) {
   res.status(err.statusCode || 500).json({
     success: false,
     error:   generic ? "Internal Server Error" : (err.message || "Internal Server Error"),
+    // A chosen error's own code, so a client can act on it (e.g. 410
+    // RECORD_DELETED from db/plugins/syncTombstones.js). Never a driver's.
+    ...(chosen && typeof err.code === "string" ? { code: err.code } : {}),
   });
 }
 

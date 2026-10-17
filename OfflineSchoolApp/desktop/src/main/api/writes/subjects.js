@@ -70,9 +70,8 @@ module.exports = [
       // The store's filter language has equality, in, not and the comparisons —
       // no $or, which threw "Unsupported filter" on every call and sent the
       // create to the network. Two reads and a union say the same thing.
-      const clash = [...docs.find("subject", { name, schoolId, class: classId }),
-                     ...docs.find("subject", { name, schoolId, classId })][0];
-      if (clash) return null;
+      // Compared without case, as the server's unique index does (../names.js).
+      if (require("../names").subjectNameTaken(docs, schoolId, classId, name)) return null;
       const now = nowISO();
       const subject = { _id: id, name, code: body?.code?.trim() || "", class: classId, classId, schoolId, ...(coeff.value !== undefined && { coefficient: coeff.value }), createdAt: now, updatedAt: now };
       return {

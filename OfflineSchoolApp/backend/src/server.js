@@ -21,6 +21,7 @@ const helmet      = require("helmet");
 const morgan      = require("morgan");
 const compression = require("compression");
 const mongoose    = require("mongoose");
+const { checkReadiness, indexReadiness } = require("./services/readiness.service");
 const path        = require("path");
 const fs          = require("fs");
 
@@ -397,6 +398,38 @@ app.get("/api/health", (_req, res) => {
     uptime:    Math.floor(process.uptime()),
     memory:    process.memoryUsage().heapUsed,
     env:       process.env.NODE_ENV || "development",
+  });
+});
+
+// Readiness, beside the liveness above: 200 only when the database answers a
+// ping, 503 otherwise (services/readiness.service.js). The Docker healthcheck
+// reads this one.
+//
+// In production it is also 503 while a unique or TTL index is missing or
+// incompatible (INDEXES_INCOMPLETE): the boot check's result, re-checked in
+// the background at most every 5 minutes while it is failing, so provisioning
+// shows up here without a restart.
+const INDEX_RECHECK_MS = 5 * 60 * 1000;
+let indexRecheck = null;
+app.get("/api/health/ready", async (_req, res) => {
+  const { ready, database } = await checkReadiness(mongoose.connection);
+  const indexCheck = require("./services/indexCheck.service");
+  const state = indexCheck.indexState();
+  if (ready && state.criticalProblems > 0 && !indexRecheck &&
+      Date.now() - state.checkedAt.getTime() > INDEX_RECHECK_MS) {
+    indexRecheck = indexCheck.verifyDeclaredIndexes({ log: () => {} })
+      .catch(() => null)
+      .finally(() => { indexRecheck = null; });
+  }
+  const idx = indexReadiness(state, { production: process.env.NODE_ENV === "production" });
+  const ok = ready && idx.ok;
+  res.status(ok ? 200 : 503).json({
+    status:    ok ? "ready" : "unavailable",
+    ...(ready && !idx.ok ? { reason: "INDEXES_INCOMPLETE" } : {}),
+    database,
+    indexes:   idx.indexes,
+    ...(idx.criticalProblems ? { criticalIndexProblems: idx.criticalProblems } : {}),
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -1109,6 +1142,17 @@ async function startServer() {
     // looking as though it is protecting them. See the module docstring.
     await ensureIdempotencyIndex();
 
+    // The sync tombstones (models/SyncTombstone.js): one per hard-deleted row,
+    // read by GET /sync/pull. Built here, as above — autoIndex is off in
+    // production, and the collection only ever gains rows by upsert on its own
+    // unique key, so a build cannot meet duplicates. Not fatal: without the
+    // index tombstones still work, slower, and the index check reports it.
+    try {
+      await require("./db/models/SyncTombstone").createIndexes();
+    } catch (err) {
+      console.error("[sync] could not build the tombstone indexes — " + err.message);
+    }
+
     // The school-wide analysis runs (docs/38): the unique index that keeps two
     // servers from running the same analysis at once, then the runs a stopped
     // process left queued or running, whose leases have expired.
@@ -1192,6 +1236,7 @@ async function startServer() {
       console.log("Route groups (in match order):");
       console.log("  PUBLIC   GET  /");
       console.log("  PUBLIC   GET  /api/health");
+      console.log("  PUBLIC   GET  /api/health/ready");
       console.log("  PUBLIC   ANY  /api/auth/*");
       console.log("  PUBLIC   ANY  /api/*              (public.routes)");
       console.log("  ─────────────────────────────────");

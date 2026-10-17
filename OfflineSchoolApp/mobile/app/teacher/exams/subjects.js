@@ -226,6 +226,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
         `SELECT * FROM students
          WHERE ${classCol} = ?
            AND (is_active = 1 OR is_active IS NULL)
+           ${colNames.includes("deleted_at") ? "AND (deleted_at IS NULL OR deleted_at = '')" : ""}
          ORDER BY ${nameCol || "rowid"} ASC`,
         [classId]
       ).catch(() => []);

@@ -59,4 +59,17 @@ subjectSchema.index({ schoolId: 1, class:   1 });
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 subjectSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// One subject name per class, compared case-insensitively ("Biology" =
+// "biology", db/nameCollation.js), among subjects not deleted. On classId, the
+// field every create writes (beside the older `class`); a legacy row with no
+// classId is outside it.
+subjectSchema.index(
+  { schoolId: 1, classId: 1, name: 1 },
+  { unique: true, partialFilterExpression: { deletedAt: null, classId: { $type: "string" } },
+    collation: require("../nameCollation").NAME_COLLATION, name: "subject_name_unique_per_class" }
+);
+// Hard deletes leave a tombstone so devices learn of them through GET /sync/pull,
+// and a deleted id cannot be recreated (db/plugins/syncTombstones.js).
+subjectSchema.plugin(require("../plugins/syncTombstones"), { entity: "subject" });
+
 module.exports = mongoose.models.Subject || mongoose.model("Subject", subjectSchema);

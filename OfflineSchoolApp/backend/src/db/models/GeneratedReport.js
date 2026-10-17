@@ -162,10 +162,13 @@ const generatedReportSchema = new mongoose.Schema(
 
 // ── Indexes ───────────────────────────────────────────────────────────────
 
-// One record per student per exam — re-generation updates this row
+// One record per student per exam — re-generation updates this row. Only for
+// a report that HAS an exam: examId defaults to null (term and annual cards),
+// and the old sparse index still indexed (null, studentId), so a pupil could
+// have only one exam-less report. New name beside the old examId_1_studentId_1.
 generatedReportSchema.index(
   { examId: 1, studentId: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { examId: { $type: "string" } }, name: "generated_report_exam_student_unique" }
 );
 
 // All reports for a school, newest first

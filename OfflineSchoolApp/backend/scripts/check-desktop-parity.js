@@ -515,7 +515,7 @@ const main = async () => {
   //          not read, so no teacher is attached
   //   sub-5  a teacher id resolving to no user at all — populate leaves the id
   //          behind with empty strings, which is different from no teacher
-  //   sub-6  a duplicate name in the same class, which the dedupe drops
+  //   sub-6  a duplicate name in the same class (legacy `class` field), which the dedupe drops
   //   sub-7  soft-deleted, and STILL returned, because this endpoint applies no
   //          deleted filter and a mirror must not be cleverer than it
   const Subject           = require("../src/db/models/Subject");
@@ -536,7 +536,10 @@ const main = async () => {
     { _id: "sub-3", schoolId: SCHOOL, name: "Chemistry",   classId: "cls-1", deletedAt: null, updatedAt: new Date() },
     { _id: "sub-4", schoolId: SCHOOL, name: "Physics",     classId: "cls-1", deletedAt: null, updatedAt: new Date() },
     { _id: "sub-5", schoolId: SCHOOL, name: "History",     classId: "cls-2", deletedAt: null, updatedAt: new Date() },
-    { _id: "sub-6", schoolId: SCHOOL, name: "mathematics", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    // Under the older `class` field: a duplicate name under `classId` is now
+    // refused by subject_name_unique_per_class, but rows from before it, or
+    // with only `class`, can still hold one — which is what the dedupe is for.
+    { _id: "sub-6", schoolId: SCHOOL, name: "mathematics", class:   "cls-1", deletedAt: null, updatedAt: new Date() },
     { _id: "sub-7", schoolId: SCHOOL, name: "Removed",     classId: "cls-1",
       deletedAt: new Date("2026-05-01"), updatedAt: new Date() },
     { _id: "sub-8", schoolId: "other-school", name: "Elsewhere", classId: "cls-9", deletedAt: null, updatedAt: new Date() },
@@ -5496,35 +5499,28 @@ const main = async () => {
   }
 
   /**
-   * THE FOURTH FINDING, and the one with teeth: this path has no uniqueness
-   * check and there is no unique index behind it either. POST /admin/classes
-   * refuses a duplicate name with a 409; PUT happily makes one.
-   *
-   * Reproduced rather than guarded, because a local check the server does not
-   * make would decline a write the server accepts and the rename would need a
-   * connection. Asserted so that if the endpoint ever grows the check, the
-   * mirror is known to need it too — this assertion is what will fail.
+   * THE FOURTH FINDING — now fixed on both sides. PUT /admin/classes used to
+   * accept a rename onto another class's name (POST refused a duplicate, PUT
+   * made one), and this handler matched it. The server now refuses it with a
+   * 409, case-insensitively, behind a unique index
+   * (class_name_unique_per_school); the local handler declines the same rename
+   * so it is never queued to be refused (desktop/src/main/api/names.js).
    */
   {
-    const duplicate = await askStructure("PUT", "/api/admin/classes/cls-3", { name: "Form 1" });
-    check("renaming one class onto another's name is accepted by the server",
-      duplicate.status, 200);
-    check("and the school now has two classes called Form 1",
-      await Class.countDocuments({ schoolId: SCHOOL, name: "Form 1", isActive: true }), 2);
-    check("which the local handler also allows, because the server does",
+    const duplicate = await askStructure("PUT", "/api/admin/classes/cls-3", { name: "form 1" });
+    check("renaming one class onto another's name (any case) is refused by the server",
+      [duplicate.status, duplicate.body?.code], [409, "DUPLICATE_NAME"]);
+    check("and the school still has one Form 1",
+      await Class.countDocuments({ schoolId: SCHOOL, name: /^form 1$/i, deletedAt: null }), 1);
+    check("which the local handler declines too, rather than queue a certain refusal",
       api.handle({ method: "PUT", path: "/api/admin/classes/cls-3", query: {},
-        body: { name: "Form 1" } }, structureCtx)?.status,
+        body: { name: "FORM 1" } }, structureCtx),
+      null);
+    check("  while renaming to a free name is still answered offline",
+      api.handle({ method: "PUT", path: "/api/admin/classes/cls-3", query: {},
+        body: { name: "Form 2" } }, structureCtx)?.status,
       200);
-    // Undo it on both sides: a duplicate name would make every later comparison
-    // of the class list about this probe rather than about the handler.
-    await Class.collection.updateOne({ _id: "cls-3" },
-      { $set: { name: "Form 2", updatedAt: new Date() } });
     docs.put("class", JSON.parse(JSON.stringify(await Class.findById("cls-3").lean())));
-    // The queued rename of cls-3 goes with it. Left in the outbox it would
-    // re-apply the duplicate on the next cycle.
-    for (const item of queue.all()) {
-      if (item.path === "/api/admin/classes/cls-3") queue.discard(item.seq);
-    }
   }
 
   // ── Editing a subject ─────────────────────────────────────────────────

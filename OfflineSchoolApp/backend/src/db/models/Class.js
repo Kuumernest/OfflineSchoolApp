@@ -244,6 +244,15 @@ classSchema.index({ createdAt: -1 });
 
 // ── Two-field compound indexes ────────────────────────────────────────────────
 classSchema.index({ schoolId: 1, name:      1 });
+// One class name per school, compared case-insensitively ("Form 1" = "form 1",
+// db/nameCollation.js), among classes not deleted — deleting a class frees its
+// name; deactivating one does not. The create route checked this alone, which
+// a rename, a case difference or two requests at once got past.
+classSchema.index(
+  { schoolId: 1, name: 1 },
+  { unique: true, partialFilterExpression: { deletedAt: null },
+    collation: require("../nameCollation").NAME_COLLATION, name: "class_name_unique_per_school" }
+);
 classSchema.index({ schoolId: 1, isActive:  1 });
 classSchema.index({ schoolId: 1, deletedAt: 1 });
 classSchema.index({ school:   1, isActive:  1 });

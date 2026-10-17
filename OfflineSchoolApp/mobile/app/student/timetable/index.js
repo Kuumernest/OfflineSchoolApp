@@ -230,6 +230,7 @@ const loadFullTimetable = async (db, classId, t) => {
                   ${pStart} AS startTime, ${pEnd} AS endTime,
                   ${pBreak} AS isBreak, ${pSort} AS sortOrder
            FROM periods p
+           ${pColSet.has("deletedat") ? "WHERE (p.deletedat IS NULL OR p.deletedat = '')" : ""}
            ORDER BY COALESCE(${pSort}, 0) ASC`
         );
         for (const p of pRows ?? []) {

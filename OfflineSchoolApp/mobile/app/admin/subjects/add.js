@@ -159,7 +159,7 @@ export default function AddSubjectScreen() {
         const db  = await getDatabase();
 
         const cls = await db.getAllAsync(
-          "SELECT * FROM classes WHERE schoolId = ? ORDER BY name ASC",
+          "SELECT * FROM classes WHERE schoolId = ? AND (deleted_at IS NULL OR deleted_at = '') ORDER BY name ASC",
           [schoolId]
         );
 
