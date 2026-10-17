@@ -477,6 +477,8 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
         "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,
+      schoolPosition: record.schoolPosition ?? null,
+      totalInSchool:  record.totalInSchool  ?? null,
       isPassing:      record.isPassing,
       isPublished:    record.isPublished ?? false,
       // §8. Stated rather than omitted: a term card must not carry one even if
@@ -587,6 +589,8 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
         "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,
+      schoolPosition: record.schoolPosition ?? null,
+      totalInSchool:  record.totalInSchool  ?? null,
       isPassing:      record.isPassing,
       isPublished:    record.isPublished ?? false,
       promotionStatus: promotionLabel(record),

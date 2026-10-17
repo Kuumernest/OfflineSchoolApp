@@ -163,6 +163,12 @@ other classes' unpublished rows too. Published rows count toward the totals but
 keep the positions they were issued with. Publish only after every class has
 been processed, or the sizes on published and later cards will disagree.
 
+Term and annual results carry a class position and a school position (no
+grade), with the same rules: computing one class re-ranks the school's other
+unpublished rows for that term or year, and a whole-school compute ranks the
+school once, after its last class. The printed card shows the school position
+as **School Rank**, under **Rank**, whenever the result has one.
+
 Coefficients come from `ExamSubject` via `subjectCoefficient.service.js`.
 
 ---

@@ -27,6 +27,7 @@ const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
 const academicPolicy    = require("./academicPolicy.service");
 const { rosterDecides } = require("./rankingScope.service");
+const { rankSchool }    = require("./schoolRanking.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, promotionUnderRules } = require("../../../shared/academicRules");
 
@@ -279,6 +280,7 @@ async function computeClassAnnualAverages({
   schoolId,
   academicYear,
   classId,
+  schoolPlaces = true,
 }) {
   // The class name, resolved once from the class being computed.
   //
@@ -415,6 +417,10 @@ async function computeClassAnnualAverages({
   // Compute class positions
   await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded, keep });
 
+  // Every class's pupils, so after this class's rows are settled. A
+  // whole-school run ranks once, after its last class.
+  if (schoolPlaces) await rankSchool(AnnualResult, { schoolId, academicYear }, "annualAverage");
+
   return { computed, skipped: skipped + noTerms, noTerms };
 }
 
@@ -490,6 +496,7 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
         schoolId,
         academicYear,
         classId: cls._id,
+        schoolPlaces: false,
       });
     } catch (err) {
       if (err.code !== "PUBLISHED_RESULTS") throw err;
@@ -500,6 +507,8 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
     totalSkipped  += out.skipped;
     totalNoTerms  += out.noTerms;
   }
+
+  await rankSchool(AnnualResult, { schoolId, academicYear }, "annualAverage");
 
   return {
     computed: totalComputed, skipped: totalSkipped, noTerms: totalNoTerms,

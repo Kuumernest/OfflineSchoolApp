@@ -524,6 +524,67 @@ const main = async () => {
   check("  G1B's published rows exactly as issued (D3)",
     (await snapshot("ResultSummary", { schoolId: GS, examId: "g1", classId: "G1B" })) === g1bBefore, true);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- school places for a term and a year ---");
+  // es1 (sequence 1) sat by K1 (k1a 16, k1b 10) and K2 (k2a 18, k2b 12,
+  // k2c 10). With only sequence 1 sat, the term average is the mark, and with
+  // one term weighted 100 the annual average is the term's.
+  const SR = await school(YEAR);
+  await cls(SR, "K1", ["k1a", "k1b"]);
+  await cls(SR, "K2", ["k2a", "k2b", "k2c"]);
+  await exam(SR, "es1", ["K1", "K2"]);
+  await marks(SR, "es1", "K1", { k1a: 16, k1b: 10 });
+  await marks(SR, "es1", "K2", { k2a: 18, k2b: 12, k2c: 10 });
+  // [school place, of] per pupil, at the term (T) or the year (A).
+  const schoolOf = async (model, ids) => Object.fromEntries(await Promise.all(ids.map(async (id) => {
+    const filter = { schoolId: SR, academicYear: YEAR, studentId: id, deletedAt: null, ...(model === "TermResult" ? { term: 1 } : {}) };
+    const r = await M(model).findOne(filter).lean();
+    return [id, r ? [r.schoolPosition, r.totalInSchool] : null];
+  })));
+  const K = ["k1a", "k1b", "k2a", "k2b", "k2c"];
+  await processExam(SR, "es1");
+  r = await call(SR, "POST", "/term-results/compute", { academicYear: YEAR, term: 1 });
+  await annual.computeAllClassAnnualAverages({ schoolId: SR, academicYear: YEAR });
+  const firstPlaces = { k1a: [2, 5], k1b: [4, 5], k2a: [1, 5], k2b: [3, 5], k2c: [4, 5] };
+  check("whole school computed: 18, 16, 12, 10, 10 → 1, 2, 3, 4, 4 of 5, at the term and the year",
+    [r.status, await schoolOf("TermResult", K), await schoolOf("AnnualResult", K)], [200, firstPlaces, firstPlaces]);
+  check("  class places still per class: K1 1/2, 2/2; K2 1/3, 2/3, 3/3", await termOf(SR, K),
+    { k1a: [1, 2], k1b: [2, 2], k2a: [1, 3], k2b: [2, 3], k2c: [3, 3] });
+
+  await M("StudentScore").updateMany({ examId: "es1", studentId: "k1b" }, { $set: { score: 17 } });
+  await processExam(SR, "es1", "K1");
+  await computeTerm(SR, "K1");
+  await annual.computeClassAnnualAverages({ schoolId: SR, academicYear: YEAR, classId: "K1" });
+  const movedPlaces = { k1a: [3, 5], k1b: [2, 5], k2a: [1, 5], k2b: [4, 5], k2c: [5, 5] };
+  check("K1 alone recomputed with k1b's 17: K2's school places move with it, at the term and the year",
+    [await schoolOf("TermResult", K), await schoolOf("AnnualResult", K)], [movedPlaces, movedPlaces]);
+  check("  K2's class places untouched: 1/3, 2/3, 3/3", await termOf(SR, ["k2a", "k2b", "k2c"]),
+    { k2a: [1, 3], k2b: [2, 3], k2c: [3, 3] });
+
+  for (const model of ["TermResult", "AnnualResult"]) {
+    await M(model).updateMany({ schoolId: SR, classId: "K2" }, { $set: { isPublished: true } });
+  }
+  const k2Before = {};
+  for (const model of ["TermResult", "AnnualResult"]) k2Before[model] = await snapshot(model, { schoolId: SR, classId: "K2" });
+  await M("StudentScore").updateMany({ examId: "es1", studentId: "k1a" }, { $set: { score: 19 } });
+  await processExam(SR, "es1", "K1");
+  await computeTerm(SR, "K1");
+  await annual.computeClassAnnualAverages({ schoolId: SR, academicYear: YEAR, classId: "K1" });
+  check("K2 published, K1 recomputed with k1a's 19: K2's pupils still counted; k1a 1/5, k1b 3/5",
+    [await schoolOf("TermResult", ["k1a", "k1b"]), await schoolOf("AnnualResult", ["k1a", "k1b"])],
+    [{ k1a: [1, 5], k1b: [3, 5] }, { k1a: [1, 5], k1b: [3, 5] }]);
+  const k2Same = {};
+  for (const model of ["TermResult", "AnnualResult"]) {
+    k2Same[model] = (await snapshot(model, { schoolId: SR, classId: "K2" })) === k2Before[model];
+  }
+  check("  K2's published rows exactly as issued (D3)", k2Same, { TermResult: true, AnnualResult: true });
+  const cards = require("../src/services/reportCardData.service");
+  const termCard   = await cards.buildTermCard({ schoolId: SR, academicYear: YEAR, term: 1, classId: "K1", studentId: "k1a" });
+  const annualCard = await cards.buildAnnualCard({ schoolId: SR, academicYear: YEAR, classId: "K1", studentId: "k1a" });
+  const placed = (c) => [c?.summary?.classPosition, c?.summary?.totalInClass, c?.summary?.schoolPosition, c?.summary?.totalInSchool];
+  check("  k1a's term and annual cards carry both places: 1/2 in the class, 1/5 in the school",
+    [placed(termCard), placed(annualCard)], [[1, 2, 1, 5], [1, 2, 1, 5]]);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();
   await mongoose.disconnect();

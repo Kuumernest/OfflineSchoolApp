@@ -203,7 +203,13 @@ const main = async () => {
   const onCommand = (e) => { if (DATA_COMMANDS.has(e.commandName)) queries += 1; };
   const conn = mongoose.connection.getClient();
 
+  // School places are written only where they moved, and a re-run moves none:
+  // cleared before each counted run, so both pay for that one write and the
+  // counts compare the same work.
+  const unplace = () => TermResult.updateMany({ schoolId: SCHOOL }, { $set: { schoolPosition: null } });
+
   // The same class again, at its current size of three, as the baseline.
+  await unplace();
   conn.on("commandStarted", onCommand);
   await termGrading.computeClassTermAverages({
     schoolId: SCHOOL, academicYear: YEAR, term: 1, classId: CLASS,
@@ -222,6 +228,7 @@ const main = async () => {
   }
 
   queries = 0;
+  await unplace();
   conn.on("commandStarted", onCommand);
   const big = await termGrading.computeClassTermAverages({
     schoolId: SCHOOL, academicYear: YEAR, term: 1, classId: CLASS,

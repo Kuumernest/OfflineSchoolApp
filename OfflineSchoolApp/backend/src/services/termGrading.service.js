@@ -27,6 +27,7 @@ const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
 const academicPolicy   = require("./academicPolicy.service");
 const { rosterDecides } = require("./rankingScope.service");
+const { rankSchool }    = require("./schoolRanking.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, sequenceFigureOn20 } = require("../../../shared/academicRules");
 
@@ -294,7 +295,7 @@ async function computeStudentTermAverage({
  * @returns {{computed, skipped, noMarks, unsequencedExams}}
  */
 async function computeClassTermAverages({
-  schoolId, academicYear, term, classId, context = null,
+  schoolId, academicYear, term, classId, context = null, schoolPlaces = true,
 }) {
   const ctx = context || await loadTermContext({ schoolId, academicYear, term });
 
@@ -393,6 +394,10 @@ async function computeClassTermAverages({
       await computeTermPositions({ schoolId, academicYear, term, classId });
     }
   }
+
+  // Every class's pupils, so after this class's rows are settled. A
+  // whole-school run ranks once, after its last class.
+  if (schoolPlaces) await rankSchool(TermResult, { schoolId, academicYear, term }, "termAverage");
 
   return {
     computed: ops.length,
@@ -507,6 +512,7 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
         term,
         classId: cls._id,
         context,
+        schoolPlaces: false,
       });
     } catch (err) {
       if (err.code !== "PUBLISHED_RESULTS") throw err;
@@ -516,6 +522,8 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
     totalComputed += out.computed;
     totalSkipped  += out.skipped;
   }
+
+  await rankSchool(TermResult, { schoolId, academicYear, term }, "termAverage");
 
   return {
     computed: totalComputed,
