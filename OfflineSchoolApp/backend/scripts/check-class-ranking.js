@@ -139,8 +139,11 @@ const main = async () => {
     const r = await M("AnnualResult").findOne({ schoolId: S, academicYear: YEAR, studentId: id, deletedAt: null }).lean();
     return [id, r ? [r.classPosition, r.totalInClass] : null];
   })));
-  const snapshot = async (model, filter) =>
-    JSON.stringify(await M(model).find(filter).sort({ studentId: 1, examId: 1 }).lean());
+  // Every field, or every field but those in `omit`.
+  const snapshot = async (model, filter, omit = []) =>
+    JSON.stringify(await M(model).find(filter, Object.fromEntries(omit.map((f) => [f, 0])))
+      .sort({ studentId: 1, examId: 1 }).lean());
+  const ACROSS = ["gradePosition", "totalInGrade", "schoolPosition", "totalInSchool"];
   const deactivate = (ids) => M("Student").updateMany({ _id: { $in: ids } }, { $set: { isActive: false } });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -212,14 +215,17 @@ const main = async () => {
   check("  F2B ranked alone: 19 … 9 → 1 … 6 of 6",
     await seq(CUR, "x1", ["b1", "b2", "b3", "b4", "b5", "b6"]),
     { b1: [1, 6, "F2B"], b2: [2, 6, "F2B"], b3: [3, 6, "F2B"], b4: [4, 6, "F2B"], b5: [5, 6, "F2B"], b6: [6, 6, "F2B"] });
-  const f2bBefore = await snapshot("ResultSummary", { schoolId: CUR, examId: "x1", classId: "F2B" });
+  const f2bBefore = await snapshot("ResultSummary", { schoolId: CUR, examId: "x1", classId: "F2B" }, [...ACROSS, "updatedAt"]);
   await M("StudentScore").updateMany({ examId: "x1", studentId: "a2" }, { $set: { score: 17 } });
   await M("StudentScore").updateMany({ examId: "x1", studentId: "b1" }, { $set: { score: 8 } });
   await processExam(CUR, "x1", "F2A");
   check("processed for F2A only: a2's 17 → 1/2, a1 2/2", await seq(CUR, "x1", ["a1", "a2"]),
     { a1: [2, 2, "F2A"], a2: [1, 2, "F2A"] });
-  check("  F2B untouched, field for field (b1's changed mark not read)",
-    await snapshot("ResultSummary", { schoolId: CUR, examId: "x1", classId: "F2B" }) === f2bBefore, true);
+  // Only its grade and school places may move (and the time they did):
+  // a2 now sits among them.
+  check("  F2B's results and class places untouched, field for field (b1's changed mark not read)",
+    await snapshot("ResultSummary", { schoolId: CUR, examId: "x1", classId: "F2B" }, [...ACROSS, "updatedAt"])
+      === f2bBefore, true);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- 8. six of eight leave: sequence, term, annual ---");
@@ -465,6 +471,58 @@ const main = async () => {
   check("  recalculated: j2's 16 is read, j2 1/2, j1 2/2",
     [r.status, await avg("j2"), await seq(CUR, "e12", ["j1", "j2"])],
     [200, 16, { j1: [2, 2, "J1"], j2: [1, 2, "J1"] }]);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- grade and school places ---");
+  // g1 sat by G1A and G1B (both level Form 1, written two ways), G2 (level
+  // Form 2) and GX (no level). G1A: ga1 16, ga2 12. G1B: gb1 18, gb2 12.
+  // G2: gc1 14. GX: gx1 20.
+  const GS = await school(YEAR);
+  await cls(GS, "G1A", ["ga1", "ga2"]);
+  await cls(GS, "G1B", ["gb1", "gb2"]);
+  await cls(GS, "G2",  ["gc1"]);
+  await cls(GS, "GX",  ["gx1"]);
+  await M("Class").updateOne({ _id: "G1A" }, { $set: { level: "Form 1" } });
+  await M("Class").updateOne({ _id: "G1B" }, { $set: { level: " form 1" } });
+  await M("Class").updateOne({ _id: "G2" },  { $set: { level: "Form 2" } });
+  await exam(GS, "g1", ["G1A", "G1B", "G2", "GX"]);
+  await marks(GS, "g1", "G1A", { ga1: 16, ga2: 12 });
+  await marks(GS, "g1", "G1B", { gb1: 18, gb2: 12 });
+  await marks(GS, "g1", "G2",  { gc1: 14 });
+  await marks(GS, "g1", "GX",  { gx1: 20 });
+  // [grade place, of, school place, of] per pupil.
+  const across = async (ids) => Object.fromEntries(await Promise.all(ids.map(async (id) => {
+    const s = await M("ResultSummary").findOne({ schoolId: GS, examId: "g1", studentId: id }).lean();
+    return [id, [s.gradePosition, s.totalInGrade, s.schoolPosition, s.totalInSchool]];
+  })));
+  const G = ["ga1", "ga2", "gb1", "gb2", "gc1", "gx1"];
+  await processExam(GS, "g1");
+  check("school: 20, 18, 16, 14, 12, 12 → 1, 2, 3, 4, 5, 5 of 6; grade Form 1 over G1A and G1B: 18, 16, 12, 12 → 1, 2, 3, 3 of 4; Form 2 1/1; no level, no grade",
+    await across(G), {
+      ga1: [2, 4, 3, 6], ga2: [3, 4, 5, 6], gb1: [1, 4, 2, 6], gb2: [3, 4, 5, 6],
+      gc1: [1, 1, 4, 6], gx1: [null, null, 1, 6],
+    });
+  check("  class places unchanged by it: G1A 16, 12 → 1/2, 2/2", await seq(GS, "g1", ["ga1", "ga2"]),
+    { ga1: [1, 2, "G1A"], ga2: [2, 2, "G1A"] });
+
+  await M("StudentScore").updateMany({ examId: "g1", studentId: "ga2" }, { $set: { score: 19 } });
+  await processExam(GS, "g1", "G1A");
+  check("G1A alone re-processed with ga2's 19: every class's grade and school places move with it",
+    await across(G), {
+      ga1: [3, 4, 4, 6], ga2: [1, 4, 2, 6], gb1: [2, 4, 3, 6], gb2: [4, 4, 6, 6],
+      gc1: [1, 1, 5, 6], gx1: [null, null, 1, 6],
+    });
+  check("  G1B's class places stay its own: gb1 1/2", (await seq(GS, "g1", ["gb1"])).gb1, [1, 2, "G1B"]);
+
+  await M("ResultSummary").updateMany({ schoolId: GS, examId: "g1", classId: "G1B" }, { $set: { isPublished: true } });
+  const g1bBefore = await snapshot("ResultSummary", { schoolId: GS, examId: "g1", classId: "G1B" });
+  await M("StudentScore").updateMany({ examId: "g1", studentId: "ga1" }, { $set: { score: 20 } });
+  r = await processExam(GS, "g1", "G1A");
+  check("G1B published, G1A re-processed with ga1's 20 → 200; G1B's pupils still counted, ga1 ties gx1",
+    [r.status, await across(["ga1", "ga2", "gc1", "gx1"])],
+    [200, { ga1: [1, 4, 1, 6], ga2: [2, 4, 3, 6], gc1: [1, 1, 5, 6], gx1: [null, null, 1, 6] }]);
+  check("  G1B's published rows exactly as issued (D3)",
+    (await snapshot("ResultSummary", { schoolId: GS, examId: "g1", classId: "G1B" })) === g1bBefore, true);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();

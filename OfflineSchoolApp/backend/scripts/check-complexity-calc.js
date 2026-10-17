@@ -38,15 +38,19 @@ const check = (label, actual, expected) => {
 // (+2, rankingScope.service), the one test that decides whether a departed
 // pupil's row is dropped from a class ranking. Calculate & save also reads
 // the class the pupil's marks were sat in before the stored summary's (+1).
+//
+// Raised again for grade and school places (examProcess rankAcrossClasses):
+// process and calculate & save read the exam's summaries and their classes'
+// levels (+2), and write the places that moved (+1, when any did).
 const CEILING = {
-  "process one exam, one class": 13,
+  "process one exam, one class": 16,
   "term compute, one class": 12,
   "sequence card payload": 12,
   "term card": 11,
   "annual card": 11,
   "promotion generateRun": 10,
   "progression?year (HTTP)": 8,
-  "calculate & save (HTTP)": 23,
+  "calculate & save (HTTP)": 26,
 };
 (async () => {
   const { MongoMemoryServer } = require(B + "/node_modules/mongodb-memory-server");

@@ -197,6 +197,10 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
   const publishedNotRanked = plans.reduce((n, p) => n + p.publishedNotRanked, 0)
     + unfiled.filter((s) => s.isPublished).length;
 
+  // Grade and school places span classes, so they are read off every summary
+  // the exam now has, not only this run's.
+  await rankAcrossClasses({ examId, schoolId });
+
   await Exam.findByIdAndUpdate(examId, { status: "completed" });
   console.log(`✅ Results processed: ${summaries.length} students`);
 
@@ -207,6 +211,67 @@ async function processExam({ exam, schoolId, classId = null, userId = null }) {
     ...(departedIds.length ? { departed: departedIds.length } : {}),
     ...(publishedNotRanked ? { publishedNotRanked } : {}),
   } };
+}
+
+/**
+ * Grade and school places for one exam, over every summary it has once a
+ * run's rows are written and its leftovers removed.
+ *
+ * The school place ranks every pupil who has a result in the exam. The grade
+ * place ranks the pupils of classes sharing one Class.level ("Form 1A" and
+ * "Form 1B" both at level "Form 1"); a class with no level is in no grade, and
+ * its pupils get no grade place rather than one guessed from the class name.
+ * Same competition rule as the class place (shared/ranking).
+ *
+ * A published summary counts in the population — its pupil sat the exam —
+ * but is never rewritten (D3): it keeps the places it was issued with. So a
+ * school that publishes one class before processing the rest will see the
+ * published cards' grade and school sizes disagree with the later ones.
+ */
+async function rankAcrossClasses({ examId, schoolId }) {
+  const rows = (await ResultSummary.find({ examId, schoolId, deletedAt: null })
+    .select("_id classId average isPublished gradePosition totalInGrade schoolPosition totalInSchool").lean())
+    .filter((r) => r.average != null);
+  if (!rows.length) return;
+
+  const Class = require("../db/models/Class");
+  const classIds = [...new Set(rows.map((r) => r.classId).filter(Boolean).map(String))];
+  const classes = classIds.length
+    ? await Class.find({ _id: { $in: classIds }, schoolId }).select("_id level").lean()
+    : [];
+  // "Form 1" and "form 1 " are one grade; an empty level is none.
+  const gradeOf = new Map(classes.map((c) => [String(c._id), (c.level || "").trim().toLowerCase()]));
+
+  const places = new Map(rows.map((r) => [String(r._id), {
+    gradePosition: null, totalInGrade: null, schoolPosition: null, totalInSchool: rows.length,
+  }]));
+  competitionPlaces(rows.map((r) => r.average)).forEach((p, i) => {
+    places.get(String(rows[i]._id)).schoolPosition = p;
+  });
+
+  const byGrade = new Map();
+  for (const r of rows) {
+    const grade = gradeOf.get(String(r.classId));
+    if (!grade) continue;
+    if (!byGrade.has(grade)) byGrade.set(grade, []);
+    byGrade.get(grade).push(r);
+  }
+  for (const members of byGrade.values()) {
+    competitionPlaces(members.map((r) => r.average)).forEach((p, i) => {
+      Object.assign(places.get(String(members[i]._id)), { gradePosition: p, totalInGrade: members.length });
+    });
+  }
+
+  // Only rows whose places moved: a row rewritten for nothing would look
+  // changed to every device that syncs it.
+  const moved = (r) => Object.entries(places.get(String(r._id))).some(([k, v]) => (r[k] ?? null) !== v);
+  const ops = rows.filter((r) => !r.isPublished && moved(r)).map((r) => ({
+    updateOne: {
+      filter: { _id: r._id, isPublished: { $ne: true } },
+      update: { $set: places.get(String(r._id)) },
+    },
+  }));
+  if (ops.length) await ResultSummary.bulkWrite(ops, { ordered: false });
 }
 
 /**

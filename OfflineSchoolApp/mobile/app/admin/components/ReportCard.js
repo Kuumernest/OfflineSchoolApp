@@ -750,12 +750,15 @@ export default function ReportCard({
                 total={result.totalInClass}
                 color="#4F46E5"
               />
-              <RankBadge
-                label={t("reportCardDoc.rank.grade")}
-                position={result.gradePosition}
-                total={result.totalInGrade}
-                color="#059669"
-              />
+              {/* No place in a grade when the class has no Level set. */}
+              {result.gradePosition != null && result.gradePosition !== "-" && (
+                <RankBadge
+                  label={t("reportCardDoc.rank.grade")}
+                  position={result.gradePosition}
+                  total={result.totalInGrade}
+                  color="#059669"
+                />
+              )}
               <RankBadge
                 label={t("reportCardDoc.rank.school")}
                 position={result.schoolPosition}

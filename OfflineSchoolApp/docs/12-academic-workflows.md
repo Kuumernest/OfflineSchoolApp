@@ -151,6 +151,18 @@ Computes `ResultSummary` per pupil: subject averages weighted by coefficient, th
 overall average, and three positions — `classPosition`, `schoolPosition`,
 `gradePosition`, each with its own index.
 
+- **Class:** the pupils of one class, ranked on their own.
+- **Grade:** the pupils of every class sharing one **Level** (set on the class
+  form; "Form 1" and "form 1" match). A class with no Level is in no grade: its
+  pupils get no grade position, and the report card hides that badge. The grade
+  is never guessed from the class name.
+- **School:** every pupil with a result in the exam.
+
+Grade and school positions span classes, so processing one class re-ranks the
+other classes' unpublished rows too. Published rows count toward the totals but
+keep the positions they were issued with. Publish only after every class has
+been processed, or the sizes on published and later cards will disagree.
+
 Coefficients come from `ExamSubject` via `subjectCoefficient.service.js`.
 
 ---
