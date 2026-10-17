@@ -39,6 +39,7 @@ const { engine }   = require("./sync/engine");
 const localApi     = require("./api");
 const appProtocol  = require("./appProtocol");
 const { normaliseServerUrl, checkServer } = require("./serverAddress");
+const { writeUnsentCopy, suggestedName } = require("./unsentCopy");
 
 // app://school/ — the window's origin (appProtocol.js says why not file://).
 // Privileges must be registered before the app is ready.
@@ -291,6 +292,27 @@ const registerHandlers = () => {
   ipcMain.handle("outbox:summary", () => queue.summary());
   ipcMain.handle("outbox:list",    () => queue.all());
   ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return queue.summary(); });
+  /**
+   * Save a copy of a blocked entry before it is discarded (unsentCopy.js).
+   * The person chooses where; nothing is written without the dialog.
+   */
+  ipcMain.handle("outbox:saveCopy", async (e, seq) => {
+    const row = queue.get(seq);
+    if (!row) return { ok: false, error: "NOT_FOUND" };
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: path.join(app.getPath("documents"), suggestedName(row)),
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (canceled || !filePath) return { ok: false, cancelled: true };
+    try {
+      writeUnsentCopy(row, filePath);
+      return { ok: true, path: filePath };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("outbox:discard", (_e, seq) => {
     const undo = queue.discard(seq);
     // The local rows this request wrote have to go with it, or the desktop

@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld("school", {
     list:    ()    => ipcRenderer.invoke("outbox:list"),
     unblock: (seq) => ipcRenderer.invoke("outbox:unblock", seq),
     discard: (seq) => ipcRenderer.invoke("outbox:discard", seq),
+    /** Write a blocked entry to a file the person chooses, before discarding it. */
+    saveCopy: (seq) => ipcRenderer.invoke("outbox:saveCopy", seq),
   },
 
   /**

@@ -90,6 +90,7 @@ interface SchoolBridge {
     list:    () => Promise<OutboxEntry[]>;
     unblock: (seq: number) => Promise<OutboxSummary>;
     discard: (seq: number) => Promise<OutboxSummary>;
+    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string }>;
   };
   sync: {
     state:    () => Promise<Array<{ collection: string; cursor: string | null; last_pull_at: string | null; last_error: string | null }>>;

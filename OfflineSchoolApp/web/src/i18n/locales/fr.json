@@ -3077,6 +3077,10 @@
     "settingsDesc": "Configuration du système"
   },
   "sync": {
+    "saveCopy": "Enregistrer une copie",
+    "copySaved": "Enregistré dans {{path}}",
+    "copyFailed": "La copie n'a pas pu être enregistrée.",
+    "recordDeleted": "Cet enregistrement a été supprimé sur le serveur : cette modification ne peut pas être appliquée. Enregistrez une copie si vous avez besoin de ce qui a été saisi, puis abandonnez-la.",
     "title": "Envoi vers l'école",
     "allSent": "Tout a bien été transmis à l'école.",
     "waiting": "{{count}} en attente",

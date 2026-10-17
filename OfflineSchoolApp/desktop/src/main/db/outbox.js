@@ -285,6 +285,12 @@ const outbox = (db) => {
       return db.prepare("SELECT * FROM outbox ORDER BY seq").all()
         .map((r) => ({ ...r, seq: Number(r.seq) }));
     },
+
+    /** One entry, whole (body included), or null. */
+    get(seq) {
+      const r = db.prepare("SELECT * FROM outbox WHERE seq = ?").get(seq);
+      return r ? { ...r, seq: Number(r.seq) } : null;
+    },
   };
 };
 

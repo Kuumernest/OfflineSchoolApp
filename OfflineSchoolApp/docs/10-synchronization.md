@@ -115,11 +115,13 @@ of scope. No scope used `$or` before; now the two are combined under `$and`.
 
 Phone: the outbox classifies a 410 on a create as permanent and parks it as
 failed, shown to the user. Desktop: a 410 blocks the queue at that entry; the
-sync indicator shows the server's message with **Retry** (cannot succeed for a
-410) and **Discard** (confirmed, then deletes the queued request and its local
-row). Discard loses what the user typed — there is no copy. Recommended before
-desktop release: on a 410 `RECORD_DELETED`, offer to save the queued payload
-(e.g. a JSON export) before discarding, and say which record was deleted.
+sync indicator shows the server's message and, for a 410, says the record was
+deleted on the server. **Try again** is not offered (it cannot succeed);
+**Save a copy** writes the queued request — method, path, the body as typed,
+when it was queued, the server's refusal — to a JSON file the person chooses
+(`desktop/src/main/unsentCopy.js`); **Discard** (confirmed) then removes the
+entry and its local row. Nothing is discarded without the person choosing to.
+`check:unsent` (desktop) pins it.
 
 ### The cursor, and the one-millisecond hole that was closed
 

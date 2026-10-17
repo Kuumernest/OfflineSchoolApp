@@ -3077,6 +3077,10 @@
     "settingsDesc": "System configuration"
   },
   "sync": {
+    "saveCopy": "Save a copy",
+    "copySaved": "Saved to {{path}}",
+    "copyFailed": "The copy could not be saved.",
+    "recordDeleted": "This record was deleted on the server, so this change cannot be applied. Save a copy if you need what was typed, then discard it.",
     "title": "Sending to the school",
     "allSent": "Everything here has reached the school.",
     "waiting": "{{count}} waiting",
