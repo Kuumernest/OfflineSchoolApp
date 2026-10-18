@@ -1,0 +1,21 @@
+# /etc/systemd/system/offlineschool-uploads-backup.service — the uploads
+# volume (photographs, documents, content) copied off the VM, incrementally.
+# Installed and scheduled as described in docs/17, "Backups".
+[Unit]
+Description=OfflineSchoolApp — uploads volume backup to off-VM storage
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Root: the script reads a Docker volume, and Docker access is root access.
+# It only READS the volume; its credentials are the rclone remote's.
+User=root
+Environment=BACKUP_ENV_FILE=/etc/offlineschool/backup.env
+ExecStart=/opt/offlineschool/OfflineSchoolApp/deploy/backup/uploads-backup.sh
+# Output goes to the journal: journalctl -u offlineschool-uploads-backup
+Nice=10
+IOSchedulingClass=best-effort
+TimeoutStartSec=6h
+PrivateTmp=true
+NoNewPrivileges=true

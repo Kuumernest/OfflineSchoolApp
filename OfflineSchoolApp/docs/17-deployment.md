@@ -484,9 +484,10 @@ sudo useradd --system --create-home offlineschool-backup
 sudo install -d -o offlineschool-backup -m 700 /var/backups/offlineschool /etc/offlineschool
 sudo install -m 600 -o offlineschool-backup deploy/backup/backup.env.example /etc/offlineschool/backup.env
 sudo -u offlineschool-backup rclone config            # the r2: or b2: remote
-sudo cp deploy/backup/offlineschool-backup.{service,timer} /etc/systemd/system/
-sudo chmod 644 /etc/systemd/system/offlineschool-backup.*
-sudo systemctl daemon-reload && sudo systemctl enable --now offlineschool-backup.timer
+sudo cp deploy/backup/offlineschool-backup.{service,timer} deploy/backup/offlineschool-uploads-backup.{service,timer} /etc/systemd/system/
+sudo chmod 644 /etc/systemd/system/offlineschool-*backup.*
+sudo systemctl daemon-reload
+sudo systemctl enable --now offlineschool-backup.timer offlineschool-uploads-backup.timer
 sudo systemctl start offlineschool-backup.service && journalctl -u offlineschool-backup -n 50
 ```
 
@@ -494,10 +495,18 @@ sudo systemctl start offlineschool-backup.service && journalctl -u offlineschool
 start, success and `/fail`, and alerts when a night passes with no success.
 `systemctl list-timers offlineschool-backup.timer` shows the next run.
 
-**Uploads volume:** also copy `uploads_data` off the VM, e.g. nightly
-`docker run --rm -v <project>_uploads_data:/u:ro -v /var/backups/offlineschool:/b alpine tar czf /b/uploads-$(date -u +%F).tar.gz -C /u .`
-(the volume's real name: `docker volume ls | grep uploads_data` — Compose prefixes it with the project name)
-then `rclone copy` it beside the database archives (not yet scripted).
+**Uploads volume** (`uploads-backup.sh`, root, nightly 03:15): the photographs
+and documents — the one piece of state on the VM. Incremental: `rclone sync`
+to `…/uploads/current`, with every file changed or deleted since the last run
+moved first to `…/uploads/changed/<UTC stamp>/`; then a one-way `rclone check`
+(every file on the volume at the destination, same size) or the run fails; only
+then `changed/` folders older than `RETENTION_DAYS` are removed. Restore with
+`uploads-restore.sh --into=<empty dir> [--from=changed/<stamp>]` — into a
+directory, never over the live volume; it prints a file count and size to
+compare. A real recovery: stop the backend, copy the restored directory into
+the volume, start it. Tested 2026-10-18 against a Docker volume and a local
+rclone destination: first run, a change and a delete moved aside, retention,
+restore (byte-identical), refusals.
 
 **Restore drill** (monthly, and before launch): set `RESTORE_TARGET_URI` and
 `RESTORE_TARGET_DB` to a staging cluster or a new database, then
@@ -594,7 +603,7 @@ anything.
 [ ] Domain DNS A/AAAA → VM; VCN + iptables open 80/443 only; first certificate issued; renewal dry-run passes
 [ ] deploy/backend.env complete (chmod 600); backend "healthy" in docker compose ps
 [ ] Cloudflare Pages: VITE_API_URL set; Pages domain(s) in ALLOWED_ORIGINS; login works end to end
-[ ] Backups: timer enabled; one successful run seen in the bucket; one restore drill into staging passed; alert configured
+[ ] Backups: both timers enabled (database, uploads); one successful run of each seen in the bucket; one restore drill of each passed; alerts configured
 [ ] Android: eas init + keystore generated and backed up offline; EXPO_TOKEN + PRODUCTION_API_URL set; a test tag produces an installable APK
 [ ] Desktop: an installer tested against staging (school_db) — until then DESKTOP_RELEASE_ENABLED stays unset
 [ ] npm run check:all passes on the deployment commit
@@ -604,7 +613,6 @@ anything.
 
 ```text
 [ ] Oracle account on Pay As You Go (idle reclamation) with a budget alert
-[ ] Uploads volume copied off the VM nightly
 [ ] REQUIRE_MEDIA_SIGNATURE=1 seven days after launch
 [ ] Sentry DSN set (backend, and VITE_SENTRY_DSN for the console)
 [ ] Re-process results published before the lock check existed (docs/19)

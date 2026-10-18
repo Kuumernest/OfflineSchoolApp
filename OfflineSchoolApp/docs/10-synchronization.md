@@ -299,6 +299,25 @@ flowchart TD
    `200` with `replay: true` rather than `409`, so a replay never looks like a
    conflict to the outbox.
 
+**Retrying a refused change (2026-10-18).** A 4xx answer is stored against its
+key and replayed for 14 days, so retrying a refused change under the same key
+got the same refusal back — after a permission was granted or data fixed, the
+change never landed. Now a retry of a REFUSED entry (4xx) goes out under a
+**new** key: desktop `outbox.unblock`, phone `MutationQueue.retry` /
+`retryAllFailed` (rows record `last_status`; `idem_key` overrides the row id),
+and phone uploads `retryFailedUpload`. A refused request changed nothing, so a
+new key cannot apply it twice. An entry that failed for want of an answer
+(network, 5xx, in progress) keeps its key — the server may have applied it.
+An abandoned "processing" key is taken over after 11 minutes (the server's
+request timeout is 10).
+
+**Phone uploads** (`/teacher/content`) now carry `Idempotency-Key` = the upload
+row's id, so a retry after a timeout the server had in fact stored gets the
+stored answer, not a second copy; an upload cut off mid-send (left
+`uploading` for 10 minutes) is queued again instead of stuck for good.
+`check:retryrefusal` (backend, real middleware + desktop outbox) and mobile
+`check-retry-rekey.js` pin both.
+
 ---
 
 ## Crash safety

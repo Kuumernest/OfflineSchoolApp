@@ -4,6 +4,7 @@
 import api          from "./api";
 import { getDatabase } from "../db/database";
 import NetInfo      from "@react-native-community/netinfo";
+import { generateUUID } from "../utils/idHelpers";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -136,6 +137,10 @@ const ensureUploadQueue = async (db) => {
     CREATE INDEX IF NOT EXISTS idx_uq_type_status
       ON upload_queue(type, status);
   `).catch(() => {});
+  // The status of a definitive refusal (4xx), and the Idempotency-Key a retry
+  // sends when it is not the row id (retryFailedUpload).
+  await db.execAsync(`ALTER TABLE upload_queue ADD COLUMN last_status INTEGER`).catch(() => {});
+  await db.execAsync(`ALTER TABLE upload_queue ADD COLUMN idem_key TEXT`).catch(() => {});
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,10 +231,32 @@ const queueUpload = async ({
 // QUEUE — get all pending uploads
 // ─────────────────────────────────────────────────────────────────────────────
 
+// An upload left 'uploading' longer than any upload may take (the request
+// times out at 180s) was cut off — the app was killed or the phone restarted
+// mid-send. It was never selected again (only pending/failed are), could not
+// be retried (retry wants 'failed') and could not be cancelled (cancel skips
+// 'uploading'): stuck for good. It goes back to 'pending'. Sending it again is
+// safe: every upload carries Idempotency-Key = its row id, so if the server
+// had already stored it, the retry gets that answer instead of a second copy.
+const STALE_UPLOADING_MS = 10 * 60 * 1000;
+
+export const recoverStaleUploads = async (db, now = Date.now()) => {
+  const cutoff = new Date(now - STALE_UPLOADING_MS).toISOString();
+  const result = await db.runAsync(
+    `UPDATE upload_queue
+     SET status = 'pending', updated_at = ?,
+         last_error = 'Interrupted while sending; queued again'
+     WHERE status = 'uploading' AND (updated_at IS NULL OR updated_at < ?)`,
+    [new Date(now).toISOString(), cutoff]
+  ).catch(() => null);
+  return result?.changes ?? 0;
+};
+
 export const getPendingUploads = async () => {
   try {
     const db = await getDatabase();
     await ensureUploadQueue(db);
+    await recoverStaleUploads(db);
 
     const rows = await db.getAllAsync(
       `SELECT * FROM upload_queue
@@ -324,8 +351,10 @@ const processQueuedUpload = async (row, onProgress) => {
       if (row.file_size) formData.append("fileSize", String(row.file_size));
       if (row.mime_type) formData.append("mimeType", row.mime_type);
 
+      // Idempotency-Key = the queue row: a retry after a timeout that the
+      // server had in fact stored gets the stored answer, not a second copy.
       response = await api.post("/teacher/content", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { "Content-Type": "multipart/form-data", "Idempotency-Key": String(row.idem_key || row.id) },
         onUploadProgress: (evt) => {
           if (onProgress && evt.total) {
             onProgress(row.id, Math.round((evt.loaded * 100) / evt.total));
@@ -342,7 +371,7 @@ const processQueuedUpload = async (row, onProgress) => {
         subjectId:   subjectId.trim(),
         classId:     classId.trim(),
         url:         url || null,
-      });
+      }, { headers: { "Idempotency-Key": String(row.idem_key || row.id) } });
     }
 
     // ── Success ───────────────────────────────────────────────────────────
@@ -369,11 +398,12 @@ const processQueuedUpload = async (row, onProgress) => {
 
     await db.runAsync(
       `UPDATE upload_queue
-       SET status     = ?,
-           last_error = ?,
-           updated_at = ?
+       SET status      = ?,
+           last_error  = ?,
+           last_status = ?,
+           updated_at  = ?
        WHERE id = ?`,
-      [isFinal ? "failed" : "pending", message, now, row.id]
+      [isFinal ? "failed" : "pending", message, err.response?.status ?? null, now, row.id]
     );
 
     console.warn(
@@ -458,11 +488,18 @@ export const cancelQueuedUpload = async (queueId) => {
 export const retryFailedUpload = async (queueId) => {
   try {
     const db = await getDatabase();
+    await ensureUploadQueue(db);
+    // A refused upload (4xx) goes out under a NEW key: the server replays a
+    // stored refusal for the old one for 14 days, so it would never be looked
+    // at again. One that failed for want of an answer keeps its key — the
+    // server may have stored it. (mutationQueue retry() says the same.)
     await db.runAsync(
       `UPDATE upload_queue
-       SET status = 'pending', attempts = 0, last_error = NULL, updated_at = ?
+       SET status = 'pending', attempts = 0, last_error = NULL, updated_at = ?,
+           idem_key = CASE WHEN last_status BETWEEN 400 AND 499 THEN ? ELSE idem_key END,
+           last_status = NULL
        WHERE id = ? AND status = 'failed'`,
-      [nowStr(), queueId]
+      [nowStr(), generateUUID(), queueId]
     );
     console.log(`[retryFailedUpload] reset id=${queueId}`);
     return true;
