@@ -1,0 +1,12 @@
+# /etc/systemd/system/offlineschool-uploads-backup.timer — nightly at 03:15,
+# after the database backup (02:30).
+[Unit]
+Description=Nightly OfflineSchoolApp uploads backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

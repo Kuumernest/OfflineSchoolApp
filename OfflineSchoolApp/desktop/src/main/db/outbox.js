@@ -233,9 +233,18 @@ const outbox = (db) => {
      * whatever the server objected to.
      */
     unblock(seq) {
+      // An entry blocked on a REFUSAL (4xx) goes out under a new
+      // Idempotency-Key: the server replays a stored refusal for its key for
+      // 14 days, so retrying under the old one got the same answer back without
+      // the request being looked at — after the permission was granted or the
+      // data fixed, the change still never landed. A refused request changed
+      // nothing, so a new key cannot apply it twice.
+      const row = db.prepare("SELECT last_status FROM outbox WHERE seq = ?").get(seq);
+      const refused = row && Number(row.last_status) >= 400 && Number(row.last_status) < 500;
       db.prepare(
-        "UPDATE outbox SET status='pending', attempts=0, next_try_at=?, last_error=NULL WHERE seq=?"
-      ).run(nowIso(), seq);
+        `UPDATE outbox SET status='pending', attempts=0, next_try_at=?, last_error=NULL
+           ${refused ? ", idem_key=?" : ""} WHERE seq=?`
+      ).run(...(refused ? [nowIso(), randomUUID(), seq] : [nowIso(), seq]));
     },
 
     /**

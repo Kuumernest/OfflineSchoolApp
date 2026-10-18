@@ -12,7 +12,8 @@ Type=oneshot
 User=offlineschool-backup
 Group=offlineschool-backup
 Environment=BACKUP_ENV_FILE=/etc/offlineschool/backup.env
-ExecStart=/opt/offlineschool/deploy/backup/mongo-backup.sh
+# The repository is cloned to /opt/offlineschool (docs/17, Deploy).
+ExecStart=/opt/offlineschool/OfflineSchoolApp/deploy/backup/mongo-backup.sh
 # Output goes to the journal: journalctl -u offlineschool-backup
 # The script prints no secrets.
 Nice=10

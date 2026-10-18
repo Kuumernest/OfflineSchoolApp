@@ -97,6 +97,14 @@ const ensureSchema = (db) => ensureTableSchema(TABLE, async (database) => {
   await database.execAsync(
     `ALTER TABLE ${TABLE} ADD COLUMN owner_id TEXT`
   ).catch(() => {});
+  // The HTTP status of a definitive refusal (4xx), and the Idempotency-Key a
+  // retry sends when it is not the row id. See retry() below.
+  await database.execAsync(
+    `ALTER TABLE ${TABLE} ADD COLUMN last_status INTEGER`
+  ).catch(() => {});
+  await database.execAsync(
+    `ALTER TABLE ${TABLE} ADD COLUMN idem_key TEXT`
+  ).catch(() => {});
 
   await database.execAsync(`CREATE TABLE IF NOT EXISTS ${ID_MAP} (
     local_id   TEXT PRIMARY KEY,
@@ -493,7 +501,7 @@ export class MutationQueue {
           `UPDATE ${TABLE} SET status = 'retrying', last_attempt_at = ? WHERE id = ?`,
           [new Date().toISOString(), row.id]
         );
-        const headers = { "Idempotency-Key": row.id };
+        const headers = { "Idempotency-Key": row.idem_key || row.id };
         if (row.base_version) headers["If-Match"] = row.base_version;
 
         // Substitute any local ids that have since been re-issued by the
@@ -536,8 +544,8 @@ export class MutationQueue {
 
         if (kind === "conflict") {
           await db.runAsync(
-            `UPDATE ${TABLE} SET status = 'conflict', conflict = ?, error = ? WHERE id = ?`,
-            [json(error?.response?.data), message, row.id]
+            `UPDATE ${TABLE} SET status = 'conflict', conflict = ?, error = ?, last_status = ? WHERE id = ?`,
+            [json(error?.response?.data), message, error?.response?.status ?? null, row.id]
           );
           summary.conflicts++;
           continue;
@@ -545,8 +553,8 @@ export class MutationQueue {
 
         if (kind === "permanent") {
           await db.runAsync(
-            `UPDATE ${TABLE} SET status = 'failed', retry_count = ?, error = ? WHERE id = ?`,
-            [(row.retry_count || 0) + 1, message, row.id]
+            `UPDATE ${TABLE} SET status = 'failed', retry_count = ?, error = ?, last_status = ? WHERE id = ?`,
+            [(row.retry_count || 0) + 1, message, error?.response?.status ?? null, row.id]
           );
           summary.failed++;
           await notifyFailed(row, payload, message);
@@ -939,14 +947,29 @@ export class MutationQueue {
     }));
   }
 
-  /** Puts a parked row back in the queue with its retry budget reset. */
+  /**
+   * Puts a parked row back in the queue with its retry budget reset.
+   *
+   * A row the server REFUSED (a 4xx: forbidden, invalid, a conflict) is sent
+   * under a NEW Idempotency-Key. The server stores a 4xx answer against the key
+   * and replays it for 14 days, so retrying under the old one got the same
+   * refusal back without the request being looked at again — after the
+   * permission was granted or the conflict resolved, the change still never
+   * landed. A refused request changed nothing, so a new key cannot apply it
+   * twice. A row that failed for want of an answer (network, 5xx, in progress)
+   * keeps its key: the server may have applied it, and the key is what stops a
+   * second copy.
+   */
   static async retry(id) {
     const db = await getDatabase();
     await ensureSchema(db);
     await db.runAsync(
       `UPDATE ${TABLE} SET status = 'pending', retry_count = 0, next_attempt_at = NULL,
-              error = NULL, conflict = NULL WHERE id = ?`,
-      [id]
+              error = NULL, conflict = NULL,
+              idem_key = CASE WHEN last_status BETWEEN 400 AND 499 THEN ? ELSE idem_key END,
+              last_status = NULL
+       WHERE id = ?`,
+      [generateUUID(), id]
     );
   }
 
@@ -954,11 +977,11 @@ export class MutationQueue {
   static async retryAllFailed() {
     const db = await getDatabase();
     await ensureSchema(db);
-    const result = await db.runAsync(
-      `UPDATE ${TABLE} SET status = 'pending', retry_count = 0, next_attempt_at = NULL,
-              error = NULL, conflict = NULL WHERE status IN ('conflict', 'failed')`
-    );
-    return result?.changes ?? 0;
+    const rows = await db.getAllAsync(
+      `SELECT id FROM ${TABLE} WHERE status IN ('conflict', 'failed')`
+    ).catch(() => []);
+    for (const r of rows ?? []) await this.retry(r.id);
+    return (rows ?? []).length;
   }
 
   /** Permanently drops a mutation the user has chosen to abandon. */
