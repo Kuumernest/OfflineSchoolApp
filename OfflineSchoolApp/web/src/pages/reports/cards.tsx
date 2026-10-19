@@ -1,5 +1,5 @@
 // web/src/pages/reports/cards.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link }                from "react-router-dom";
 import { ArrowRight }          from "lucide-react";
 import { useAuthStore }        from "@/store/auth.store";
@@ -12,6 +12,13 @@ import api, { TIMEOUTS }       from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
 import { ProgressBar }    from "@/components/ui/ProgressBar";
+import { Modal }          from "@/components/ui/Modal";
+import {
+  openPreviewWindow,
+  showInPreviewWindow,
+  printHtml,
+} from "@/print/document";
+import { isDesktop }      from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -32,6 +39,13 @@ interface StudentOption { _id: string; name: string; studentName?: string }
  * terms combined — so they are chosen by the period they cover.
  */
 type CardType = "sequence" | "term" | "annual";
+
+/** A fetched report card, held for the in-app batch preview. */
+interface PreviewCard {
+  id:   string;
+  name: string;
+  html: string;
+}
 
 // ─────────────────────────────────────────────────────────
 // EXAM CARD
@@ -114,6 +128,40 @@ export default function ReportCardsPage() {
   const [result,          setResult]          = useState<{
     success: number; error: number; message: string;
   } | null>(null);
+
+  /*
+   * Batch preview. A class is fetched one card at a time, then shown here —
+   * no `window.open` per pupil, which browsers block after the first one.
+   */
+  const [previewCards,    setPreviewCards]    = useState<PreviewCard[]>([]);
+  const [previewId,       setPreviewId]       = useState("");
+  const [previewOpen,     setPreviewOpen]     = useState(false);
+  const [previewMessage,  setPreviewMessage]  = useState("");
+
+  /*
+   * Bumped whenever a selection changes or a new generation starts. A request
+   * whose token no longer matches is stale: it must not write progress, cards,
+   * modal state or a result over the newer selection.
+   */
+  const generationRef = useRef(0);
+  const printRunRef   = useRef(0);
+
+  const invalidateGeneration = () => {
+    generationRef.current += 1;
+    // The stale run will return at its next check; the bar stops now rather
+    // than waiting for a request nobody is waiting for any more.
+    setGenerating(false);
+  };
+
+  const closePreview = () => {
+    // Invalidate a print-status reply that is still in flight, and drop the
+    // document so a closed modal does not keep the last card mounted.
+    printRunRef.current += 1;
+    setPreviewOpen(false);
+    setPreviewMessage("");
+    setPreviewCards([]);
+    setPreviewId("");
+  };
 
   const exams = (examsData?.exams ?? []).filter(
     (e) => e.status === "completed" || e.status === "published"
@@ -356,24 +404,82 @@ export default function ReportCardsPage() {
       return;
     }
 
+    /*
+     * Every generation carries a token. A selection change bumps the token,
+     * so a reply that arrives afterwards knows it is answering a question the
+     * reader has already moved on from.
+     */
+    const generation = ++generationRef.current;
+    const isCurrent  = () => generationRef.current === generation;
+    printRunRef.current += 1;
+
+    /*
+     * In a browser, one card is previewed in a tab. The tab is opened HERE,
+     * synchronously, while the click still counts as a user gesture. Opening
+     * it after the request below returns is what made the second and later
+     * cards fail: a `window.open` outside the gesture is treated as an
+     * unsolicited popup, returns null, and prints nothing — while the old code
+     * counted it as a success. The window stays blank until the finished card
+     * is written.
+     *
+     * The packaged desktop application denies every `window.open`
+     * (desktop/src/main/main.js), so there a single card takes the same
+     * in-app preview path as a class. No Electron policy is widened.
+     */
+    const single = targetStudents.length === 1;
+    const singleInTab = single && !isDesktop();
+    const previewWindow = singleInTab ? openPreviewWindow() : null;
+
+    if (singleInTab && !previewWindow) {
+      const message = t("reportCards.popupBlocked");
+      setGenerating(false);
+      setResult({ success: 0, error: 1, message });
+      toast({ kind: "error", title: message });
+      return;
+    }
+
     setGenerating(true);
     setResult(null);
+    setPreviewOpen(false);
+    setPreviewCards([]);
+    setPreviewId("");
+    setPreviewMessage("");
     setProgress({ done: 0, total: targetStudents.length, current: "" });
 
-    let success = 0;
-    let error   = 0;
+    const collected: PreviewCard[] = [];
+    let opened = 0;
+    let error  = 0;
+    let singleFailure: "empty" | "closed" | "show" | "request" | null = null;
+
+    const discardPreviewWindow = () => {
+      try {
+        if (previewWindow && !previewWindow.closed) previewWindow.close();
+      } catch {
+        // Already gone; nothing to close.
+      }
+    };
+
+    /* True when a selection or a newer run has superseded this one. */
+    const stale = () => {
+      if (isCurrent()) return false;
+      discardPreviewWindow();
+      return true;
+    };
 
     for (let i = 0; i < targetStudents.length; i++) {
+      if (stale()) return;
       const student = targetStudents[i];
+      const name    = student.studentName || student.name || String(student._id);
       setProgress({
         done:    i,
         total:   targetStudents.length,
-        current: student.name || String(student._id),
+        current: name,
       });
       try {
         // One renderer, three endpoints — see cardRequest.
         const sid  = String(student._id);
         const res2 = await cardRequest(sid);
+        if (stale()) return;
 
         // The term and annual routes send the document; the sequence route
         // wraps it in JSON. The old check here tested the axios RESPONSE for
@@ -385,40 +491,117 @@ export default function ReportCardsPage() {
 
         if (!html) {
           error++;
+          if (singleInTab) { singleFailure = "empty"; discardPreviewWindow(); break; }
           continue;
         }
 
-        // Open in new tab for printing
-        const w = window.open("", "_blank");
-        if (w) {
-          w.document.write(html);
-          w.document.close();
-          w.focus();
-          setTimeout(() => {
-            w.print();
-          }, 500);
+        if (singleInTab) {
+          if (!previewWindow || previewWindow.closed) {
+            error++;
+            singleFailure = "closed";
+            break;
+          }
+          if (!showInPreviewWindow(previewWindow, html)) {
+            error++;
+            singleFailure = "show";
+            discardPreviewWindow();
+            break;
+          }
+          // The document was written. Printing was requested in that tab; it
+          // is not claimed to have completed.
+          opened++;
+        } else {
+          // A class — and any single card in the packaged desktop app — is
+          // shown in the in-app preview. Opening one window per pupil is
+          // exactly what browsers block after the first card.
+          collected.push({ id: sid, name, html });
         }
-        success++;
       } catch {
+        if (stale()) return;
         error++;
+        if (singleInTab) { singleFailure = "request"; discardPreviewWindow(); break; }
       }
+      if (stale()) return;
       setProgress({
         done:    i + 1,
         total:   targetStudents.length,
-        current: student.name || String(student._id),
+        current: name,
       });
     }
 
+    if (stale()) return;
     setGenerating(false);
+
+    if (singleInTab) {
+      setResult({
+        success: opened,
+        error,
+        message: opened
+          ? t("reportCards.previewOpened")
+          : singleFailure === "empty"
+            ? t("reportCards.emptyResponse")
+            : singleFailure === "closed"
+              ? t("reportCards.previewClosed")
+              : singleFailure === "show"
+                ? t("reportCards.previewUnavailable")
+                : t("reportCards.cardFailed"),
+      });
+      return;
+    }
+
+    if (collected.length === 0) {
+      setResult({
+        success: 0,
+        error,
+        // The remedy differs by card: a sequence card needs the exam's results
+        // processed, a term or annual card needs Compute run for that period.
+        message: `${t("reportCards.batchNone")}${
+          error > 0 ? ` ${t(`reportCards.someFailed_${cardType}`, { count: error })}` : ""
+        }`,
+      });
+      return;
+    }
+
+    setPreviewCards(collected);
+    setPreviewId(collected[0].id);
+    setPreviewOpen(true);
     setResult({
-      success,
+      success: collected.length,
       error,
-      // The remedy differs by card: a sequence card needs the exam's results
-      // processed, a term or annual card needs Compute run for that period.
-      message: `${t("reportCards.sentToPrint", { count: success })}${
+      message: `${t("reportCards.batchReady", { count: collected.length })}${
         error > 0 ? ` ${t(`reportCards.someFailed_${cardType}`, { count: error })}` : ""
       }`,
     });
+  };
+
+  const previewCard = previewCards.find((card) => card.id === previewId)
+    ?? previewCards[0]
+    ?? null;
+
+  /**
+   * Print the card currently shown, through the same hidden-iframe helper the
+   * rest of the console uses. "Requested", not "printed": the browser does not
+   * tell the page whether the dialog was accepted.
+   */
+  const handlePrintPreview = async () => {
+    if (!previewCard) return;
+    const run = ++printRunRef.current;
+    setPreviewMessage("");
+    try {
+      // Resolves once the iframe has reached print(); false when it could not.
+      const requested = await printHtml(previewCard.html);
+      if (printRunRef.current !== run) return;
+      setPreviewMessage(
+        requested
+          ? t("reportCards.printRequested", {
+              name: previewCard.name || t("reportCards.thisStudent"),
+            })
+          : t("reportCards.printNotStarted")
+      );
+    } catch {
+      if (printRunRef.current !== run) return;
+      setPreviewMessage(t("reportCards.printNotStarted"));
+    }
   };
 
   return (
@@ -467,6 +650,7 @@ export default function ReportCardsPage() {
                   key={ct}
                   type="button"
                   onClick={() => {
+                    invalidateGeneration();
                     setCardType(ct);
                     // The pickers below mean different things per type, so
                     // nothing chosen under one carries over to another.
@@ -475,6 +659,7 @@ export default function ReportCardsPage() {
                     setSelectedStudent(null);
                     setStudents([]);
                     setResult(null);
+                    closePreview();
                   }}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold border
                     transition-colors ${cardType === ct
@@ -507,7 +692,11 @@ export default function ReportCardsPage() {
                   </span>
                   <select
                     value={academicYear}
-                    onChange={(e) => { setAcademicYear(e.target.value); setSelectedClass(null); }}
+                    onChange={(e) => {
+                      invalidateGeneration();
+                      setAcademicYear(e.target.value);
+                      setSelectedClass(null);
+                    }}
                     className="rounded-xl border border-gray-200 px-3 py-2 text-sm
                                outline-none focus:border-primary-400"
                   >
@@ -526,7 +715,11 @@ export default function ReportCardsPage() {
                         <button
                           key={n}
                           type="button"
-                          onClick={() => { setTermNumber(n); setSelectedClass(null); }}
+                          onClick={() => {
+                            invalidateGeneration();
+                            setTermNumber(n);
+                            setSelectedClass(null);
+                          }}
                           className={`px-3 py-2 rounded-xl text-sm font-semibold border
                             transition-colors ${termNumber === n
                               ? "bg-primary-600 border-primary-600 text-white"
@@ -562,6 +755,7 @@ export default function ReportCardsPage() {
                     exam={exam}
                     isSelected={selectedExam?._id === exam._id}
                     onSelect={() => {
+                      invalidateGeneration();
                       setSelectedExam(exam);
                       setSelectedClass(null);
                       setSelectedStudent(null);
@@ -593,7 +787,10 @@ export default function ReportCardsPage() {
                   {classes.map((cls) => (
                     <button
                       key={cls._id}
-                      onClick={() => setSelectedClass(cls)}
+                      onClick={() => {
+                        invalidateGeneration();
+                        setSelectedClass(cls);
+                      }}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold
                         border transition-colors
                         ${selectedClass?._id === cls._id
@@ -662,7 +859,10 @@ export default function ReportCardsPage() {
               ) : (
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
-                    onClick={() => setSelectedStudent(null)}
+                    onClick={() => {
+                      invalidateGeneration();
+                      setSelectedStudent(null);
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold
                       border transition-colors
                       ${!selectedStudent
@@ -677,7 +877,10 @@ export default function ReportCardsPage() {
                     return (
                       <button
                         key={s._id}
-                        onClick={() => setSelectedStudent(s)}
+                        onClick={() => {
+                          invalidateGeneration();
+                          setSelectedStudent(s);
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold
                           border transition-colors
                           ${selectedStudent?._id === s._id
@@ -815,11 +1018,91 @@ export default function ReportCardsPage() {
             )}
 
             <p className="text-xs text-gray-400 text-center mt-3">
-              {t("reportCards.opensNewTab")}
+              {t("reportCards.previewNote")}
             </p>
           </div>
         </div>
       </div>
+
+      {/*
+        * A whole class, previewed here rather than in one pop-up per pupil.
+        * The reader picks a card, checks it in the iframe and presses Print;
+        * nothing is printed until they do.
+        */}
+      <Modal
+        open={previewOpen}
+        onClose={closePreview}
+        title={t("reportCards.previewTitle")}
+        size="lg"
+        className="max-w-5xl"
+      >
+        <div className="space-y-3">
+          {previewCards.length > 1 && (
+            <label className="block">
+              <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                {t("reportCards.previewSelect")}
+              </span>
+              <select
+                value={previewCard?.id ?? ""}
+                onChange={(e) => {
+                  printRunRef.current += 1;
+                  setPreviewId(e.target.value);
+                  setPreviewMessage("");
+                }}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2
+                           text-sm outline-none focus:border-primary-400"
+              >
+                {previewCards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.name || card.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <p className="text-xs text-gray-500">{t("reportCards.previewHint")}</p>
+
+          {previewCard ? (
+            <iframe
+              srcDoc={previewCard.html}
+              className="h-[70vh] w-full rounded-lg border border-gray-200 bg-white"
+              sandbox="allow-same-origin"
+              title={t("reportCards.previewTitle")}
+            />
+          ) : (
+            <p className="text-sm text-gray-500">{t("reportCards.batchNone")}</p>
+          )}
+
+          {previewMessage && (
+            <p role="status" className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              {previewMessage}
+            </p>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={closePreview}
+              className="px-4 py-2 rounded-xl border border-gray-200 text-sm
+                         font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              {t("common.close")}
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintPreview}
+              disabled={!previewCard}
+              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700
+                         text-white text-sm font-semibold transition-colors
+                         disabled:opacity-50"
+            >
+              {t("common.print")}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }
