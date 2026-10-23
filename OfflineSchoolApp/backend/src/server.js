@@ -17,6 +17,7 @@ require("./config/env").validateEnv();
 
 const express     = require("express");
 const cors        = require("cors");
+const { corsOrigin } = require("./config/corsOrigins");
 const helmet      = require("helmet");
 const morgan      = require("morgan");
 const compression = require("compression");
@@ -129,12 +130,9 @@ morgan.token("url", (req) =>
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 app.use(cors({
-  origin: process.env.NODE_ENV === "production"
-    ? (process.env.ALLOWED_ORIGINS || "")
-        .split(",")
-        .map((o) => o.trim())
-        .filter(Boolean)
-    : true,
+  // ALLOWED_ORIGINS, plus any ALLOWED_ORIGIN_PATTERNS, in production;
+  // reflect-all otherwise. See config/corsOrigins.js.
+  origin:         corsOrigin(),
   credentials:    true,
   methods:        ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   // Idempotency-Key is read by middleware/idempotency.js. A browser client

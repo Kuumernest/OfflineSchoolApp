@@ -89,7 +89,10 @@ when `JWT_SECRET` is a known placeholder or too short, or when
 
 `helmet()` with `crossOriginResourcePolicy: { policy: "cross-origin" }` — so
 `nosniff`, helmet's default CSP and the rest are on. CORS in production is
-restricted to `ALLOWED_ORIGINS`; **in development it reflects any origin**.
+restricted to `ALLOWED_ORIGINS`, plus any anchored regexes in the optional
+`ALLOWED_ORIGIN_PATTERNS` (used by a dev backend to serve preview builds;
+an unanchored or invalid pattern stops the process at boot); **in development
+it reflects any origin**.
 
 Allowed request headers include `Idempotency-Key`, without which a browser
 preflight would strip it and the client would silently lose the protection it
