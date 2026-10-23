@@ -22,6 +22,7 @@ table over memory.
 | `JWT_REFRESH_SECRET` | **yes** | Enables the refresh-token flow (`POST /auth/refresh`). |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES` | no | Defaults 30d / 90d. |
 | `ALLOWED_ORIGINS` | **yes in prod** | Comma-separated CORS allow-list. |
+| `ALLOWED_ORIGIN_PATTERNS` | no | Extra CORS origins by regex, whitespace-separated, each anchored `^…$` (refused at boot otherwise), e.g. `^https://[a-z0-9-]+\.offlineschoolapp\.pages\.dev$` for Pages previews. Set on a dev backend only. |
 | `SCHOOL_NAME` | no | Fallback name in emails and printed documents. |
 | `APP_LOGIN_URL` | no | Sign-in link included in welcome emails. |
 | `REQUIRE_MEDIA_SIGNATURE` | no | `1` enforces signed URLs for message attachments; unset = observe mode (log only). |

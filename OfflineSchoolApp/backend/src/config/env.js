@@ -31,6 +31,8 @@
  * in .env.example is exactly the value most likely to reach a server.
  */
 
+const { originPatterns } = require("./corsOrigins");
+
 const REQUIRED = ["MONGODB_URI", "JWT_SECRET"];
 const REQUIRED_IN_PRODUCTION = ["ALLOWED_ORIGINS"];
 
@@ -133,6 +135,10 @@ function validateEnv({ env = process.env, exit = true } = {}) {
         );
       }
     }
+
+    // A pattern that is unanchored or does not compile would widen, or
+    // silently fail to apply, the CORS allow-list. See config/corsOrigins.js.
+    problems.push(...originPatterns(env).problems);
 
     const secret = String(env.JWT_SECRET ?? "");
     if (secret && secret.length < 32) {
