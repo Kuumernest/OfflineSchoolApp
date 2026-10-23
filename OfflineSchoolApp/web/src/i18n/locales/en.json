@@ -2656,23 +2656,92 @@
       "loadFailed": "Could not load the audit log",
       "reason": "Reason",
       "changed": "Changed",
+      "deletedSchool": "Deleted school",
       "actions": {
-        "school.created": "School created",
-        "school.updated": "School updated",
-        "school.activated": "School activated",
-        "school.deactivated": "School deactivated",
-        "school.entered": "Entered a school",
-        "admin.created": "Administrator appointed",
-        "admin.restored": "Administrator restored",
-        "admin.passwordReset": "Password reset",
-        "admin.removed": "Administrator removed",
+        "school": {
+          "created": "School created",
+          "updated": "School updated",
+          "activated": "School activated",
+          "deactivated": "School deactivated",
+          "entered": "Entered a school"
+        },
+        "admin": {
+          "created": "Administrator appointed",
+          "restored": "Administrator restored",
+          "passwordReset": "Password reset",
+          "removed": "Administrator removed"
+        },
         "superAdmin": {
           "created": "Super Admin created",
           "updated": "Super Admin updated",
           "activated": "Super Admin activated",
           "deactivated": "Super Admin deactivated",
           "passwordReset": "Super Admin password reset"
+        },
+        "academic": {
+          "rulesChanged": "Academic rules changed"
+        },
+        "reportCard": {
+          "reissued": "Report card reissued"
+        },
+        "results": {
+          "unpublished": "Results unpublished"
         }
+      },
+      "layers": {
+        "sequence": "Sequence",
+        "term": "Term",
+        "annual": "Annual"
+      },
+      "fields": {
+        "name": "Name",
+        "code": "Code",
+        "email": "Email",
+        "phone": "Phone",
+        "address": "Address",
+        "city": "City",
+        "state": "Region",
+        "country": "Country",
+        "website": "Website",
+        "principalName": "Principal",
+        "verified": "Verified",
+        "academicYear": "Academic year",
+        "isActive": "Active",
+        "applicationsOpen": "Applications open",
+        "promotionThreshold": "Promotion pass mark"
+      },
+      "text": {
+        "yes": "yes",
+        "no": "no",
+        "items": "{{count}} item",
+        "items_other": "{{count}} items",
+        "changed": "{{field}} changed from “{{from}}” to “{{to}}”.",
+        "set": "{{field}} set to “{{to}}”.",
+        "cleared": "{{field}} cleared (was “{{from}}”).",
+        "schoolCreated": "The school “{{name}}” was created.",
+        "schoolActivated": "The school was switched on.",
+        "schoolDeactivated": "The school was switched off; its users can no longer sign in.",
+        "schoolEntered": "A platform administrator opened this school's screens.",
+        "adminCreated": "{{name}} ({{email}}) was appointed as {{role}}.",
+        "adminRestored": "{{name}} ({{email}}) was restored as {{role}}.",
+        "adminRemoved": "{{email}} ({{role}}) was removed from the school.",
+        "passwordReset": "The password for {{email}} was reset.",
+        "superAdminCreated": "{{name}} ({{email}}) was added as a Super Admin.",
+        "superAdminActivated": "The Super Admin account {{email}} was activated.",
+        "superAdminDeactivated": "The Super Admin account {{email}} was deactivated.",
+        "account": "Account: {{email}}.",
+        "rulesFor": "Calculation rules for {{year}} were changed.",
+        "classThresholds": "The pass mark changed for {{count}} class.",
+        "classThresholds_other": "The pass mark changed for {{count}} classes.",
+        "reportCardReissued": "The report card for {{label}} was reissued.",
+        "templateChanged": "Template version changed from {{from}} to {{to}}.",
+        "layoutChanged": "Layout version changed from {{from}} to {{to}}.",
+        "cardRevived": "The card had been deleted and is now issued again.",
+        "verifyCode": "New verification code: {{code}}.",
+        "resultsUnpublished": "Results for {{label}} were unpublished ({{count}} record withdrawn).",
+        "resultsUnpublished_other": "Results for {{label}} were unpublished ({{count}} records withdrawn).",
+        "resultsUnpublishedLayer": "{{layer}} results for {{label}} were unpublished ({{count}} record withdrawn).",
+        "resultsUnpublishedLayer_other": "{{layer}} results for {{label}} were unpublished ({{count}} records withdrawn)."
       }
     },
     "settings": {

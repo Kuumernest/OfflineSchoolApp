@@ -2656,23 +2656,92 @@
       "loadFailed": "Impossible de charger le journal d'audit",
       "reason": "Motif",
       "changed": "Modifié",
+      "deletedSchool": "Établissement supprimé",
       "actions": {
-        "school.created": "Établissement créé",
-        "school.updated": "Établissement mis à jour",
-        "school.activated": "Établissement activé",
-        "school.deactivated": "Établissement désactivé",
-        "school.entered": "Entrée dans un établissement",
-        "admin.created": "Administrateur nommé",
-        "admin.restored": "Administrateur restauré",
-        "admin.passwordReset": "Mot de passe réinitialisé",
-        "admin.removed": "Administrateur retiré",
+        "school": {
+          "created": "Établissement créé",
+          "updated": "Établissement mis à jour",
+          "activated": "Établissement activé",
+          "deactivated": "Établissement désactivé",
+          "entered": "Entrée dans un établissement"
+        },
+        "admin": {
+          "created": "Administrateur nommé",
+          "restored": "Administrateur restauré",
+          "passwordReset": "Mot de passe réinitialisé",
+          "removed": "Administrateur retiré"
+        },
         "superAdmin": {
           "created": "Super administrateur créé",
           "updated": "Super administrateur mis à jour",
           "activated": "Super administrateur activé",
           "deactivated": "Super administrateur désactivé",
           "passwordReset": "Mot de passe d'un super administrateur réinitialisé"
+        },
+        "academic": {
+          "rulesChanged": "Règles académiques modifiées"
+        },
+        "reportCard": {
+          "reissued": "Bulletin réémis"
+        },
+        "results": {
+          "unpublished": "Résultats dépubliés"
         }
+      },
+      "layers": {
+        "sequence": "Séquence",
+        "term": "Trimestre",
+        "annual": "Annuel"
+      },
+      "fields": {
+        "name": "Nom",
+        "code": "Code",
+        "email": "E-mail",
+        "phone": "Téléphone",
+        "address": "Adresse",
+        "city": "Ville",
+        "state": "Région",
+        "country": "Pays",
+        "website": "Site web",
+        "principalName": "Chef d'établissement",
+        "verified": "Vérifié",
+        "academicYear": "Année scolaire",
+        "isActive": "Actif",
+        "applicationsOpen": "Inscriptions ouvertes",
+        "promotionThreshold": "Moyenne de passage"
+      },
+      "text": {
+        "yes": "oui",
+        "no": "non",
+        "items": "{{count}} élément",
+        "items_other": "{{count}} éléments",
+        "changed": "{{field}} : « {{from}} » remplacé par « {{to}} ».",
+        "set": "{{field}} défini sur « {{to}} ».",
+        "cleared": "{{field}} effacé (était « {{from}} »).",
+        "schoolCreated": "L'établissement « {{name}} » a été créé.",
+        "schoolActivated": "L'établissement a été activé.",
+        "schoolDeactivated": "L'établissement a été désactivé ; ses utilisateurs ne peuvent plus se connecter.",
+        "schoolEntered": "Un administrateur de la plateforme a ouvert les écrans de cet établissement.",
+        "adminCreated": "{{name}} ({{email}}) a été nommé {{role}}.",
+        "adminRestored": "{{name}} ({{email}}) a été restauré comme {{role}}.",
+        "adminRemoved": "{{email}} ({{role}}) a été retiré de l'établissement.",
+        "passwordReset": "Le mot de passe de {{email}} a été réinitialisé.",
+        "superAdminCreated": "{{name}} ({{email}}) a été ajouté comme super administrateur.",
+        "superAdminActivated": "Le compte super administrateur {{email}} a été activé.",
+        "superAdminDeactivated": "Le compte super administrateur {{email}} a été désactivé.",
+        "account": "Compte : {{email}}.",
+        "rulesFor": "Les règles de calcul de {{year}} ont été modifiées.",
+        "classThresholds": "La moyenne de passage a changé pour {{count}} classe.",
+        "classThresholds_other": "La moyenne de passage a changé pour {{count}} classes.",
+        "reportCardReissued": "Le bulletin {{label}} a été réémis.",
+        "templateChanged": "Version du modèle : {{from}} → {{to}}.",
+        "layoutChanged": "Version de la mise en page : {{from}} → {{to}}.",
+        "cardRevived": "Le bulletin avait été supprimé et est de nouveau émis.",
+        "verifyCode": "Nouveau code de vérification : {{code}}.",
+        "resultsUnpublished": "Les résultats de {{label}} ont été dépubliés ({{count}} enregistrement retiré).",
+        "resultsUnpublished_other": "Les résultats de {{label}} ont été dépubliés ({{count}} enregistrements retirés).",
+        "resultsUnpublishedLayer": "Résultats ({{layer}}) de {{label}} dépubliés ({{count}} enregistrement retiré).",
+        "resultsUnpublishedLayer_other": "Résultats ({{layer}}) de {{label}} dépubliés ({{count}} enregistrements retirés)."
       }
     },
     "settings": {

@@ -81,6 +81,8 @@ export interface AuditEntry {
   actorRole:     string | null;
   schoolId:      string | null;
   schoolName:    string | null;
+  /** The school this row names no longer exists; schoolName is what it was recorded as. */
+  schoolDeleted?: boolean;
   resourceType:  string | null;
   resourceId:    string | null;
   resourceLabel: string | null;

@@ -24,6 +24,7 @@ import { useToast }              from "@/components/ui/Toast";
 import { useFormat }             from "@/i18n/format";
 import { useEnterSchool, errorMessage } from "@/components/platform/useEnterSchool";
 import { MetricTile, MetricGrid } from "@/components/platform/MetricTile";
+import { auditActionLabel } from "@/utils/auditText";
 import {
   fetchSchool, updateSchool, activateSchool, deactivateSchool,
   appointSchoolAdmin, resetSchoolAdminPassword,
@@ -326,7 +327,7 @@ export default function SchoolDetailPage() {
                     <Tr key={e._id}>
                       <Td>{fmt.dateTime(e.at)}</Td>
                       <Td wrap className="min-w-[10rem] max-w-xs">
-                        {t(`platform.audit.actions.${e.action}`, { defaultValue: e.action })}
+                        {auditActionLabel(e.action, t)}
                         {e.resourceLabel && e.resourceType === "user" ? <span className="ml-1 text-ink-muted">· {e.resourceLabel}</span> : null}
                       </Td>
                       <Td>{e.actorName ?? e.actorId ?? "—"}</Td>
