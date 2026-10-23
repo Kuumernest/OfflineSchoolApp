@@ -42,7 +42,7 @@
 // not asked for approvals is the same empty claim in a different costume.
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
@@ -135,6 +135,7 @@ export default function BursarDashboardPage() {
 
   // One call, both kinds of number: `summary` bounded to today, `arrears`
   // unbounded by design. See the note at the top of the file.
+  const queryClient = useQueryClient();
   const reportQ = useQuery({
     queryKey: ["finance", "report", schoolId, today, year],
     queryFn:  () => fetchReport(schoolId, { from: today, to: today, academicYear: year }),
@@ -171,7 +172,14 @@ export default function BursarDashboardPage() {
 
   // The four tiles are the point of the page, so it waits for the one request
   // that fills them. Everything below streams in on its own.
-  if (reportQ.isLoading) return <PageSpinner />;
+  if (reportQ.isLoading) {
+    // Cancel first: refetch() alone rejoins the request still in flight.
+    const retry = async () => {
+      await queryClient.cancelQueries({ queryKey: ["finance", "report"] });
+      void reportQ.refetch();
+    };
+    return <PageSpinner onRetry={retry} />;
+  }
 
   const arrears = reportQ.data?.arrears;
   const flow    = reportQ.data?.summary;

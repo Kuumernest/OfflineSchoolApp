@@ -1,5 +1,5 @@
 // web/src/pages/dashboard/DashboardPage.tsx
-import { useQuery }        from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate }     from "react-router-dom";
 import { useTranslation }  from "react-i18next";
 import {
@@ -193,6 +193,8 @@ export default function DashboardPage() {
 
   const pendingCount = pendingQ.data?.pagination?.total ?? 0;
 
+  const queryClient = useQueryClient();
+
   // ── Block render only on core queries ─────────────────────────────────────
   const coreLoading =
     studentQ.isLoading   ||
@@ -202,7 +204,15 @@ export default function DashboardPage() {
     examQ.isLoading      ||
     attendanceQ.isLoading;
 
-  if (coreLoading) return <PageSpinner />;
+  if (coreLoading) {
+    // refetch() alone would rejoin the request still in flight; cancel it
+    // first so Retry really asks the server again.
+    const retry = async () => {
+      await queryClient.cancelQueries({ queryKey: ["dashboard"] });
+      void queryClient.refetchQueries({ queryKey: ["dashboard"], type: "active" });
+    };
+    return <PageSpinner onRetry={retry} />;
+  }
 
   // All fetchers now return zero-fallbacks on error so this is informational
   // only — the dashboard still renders even when some queries fail.

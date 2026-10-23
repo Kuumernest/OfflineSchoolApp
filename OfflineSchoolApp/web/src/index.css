@@ -309,6 +309,15 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+
+    /* …except a loading indicator, which the rule above froze mid-turn so a
+       page that was busy looked hung. It pulses instead: an opacity change,
+       no movement. Kept in this layer on purpose: between layers an earlier
+       layer's !important wins, so the same rule among the utilities would
+       lose to the one above whatever its specificity. */
+    .animate-spin {
+      animation: busy-pulse 2s ease-in-out infinite !important;
+    }
   }
 
   ::-webkit-scrollbar {
@@ -365,6 +374,12 @@
    Under prefers-reduced-motion the sweep stops and the bar sits full-width at
    reduced opacity: still visibly "busy", without the sliding.
    ───────────────────────────────────────────────────────────────────────────── */
+
+/* The reduced-motion stand-in for a spinner (see @layer base). */
+@keyframes busy-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
 
 @keyframes progress-sweep {
   0%   { transform: translateX(-100%); }
