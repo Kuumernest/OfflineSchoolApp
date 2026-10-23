@@ -197,7 +197,7 @@ explanation that nothing is configured rather than shown an authentication
 error later; `ANTHROPIC_WORKSPACE_ID`, needed only for an organisation
 key not scoped to one workspace (the API refuses such a key until the
 workspace is named; the adapter reports that as `PROVIDER_AUTH` with the
-variable to set); `ANTHROPIC_MODEL`, default **`claude-sonnet-5`**, never
+variable to set); `ANTHROPIC_MODEL`, default **`claude-sonnet-5-5`**, never
 written in code; `ADVANCED_INTELLIGENCE_TIMEOUT_MS`,
 `ADVANCED_INTELLIGENCE_EFFORT`, `ADVANCED_INTELLIGENCE_MODEL_FALLBACKS`. A
 misspelt provider is reported once and treated as `none`. The key exists on
@@ -595,7 +595,7 @@ cross-domain evidence, the pupil's own exploration, new evidence, the
 career question, no ranking, no prediction, no profession; the provider
 request, the rendered message and the instructions the brief requires, the
 null provider, purity, the model-independent contract; the provider
-registry (none by default, `claude-sonnet-5` by default, no key → none, a
+registry (none by default, `claude-sonnet-5-5` by default, no key → none, a
 typo → none), the key never on the instance, auth and unknown-model
 failures, SDK isolation by source scan, normalisation, citation objects, a
 fabricated id, a foreign boundary, a grade-change claim, injection inside
