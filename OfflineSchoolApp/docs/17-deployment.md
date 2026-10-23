@@ -368,10 +368,38 @@ Known: `web/src/pages/students/AdmissionsPage.tsx` builds legacy relative
 
 Push a tag `vX.Y.Z` equal to `mobile/app.json` `version`. The workflow checks
 its configuration first and fails by name if anything is missing, then builds
-and attaches everything to a published GitHub **pre-release** (never marked
-"Latest") with `SHA256SUMS`, for testers. It deploys nothing and enables no
-auto-update. For a production release, promote the pre-release by hand after
-testing.
+and attaches everything to a GitHub release with `SHA256SUMS`. The version sets
+the kind:
+
+| Version | Release | Notes |
+|---|---|---|
+| `0.x.y` | **pre-release** for testers, never marked "Latest" | "Test build — not for production use" |
+| `1.0.0` and up | **production** release, marked "Latest" | tells test-build users to uninstall first. **Refused** while `PRODUCTION_API_URL` or `DESKTOP_API_URL` points at a `*.onrender.com` dev host |
+
+It deploys nothing and enables no auto-update.
+
+`v1.0.0` is already taken: it was pushed on 2026-10-16 for the staging run
+(docs/40, 0.1), before this workflow existed. The first production release is
+**`v1.0.1`**; a pushed tag is not moved.
+
+**Production release, in order** (once the production API answers `ready` and
+a sign-in works end to end):
+
+1. Repository variables (Settings → Secrets and variables → Actions):
+   `PRODUCTION_API_URL` and `DESKTOP_API_URL` = `https://<api-domain>/api`.
+   From now on every tag builds against production; tester builds need these
+   pointed back at the dev backend first.
+2. Merge the commit whose `mobile/app.json` says `1.0.1` into `master`, and run
+   `npm run check:all` on it.
+3. Tag that commit and push the tag:
+   `git tag v1.0.1 <commit> && git push origin v1.0.1`.
+4. The run builds the APK and the Windows installer and publishes the release.
+   Install both against production before telling schools.
+5. Testers who installed `0.1.0`: uninstall it first. The production APK has the
+   same package name and signing key, so it would upgrade in place and keep the
+   test build's local data and queued changes, which would then sync to
+   production. On Windows also delete the app data: the installer keeps it
+   (`deleteAppDataOnUninstall: false`).
 
 The tester builds point at the dev backend (`https://offlineschool-app.onrender.com/api`
 in both URL variables). It sleeps when idle and takes 30–60 s to wake, so the
