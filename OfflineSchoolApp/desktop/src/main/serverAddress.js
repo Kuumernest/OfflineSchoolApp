@@ -37,9 +37,13 @@ function normaliseServerUrl(input) {
  * Is there a school server at this address? Asks /api/health (liveness:
  * answers whenever the API is up, database or not).
  *
+ * Waits up to a minute: a hosted server that sleeps when idle (Render's free
+ * tier) takes 30–60 s to answer its first request, and a shorter wait would
+ * tell the school its correct address is wrong.
+ *
  * @returns {Promise<{ ok: boolean, url?: string, error?: string }>}
  */
-async function checkServer(input, fetchImpl, timeoutMs = 10000) {
+async function checkServer(input, fetchImpl, timeoutMs = 60000) {
   const n = normaliseServerUrl(input);
   if (!n.ok) return n;
   let res;

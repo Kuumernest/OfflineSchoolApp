@@ -364,6 +364,14 @@ export const TIMEOUTS = {
   render: 60_000,
   /** Whole-cohort work: compute, publish, promote, export. */
   long: 120_000,
+  /**
+   * Signing in: often the first request after the server has slept. A hosted
+   * server on a free tier (Render) takes 30–60 s to wake, longer than the
+   * default, and a timed-out sign-in reads as a wrong password or no network.
+   * 120 s because the link-quality scaling (lib/linkQuality.ts) can halve a budget on a fast
+   * link; this keeps at least the 60 s a wake-up needs.
+   */
+  signIn: 120_000,
 } as const;
 
 export default api;

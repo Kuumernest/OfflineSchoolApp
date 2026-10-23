@@ -31,6 +31,15 @@ export default function DesktopServerGate({ children }: { children: ReactNode })
   const [current, setCurrent] = useState<string | null>(null);
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  // The check can wait up to a minute for a sleeping server to wake; past a
+  // few seconds the button says so, rather than looking stuck.
+  const [slow, setSlow]       = useState(false);
+
+  useEffect(() => {
+    if (!busy) return;
+    const id = window.setTimeout(() => setSlow(true), 5_000);
+    return () => window.clearTimeout(id);
+  }, [busy]);
 
   useEffect(() => {
     if (!bridge) return;
@@ -52,6 +61,7 @@ export default function DesktopServerGate({ children }: { children: ReactNode })
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setSlow(false);
     setError(null);
     try {
       const checked = await bridge.server.check(address);
@@ -106,7 +116,7 @@ export default function DesktopServerGate({ children }: { children: ReactNode })
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
-            {busy ? t("desktopServer.checking") : t("desktopServer.connect")}
+            {busy ? t(slow ? "common.wakingServer" : "desktopServer.checking") : t("desktopServer.connect")}
           </button>
           {current && (
             <button type="button" onClick={() => { setAddress(current); setPhase("ready"); }}
