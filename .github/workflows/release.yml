@@ -3,12 +3,12 @@
 # Push a tag vX.Y.Z (matching mobile/app.json "version") and this builds:
 #   - the Android APK, through EAS Build (profile production-apk), for direct
 #     distribution to schools;
-#   - the desktop installers (Windows, Linux, macOS), ONLY when the repository
-#     variable DESKTOP_RELEASE_ENABLED is "true" — off by default until an
-#     installer has been tested against staging (docs/17);
-# and attaches them, with SHA256SUMS, to a DRAFT GitHub Release. A person
-# reviews and publishes the draft. Nothing here deploys the server, publishes
-# to a store, or turns on auto-update.
+#   - the Windows desktop installer and portable .exe, ONLY when the
+#     repository variable DESKTOP_RELEASE_ENABLED is "true";
+# and attaches them, with SHA256SUMS, to a GitHub PRE-RELEASE for testers.
+# A pre-release is published (downloadable by anyone who can see the repo)
+# but never marked "Latest". Nothing here deploys the server, publishes to a
+# store, or turns on auto-update.
 #
 # Configuration (Settings → Secrets and variables → Actions):
 #   secret   EXPO_TOKEN               an Expo access token (robot user) for EAS Build
@@ -146,14 +146,12 @@ jobs:
           if-no-files-found: error
 
   desktop:
-    name: Desktop (${{ matrix.os }})
+    name: Desktop (Windows)
     needs: preflight
     if: needs.preflight.outputs.desktop == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # Windows only for now. electron-builder.yml still describes the Linux and
+    # macOS targets; add their runners back here to build them.
+    runs-on: windows-latest
     timeout-minutes: 45
     defaults:
       run:
@@ -189,16 +187,12 @@ jobs:
         run: npm run package -- --publish never
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: desktop-${{ matrix.os }}
-          path: |
-            OfflineSchoolApp/desktop/dist/*.exe
-            OfflineSchoolApp/desktop/dist/*.AppImage
-            OfflineSchoolApp/desktop/dist/*.deb
-            OfflineSchoolApp/desktop/dist/*.dmg
+          name: desktop-windows
+          path: OfflineSchoolApp/desktop/dist/*.exe
           if-no-files-found: error
 
   release:
-    name: Draft GitHub Release
+    name: GitHub pre-release
     needs: [preflight, android, desktop]
     if: always() && needs.android.result == 'success' && (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
     runs-on: ubuntu-latest
@@ -212,12 +206,12 @@ jobs:
       - name: Checksums
         working-directory: release
         run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
-      - name: Create the draft release
+      - name: Create the pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
           gh release create "$TAG" release/* \
-            --draft --verify-tag --title "$TAG" \
-            --notes "Draft — review before publishing. Android APK built by EAS (production-apk). Desktop installers are UNSIGNED: Windows SmartScreen and macOS Gatekeeper will warn (docs/17). Verify downloads against SHA256SUMS."
+            --prerelease --latest=false --verify-tag --title "$TAG (testing)" \
+            --notes "Test build — not for production use. Android APK built by EAS (production-apk); install it by allowing installs from unknown sources. The Windows installer is UNSIGNED: SmartScreen shows \"Windows protected your PC\" — choose More info → Run anyway (docs/17). Verify downloads against SHA256SUMS."

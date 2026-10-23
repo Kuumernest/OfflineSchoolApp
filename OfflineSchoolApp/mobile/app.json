@@ -2,7 +2,7 @@
   "expo": {
     "name": "My School On The Move",
     "slug": "mobile",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "scheme": "myschoolonthemove",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -40,6 +40,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1fb0b01a-5fc5-43fd-ab8f-5ba2ef2ca741"
+      }
+    },
+    "owner": "kuum"
   }
 }

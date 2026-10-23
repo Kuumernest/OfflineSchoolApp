@@ -1,6 +1,6 @@
 // web/src/store/auth.store.ts
 import { create } from "zustand";
-import api        from "@/lib/axios";
+import api, { TIMEOUTS } from "@/lib/axios";
 import { desktop } from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -305,7 +305,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               password: credentials.password,
             };
 
-      const response = await api.post("/auth/login", payload);
+      const response = await api.post("/auth/login", payload, { timeout: TIMEOUTS.signIn });
       const { token, refreshToken, user } = extractAuthPayload(response.data);
 
       persistAuth(user, token, refreshToken);

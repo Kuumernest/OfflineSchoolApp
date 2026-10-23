@@ -368,8 +368,15 @@ Known: `web/src/pages/students/AdmissionsPage.tsx` builds legacy relative
 
 Push a tag `vX.Y.Z` equal to `mobile/app.json` `version`. The workflow checks
 its configuration first and fails by name if anything is missing, then builds
-and attaches everything to a **draft** GitHub Release with `SHA256SUMS`. A
-person publishes the draft. It deploys nothing and enables no auto-update.
+and attaches everything to a published GitHub **pre-release** (never marked
+"Latest") with `SHA256SUMS`, for testers. It deploys nothing and enables no
+auto-update. For a production release, promote the pre-release by hand after
+testing.
+
+The tester builds point at the dev backend (`https://offlineschool-app.onrender.com/api`
+in both URL variables). It sleeps when idle and takes 30–60 s to wake, so the
+first request waits: the desktop's server check allows 60 s, web and desktop
+sign-in 120 s (`TIMEOUTS.signIn`); mobile sign-in has no timeout.
 
 | Repository setting | Kind | Purpose |
 |---|---|---|
@@ -379,7 +386,7 @@ person publishes the draft. It deploys nothing and enables no auto-update.
 | `DESKTOP_API_URL` | variable | the API URL for the desktop build |
 
 Actions are pinned to the commit SHAs of reviewed tags; the workflow token is
-read-only except for the final job (`contents: write`, to create the draft).
+read-only except for the final job (`contents: write`, to create the release).
 
 ### Android
 
@@ -408,8 +415,9 @@ read-only except for the final job (`contents: write`, to create the draft).
 ### Desktop
 
 - Targets (`desktop/electron-builder.yml`): Windows NSIS + portable (x64),
-  Linux AppImage + deb (x64), macOS dmg (x64, arm64), each on its own
-  GitHub-hosted runner. No native modules.
+  Linux AppImage + deb (x64), macOS dmg (x64, arm64). The release workflow
+  currently builds **Windows only** (`windows-latest`); add runners back to
+  ship the others. No native modules.
 - **Unsigned.** No Windows code-signing certificate or Apple Developer ID is
   configured. Windows SmartScreen shows "Windows protected your PC — unknown
   publisher" (More info → Run anyway) until a certificate builds reputation;
