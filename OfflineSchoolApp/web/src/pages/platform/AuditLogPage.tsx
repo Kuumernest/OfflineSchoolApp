@@ -6,6 +6,7 @@ import { useState }             from "react";
 import { useQuery }             from "@tanstack/react-query";
 import { useTranslation }       from "react-i18next";
 import { roleLabel } from "@/utils/roleLabel";
+import { auditActionLabel, auditSentences } from "@/utils/auditText";
 import { Link }                 from "react-router-dom";
 import { ScrollText }           from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
@@ -21,32 +22,31 @@ import {
 
 const ACTION_VARIANT = (action: string): "success" | "danger" | "warning" | "info" | "default" => {
   if (action.endsWith(".created") || action.endsWith(".activated") || action.endsWith(".restored")) return "success";
-  if (action.endsWith(".deactivated") || action.endsWith(".removed")) return "danger";
-  if (action.endsWith(".passwordReset") || action.endsWith(".updated")) return "warning";
+  if (action.endsWith(".deactivated") || action.endsWith(".removed") || action.endsWith(".unpublished")) return "danger";
+  if (action.endsWith(".passwordReset") || action.endsWith(".updated") ||
+      action.endsWith(".rulesChanged") || action.endsWith(".reissued")) return "warning";
   if (action.endsWith(".entered")) return "info";
   return "default";
 };
 
 function Details({ e }: { e: AuditEntry }) {
   const { t } = useTranslation();
-  const changed = e.after && typeof e.after === "object" ? Object.keys(e.after) : [];
+  const sentences = auditSentences(e, t);
   return (
     <div className="space-y-1 text-xs leading-relaxed text-ink-muted">
-      {e.resourceLabel && e.resourceType === "user" ? <div className="break-words">{e.resourceLabel}</div> : null}
-      {e.reason ? <div className="break-words"><span className="font-medium">{t("platform.audit.reason")}:</span> {e.reason}</div> : null}
-      {changed.length > 0 && e.action !== "school.created" ? (
-        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-          <span className="font-medium">{t("platform.audit.changed")}:</span>
-          {changed.map((k) => {
-            const before = e.before?.[k];
-            const after  = e.after?.[k];
-            const show = (v: unknown) => (v == null || v === "" ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
-            return <span key={k} className="break-all">{k}: {show(before)} → {show(after)}</span>;
-          })}
-        </div>
-      ) : null}
+      {sentences.map((line, i) => <p key={i} className="break-words">{line}</p>)}
+      {e.reason ? <p className="break-words"><span className="font-medium">{t("platform.audit.reason")}:</span> {e.reason}</p> : null}
     </div>
   );
+}
+
+function SchoolCell({ e }: { e: AuditEntry }) {
+  const { t } = useTranslation();
+  if (!e.schoolId) return <>—</>;
+  if (e.schoolDeleted || !e.schoolName) {
+    return <span className="italic text-ink-muted" title={e.schoolName ?? undefined}>{t("platform.audit.deletedSchool")}</span>;
+  }
+  return <Link to={`/platform/schools/${e.schoolId}`} className="hover:underline">{e.schoolName}</Link>;
 }
 
 export default function AuditLogPage() {
@@ -87,7 +87,7 @@ export default function AuditLogPage() {
           <FormField label={a("action")}>
             <SelectField value={action} onChange={(e) => { setAction(e.target.value); reset(); }}
               options={[{ value: "", label: a("allActions") },
-                ...actions.map((k) => ({ value: k, label: t(`platform.audit.actions.${k}`, { defaultValue: k }) }))]} />
+                ...actions.map((k) => ({ value: k, label: auditActionLabel(k, t) }))]} />
           </FormField>
           <FormField label={t("platform.filters.from")}>
             <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); reset(); }} />
@@ -119,13 +119,11 @@ export default function AuditLogPage() {
                     <Td className="whitespace-nowrap">{fmt.dateTime(e.at)}</Td>
                     <Td>
                       <Badge variant={ACTION_VARIANT(e.action)}>
-                        {t(`platform.audit.actions.${e.action}`, { defaultValue: e.action })}
+                        {auditActionLabel(e.action, t)}
                       </Badge>
                     </Td>
                     <Td wrap className="max-w-xs">
-                      {e.schoolId ? (
-                        <Link to={`/platform/schools/${e.schoolId}`} className="hover:underline">{e.schoolName ?? e.schoolId}</Link>
-                      ) : "—"}
+                      <SchoolCell e={e} />
                     </Td>
                     <Td>
                       <div>{e.actorName ?? e.actorId ?? "—"}</div>

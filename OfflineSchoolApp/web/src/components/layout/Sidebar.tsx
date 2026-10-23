@@ -72,7 +72,9 @@ function SingleItem({
   return (
     <NavLink
       to={item.path}
-      end={item.path === "/dashboard"}
+      // Both are prefixes of every page beneath them; match them exactly so
+      // only the page actually open is highlighted.
+      end={item.path === "/dashboard" || item.path === "/platform"}
       className={({ isActive }) =>
         cn(
           ROW,

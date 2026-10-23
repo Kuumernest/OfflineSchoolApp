@@ -11,8 +11,10 @@
 // out beside it.
 //
 // Rendered only for super_admin. Everyone else has exactly one school and no
-// need to be told which.
-import { useNavigate }    from "react-router-dom";
+// need to be told which. Not rendered on /platform pages either: those look
+// across every school (the audit log, cross-school reports), so a banner
+// naming one school there reads as a filter the page is not applying.
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Building2, LogOut, AlertTriangle } from "lucide-react";
 import { useActiveSchool, useAuthStore, useUser } from "@/store/auth.store";
@@ -22,11 +24,13 @@ import { Badge }  from "@/components/ui/Badge";
 export default function SchoolContextBar() {
   const { t }        = useTranslation();
   const navigate     = useNavigate();
+  const { pathname } = useLocation();
   const user         = useUser();
   const activeSchool = useActiveSchool();
   const leaveSchool  = useAuthStore((s) => s.leaveSchool);
 
   if (user?.role !== "super_admin" || !activeSchool) return null;
+  if (pathname === "/platform" || pathname.startsWith("/platform/")) return null;
 
   const exit = () => {
     leaveSchool();

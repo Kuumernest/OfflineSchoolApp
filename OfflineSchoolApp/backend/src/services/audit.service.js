@@ -1,7 +1,9 @@
 // backend/src/services/audit.service.js
 "use strict";
 
+const mongoose = require("mongoose");
 const AuditLog = require("../db/models/AuditLog");
+const School   = require("../db/models/School");
 
 /**
  * The platform audit trail — see db/models/AuditLog.js for what it is for.
@@ -97,7 +99,33 @@ const listAudit = async ({
     AuditLog.countDocuments(match),
   ]);
 
-  return { entries, total, page: p, pages: Math.ceil(total / l) || 1, limit: l };
+  return { entries: await withSchoolNames(entries), total, page: p, pages: Math.ceil(total / l) || 1, limit: l };
+};
+
+/**
+ * Name every row's school as it is called NOW, whatever the row recorded.
+ *
+ * Not every writer stores a schoolName (the academic, report-card and
+ * unpublish rows carry only the id), and a stored name goes stale when the
+ * school is renamed. So the name is looked up at read time; the recorded one
+ * is kept only as a hint for a school that no longer exists, which is flagged
+ * with `schoolDeleted` so the page can say so instead of linking to a 404.
+ */
+const withSchoolNames = async (entries) => {
+  const ids = [...new Set(entries.map((e) => e.schoolId).filter(Boolean))];
+  const valid = ids.filter((id) => mongoose.isValidObjectId(id));
+  const live = valid.length
+    ? await School.find({ _id: { $in: valid }, ...School.notDeletedClause() }).select("_id name").lean()
+    : [];
+  const names = new Map(live.map((s) => [String(s._id), s.name]));
+
+  return entries.map((e) => {
+    if (!e.schoolId) return { ...e, schoolDeleted: false };
+    const name = names.get(String(e.schoolId));
+    return name != null
+      ? { ...e, schoolName: name, schoolDeleted: false }
+      : { ...e, schoolDeleted: true };
+  });
 };
 
 module.exports = { recordAudit, diff, listAudit, ACTIONS: AuditLog.ACTIONS };
