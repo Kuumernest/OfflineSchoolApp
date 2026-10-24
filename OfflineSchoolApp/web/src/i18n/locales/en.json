@@ -3169,6 +3169,8 @@
     "waitingBody": "{{count}} change(s) recorded on this computer have not been sent yet. They will go as soon as there is a connection.",
     "offline": "Offline",
     "offlineBody": "The school's server cannot be reached. Work carries on here and is sent when the connection returns.",
+    "error": "Sync error",
+    "errorBody": "The server answered with an error, so nothing new was received. It is tried again automatically.",
     "syncing": "Syncing",
     "blocked": "{{count}} need attention",
     "needsAttention": "Refused by the server",
@@ -3178,6 +3180,16 @@
     "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
     "syncNow": "Check now",
     "lastChecked": "Last checked at {{time}}"
+  },
+  "initialSync": {
+    "loadingTitle": "Downloading your school's data to this computer…",
+    "loadingBody": "The first time can take a few minutes, and about a minute longer if the server was asleep. Lists stay empty until it finishes.",
+    "failedTitle": "Your school's data has not been downloaded to this computer yet",
+    "failedOffline": "The server could not be reached. Empty lists here do not mean the data is gone — it is still on the server.",
+    "failedSession": "This computer's session with the server has ended. Sign out and sign in again, then try again.",
+    "failedError": "The server answered with an error. Empty lists here do not mean the data is gone — it is still on the server.",
+    "logFile": "Details are in {{path}}",
+    "retry": "Try again"
   },
   "academicStructure": {
     "title": "Academic Structure",

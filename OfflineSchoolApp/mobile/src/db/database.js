@@ -3,6 +3,7 @@
 
 import * as SQLite from "expo-sqlite";
 import { createTableFromSchema, ensureSchemaColumns } from "./schema";
+import { instrument } from "./localWrites";
 
 const DB_NAME = "schoolapp.db";
 
@@ -399,7 +400,10 @@ const _openDatabase = async () => {
     }
 
     console.log(`[database] SQLite opened: ${DB_NAME}`);
-    _db = db;
+    // Every write from here on is reported to the sync (localWrites.js), so a
+    // change leaves the device shortly after it is made. After the schema
+    // setup above, which is not anybody's change.
+    _db = instrument(db);
     return _db;
 
   } catch (err) {

@@ -725,7 +725,7 @@ export const getAdminStats = async ({ refresh = false } = {}) => {
     try {
       const { SyncManager } = require("./syncManager");
       // force: an explicit refresh must not be swallowed by the rate-limit gap.
-      await SyncManager.syncAll({ force: true });
+      await SyncManager.syncAll({ force: true, full: true });
     } catch (err) {
       console.log("getAdminStats: refresh failed, using local data:", err.message);
     }

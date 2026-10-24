@@ -320,6 +320,35 @@ class SyncManagerClass {
     // re-downloading a ~160 KB base64 logo every 30 seconds.
     this.SCHOOL_INFO_TTL_MS    = 6 * 60 * 60 * 1_000;   // 6 hours
     this._lastSchoolInfoAt     = null;
+
+    // ── Push soon after a local change ──────────────────────────────────
+    // A save on this phone used to wait for the next reconnect, foreground or
+    // five-minute tick before it left. Now every local write (db/localWrites.js)
+    // arms a short timer, re-armed by each further write, and when the writes
+    // stop the outbox is filled and sent. Push only: the pull is what is
+    // expensive, and a change made here needs nothing from the server to go.
+    this.PUSH_DEBOUNCE_MS      = 3_000;
+    this._pushTimer            = null;
+    this._pushing              = false;
+    // A write seen while a full sync held the lock. The sync may already have
+    // passed its own push step, so one more push runs when it finishes.
+    this._pushAfterSync        = false;
+    // The reverse: a full sync asked for while a push held the lock.
+    this._syncAfterPush        = null;
+    this._localWritesUnsub     = null;
+
+    // ── Lists the pull re-downloads whole ───────────────────────────────
+    // These endpoints have no "since" cursor, so every sync fetched each list
+    // in full whether or not anything had changed — most of a sync's round
+    // trips. They change rarely, so each is fetched at most once per
+    // LIST_REFRESH_MS. A sync a person asked for (pull to refresh, "sync now")
+    // passes full: true and fetches them all regardless.
+    //
+    // In memory: a cold launch fetches every list once, which is when a
+    // device is most likely to be behind.
+    this.LIST_REFRESH_MS       = 30 * 60 * 1_000;
+    this._listPulledAt         = new Map();
+    this._fullRun              = false;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -548,6 +577,12 @@ class SyncManagerClass {
     this._netUnsubscribe = null;
     this._appStateSub?.remove?.();
     this._appStateSub          = null;
+    this._localWritesUnsub?.();
+    this._localWritesUnsub     = null;
+    if (this._pushTimer) { clearTimeout(this._pushTimer); this._pushTimer = null; }
+    this._pushAfterSync        = false;
+    this._syncAfterPush        = null;
+    this._listPulledAt.clear();
     this.isSyncing             = false;
     this._staleSubjectsCleared = false;
     this._classIdsRepaired     = false;
@@ -643,6 +678,87 @@ class SyncManagerClass {
       console.log(`[SyncManager] Foregrounded after ${Math.round(away / 1000)}s — syncing`);
       this.syncAll({ force: true }).catch(console.warn);
     });
+
+    this._localWritesUnsub?.();
+    this._localWritesUnsub = require("../db/localWrites").onLocalWrite(() => this._onLocalWrite());
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 4b — PUSH SOON AFTER A LOCAL CHANGE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _onLocalWrite() {
+    if (this._destroyed) return;
+    // The push's own writes (backfill marking rows, drain settling them) are
+    // not news, and reacting to them would loop.
+    if (this._pushing) return;
+    if (this.isSyncing) { this._pushAfterSync = true; return; }
+    this._schedulePush();
+  }
+
+  _schedulePush(delay = this.PUSH_DEBOUNCE_MS) {
+    if (this._destroyed) return;
+    if (this._pushTimer) clearTimeout(this._pushTimer);
+    this._pushTimer = setTimeout(() => {
+      this._pushTimer = null;
+      this.pushNow().catch((err) => console.warn("[SyncManager] push failed:", err?.message));
+    }, delay);
+  }
+
+  /**
+   * Fill the outbox from dirty rows and send it. No pull.
+   *
+   * Takes the global lock so it never overlaps a full sync, and hands the
+   * rate-limit window back afterwards: a push must not make the next real
+   * sync wait. Offline it does nothing — the reconnect trigger syncs anyway.
+   */
+  async pushNow() {
+    if (this._destroyed || this._pushing) return;
+    if (this.isSyncing) { this._pushAfterSync = true; return; }
+    if (!isAuthenticated()) return;
+    if (getCurrentAuth().user?.mustResetPassword) return;
+
+    const net = await NetInfo.fetch().catch(() => ({ isConnected: true }));
+    if (net.isConnected === false) return;
+
+    const { acquireSyncLock, releaseSyncLock } = require("../store/auth.store");
+    if (!acquireSyncLock({ force: true })) {
+      // Held by a full sync starting up; its finally runs the push.
+      this._pushAfterSync = true;
+      return;
+    }
+
+    this._pushing = true;
+    const started = Date.now();
+    try {
+      await this.backfillOutbox();
+      const result = await this.drainOutbox();
+      if (result?.synced || result?.failed || result?.conflicts || result?.uploads) {
+        console.log(`[SyncManager] Pushed after a local change in ${Date.now() - started} ms`, result);
+      }
+    } finally {
+      this._pushing = false;
+      releaseSyncLock(false);
+      const owed = this._syncAfterPush;
+      this._syncAfterPush = null;
+      if (owed && !this._destroyed) this.syncAll(owed).catch(console.warn);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 4c — LIST PULLS, AT MOST ONCE PER LIST_REFRESH_MS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Is the whole-list pull named `key` due on this run? */
+  _listDue(key) {
+    if (this._fullRun) return true;
+    const at = this._listPulledAt.get(key);
+    return !at || Date.now() - at >= this.LIST_REFRESH_MS;
+  }
+
+  /** Record a whole-list pull as done. Only on success, so a failure retries. */
+  _listPulled(key) {
+    this._listPulledAt.set(key, Date.now());
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -987,7 +1103,12 @@ class SyncManagerClass {
    * to do" is checked BEFORE the global lock is taken, so a no-op tick never
    * consumes the rate-limit window that the next real sync needs.
    */
-  async syncAll({ force = false } = {}) {
+  /**
+   * @param force  past the rate-limit gap (reconnect, foreground, a person)
+   * @param full   also re-fetch every whole list, however recent (a person
+   *               asked: pull to refresh, "sync now"). See LIST_REFRESH_MS.
+   */
+  async syncAll({ force = false, full = false } = {}) {
     if (this._destroyed)    { console.log("[SyncManager] Destroyed — skipping sync");         return; }
     if (this.isSyncing)     { console.log("[SyncManager] Already syncing — skipping");        return; }
 
@@ -1019,12 +1140,25 @@ class SyncManagerClass {
 
     const { acquireSyncLock, releaseSyncLock } = require("../store/auth.store");
     if (!acquireSyncLock({ force })) {
+      // A push after a local change holds the lock for a moment. A reconnect
+      // or foreground sync skipped here would otherwise wait a whole interval,
+      // so it is remembered and run when the push lets go.
+      if (this._pushing) {
+        this._syncAfterPush = {
+          force: force || Boolean(this._syncAfterPush?.force),
+          full:  full  || Boolean(this._syncAfterPush?.full),
+        };
+        console.log("[SyncManager] Push in progress — syncing when it finishes");
+        return;
+      }
       console.log("[SyncManager] Global sync lock held — skipping");
       return;
     }
 
     this.isSyncing = true;
-    console.log(`[SyncManager] Starting full sync…${force ? " (forced)" : ""}`);
+    this._fullRun  = full;
+    console.log(`[SyncManager] Starting full sync…${force ? " (forced)" : ""}${full ? " (all lists)" : ""}`);
+    let outcome = "aborted";
 
     // visible: force.
     //
@@ -1099,15 +1233,19 @@ class SyncManagerClass {
       // down: the first good sync after an outage is exactly when somebody is
       // waiting for a register to leave the device.
       this._consecutiveFailures = 0;
+      outcome = "completed";
     } catch (err) {
       console.warn("[SyncManager] Sync incomplete:", err.message);
       this._consecutiveFailures += 1;
+      outcome = "failed";
     } finally {
       this.isSyncing = false;
+      this._fullRun  = false;
+      if (this._pushAfterSync) { this._pushAfterSync = false; this._schedulePush(); }
       // In the finally, so an aborted or failed sync clears the bar too.
       // A bar left at 60% after a thrown pull is the exact ambiguity this
       // was built to remove.
-      SyncProgress.end();
+      SyncProgress.end(outcome);
       releaseSyncLock();
     }
   }
@@ -1484,6 +1622,7 @@ class SyncManagerClass {
         }
       }
 
+      this._listPulled("assignments");
       console.log(
         `[SyncManager] Assignment pull complete` +
         (retired ? ` — ${retired} local row(s) already upstream` : "")
@@ -1573,25 +1712,25 @@ class SyncManagerClass {
       // Full assignment list — richer than the /sync/pull slice (it carries
       // teacher/class/subject name blobs) and it retires local rows the
       // server already has so the backfill won't queue duplicates.
-      if (this.isAdmin()) await this.pullAssignmentsFromServer();
+      if (this.isAdmin() && this._listDue("assignments")) await this.pullAssignmentsFromServer();
 
       SyncProgress.step("announcements");
       await this.pullAnnouncements(lastSyncTime);
       SyncProgress.step("fees");
-      await this.pullFeeStructures();
+      if (this._listDue("fees")) await this.pullFeeStructures();
       SyncProgress.step("timetable");
-      await this.pullTimetable();
+      if (this._listDue("timetable")) await this.pullTimetable();
       SyncProgress.step("messages");
       await this.pullMessages();
       SyncProgress.step("gate");
-      await this.pullGateRoster();
+      if (this._listDue("gate")) await this.pullGateRoster();
       SyncProgress.step("attendance");
       await this.pullAttendance();
       SyncProgress.step("examsStep");
-      await this.pullExams();
+      if (this._listDue("exams")) await this.pullExams();
       if (this.isAdmin()) {
         SyncProgress.step("finance");
-        await this.pullFinance();
+        if (this._listDue("finance")) await this.pullFinance();
       }
       if (this.isAdmin()) {
         SyncProgress.step("applications");
@@ -1676,6 +1815,7 @@ class SyncManagerClass {
 
       const svc = require("./feeStructure.service");
       const { count } = await svc.syncFromServer(schoolId);
+      this._listPulled("fees");
       if (count > 0) console.log(`[SyncManager] Pulled ${count} fee structure(s)`);
     } catch (err) {
       /*
@@ -1714,6 +1854,7 @@ class SyncManagerClass {
     try {
       const { syncTimetableFromServer } = require("./timetableService");
       await syncTimetableFromServer();
+      this._listPulled("timetable");
     } catch (err) {
       console.warn("[SyncManager] pullTimetable failed:", err.message);
     }
@@ -1752,6 +1893,7 @@ class SyncManagerClass {
       if (!schoolId) return;
       const { syncRoster } = require("./gate.service");
       await syncRoster({ schoolId });
+      this._listPulled("gate");
     } catch (err) {
       console.warn("[SyncManager] pullGateRoster failed:", err.message);
     }
@@ -1801,6 +1943,7 @@ class SyncManagerClass {
       if (!schoolId) return;
 
       const { data } = await api.get("/exams", { params: { schoolId } });
+      this._listPulled("exams");
       const list = data?.data ?? data?.exams ?? [];
       if (!Array.isArray(list) || !list.length) return;
 
@@ -1821,11 +1964,14 @@ class SyncManagerClass {
     if (!schoolId) return;
 
     // Separately, so a school that has expenses but no payroll permission
-    // still gets its expenses.
+    // still gets its expenses. Counted as pulled only when both answered, so
+    // a failed half is retried next sync rather than in half an hour.
+    let ok = true;
     try {
       const { pullExpenses } = require("./expense.service");
       await pullExpenses({ schoolId });
     } catch (err) {
+      ok = false;
       console.warn("[SyncManager] pullExpenses failed:", err.message);
     }
 
@@ -1833,8 +1979,10 @@ class SyncManagerClass {
       const { pullRuns } = require("./payroll.service");
       await pullRuns({ schoolId });
     } catch (err) {
+      ok = false;
       console.warn("[SyncManager] pullRuns failed:", err.message);
     }
+    if (ok) this._listPulled("finance");
   }
 
   async pullStudentApplications(lastSyncTime) {
