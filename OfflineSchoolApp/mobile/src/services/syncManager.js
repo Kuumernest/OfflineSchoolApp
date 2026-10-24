@@ -1025,6 +1025,7 @@ class SyncManagerClass {
 
     this.isSyncing = true;
     console.log(`[SyncManager] Starting full sync…${force ? " (forced)" : ""}`);
+    let outcome = "aborted";
 
     // visible: force.
     //
@@ -1099,15 +1100,17 @@ class SyncManagerClass {
       // down: the first good sync after an outage is exactly when somebody is
       // waiting for a register to leave the device.
       this._consecutiveFailures = 0;
+      outcome = "completed";
     } catch (err) {
       console.warn("[SyncManager] Sync incomplete:", err.message);
       this._consecutiveFailures += 1;
+      outcome = "failed";
     } finally {
       this.isSyncing = false;
       // In the finally, so an aborted or failed sync clears the bar too.
       // A bar left at 60% after a thrown pull is the exact ambiguity this
       // was built to remove.
-      SyncProgress.end();
+      SyncProgress.end(outcome);
       releaseSyncLock();
     }
   }
