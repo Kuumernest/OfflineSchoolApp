@@ -6,20 +6,6 @@ export type Audience = (typeof AUDIENCES)[number];
 export const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
-export const AUDIENCE_LABELS: Record<Audience, string> = {
-  all:      "Everyone",
-  teachers: "Teachers only",
-  students: "Students only",
-  class:    "Specific classes",
-};
-
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  low:    "Low",
-  normal: "Normal",
-  high:   "High",
-  urgent: "Urgent",
-};
-
 export interface AnnouncementAuthor {
   _id?:  string;
   name?: string;

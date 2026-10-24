@@ -766,7 +766,22 @@
     "nothingUnread": "Nothing was left unread.",
     "removeBody": "“{{title}}” will disappear for everyone who can currently see it.",
     "none": "No announcements yet",
-    "noneHint": "Post one to reach staff, students, or a particular class."
+    "noneHint": "Post one to reach staff, students, or a particular class.",
+    "countLine": "{{count}} posted · pinned notices appear first",
+    "countLine_other": "{{count}} posted · pinned notices appear first",
+    "byAuthor": "by {{name}}",
+    "audienceOpt": {
+      "all": "Everyone",
+      "teachers": "Teachers only",
+      "students": "Students only",
+      "class": "Specific classes"
+    },
+    "priorityOpt": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    }
   },
   "timetable": {
     "title": "Timetable",
@@ -1368,6 +1383,7 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "justNow": "Just now",
     "title": "Notifications",
     "readAll": "Read all",
     "none": "No notifications yet",

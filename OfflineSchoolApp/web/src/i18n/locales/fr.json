@@ -766,7 +766,22 @@
     "nothingUnread": "Il ne restait rien à lire.",
     "removeBody": "« {{title}} » disparaîtra pour toutes les personnes qui le voient actuellement.",
     "none": "Aucun communiqué pour le moment",
-    "noneHint": "Publiez-en un pour joindre le personnel, les élèves ou une classe en particulier."
+    "noneHint": "Publiez-en un pour joindre le personnel, les élèves ou une classe en particulier.",
+    "countLine": "{{count}} publié · les communiqués épinglés s'affichent en premier",
+    "countLine_other": "{{count}} publiés · les communiqués épinglés s'affichent en premier",
+    "byAuthor": "par {{name}}",
+    "audienceOpt": {
+      "all": "Tout le monde",
+      "teachers": "Enseignants uniquement",
+      "students": "Élèves uniquement",
+      "class": "Classes précises"
+    },
+    "priorityOpt": {
+      "low": "Faible",
+      "normal": "Normale",
+      "high": "Élevée",
+      "urgent": "Urgente"
+    }
   },
   "timetable": {
     "title": "Emploi du temps",
@@ -1368,6 +1383,7 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "justNow": "À l'instant",
     "title": "Notifications",
     "readAll": "Tout marquer comme lu",
     "none": "Aucune notification",

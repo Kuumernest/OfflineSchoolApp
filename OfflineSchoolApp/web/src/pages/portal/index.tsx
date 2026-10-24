@@ -675,7 +675,7 @@ export default function ParentPortalPage() {
                               : "default"
                           }
                         >
-                          {p.status}
+                          {t(`academic.${String(p.status).toLowerCase()}`, { defaultValue: p.status })}
                         </Badge>
                       </li>
                     ))}
@@ -745,7 +745,7 @@ export default function ParentPortalPage() {
                               : "warning"
                           }
                         >
-                          {day.status}
+                          {t(`academic.${String(day.status).toLowerCase()}`, { defaultValue: day.status })}
                         </Badge>
                       </li>
                     ))}
