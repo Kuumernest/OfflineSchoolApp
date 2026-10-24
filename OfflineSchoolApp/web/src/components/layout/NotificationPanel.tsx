@@ -10,6 +10,7 @@ import {
 import { cn }                                       from "@/utils/cn";
 import { useAuthStore }                             from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import { timeAgo }        from "@/i18n";
 import {
   fetchNotifications,
   markAsRead,
@@ -65,25 +66,12 @@ const PRIORITY_CONFIG: Record<
 };
 
 // ─── Time ago helper ──────────────────────────────────────────────────────────
-function timeAgo(dateStr: string): string {
+// In the console's language: the hand-written "5m ago" / "2d ago" was English
+// on a French console, and its fallback date took the browser's locale.
+function whenOf(dateStr: string, justNow: string): string {
   if (!dateStr) return "";
-
-  const now     = Date.now();
-  const then    = new Date(dateStr).getTime();
-  const diff    = Math.max(0, now - then);
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours   = Math.floor(minutes / 60);
-  const days    = Math.floor(hours / 24);
-  const weeks   = Math.floor(days / 7);
-
-  if (seconds < 60) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours   < 24) return `${hours}h ago`;
-  if (days    < 7)  return `${days}d ago`;
-  if (weeks   < 4)  return `${weeks}w ago`;
-
-  return new Date(dateStr).toLocaleDateString();
+  if (Date.now() - new Date(dateStr).getTime() < 60_000) return justNow;
+  return timeAgo(dateStr);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -219,8 +207,11 @@ export default function NotificationPanel() {
         <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
 
           {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
+          {/* gap and min-w-0: the panel is a fixed w-96 with overflow-hidden, so
+              in French ("Tout marquer comme lu") the row used to run past the
+              edge and the button text was cut off. The summary wraps instead. */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <h3 className="text-sm font-semibold text-gray-800">
                 {t("notifications.title")}
               </h3>
@@ -235,11 +226,11 @@ export default function NotificationPanel() {
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={handleReadAll}
-                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1 whitespace-nowrap"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
                   {t("notifications.readAll")}
@@ -393,7 +384,7 @@ export default function NotificationPanel() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {timeAgo(n.createdAt)}
+                        {whenOf(n.createdAt, t("notifications.justNow"))}
                       </span>
 
                       {n.type === "alert" && (

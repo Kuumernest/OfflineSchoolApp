@@ -48,9 +48,7 @@ import {
 } from "@/services/announcement.service";
 import { fetchClasses } from "@/services/class.service";
 import {
-  AUDIENCE_LABELS,
   PRIORITIES,
-  PRIORITY_LABELS,
   allowedAudiences,
   canPin,
 } from "@/types/announcement.types";
@@ -283,14 +281,18 @@ export default function AnnouncementsPage() {
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t("announcements.title")}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {listQ.data?.total ?? 0} posted · pinned notices appear first
+            {t("announcements.countLine", { count: listQ.data?.total ?? 0 })}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* flex-wrap, and the button may wrap its own text: "Tout marquer
+            comme lu" is half again as long as "Mark all read" and was cut off
+            on a narrow window. */}
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
             size="sm"
+            className="h-auto min-h-9 py-1.5 whitespace-normal text-left"
             icon={<CheckCheck className="w-4 h-4" />}
             loading={readAllMutation.isPending}
             onClick={() => readAllMutation.mutate()}
@@ -308,7 +310,7 @@ export default function AnnouncementsPage() {
         <Select
           options={[
             { value: "", label: t("announcements.everyAudience") },
-            ...audiences.map((a) => ({ value: a, label: AUDIENCE_LABELS[a] })),
+            ...audiences.map((a) => ({ value: a, label: t(`announcements.audienceOpt.${a}`) })),
           ]}
           value={audience}
           onChange={(e) => { setAudience(e.target.value); setPage(1); }}
@@ -316,7 +318,7 @@ export default function AnnouncementsPage() {
         <Select
           options={[
             { value: "", label: t("announcements.anyPriority") },
-            ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] })),
+            ...PRIORITIES.map((p) => ({ value: p, label: t(`announcements.priorityOpt.${p}`) })),
           ]}
           value={priority}
           onChange={(e) => { setPriority(e.target.value); setPage(1); }}
@@ -366,7 +368,7 @@ export default function AnnouncementsPage() {
                         <h3 className="text-sm font-semibold text-gray-900">
                           {a.title}
                         </h3>
-                        <Badge label={PRIORITY_LABELS[a.priority]} variant={PRIORITY_VARIANT[a.priority]} />
+                        <Badge label={t(`announcements.priorityOpt.${a.priority}`)} variant={PRIORITY_VARIANT[a.priority]} />
                         <Badge label={t(meta.labelKey)} variant={meta.variant} />
                       </div>
 
@@ -375,11 +377,11 @@ export default function AnnouncementsPage() {
                       </p>
 
                       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
-                        <span>{AUDIENCE_LABELS[a.audience]}</span>
+                        <span>{t(`announcements.audienceOpt.${a.audience}`)}</span>
                         {targets.length > 0 && (
                           <span className="text-gray-500">{targets.join(", ")}</span>
                         )}
-                        {a.authorName && <span>by {a.authorName}</span>}
+                        {a.authorName && <span>{t("announcements.byAuthor", { name: a.authorName })}</span>}
                         {a.createdAt && <span>{formatDate(a.createdAt)}</span>}
                         {a.expiresAt && (
                           <span className="inline-flex items-center gap-1">
@@ -474,7 +476,7 @@ export default function AnnouncementsPage() {
               }
             >
               <SelectField
-                options={audiences.map((a) => ({ value: a, label: AUDIENCE_LABELS[a] }))}
+                options={audiences.map((a) => ({ value: a, label: t(`announcements.audienceOpt.${a}`) }))}
                 value={form.audience}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, audience: e.target.value as Audience }))
@@ -484,7 +486,7 @@ export default function AnnouncementsPage() {
 
             <FormField label={t("announcements.priority")}>
               <SelectField
-                options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))}
+                options={PRIORITIES.map((p) => ({ value: p, label: t(`announcements.priorityOpt.${p}`) }))}
                 value={form.priority}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, priority: e.target.value as Priority }))
@@ -578,10 +580,10 @@ export default function AnnouncementsPage() {
         <Modal open onClose={() => setReading(null)} title={reading.title} size="lg">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge label={PRIORITY_LABELS[reading.priority]} variant={PRIORITY_VARIANT[reading.priority]} />
-              <Badge label={AUDIENCE_LABELS[reading.audience]} variant="default" />
+              <Badge label={t(`announcements.priorityOpt.${reading.priority}`)} variant={PRIORITY_VARIANT[reading.priority]} />
+              <Badge label={t(`announcements.audienceOpt.${reading.audience}`)} variant="default" />
               {reading.authorName && (
-                <span className="text-xs text-gray-500">by {reading.authorName}</span>
+                <span className="text-xs text-gray-500">{t("announcements.byAuthor", { name: reading.authorName })}</span>
               )}
             </div>
             {/* whitespace-pre-wrap so paragraph breaks the author typed
