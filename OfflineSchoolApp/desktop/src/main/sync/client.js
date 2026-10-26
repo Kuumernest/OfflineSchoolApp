@@ -28,6 +28,16 @@
 const TIMEOUT_MS = 30_000;
 
 /**
+ * For a page of the feed. A hosted server that sleeps when idle (Render's free
+ * tier) takes 30–60 s to answer its first request, and the first page of a
+ * first sync is up to 500 rows of every collection on top of that. At 30 s the
+ * first pull after the server had slept timed out every time, the cycle was
+ * reported as "offline", and the screens stayed empty for a server that was
+ * on its way up.
+ */
+const PULL_TIMEOUT_MS = 90_000;
+
+/**
  * A failure the caller can act on.
  *
  * `status` is null for anything that never reached the server — no route to
@@ -60,7 +70,7 @@ const client = ({ meta }) => {
   /**
    * @param {string} [idemKey] Sent as Idempotency-Key. See replay() below.
    */
-  const request = async (method, path, body, idemKey) => {
+  const request = async (method, path, body, idemKey, { timeoutMs = TIMEOUT_MS } = {}) => {
     const base = baseUrl();
     if (!base)  throw new SyncError("No server address configured", { code: "NO_SERVER" });
     if (!token) throw new SyncError("Not signed in", { code: "NO_TOKEN" });
@@ -78,7 +88,7 @@ const client = ({ meta }) => {
           ...(idemKey ? { "Idempotency-Key": String(idemKey) } : {}),
         },
         body:   body === undefined || body === null ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
       // No status: it never arrived. Reported as retryable rather than as a
@@ -111,7 +121,7 @@ const client = ({ meta }) => {
     setServerUrl(url) { meta.set("serverUrl", String(url || "").replace(/\/+$/, "")); },
 
     /** One page of changes, for the collections named. */
-    changes({ collections, cursors, limit = 500 }) {
+    changes({ collections, cursors, limit = 500, schoolId = null }) {
       const params = new URLSearchParams();
       // Omitted entirely when there is no list: the server then sends everything
       // this caller may have, which is what keeps the collection list in one
@@ -119,7 +129,11 @@ const client = ({ meta }) => {
       if (collections?.length) params.set("collections", collections.join(","));
       if (cursors && Object.keys(cursors).length) params.set("cursors", JSON.stringify(cursors));
       params.set("limit", String(limit));
-      return request("GET", `/api/sync/changes?${params}`);
+      // Read by the server only for a super_admin, who has no school of their
+      // own: without it the feed answers them with nothing at all (tenantFilter
+      // in syncFeed.controller.js). Everybody else's school comes from the token.
+      if (schoolId) params.set("schoolId", String(schoolId));
+      return request("GET", `/api/sync/changes?${params}`, undefined, undefined, { timeoutMs: PULL_TIMEOUT_MS });
     },
 
     /**
@@ -152,4 +166,4 @@ const client = ({ meta }) => {
   };
 };
 
-module.exports = { client, SyncError, TIMEOUT_MS };
+module.exports = { client, SyncError, TIMEOUT_MS, PULL_TIMEOUT_MS };

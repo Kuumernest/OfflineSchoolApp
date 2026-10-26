@@ -2729,7 +2729,16 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
   );
   if (!student) return sendError(res, 404, "Student not found");
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: "Student restored",
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
@@ -2783,14 +2792,17 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   if (!student) return sendError(res, 404, "Student not found");
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // Joining a class mid-year is joining its fees. Active structures covering
-  // the destination class apply now; anything the student was already billed
-  // for (including by a structure that covers both old and new class) is
-  // skipped by the unique index. Never throws.
+  // Joining a class mid-year is joining its fees. The old class's charges for
+  // the year are voided (payments stay with the student and count against the
+  // new ones), and active structures covering the destination class apply
+  // now; anything the student was already billed for (including by a
+  // structure that covers both old and new class) is skipped by the unique
+  // index. Never throws.
   const billing = await billStudentForClass({
     schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
     student:  { _id: student._id, classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2803,6 +2815,7 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
     // definition and the reply has to carry the new class's name.
     message: "Student moved to new class",
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));

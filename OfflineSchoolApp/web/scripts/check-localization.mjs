@@ -322,5 +322,77 @@ check("no hand-rolled English plural remains", handRolled, []);
   check("no stray English after the reports blurb", /\{t\("reports\.blurb"\)\}\s*\n\s*from it\./.test(read("src/pages/reports/index.tsx")), false);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Announcements, dashboard badges and relative dates (tester's pass on a
+// French console, Green Valley Academy). The audience filter, the count line,
+// the priority and exam-status badges and "about 2 months ago" were all
+// English: labels from an English table, a stored value rendered as its own
+// label, and date-fns left on its default locale. None was a missing key, so
+// the parity check could not see them.
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- announcements, badges and relative dates, in French ---");
+{
+  check("fr: audience options",
+    ["all", "teachers", "students", "class"].map((a) => T("fr", `announcements.audienceOpt.${a}`)),
+    ["Tout le monde", "Enseignants uniquement", "Élèves uniquement", "Classes précises"]);
+  check("fr: priority badges",
+    ["low", "normal", "high", "urgent"].map((p) => T("fr", `announcements.priorityOpt.${p}`)),
+    ["Faible", "Normale", "Élevée", "Urgente"]);
+  check("fr: the count line, singular and plural",
+    [T("fr", "announcements.countLine", { count: 1 }), T("fr", "announcements.countLine", { count: 5 })],
+    ["1 publié · les communiqués épinglés s'affichent en premier", "5 publiés · les communiqués épinglés s'affichent en premier"]);
+  check("fr: the author line", T("fr", "announcements.byAuthor", { name: "Mme Ngo" }), "par Mme Ngo");
+  check("fr: exam statuses on the dashboard",
+    [T("fr", "examStatus.completed"), T("fr", "examStatus.published")], ["Terminée", "Publiée"]);
+  check("fr: just now", T("fr", "notifications.justNow"), "À l'instant");
+
+  // The relative date itself, through the helper every screen now uses.
+  const { formatDistanceToNow } = await import("date-fns");
+  const { fr: frDates }         = await import("date-fns/locale");
+  const ago = new Date(Date.now() - 62 * 24 * 3600 * 1000);
+  check("fr: a relative date reads in French with the fr locale",
+    formatDistanceToNow(ago, { addSuffix: true, locale: frDates }), "il y a 2 mois");
+  const i18nSrc = read("src/i18n/index.ts");
+  check("the timeAgo helper passes the console's date locale",
+    /formatDistanceToNow\(new Date\(date\), \{[^}]*locale: dateLocale\(\)/.test(i18nSrc) && /resolvedLanguage === "fr" \? frDates/.test(i18nSrc), true);
+
+  // ── Rules, so the next one is caught ─────────────────────────────────────
+
+  // 1. A date-fns distance or relative call without a locale writes English.
+  //    Every one must name a locale (the helper in src/i18n does).
+  const noLocale = [];
+  for (const [file, text] of sources) {
+    for (const m of text.matchAll(/\b(formatDistance|formatDistanceToNow|formatDistanceStrict|formatDistanceToNowStrict|formatRelative)\(/g)) {
+      const call = text.slice(m.index, m.index + 240);
+      if (!/locale\s*:/.test(call)) noLocale.push(`${file}: ${m[1]}`);
+    }
+  }
+  check("every date-fns relative date names a locale", noLocale, []);
+
+  // 2. A stored value (priority, status, audience) rendered as its own label
+  //    is English in every language: "urgent", "completed".
+  const rawEnum = [];
+  const ENUM_AS_LABEL = /label=\{[A-Za-z_.?]+\.(priority|status|audience)\}|>\s*\{[A-Za-z_.?]+\.(priority|status|audience)\}\s*</g;
+  for (const [file, text] of sources) {
+    for (const m of text.matchAll(ENUM_AS_LABEL)) rawEnum.push(`${file}: ${m[0].replace(/\s+/g, " ")}`);
+  }
+  check("no priority, status or audience is shown as its raw stored value", rawEnum, []);
+
+  // 3. The literals this pass found, and an English label table coming back.
+  const found = [];
+  const PASS_LITERALS = [
+    `"Everyone"`, `"Teachers only"`, `"Students only"`, `"Specific classes"`,
+    " posted · pinned notices", ">by {", "AUDIENCE_LABELS", "PRIORITY_LABELS",
+    "m ago`", "d ago`", `"just now"`,
+  ];
+  for (const [file, text] of sources) {
+    for (const lit of PASS_LITERALS) if (text.includes(lit)) found.push(`${file}: ${lit}`);
+  }
+  check("none of this pass's English literals survive in rendered code", found, []);
+
+  const exams = read("src/components/dashboard/RecentExams.tsx");
+  check("the exam status pill goes through examStatus.*", /t\(`examStatus\.\$\{key\}`/.test(exams), true);
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

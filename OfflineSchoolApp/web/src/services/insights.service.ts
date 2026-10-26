@@ -192,6 +192,10 @@ export interface RecordedReview {
   engineVersion:  string;
   version:        number;
   review:         ReviewForm;
+  reviewerRole:   string | null;
+  /** The platform operator's review: shown, marked, never a pilot's teacher evidence. */
+  operator:       boolean;
+  pilotKind:      PilotKind | null;
 }
 
 export interface ReviewCase {
@@ -220,6 +224,14 @@ export interface ReviewCase {
   explanation:     Array<{ code: string; evidence: Evidence[] }>;
   selectedBecause: string;
   review:          ReviewForm;
+  /** More than one subject record by this name (a class change): the marks are this record's only. */
+  subjectRecords:  number;
+  /** Borderline cases: which classification one mark adds or drops, and under which threshold move. */
+  borderline:      Array<{ code: string; claimed: boolean; flipsUnder: string[] }> | null;
+  /** Other categories this pupil and subject are on the sheet under. */
+  related:         string[];
+  /** A pupil-wide case: the subjects it rests on. */
+  subjects:        Array<{ subjectId: string; subjectName: string }> | null;
   // As this viewer may see it.
   reviewStatus:  ReviewStatus;
   reviewCount:   number;
@@ -234,6 +246,12 @@ export interface ReviewStatusBlock {
   cases: number; unreviewed: number; oneReview: number; multipleReviews: number;
   agreement: { agree: number; differ: number };
   reviewsRecorded: number; reviewers: number;
+  /** Where the recorded reviews are, so this page reconciles with the cross-school count. offRoll is null for a class scope. */
+  breakdown: {
+    onSheet: number; offSheet: number; offRoll: number | null;
+    byKind: Record<"real" | "synthetic" | "development" | "none", number>;
+    operator: number;
+  };
   /** Categories where reviewers differed on more than one case. A pattern, never a score. */
   repeatedDisagreements: string[];
   byCategory: Record<string, { cases: number; reviewed: number; multipleReviews: number; differ: number }>;
@@ -259,6 +277,8 @@ export interface ReviewPackage {
   categories:    string[];
   priority:      string[];
   coverage:      Record<string, number>;
+  /** Cases sampled per category. */
+  maxPerCategory: number | null;
   reviewStatus:  ReviewStatusBlock;
   cases:         ReviewCase[];
   totalCases:    number;
@@ -344,6 +364,8 @@ export async function reviseReview(
 export interface PlatformCalibrationRow {
   schoolId: string; schoolName: string; isActive: boolean;
   reviews: number; reviewers: number; engineVersions: string[];
+  byKind: Record<"real" | "synthetic" | "development" | "none", number>;
+  operatorReviews: number;
   byOutcome: Record<string, number>; byCategory: Record<string, number>;
   dataQualityCitations: Record<string, number>;
   patterns: Array<{ kind: string; support: number; note: string }>;
