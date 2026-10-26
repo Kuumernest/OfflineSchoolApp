@@ -640,6 +640,15 @@ exports.pushStudentDecisions = async (req, res) => {
 
           await session.commitTransaction();
 
+          // Approved into a class is joining its fees, as on every other
+          // approve route. After the commit: billing never throws and must
+          // not decide whether the approval stands.
+          await require("../services/fees.service").applyActiveStructuresForStudent({
+            schoolId,
+            student:  { _id: student._id, classId },
+            raisedBy: req.user?._id ? String(req.user._id) : null,
+          });
+
           // tempPassword is intentionally surfaced once so the admin
           // can communicate initial credentials to the student.
           results.synced.push({

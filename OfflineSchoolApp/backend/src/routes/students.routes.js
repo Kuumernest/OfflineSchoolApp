@@ -1823,7 +1823,18 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
       ...(schoolId ? { schoolId } : {}),
     }).lean();
     if (existing) {
+      // Billed on the replay as well. A first attempt that saved the student
+      // and then failed before billing (a dropped connection, a restart) is
+      // retried by the outbox and lands here; returning early left that
+      // student with no fees. Charges already raised are skipped by the
+      // unique index, so a replay of a complete enrolment raises nothing.
+      const billing = await billStudentForClass({
+        schoolId,
+        student:  { _id: existing._id, classId: existing.classId },
+        raisedBy: req.user?._id ? String(req.user._id) : null,
+      });
       return sendSuccess(res, {
+        feesRaised:    billing.raised,
         // Reduced shape: an idempotency replay needs identity, class and
         // enrolment number — not the document the office keeps.
         student:       pickRoster(normaliseStudent(existing)),
@@ -2156,7 +2167,15 @@ const handleApprove = asyncHandler(async (req, res) => {
 
     console.log(`✅ Application approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+    // Approved into a class is joining its fees, as on the admin approve route.
+    const billing = await billStudentForClass({
+      schoolId: String(appRecord.schoolId || schoolId || ""),
+      student:  { _id: student._id, classId: String(targetClass._id) },
+      raisedBy: req.user?._id ? String(req.user._id) : null,
+    });
+
     return sendSuccess(res, {
+      feesRaised:   billing.raised,
       emailSent:    emailResult.success,
       warning:      notice,
       message:      notice
@@ -2231,7 +2250,14 @@ const handleApprove = asyncHandler(async (req, res) => {
 
   console.log(`✅ Student approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: String(targetClass._id) },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised:   billing.raised,
     emailSent:    emailResult.success,
     warning:      notice,
     message:      notice
@@ -2791,7 +2817,16 @@ router.patch("/:id/restore", authenticate, canManage, asyncHandler(async (req, r
     await User.findByIdAndUpdate(student.userId, { $set: { isActive: true } }).catch(() => {});
   }
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: `"${resolveDisplayName(student)}" has been restored`,
     data:    normaliseStudent(student.toObject()),
     overwrote,
@@ -2838,13 +2873,15 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   console.log(`[move] "${resolveDisplayName(student)}" ${prev} → ${student.classId}`);
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // The destination class's active structures apply to this student now;
-  // charges that already exist (e.g. a structure covering both classes) are
-  // skipped by the unique index. Never throws.
+  // The old class's charges for the year are voided and the destination
+  // class's apply now (payments stay with the student and count against the
+  // new ones); charges that already exist (e.g. a structure covering both
+  // classes) are skipped by the unique index. Never throws.
   const billing = await billStudentForClass({
     schoolId,
     student:  { _id: student._id, classId: student.classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2855,6 +2892,7 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" moved to ${className}`,
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    { ...normaliseStudent(student.toObject()), className },
     overwrote,
   });
