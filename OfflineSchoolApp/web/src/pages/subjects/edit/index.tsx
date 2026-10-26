@@ -16,6 +16,7 @@ import {
   updateSubjectDetailed,
 }                       from "@/services/class.service";
 import { useToast }     from "@/components/ui/Toast";
+import { coefficientCascadeNotice } from "../coefficientCascade";
 import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
 import type { Class, Teacher, Subject } from "@/types";
@@ -223,25 +224,8 @@ export default function EditSubjectPage() {
        * exams, it has to say so, because a silent cascade is the same problem
        * from the other side: averages that moved with nothing to show it.
        */
-      if (cascade && cascade.examSubjectsUpdated > 0) {
-        toast({
-          kind:  cascade.reprocessRequired ? "warning" : "success",
-          title: t("subjectsEdit.coeffAppliedTitle"),
-          message: [
-            t("subjectsEdit.coeffApplied", {
-              count: cascade.examSubjectsUpdated,
-              exams: cascade.examsAffected,
-            }),
-            cascade.skippedOverridden > 0
-              ? t("subjectsEdit.coeffSkippedOwn", { count: cascade.skippedOverridden })
-              : null,
-            cascade.skippedFinalised > 0
-              ? t("subjectsEdit.coeffSkippedFinal", { count: cascade.skippedFinalised })
-              : null,
-            cascade.reprocessRequired ? t("subjectsEdit.coeffReprocess") : null,
-          ].filter(Boolean).join(" "),
-        });
-      }
+      const notice = coefficientCascadeNotice(t, cascade);
+      if (notice) toast(notice);
       navigate("/subjects", { state: { updated: true } });
     },
     onError: (err: unknown) => {

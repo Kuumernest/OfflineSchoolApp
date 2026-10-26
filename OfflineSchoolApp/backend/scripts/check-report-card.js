@@ -329,12 +329,21 @@ const { absoluteLogoUrl }  = require("../src/services/reportCardData.service");
 
 const seeded  = { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS };
 const fakeReq = { protocol: "https", headers: {}, get: () => "school.example.com" };
+
+// A logo that is really on disk: the resolver (print/imageSource.js) prints
+// no logo rather than a link to a file that is not there.
+const LOGO_DIR  = require("path").join(__dirname, "../src/uploads/logos");
+const LOGO_FILE = "check-report-card-logo.jpg";
+require("fs").mkdirSync(LOGO_DIR, { recursive: true });
+require("fs").writeFileSync(require("path").join(LOGO_DIR, LOGO_FILE),
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0]));
+process.on("exit", () => { try { require("fs").unlinkSync(require("path").join(LOGO_DIR, LOGO_FILE)); } catch {} });
 const tplOpts = {
   template:   seeded,
   schoolName: "GBHS Molyko",
   school: {
     name:  "GBHS Molyko",
-    logo:  absoluteLogoUrl("/uploads/logos/x.jpg", fakeReq),
+    logo:  absoluteLogoUrl(`/uploads/logos/${LOGO_FILE}`, fakeReq),
     motto: "Knowledge and Service",
   },
 };
@@ -368,11 +377,20 @@ check("and the school's motto",               seq.includes("Knowledge and Servic
 // a stored file became "data:image/png;base64,/uploads/logos/x.jpg" and no
 // browser would load it. The card printed with no logo and nothing said why.
 check("the logo is an absolute URL, used as the src",
-  seq.includes('src="https://school.example.com/uploads/logos/x.jpg"'), true);
+  seq.includes(`src="https://school.example.com/uploads/logos/${LOGO_FILE}"`), true);
 check("and is not wrapped in a base64 prefix it does not need",
   /base64,https/.test(seq), false);
 check("absoluteLogoUrl leaves a data URI alone",
   absoluteLogoUrl("data:image/png;base64,AAA", fakeReq), "data:image/png;base64,AAA");
+// The legacy shape: inline base64 with no prefix, which every school had
+// before logos became files. "/9j/" is how JPEG bytes always begin in base64,
+// so it was taken for a path and printed as https://host/9j/4AAQ… — a 404.
+const LEGACY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1,
+  ...Array(60).fill(7)]).toString("base64");
+check("a legacy inline JPEG logo becomes a data URI, not a URL on the host",
+  absoluteLogoUrl(LEGACY_JPEG, fakeReq), `data:image/jpeg;base64,${LEGACY_JPEG}`);
+check("a stored path whose file is gone is no logo, not a broken image",
+  absoluteLogoUrl("/uploads/logos/not-there.jpg", fakeReq), null);
 check("and a URL that is already absolute",
   absoluteLogoUrl("https://cdn.example/x.png", fakeReq), "https://cdn.example/x.png");
 
@@ -804,7 +822,7 @@ check("a school's own template carries the watermark",
 check("under the template's content",
   watermarkOf(tplWm).at < tplWm.indexOf('class="report-wrapper"'), true);
 check("and the template's own header logo is unchanged",
-  /<img\s+src="https:\/\/school\.example\.com\/uploads\/logos\/x\.jpg"\s+class="school-logo"/
+  /<img\s+src="https:\/\/school\.example\.com\/uploads\/logos\/check-report-card-logo\.jpg"\s+class="school-logo"/
     .test(tplWm), true);
 check("the template's own CSS comes after the watermark's, so it can override it",
   tplWm.indexOf(".school-watermark {") < tplWm.indexOf(".report-wrapper {"), true);

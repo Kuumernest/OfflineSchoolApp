@@ -26,7 +26,8 @@
  * and fail. Copying their numbers across is what stops that.
  *
  * Existing numbers are never rewritten, including the two legacy formats
- * (GVA00/2026/001 and GVA00-2026-0001). Renumbering a real student would
+ * (GVA00/2026/001 and GVA00-2026-0001). New ones come from
+ * services/admissionNumber.service.js, in its format (GVA00-2026-008). Renumbering a real student would
  * invalidate whatever paperwork already carries the old number.
  *
  *   node scripts/backfill-admission-numbers.js            # dry run
@@ -45,38 +46,22 @@ const has = (v) => Boolean(v && String(v).trim());
   await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
 
   const Student = require("../src/db/models/Student");
-  const School  = require("../src/db/models/School");
 
-  const school = await School.findById(SCHOOL).lean().catch(() => null);
-
-  // Mirrors admin.routes exactly. If these ever diverge the backfill starts
-  // minting numbers in a series the app will not continue.
-  const schoolCode =
-    school?.code?.trim().toUpperCase().slice(0, 5) ||
-    (SCHOOL || "SCH").replace(/[^A-Z0-9]/gi, "").slice(0, 3).toUpperCase() ||
-    "SCH";
-  const prefix = `${schoolCode}/${new Date().getFullYear()}/`;
+  // The app's own generator, so a minted number has the same shape and
+  // continues the same sequence as every admission path.
+  const admission = require("../src/services/admissionNumber.service");
+  const year       = new Date().getFullYear();
+  const schoolCode = await admission.schoolCodeFor(SCHOOL);
+  const sep        = admission.FORMAT.separator;
+  const prefix     = `${schoolCode}${sep}${year}${sep}`;
 
   const students = await Student.find({
     schoolId: SCHOOL, status: "approved", deletedAt: null,
   }).select("studentName enrollmentNo admissionNo").lean();
 
-  // Every number already in use, in EITHER field, so a minted one cannot
-  // collide with a number that exists but is stored in the other column.
-  const taken = new Set();
-  for (const s of students) {
-    if (has(s.enrollmentNo)) taken.add(String(s.enrollmentNo).trim());
-    if (has(s.admissionNo))  taken.add(String(s.admissionNo).trim());
-  }
-
-  // Continue the series from the highest number in the generator's format,
-  // looking at both fields.
-  let nextSeq = 0;
-  for (const value of taken) {
-    if (!value.startsWith(prefix)) continue;
-    const seq = parseInt(value.slice(prefix.length), 10);
-    if (!Number.isNaN(seq) && seq > nextSeq) nextSeq = seq;
-  }
+  // Previewed from the highest number issued in any shape. The dry run must
+  // not take numbers from the counter, so the real ones are issued on --apply.
+  let nextSeq = await admission.highestIssued(schoolCode, year);
 
   const plan = [];
 
@@ -92,13 +77,9 @@ const has = (v) => Boolean(v && String(v).trim());
     } else if (e && !a) {
       plan.push({ _id: s._id, name, action: "copy enrollmentNo → admissionNo", value: e });
     } else {
-      let value;
-      do {
-        nextSeq += 1;
-        value = `${prefix}${String(nextSeq).padStart(3, "0")}`;
-      } while (taken.has(value));   // never reuse, even across formats
-      taken.add(value);
-      plan.push({ _id: s._id, name, action: "MINT new number", value });
+      nextSeq += 1;
+      plan.push({ _id: s._id, name, action: "MINT new number", mint: true,
+        value: admission.formatAdmissionNo(schoolCode, year, nextSeq) });
     }
   }
 
@@ -119,6 +100,10 @@ const has = (v) => Boolean(v && String(v).trim());
 
   let done = 0;
   for (const p of plan) {
+    if (p.mint) {
+      p.value = await admission.nextAdmissionNo(SCHOOL, { year });
+      console.log(`  minted ${p.value} for ${p.name}`);
+    }
     // Written through the driver, not the model: `enrollment_no` and
     // `admissionNumber` are legacy aliases the schema does not declare, and a
     // strict-mode save would silently drop them — leaving the very split this
