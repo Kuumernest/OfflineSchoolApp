@@ -48,6 +48,7 @@ import { v4 as uuidv4 } from "uuid";
 import api                from "./api";
 import { getDatabase }    from "../db/database";
 import { MutationQueue, registerReconciler, registerFailureHandler } from "./mutationQueue.service";
+import { getCurrentAuth } from "../utils/authHelpers";
 
 // ── Local schema ────────────────────────────────────────────────────────────
 
@@ -167,6 +168,61 @@ const rowToConversation = (r) => ({
   lastDeliveredSeqByOther:   r.last_delivered_seq_by_other || 0,
 });
 
+// ── Whose store this is ─────────────────────────────────────────────────────
+//
+// One phone, one schoolapp.db, several people. An admin signs in, their
+// threads with parents are stored; a pupil signs in next and the inbox read
+// every stored row — the server would have answered 404 for each of them,
+// but the list never asked it. So every read below shows only threads the
+// signed-in person is a participant in, and what is not theirs is deleted
+// at sign-in, sign-out, every sync, and when the server says "not found".
+
+/** The signed-in user's id, or null. This store only ever holds "user" principals. */
+const signedInId = () => {
+  const u = getCurrentAuth()?.user;
+  const id = u?._id ?? u?.id;
+  return id ? String(id) : null;
+};
+
+/** Does a stored conversation row list `myId` as a participant? */
+const isMine = (row, myId) =>
+  !!myId && parse(row?.participants, []).some(
+    (p) => (p?.kind ?? "user") === "user" && String(p?.id) === String(myId)
+  );
+
+async function deleteConversations(db, ids) {
+  for (const id of ids) {
+    await db.runAsync(`DELETE FROM ${MESSAGES} WHERE conversation_id = ?`, [String(id)]);
+    await db.runAsync(`DELETE FROM ${CONVERSATIONS} WHERE id = ?`, [String(id)]);
+  }
+  return ids.length;
+}
+
+/**
+ * Delete every stored thread `myId` is not a participant in, with its
+ * messages. With no one signed in, everything goes.
+ */
+export async function purgeNotMine(myId = signedInId()) {
+  await ensureSchema();
+  const db   = await getDatabase();
+  const rows = await db.getAllAsync(`SELECT id, participants FROM ${CONVERSATIONS}`);
+  const gone = rows.filter((r) => !isMine(r, myId)).map((r) => r.id);
+  await deleteConversations(db, gone);
+  // Messages whose thread is no longer stored (or never was).
+  await db.runAsync(
+    `DELETE FROM ${MESSAGES} WHERE conversation_id NOT IN (SELECT id FROM ${CONVERSATIONS})`
+  );
+  return gone.length;
+}
+
+/** Forget every stored conversation and message: sign-out and account switch. */
+export async function clearLocalMessages() {
+  await ensureSchema();
+  const db = await getDatabase();
+  await db.runAsync(`DELETE FROM ${MESSAGES}`);
+  await db.runAsync(`DELETE FROM ${CONVERSATIONS}`);
+}
+
 // ── Local writes ────────────────────────────────────────────────────────────
 
 async function upsertConversation(db, c, myId, myKind) {
@@ -220,24 +276,37 @@ async function upsertMessage(db, conversationId, m, state = "sent") {
  */
 export async function listConversations() {
   await ensureSchema();
+  const myId = signedInId();
   const db   = await getDatabase();
   const rows = await db.getAllAsync(
     `SELECT * FROM ${CONVERSATIONS}
      WHERE is_archived = 0
      ORDER BY COALESCE(last_message_at, updated_at) DESC`
   );
-  return rows.map(rowToConversation);
+  return rows.filter((r) => isMine(r, myId)).map(rowToConversation);
 }
 
 /** Pull conversations from the server and reconcile locally. */
 export async function syncConversations({ myId, myKind = "user" } = {}) {
   await ensureSchema();
   try {
-    const res  = await api.get("/messages/conversations", { timeout: 10000 });
+    const PAGE = 100;   // the server's maximum page
+    const res  = await api.get("/messages/conversations", { params: { limit: PAGE }, timeout: 10000 });
     const list = res.data?.conversations ?? [];
     const db   = await getDatabase();
 
     for (const c of list) await upsertConversation(db, c, myId, myKind);
+
+    // The server lists only the caller's threads. Anything stored that is not
+    // theirs goes; and when the answer is the whole list (shorter than a
+    // page), so does any stored thread it no longer contains — a class left,
+    // a thread removed.
+    await purgeNotMine(myId ? String(myId) : signedInId());
+    if (list.length < PAGE) {
+      const keep   = new Set(list.map((c) => String(c._id)));
+      const stored = await db.getAllAsync(`SELECT id FROM ${CONVERSATIONS}`);
+      await deleteConversations(db, stored.map((r) => r.id).filter((id) => !keep.has(String(id))));
+    }
 
     return { ok: true, count: list.length };
   } catch (err) {
@@ -256,6 +325,10 @@ export async function syncConversations({ myId, myKind = "user" } = {}) {
 export async function listMessages(conversationId, { limit = 50 } = {}) {
   await ensureSchema();
   const db   = await getDatabase();
+  const conv = await db.getFirstAsync(
+    `SELECT participants FROM ${CONVERSATIONS} WHERE id = ?`, [String(conversationId)]
+  ).catch(() => null);
+  if (!conv || !isMine(conv, signedInId())) return [];
   const rows = await db.getAllAsync(
     `SELECT * FROM ${MESSAGES}
      WHERE conversation_id = ?
@@ -337,6 +410,13 @@ export async function syncMessages(conversationId, myId) {
 
     return { ok: true, count: list.length };
   } catch (err) {
+    // Not found: not a thread this person is in (or no longer exists). The
+    // stored copy is deleted rather than kept on screen.
+    if (err?.response?.status === 404) {
+      const db = await getDatabase();
+      await deleteConversations(db, [conversationId]);
+      return { ok: false, gone: true };
+    }
     return { ok: false, reason: err?.message };
   }
 }
@@ -462,10 +542,10 @@ export async function getConversation(conversationId) {
   await ensureSchema();
   const db = await getDatabase();
   const r = await db.getFirstAsync(
-    `SELECT id, kind, title, is_read_only, is_archived FROM ${CONVERSATIONS} WHERE id = ?`,
+    `SELECT id, kind, title, is_read_only, is_archived, participants FROM ${CONVERSATIONS} WHERE id = ?`,
     [String(conversationId)]
   ).catch(() => null);
-  return r ? { _id: r.id, kind: r.kind, title: r.title, isReadOnly: !!r.is_read_only, isArchived: !!r.is_archived } : null;
+  return r && isMine(r, signedInId()) ? { _id: r.id, kind: r.kind, title: r.title, isReadOnly: !!r.is_read_only, isArchived: !!r.is_archived } : null;
 }
 
 /**
@@ -614,12 +694,15 @@ export async function openDirect({ id, kind = "user", myId, myKind = "user" }) {
 /** Total unread across every thread, for a badge. */
 export async function unreadTotal() {
   await ensureSchema();
-  const db  = await getDatabase();
-  const row = await db.getFirstAsync(
-    `SELECT SUM(MAX(0, last_message_seq - last_read_seq)) AS n
+  const myId = signedInId();
+  const db   = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT participants, last_message_seq, last_read_seq
      FROM ${CONVERSATIONS} WHERE is_archived = 0`
   );
-  return row?.n ?? 0;
+  return rows
+    .filter((r) => isMine(r, myId))
+    .reduce((n, r) => n + Math.max(0, (r.last_message_seq || 0) - (r.last_read_seq || 0)), 0);
 }
 
 // ── Outbox reconciliation ───────────────────────────────────────────────────
@@ -655,6 +738,8 @@ export const registerMessageReconcilers = () => {
 
 export default {
   registerMessageReconcilers,
+  purgeNotMine,
+  clearLocalMessages,
   fetchRecipients,
   uploadAttachment,
   listConversations,

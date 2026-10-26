@@ -208,9 +208,15 @@ app.get("/uploads/{*path}", (req, res, next) => {
   // sitting in clients' SQLite caches were received unsigned and every message
   // read since the signing change re-issues them. Give caches a signature
   // lifetime to refresh, then REQUIRE_MEDIA_SIGNATURE=1 enforces.
-  if (mediaSignature.isProtectedPath(relativePath)) {
+  // Judged on the path as it RESOLVES, not as it was typed: "./messages/x"
+  // and "a/../messages/x" land on uploads/messages/x, but their first segment
+  // is not "messages", so the raw string passed as unprotected and a private
+  // attachment was served without a signature. A legitimate signed URL is
+  // already canonical, so its signature verifies against the same string.
+  const canonicalPath = path.relative(uploadsRoot, filePath).split(path.sep).join("/");
+  if (mediaSignature.isProtectedPath(canonicalPath)) {
     const sig = req.query?.sig;
-    if (!mediaSignature.verifyMediaSignature(relativePath, sig)) {
+    if (!mediaSignature.verifyMediaSignature(canonicalPath, sig)) {
       if (process.env.REQUIRE_MEDIA_SIGNATURE === "1") {
         return res.status(401).json({
           error: "This link has expired. Ask for the file to be shared again.",
