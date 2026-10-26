@@ -18,7 +18,8 @@
     "check:l10n": "node scripts/check-localization.mjs",
     "check:layout": "node scripts/check-platform-layout.mjs",
     "check:print": "node scripts/check-report-print.mjs",
-    "check:permlabels": "node scripts/check-permission-labels.mjs"
+    "check:permlabels": "node scripts/check-permission-labels.mjs",
+    "check:activenav": "node scripts/check-active-nav.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

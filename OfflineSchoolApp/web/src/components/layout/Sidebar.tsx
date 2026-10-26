@@ -1,13 +1,14 @@
 // web/src/components/layout/Sidebar.tsx
-import { useState, useEffect }          from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation }                from "react-i18next";
-import { NavLink, useLocation }         from "react-router-dom";
+import { Link, useLocation }           from "react-router-dom";
 import { ChevronRight, GraduationCap, X } from "lucide-react";
 import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
 import { sectionForPath, NAV_GROUPS, groupIndexFor } from "@/config/sections";
 import { useUser, useActiveSchool }     from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
 import { roleLabel }                    from "@/utils/roleLabel";
+import { activeNavPath }                from "@/utils/activeNav";
 import { type UserRole }                from "@/types";
 
 // ─────────────────────────────────────────────────────────
@@ -28,8 +29,9 @@ const hasAccess = (item: NavItem, role: UserRole, inSchool: boolean) => {
   return item.platform ? true : inSchool;
 };
 
-const isParentActive = (item: NavItem, pathname: string) =>
-  item.children?.some((c) => c.path && pathname.startsWith(c.path)) ?? false;
+/** A group is active when it holds the one active entry. */
+const isParentActive = (item: NavItem, activePath: string | null) =>
+  Boolean(activePath) && (item.children?.some((c) => c.path === activePath) ?? false);
 
 /**
  * Translate a nav entry, falling back to its English label.
@@ -62,29 +64,31 @@ const firstPath = (item: NavItem): string | undefined =>
 function SingleItem({
   item,
   depth = 0,
+  activePath,
 }: {
-  item:   NavItem;
-  depth?: number;
+  item:       NavItem;
+  depth?:     number;
+  activePath: string | null;
 }) {
   const navLabel = useNavLabel();
   if (!item.path) return null;
 
+  // Decided once for the whole rail (utils/activeNav.ts), not per link by
+  // prefix — NavLink's own matching lit /students and /students/admissions
+  // together, and every other pair where one entry is the other's prefix.
+  const isActive = item.path === activePath;
+
   return (
-    <NavLink
+    <Link
       to={item.path}
-      // Both are prefixes of every page beneath them; match them exactly so
-      // only the page actually open is highlighted.
-      end={item.path === "/dashboard" || item.path === "/platform"}
-      className={({ isActive }) =>
-        cn(
-          ROW,
-          isActive
-            ? "bg-primary-600 text-nav-text-active"
-            : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
-        )
-      }
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        ROW,
+        isActive
+          ? "bg-primary-600 text-nav-text-active"
+          : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
+      )}
     >
-      {({ isActive }) => (
         <>
           {depth === 0 ? (
             /* The icon carries its section's colour when the row is at rest,
@@ -120,8 +124,7 @@ function SingleItem({
             </span>
           )}
         </>
-      )}
-    </NavLink>
+    </Link>
   );
 }
 
@@ -133,14 +136,15 @@ function GroupItem({
   item,
   role,
   inSchool,
+  activePath,
 }: {
-  item:     NavItem;
-  role:     UserRole;
-  inSchool: boolean;
+  item:       NavItem;
+  role:       UserRole;
+  inSchool:   boolean;
+  activePath: string | null;
 }) {
-  const { pathname } = useLocation();
   const navLabel     = useNavLabel();
-  const active       = isParentActive(item, pathname);
+  const active       = isParentActive(item, activePath);
   const [open, setOpen] = useState(active);
 
   // Navigating into a section from outside the rail — a dashboard tile, a deep
@@ -201,7 +205,7 @@ function GroupItem({
             aria-hidden="true"
           />
           {visibleChildren.map((child) => (
-            <SingleItem key={child.path} item={child} depth={1} />
+            <SingleItem key={child.path} item={child} depth={1} activePath={activePath} />
           ))}
         </div>
       )}
@@ -230,6 +234,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   // is static and this is a no-op. DashboardLayout passes a stable onClose so
   // listing it here cannot loop.
   useEffect(() => { onClose(); }, [pathname, onClose]);
+
+  // Among the entries this person is shown: a page under an entry they cannot
+  // see should light its visible parent, not nothing.
+  const activePath = useMemo(() => {
+    const paths = NAV_ITEMS.filter((i) => hasAccess(i, role, inSchool)).flatMap((i) => [
+      i.path,
+      ...(i.children ?? []).filter((c) => hasAccess(c, role, inSchool)).map((c) => c.path),
+    ]);
+    return activeNavPath(pathname, paths);
+  }, [pathname, role, inSchool]);
 
   const initial = user?.name?.charAt(0).toUpperCase() ?? "?";
 
@@ -298,9 +312,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-0.5">
                   {items.map((item) =>
                     item.children ? (
-                      <GroupItem key={item.label} item={item} role={role} inSchool={inSchool} />
+                      <GroupItem key={item.label} item={item} role={role} inSchool={inSchool} activePath={activePath} />
                     ) : (
-                      <SingleItem key={item.path} item={item} />
+                      <SingleItem key={item.path} item={item} activePath={activePath} />
                     )
                   )}
                 </div>
