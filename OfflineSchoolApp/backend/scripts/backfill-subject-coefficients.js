@@ -15,25 +15,32 @@
  * A weight an admin deliberately set for one exam is a per-exam override and
  * must survive this, so anything else is left alone and reported as skipped.
  *
+ * An exam whose results are published, locked or archived is never touched,
+ * whatever its weights: those cards have gone home, and a coefficient
+ * rescales every average on them (isFinalised, subjectCoefficient.service).
+ *
  * Changing a weight makes any already-computed average for that exam stale —
  * positions are ranked on it. This script does NOT reprocess: that would
  * silently republish results while nobody is watching. It prints the affected
  * exam ids so they can be reprocessed deliberately via
  * POST /api/exams/:examId/process.
  *
- * Usage:
- *   node scripts/backfill-subject-coefficients.js --dry-run
- *   node scripts/backfill-subject-coefficients.js
+ * A dry run unless told otherwise — writing is the flag, not the default:
+ *   node scripts/backfill-subject-coefficients.js            # report only
+ *   node scripts/backfill-subject-coefficients.js --apply    # write
+ * (--dry-run is still accepted, and still wins over --apply.)
  */
 
 require("dotenv").config();
 
 const mongoose        = require("mongoose");
 const connectDatabase = require("../src/config/database");
+const Exam            = require("../src/db/models/Exam");
 const ExamSubject     = require("../src/db/models/ExamSubject");
 const Subject         = require("../src/db/models/Subject");
+const { isFinalised } = require("../src/services/subjectCoefficient.service");
 
-const DRY_RUN = process.argv.includes("--dry-run");
+const DRY_RUN = process.argv.includes("--dry-run") || !process.argv.includes("--apply");
 const DEFAULT_WEIGHT = 100;
 
 const main = async () => {
@@ -63,7 +70,13 @@ const main = async () => {
     ])
   );
 
+  const exams = await Exam.find({
+    _id: { $in: [...new Set(examSubjects.map((es) => String(es.examId)))] },
+  }).select("_id status resultsPublished resultsLockedAt").lean();
+  const finalised = new Set(exams.filter(isFinalised).map((e) => String(e._id)));
+
   const updates      = [];
+  let   skippedFinal = 0;
   const staleExams   = new Set();
   let   skippedSet   = 0;
   let   alreadyRight = 0;
@@ -73,6 +86,7 @@ const main = async () => {
     const coeff = coeffById.get(String(es.subjectId));
 
     if (coeff === undefined) { noSubject++; continue; }
+    if (finalised.has(String(es.examId))) { skippedFinal++; continue; }
 
     const target = Math.round(coeff * 100);
 
@@ -105,6 +119,7 @@ const main = async () => {
   console.log(`  to update             : ${updates.length}`);
   console.log(`  already correct       : ${alreadyRight}`);
   console.log(`  left alone (override) : ${skippedSet}`);
+  console.log(`  left alone (published): ${skippedFinal}`);
   console.log(`  subject missing       : ${noSubject}`);
   console.log("─────────────────────────────────────────────");
 
@@ -114,7 +129,7 @@ const main = async () => {
   }
 
   if (DRY_RUN) {
-    console.log("\nDry run — re-run without --dry-run to apply.");
+    console.log("\nDry run — re-run with --apply to write.");
     return;
   }
 

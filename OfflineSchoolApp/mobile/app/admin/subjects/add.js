@@ -179,7 +179,11 @@ export default function AddSubjectScreen() {
           const own = row && String(row.school_id ?? row.schoolId ?? "") === String(schoolId);
           if (own) {
             setForm({
-              name: row.name ?? "", code: row.code ?? "", coefficient: "",
+              // Shown as stored, so the admin edits the real value; a subject
+              // with none (older rows, older mirrors) stays blank, which the
+              // PUT below treats as "leave alone".
+              name: row.name ?? "", code: row.code ?? "",
+              coefficient: Number(row.coefficient) > 0 ? String(row.coefficient) : "",
               classIds: [row.class_id ?? row.classId].filter(Boolean), teacherId: "",
             });
           } else {
@@ -248,7 +252,11 @@ export default function AddSubjectScreen() {
         // The mirror catches up on the next pull; the list reads it meanwhile.
         try {
           const db = await getDatabase();
-          await db.runAsync("UPDATE subjects SET name = ?, code = ? WHERE id = ?", [form.name.trim(), form.code.trim(), String(editId)]);
+          const coeff = form.coefficient.trim();
+          await db.runAsync(
+            "UPDATE subjects SET name = ?, code = ?, coefficient = COALESCE(?, coefficient) WHERE id = ?",
+            [form.name.trim(), form.code.trim(), coeff ? Number(coeff) : null, String(editId)]
+          );
         } catch { /* the next pull sets it right */ }
         router.push("/admin/subjects");
       } catch (err) {
