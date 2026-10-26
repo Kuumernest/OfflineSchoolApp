@@ -31,8 +31,17 @@ const { cascadeCoefficient, coefficientOf } =
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch((err) => next(err));
 
+// Documents inside any payload leave as their presentation — title, type and
+// a signed, short-lived link — exactly as the students router sends them.
+// This router answered the console's and the phone's admissions screens with
+// the stored record instead: a /uploads/applications URL that server.js
+// closes to everyone, and the file's path on the server's disk. Opening either
+// failed, so staff could not preview any document an applicant had sent.
 const sendSuccess = (res, data, status = 200) =>
-  res.status(status).json({ success: true, ...data });
+  res.status(status).json({
+    success: true,
+    ...require("../utils/applicationDocuments").redactDocumentsDeep(res.req, data),
+  });
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
