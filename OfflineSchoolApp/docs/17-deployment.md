@@ -6,7 +6,8 @@ GitHub Actions (APK and desktop releases), nightly off-VM backups.*
 
 > **Read [19-known-limitations.md](19-known-limitations.md) and the launch
 > blockers at the end of this page before deploying.** The packaged desktop
-> app does not work yet (see "Desktop").
+> app reaches its server since 2026-10-17 (see "Desktop: reaching the
+> server"); installers are still unsigned.
 
 ---
 
@@ -55,6 +56,7 @@ no values appear in this documentation.
 | `MONGODB_URI` | always | `config/env.js` — process exits if unset |
 | `JWT_SECRET` | always | `config/env.js` — exits if unset, a known placeholder, or too short (32+ characters) |
 | `ALLOWED_ORIGINS` | **in production** | `config/env.js` — exits if unset when `NODE_ENV=production`. Comma-separated. |
+| `JWT_REFRESH_SECRET` | **in production** | `config/env.js` — exits if unset when `NODE_ENV=production`. Outside production an unset value is tolerated: the first `/auth/refresh` handler then falls through to a second that refreshes against the access token. |
 
 ### Backend — optional
 
@@ -63,9 +65,9 @@ no values appear in this documentation.
 | `PORT` | `5000` | listen port |
 | `NODE_ENV` | unset | `production` enables strict CORS, `trust proxy`, combined logging |
 | `JWT_EXPIRES_IN` | `30d` | access-token lifetime |
-| `JWT_REFRESH_SECRET` | unset | **when unset, the first `/auth/refresh` handler falls through to a second that refreshes against the access token** |
 | `JWT_REFRESH_EXPIRES` | `90d` | refresh-token lifetime |
 | `REQUIRE_MEDIA_SIGNATURE` | off | `1` enforces HMAC signatures on message attachments |
+| `ALLOWED_ORIGIN_PATTERNS` | unset | extra CORS origins by anchored regex (`config/corsOrigins.js`), for a **dev** backend serving preview builds. **Leave unset in production**: preview deployments must never reach live data. |
 | `SENTRY_DSN` | unset | Sentry is fully inert without it |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0` | tracing is opt-in |
 | `SENTRY_RELEASE` | unset | release tag |
@@ -85,6 +87,9 @@ no values appear in this documentation.
 | `ANALYSIS_CONCURRENCY` | `1` | analyses one server process runs at once; budget about `ANALYSIS_WORKER_HEAP_MB` of free memory for each |
 | `ANALYSIS_TIMEOUT_MS` | `600000` | an analysis worker running longer is stopped (`TIMEOUT`) |
 | `ANALYSIS_REPORT_MAX_BYTES` | `12582912` | largest compressed analysis report stored (`REPORT_TOO_LARGE` above it) |
+| `ADVANCED_INTELLIGENCE_PROVIDER` | `none` | `anthropic` turns on model-written explanations; needs `ANTHROPIC_API_KEY` (docs/31) |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | the model asked; `ADVANCED_INTELLIGENCE_MODEL` is an older name for it |
+| `ADVANCED_INTELLIGENCE_EFFORT` · `_TIMEOUT_MS` · `_MODEL_FALLBACKS` | `low` · `20000` · off | effort level, per-request timeout, refusal fallbacks |
 
 The four `ANALYSIS_*` variables are read once at startup as whole numbers;
 anything that is not at least 1 is the default.
@@ -307,6 +312,28 @@ plan reported 469 missing, `--apply` created 469, the plan then reported
 nothing missing; the staging form reached its own database; the backend then
 reported ready and the printed password signed in, with platform routes
 answering `PASSWORD_CHANGE_REQUIRED` until it was changed.
+
+### First super admin
+
+A new database has no users, and every other way to make a super admin needs
+one signed in. `backend/scripts/create-super-admin.js` makes the first, once:
+it refuses when any super admin exists (active or not) or the email is taken,
+generates a 20-character password, prints it once, stores only its hash, flags
+the account so its first sign-in can only change the password, and records
+`superAdmin.created` in the audit log.
+
+1. After the index plan shows nothing missing and `/api/health/ready` answers
+   `ready`, run it with the container command in "Backend scripts on the VM".
+2. Sign in on the console's `/login` with that email and the printed password,
+   straight away, and set a new password. Until then every other route answers
+   `PASSWORD_CHANGE_REQUIRED`. Keep the new one in a password manager; the
+   printed one is now dead.
+3. Create any further operators from **Platform settings**, signed in as this
+   one: the audit log then names who made them. The script refuses from now on.
+
+Password lost before that first sign-in: in Atlas (Data Explorer, `users`),
+delete the one document with that email and `role: "super_admin"`, then run the
+command again.
 
 ### TLS
 
@@ -661,6 +688,7 @@ anything.
 
 ```text
 [ ] Atlas: dedicated app user (readWrite on one database), read-only backup user, Network Access = VM IP only
+[ ] First super admin created with scripts/create-super-admin.js (after the indexes); signed in once and its password changed
 [ ] Index plan run against staging, then production; duplicates resolved; missing unique indexes created; /api/health/ready no longer INDEXES_INCOMPLETE
 [ ] Production on a NEW database (not school_db); staging rehearsal on school_db: legacy indexes reviewed and superseded ones dropped by hand, then --apply, then the plan shows nothing missing/incompatible/legacy
 [ ] Domain DNS A/AAAA → VM; VCN + iptables open 80/443 only; first certificate issued; renewal dry-run passes
