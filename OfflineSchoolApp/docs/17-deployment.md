@@ -256,6 +256,58 @@ Three services:
   it, so there is no restart loop; nginx depends on the backend having
   *started*, not being healthy, so it can always answer the ACME challenge.
 
+### Backend scripts on the VM
+
+The production image carries `src/`, not `backend/scripts/`, and the VM has no
+Node.js of its own. A one-off script runs in a throwaway container of the same
+image, with the checkout's `backend/scripts` mounted over `/app/scripts`
+(read-only), from `/opt/offlineschool/OfflineSchoolApp`. `docker compose run`
+gives that container the backend's own environment (`deploy/backend.env`), so
+the server's `MONGODB_URI` is already there and never typed. `--rm` removes the
+container afterwards; `--no-deps` starts nothing else. Build the image first
+(`docker compose up -d --build` does).
+
+**First super admin** (a new database has no users; see "First super admin"):
+
+```bash
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  node scripts/create-super-admin.js --email=<operator email> --name="<full name>"
+```
+
+Exit 0 prints the temporary password once; exit 3 = a super admin already
+exists (or the email is taken), and nothing was written.
+
+**Index plan on the production database** (the server's own, from
+`deploy/backend.env`: the planner reads only `PROVISION_MONGODB_URI`, so the
+command hands it the server's `MONGODB_URI` explicitly):
+
+```bash
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  sh -c 'PROVISION_MONGODB_URI="$MONGODB_URI" exec node scripts/provision-indexes.js'            # plan, read-only
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  sh -c 'PROVISION_MONGODB_URI="$MONGODB_URI" exec node scripts/provision-indexes.js --apply'    # off-peak
+```
+
+**Index plan on another database** (staging), typed at a prompt that does not
+echo, so it stays out of the shell history and the screen:
+
+```bash
+read -rs PROVISION_MONGODB_URI && export PROVISION_MONGODB_URI    # paste, Enter
+docker compose run --rm --no-deps -e PROVISION_MONGODB_URI -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  node scripts/provision-indexes.js
+unset PROVISION_MONGODB_URI
+```
+
+Atlas must allow the VM's IP on that cluster too. With the variable unset, the
+planner refuses (exit 64) rather than fall back to the server's database.
+
+Tested 2026-10-23 against the production image and a throwaway MongoDB 7
+container: the admin command created one account and refused a second run; the
+plan reported 469 missing, `--apply` created 469, the plan then reported
+nothing missing; the staging form reached its own database; the backend then
+reported ready and the printed password signed in, with platform routes
+answering `PASSWORD_CHANGE_REQUIRED` until it was changed.
+
 ### TLS
 
 nginx serves the API on 443 only (TLS 1.2 and 1.3, HTTP/2, HSTS). Port 80
@@ -568,6 +620,9 @@ PROVISION_MONGODB_URI='<staging uri>' node scripts/provision-indexes.js         
 PROVISION_MONGODB_URI='<staging uri>' node scripts/provision-indexes.js --apply    # off-peak
 # then production, the same two steps
 ```
+
+That form needs Node.js and `npm ci` in `backend/`. On the VM, use the container
+commands in "Backend scripts on the VM" instead.
 
 Resolve reported duplicates as a per-school data decision (money and results
 rows need a person). Resolve conflicts by hand; the existing
