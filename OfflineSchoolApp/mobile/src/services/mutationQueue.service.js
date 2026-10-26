@@ -521,7 +521,15 @@ export class MutationQueue {
         summary.synced++;
       } catch (error) {
         const kind    = classifyError(error, row.method);
-        const message = error?.message ?? String(error);
+        // The server's own reason first ("You are not a participant", "This
+        // school has disabled student messages to administrators"). axios's
+        // "Request failed with status code 403" told the person nothing, and
+        // it is what the failed bubble and the pending-changes screen showed.
+        const said    = error?.response?.data;
+        const message =
+          (typeof said?.error   === "string" && said.error)   ||
+          (typeof said?.message === "string" && said.message) ||
+          error?.message || String(error);
 
         if (kind === "unauthenticated") {
           // Back to pending, untouched, and the drain stops: every row after

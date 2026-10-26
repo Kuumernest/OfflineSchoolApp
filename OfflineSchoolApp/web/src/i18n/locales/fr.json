@@ -3576,7 +3576,7 @@
       "insufficient_evidence": "Preuves insuffisantes"
     },
     "category": {
-      "borderline_threshold": "Limite : une note de plus ou de moins change la réponse",
+      "borderline_threshold": "Limite : un point sur un seuil ajoute ou retire une classification",
       "declining": "Baisse",
       "sudden_change": "Changement brusque",
       "weak_and_persistent": "Faible et persistant",
@@ -3585,7 +3585,7 @@
       "trend_on_variable_subject": "Tendance sur une matière variable",
       "strong_but_recent": "Fort, mais récent",
       "emerging_strength": "Point fort émergent",
-      "insufficient_evidence": "Preuves insuffisantes",
+      "insufficient_evidence": "Trop peu d'historique pour conclure",
       "volatile": "Volatil",
       "strong_and_stable": "Fort et stable",
       "absence_heavy": "Nombreuses absences",
@@ -3594,7 +3594,7 @@
       "with_intervention": "Avec une intervention"
     },
     "reason": {
-      "borderline_threshold": "une note de plus ou de moins changerait ce que dit le système",
+      "borderline_threshold": "déplacer un seuil d'un seul point change ce que dit le système — la ligne ci-dessous indique quelle classification",
       "declining": "le système lit une baisse — l'élève, ou l'épreuve ?",
       "sudden_change": "le dernier écart est grand — changement réel ?",
       "weak_and_persistent": "plusieurs notes sous la moyenne — le tableau est-il juste ?",
@@ -3602,8 +3602,8 @@
       "cross_subject_strength": "plusieurs matières fortes ensemble — le système les nomme sans prétendre à un domaine",
       "trend_on_variable_subject": "une tendance lue sur une matière aux notes changeantes — est-elle réelle ?",
       "strong_but_recent": "fort, sur peu d'historique — trop tôt pour le dire ?",
-      "emerging_strength": "les premiers signes d'un point fort — est-il là ?",
-      "insufficient_evidence": "le système a refusé de conclure — à raison ?",
+      "emerging_strength": "fort sur trois notes ou plus, mais pas sur chacune — le point fort est-il là ?",
+      "insufficient_evidence": "le système a refusé de conclure faute de notes publiées — à raison ?",
       "volatile": "des notes qui varient fortement — une lecture est-elle possible ?",
       "strong_and_stable": "fort et régulier — cela correspond-il à l'élève ?",
       "absence_heavy": "nombreuses absences — ont-elles faussé la lecture ?",
@@ -3616,9 +3616,9 @@
       "partially_confirmed": "Partiellement confirmée",
       "rejected": "Non étayée",
       "uncertain": "Incertaine",
-      "unreviewed": "Non revue",
+      "unreviewed": "Envoyée sans verdict",
       "partially_appropriate": "Partiellement étayée",
-      "insufficient_evidence": "Preuves insuffisantes"
+      "insufficient_evidence": "Relecteur : preuves insuffisantes pour juger"
     },
     "pattern": {
       "DATA_QUALITY_OFTEN_CITED": "Les relecteurs ont souvent mis en cause les données plutôt que la règle",
@@ -3633,7 +3633,7 @@
       "reviewers": "{{n}} relecteurs",
       "agree": "{{n}} concordent",
       "differ": "{{n}} divergent",
-      "byCategory": "Par catégorie (revus / cas, plusieurs)",
+      "byCategory": "Par catégorie (revus / cas échantillonnés — jusqu'à {{n}} par catégorie, plusieurs)",
       "catCounts": "{{r}} / {{c}}, {{m}} avec plusieurs",
       "byOutcome": "Réponses des relecteurs",
       "sharesWithheld": "Trop peu de revues pour que des parts aient un sens ; comptes seulement.",
@@ -3661,7 +3661,7 @@
       "p4": "Le désaccord est une preuve précieuse. Si le système se trompe sur un élève que vous connaissez, dites-le — c'est exactement l'objet de cet exercice.",
       "p5": "Évaluez de façon indépendante. Vous ne verrez pas les réponses de vos collègues avant d'avoir envoyé la vôtre ; merci de ne pas discuter d'un cas avant.",
       "p6": "Quand le problème vient des données et non de la règle — résultat manquant, épreuve difficile, absence — cochez les codes de qualité des données. Ils sont comptés à part.",
-      "p7": "Personne n'a dit au système qu'il devait avoir raison. Il est mis à l'épreuve."
+      "p7": "Le système est mis à l'épreuve. Ne supposez pas qu'il a raison : vérifiez chaque conclusion au regard de ce que vous savez de l'élève."
     },
     "pilot": {
       "heading": "Pilote de validation",
@@ -4014,6 +4014,30 @@
       "pending": "L'analyse de l'établissement est en cours de préparation. Cette page se mettra à jour d'elle-même lorsqu'elle sera prête.",
       "stillPending": "L'analyse de l'établissement prend plus de temps que d'habitude. Rechargez la page pour vérifier à nouveau.",
       "failed": "L'analyse de l'établissement n'a pas pu être terminée. Le chef d'établissement ou l'opérateur de la plateforme peut la relancer."
+    },
+    "noRegNo": "Pas de matricule",
+    "borderline": {
+      "drop": "Un point retirerait « {{code}} » ({{moves}}).",
+      "add": "Un point ajouterait « {{code}} » ({{moves}})."
+    },
+    "restsOn": "Repose sur : {{subjects}}. D'autres matières peuvent être en baisse.",
+    "related": {
+      "subject": "{{subject}} figure aussi sur cette liste comme : {{categories}}. Chacune est une question distincte sur les mêmes notes.",
+      "student": "Cet élève figure aussi sur cette liste comme : {{categories}}."
+    },
+    "subjectRecords": "{{subject}} est enregistrée comme {{n}} matières distinctes (sans doute un changement de classe) ; les notes ici viennent d'un seul enregistrement.",
+    "operatorReview": "Opérateur de la plateforme — pas une preuve enseignante",
+    "ledger": {
+      "onSheet": "{{n}} sur les cas du jour",
+      "offSheet": "{{n}} sur des cas qui ne sont plus sur la liste",
+      "offRoll": "{{n}} sur des élèves qui ne sont plus inscrits (non comptées ci-dessus)",
+      "kind": {
+        "real": "{{n}} dans un pilote réel",
+        "synthetic": "{{n}} dans un pilote synthétique",
+        "development": "{{n}} dans un pilote de développement",
+        "none": "{{n}} hors de tout pilote"
+      },
+      "operator": "{{n}} par l'opérateur de la plateforme (jamais une preuve de pilote)"
     }
   },
   "strengths": {

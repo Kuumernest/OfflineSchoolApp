@@ -109,6 +109,34 @@ export const resetSyncLock = () => {
 };
 
 // ── Store ──────────────────────────────────────────────────────────────────
+/**
+ * Remove messages this phone holds for anyone but `keepUserId`.
+ *
+ * The message store and the guardian portal's cache live in the one shared
+ * schoolapp.db, and nothing cleared them between accounts: a pupil who
+ * signed in after an admin read the admin's threads with parents from the
+ * local store. With an id, that person's own threads are kept (their
+ * history stays offline-readable) and every other thread is deleted; with
+ * none, everything is. Any guardian portal session is signed out either way,
+ * which also clears the portal's cached threads. Never throws: failing to
+ * tidy must not fail a sign-in or a sign-out.
+ */
+async function forgetOtherPeoplesMessages(keepUserId) {
+  try {
+    const messages = require("../services/message.service");
+    if (keepUserId) await messages.purgeNotMine(keepUserId);
+    else            await messages.clearLocalMessages();
+  } catch (err) {
+    console.warn("[auth] clearing other accounts' messages failed:", err?.message);
+  }
+  try {
+    const portal = require("../services/portal.service");
+    if (await portal.hasSession()) await portal.signOut();
+  } catch (err) {
+    console.warn("[auth] signing out the guardian portal failed:", err?.message);
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
   user:             null,
   token:            null,
@@ -446,6 +474,11 @@ export const useAuthStore = create((set, get) => ({
         );
       }
 
+      // A phone is shared. Whatever the previous account left in the
+      // message store, and any guardian portal session with its cached
+      // threads, belong to somebody else; this person sees neither.
+      await forgetOtherPeoplesMessages(String(user?.id ?? user?._id ?? ""));
+
       resetSyncLock();
 
       // ✅ Single atomic set — isLoading:false included so the component
@@ -599,6 +632,9 @@ export const useAuthStore = create((set, get) => ({
     resetSyncLock();
 
     await get()._clearStorage();
+
+    // Nobody is signed in: no conversation on this phone is anybody's now.
+    await forgetOtherPeoplesMessages(null);
 
     // ✅ Single atomic set — hydrated stays true so the splash doesn't
     //    re-appear; the navigation guard sees token:null and redirects
