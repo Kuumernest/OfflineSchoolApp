@@ -150,16 +150,25 @@ const reviewsFor = async ({ schoolId, studentIds }) => {
 
   const reviewerIds = [...new Set(reviews.map((r) => String(r.reviewedBy)))];
   const reviewers = reviewerIds.length
-    ? await User.find({ _id: { $in: reviewerIds } }).select("name").lean()
+    ? await User.find({ _id: { $in: reviewerIds } }).select("name role").lean()
     : [];
-  const nameOf = new Map(reviewers.map((u) => [String(u._id), u.name ?? null]));
+  const userOf = new Map(reviewers.map((u) => [String(u._id), u]));
 
   return reviews.map((r) => ({
     ...r,
     // Attributed, always. Whether a given viewer is SHOWN it is decided below.
-    reviewedByName: nameOf.get(String(r.reviewedBy)) ?? null,
+    reviewedByName: userOf.get(String(r.reviewedBy))?.name ?? null,
+    // Stamped at submission; rows from before the stamp take the user's role.
+    reviewerRole: r.reviewerRole ?? userOf.get(String(r.reviewedBy))?.role ?? null,
   }));
 };
+
+/**
+ * Whether a review is a teacher's evidence. An operator's review is a school
+ * record, shown and marked, but the operator does not know the child — it is
+ * never part of what a pilot decides on.
+ */
+const isOperatorReview = (r) => r.reviewerRole === ROLES.SUPER_ADMIN;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHAPING FOR A VIEWER
@@ -169,6 +178,7 @@ const publicReview = (r) => ({
   reviewId: String(r._id), reviewedBy: String(r.reviewedBy), reviewedByName: r.reviewedByName,
   reviewedAt: r.reviewedAt, revisedAt: r.revisedAt ?? null, engineVersion: r.engineVersion,
   version: r.version, review: r.review,
+  reviewerRole: r.reviewerRole ?? null, operator: isOperatorReview(r), pilotKind: r.pilotKind ?? null,
 });
 
 /**
@@ -215,11 +225,18 @@ const caseForViewer = (c, reviews, viewer) => {
   };
 };
 
+/** Reviews by the exercise they were made in: a real pilot, a synthetic or development one, or none open. */
+const countKinds = (reviews) => {
+  const out = { real: 0, synthetic: 0, development: 0, none: 0 };
+  for (const r of reviews) out[r.pilotKind ?? "none"] = (out[r.pilotKind ?? "none"] ?? 0) + 1;
+  return out;
+};
+
 /**
  * The school-wide (or class-wide) picture of how the validation is going.
  * Counts only; the per-case detail is on the cases themselves.
  */
-const reviewStatusOf = (cases, allReviews) => {
+const reviewStatusOf = (cases, allReviews, ledger = null) => {
   const byCategory = {};
   for (const c of cases) {
     const b = byCategory[c.category] ?? { cases: 0, reviewed: 0, multipleReviews: 0, differ: 0 };
@@ -234,6 +251,8 @@ const reviewStatusOf = (cases, allReviews) => {
   // score for anyone.
   const repeatedDisagreements = Object.keys(byCategory).filter((k) => byCategory[k].differ >= 2).sort();
   const withMany = cases.filter((c) => c.reviewCount > 1);
+  const recorded = [...allReviews.values()].flat();
+  const onSheet = new Set(cases.map(caseKey));
   return {
     cases: cases.length,
     unreviewed:      cases.filter((c) => c.reviewCount === 0).length,
@@ -245,8 +264,21 @@ const reviewStatusOf = (cases, allReviews) => {
       agree:  withMany.filter((c) => c.agreement === "AGREE").length,
       differ: withMany.filter((c) => c.agreement === "DIFFER").length,
     },
-    reviewsRecorded: [...allReviews.values()].reduce((n, l) => n + l.length, 0),
-    reviewers: new Set([...allReviews.values()].flat().map((r) => String(r.reviewedBy))).size,
+    reviewsRecorded: recorded.length,
+    reviewers: new Set(recorded.map((r) => String(r.reviewedBy))).size,
+    // Where the recorded reviews are, so the numbers on this page add up to
+    // the cross-school figure: reviews on a case on today's sheet, reviews on
+    // a pupil in scope whose case is not on it (the engine moved, or the
+    // sample picked another pupil), and — school-wide only — reviews of pupils
+    // no longer on the roll. Then the same reviews by the exercise they were
+    // made in, and how many came from the platform operator.
+    breakdown: {
+      onSheet:   recorded.filter((r) => onSheet.has(caseKey(r))).length,
+      offSheet:  recorded.filter((r) => !onSheet.has(caseKey(r))).length,
+      offRoll:   ledger ? ledger.offRoll : null,
+      byKind:    countKinds(ledger ? [...recorded, ...ledger.offRollReviews] : recorded),
+      operator:  (ledger ? [...recorded, ...ledger.offRollReviews] : recorded).filter(isOperatorReview).length,
+    },
     repeatedDisagreements,
     byCategory: Object.fromEntries(Object.keys(byCategory).sort().map((k) => [k, byCategory[k]])),
   };
@@ -270,9 +302,31 @@ const reviewStatusOf = (cases, allReviews) => {
 const scopeStudents = async ({ schoolId, classIds }) => {
   const filter = { schoolId, status: "approved", deletedAt: null };
   if (classIds) filter.classId = { $in: classIds };
+  // admissionNo too: rows written by the older desktop path carry the number
+  // there and not in enrollmentNo — results.service reads both, and so does
+  // this, so a pupil who has a number on the report card has it here.
   const students = await Student.find(filter)
-    .select("_id classId studentName name firstName lastName enrollmentNo").lean();
+    .select("_id classId studentName name firstName lastName enrollmentNo admissionNo").lean();
   return { students, studentIds: students.map((s) => String(s._id)) };
+};
+
+/**
+ * School-wide only: the reviews in this school on pupils who are not on the
+ * roll today (withdrawn, deleted, or the pupils of an exercise since cleared).
+ * They are school records and stay; this says how many, so the page's count
+ * and the cross-school count can be reconciled. Never for a class scope — a
+ * teacher learns nothing about pupils outside their classes.
+ */
+const offRollLedger = async (schoolId, studentIds) => {
+  const offRollReviews = await IntelligenceReview.find({
+    schoolId, deletedAt: null, studentId: { $nin: studentIds },
+  }).select("pilotKind reviewerRole reviewedBy").lean();
+  const roles = offRollReviews.some((r) => !r.reviewerRole)
+    ? new Map((await User.find({ _id: { $in: [...new Set(offRollReviews.map((r) => String(r.reviewedBy)))] } }).select("role").lean())
+        .map((u) => [String(u._id), u.role]))
+    : new Map();
+  const rows = offRollReviews.map((r) => ({ ...r, reviewerRole: r.reviewerRole ?? roles.get(String(r.reviewedBy)) ?? null }));
+  return { offRoll: rows.length, offRollReviews: rows };
 };
 
 /**
@@ -296,8 +350,10 @@ const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engin
   // stays one, but it is not evidence for this pilot's decision, and the
   // snapshot must not count it. Without a window (the review queue itself),
   // every review is visible.
+  // And a pilot counts teachers' judgements: an operator's review is outside
+  // its evidence whatever window it falls in (counted in window.operator).
   const reviews = allReviews.filter((r) =>
-    (!pilotRunId || r.pilotRunId === pilotRunId) &&
+    (!pilotRunId || (r.pilotRunId === pilotRunId && !isOperatorReview(r))) &&
     (!reviewedSince || new Date(r.reviewedAt) >= new Date(reviewedSince)) &&
     (!engineVersion || r.engineVersion === engineVersion));
 
@@ -311,7 +367,7 @@ const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engin
   const className = new Map(classes.map((c) => [String(c._id), c.name ?? null]));
   const identity = new Map(students.map((s) => [String(s._id), {
     studentName: displayName(s) || null,
-    enrollmentNo: s.enrollmentNo ?? null,
+    enrollmentNo: s.enrollmentNo || s.admissionNo || null,
     classId: s.classId ? String(s.classId) : null,
     className: s.classId ? (className.get(String(s.classId)) ?? null) : null,
   }]));
@@ -348,10 +404,15 @@ const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engin
     categories: report.reviewCases.categories,
     priority:   report.reviewCases.priority,
     coverage:   report.reviewCases.coverage,
-    reviewStatus: reviewStatusOf(cases, byCase),
+    maxPerCategory: report.reviewCases.maxPerCategory ?? null,
+    reviewStatus: reviewStatusOf(cases, byCase, scope.classIds ? null : await offRollLedger(scope.schoolId, studentIds)),
     cases,
     feedback: analyseReviews(feedbackSheet),
-    window: { pilotRunId: pilotRunId ?? null, reviewedSince: reviewedSince ? new Date(reviewedSince) : null, engineVersion: engineVersion ?? null, excluded: allReviews.length - reviews.length },
+    window: {
+      pilotRunId: pilotRunId ?? null, reviewedSince: reviewedSince ? new Date(reviewedSince) : null, engineVersion: engineVersion ?? null,
+      excluded: allReviews.length - reviews.length,
+      operator: pilotRunId ? allReviews.filter((r) => r.pilotRunId === pilotRunId && isOperatorReview(r)).length : 0,
+    },
     report,
   };
 };
@@ -371,7 +432,7 @@ const caseFor = async ({ schoolId, studentId, category, subjectId }) => {
     .select("_id classId").lean();
   if (!student) return null;
   const { cohort } = await liveCohort({ schoolId, classIds: null, studentIds: [String(student._id)] });
-  const report = analyseCohort(cohort);
+  const report = analyseCohort(cohort, { maxPerCategory: Infinity });
   const wanted = caseKey({ category, studentId: String(student._id), subjectId: subjectId ?? null });
   return report.reviewCases.cases.find((c) => caseKey(c) === wanted) ?? null;
 };
@@ -450,6 +511,7 @@ module.exports = {
   publicReview,
   agreementOf,
   shielded,
+  isOperatorReview,
   validateReview,
   STATUS,
 };

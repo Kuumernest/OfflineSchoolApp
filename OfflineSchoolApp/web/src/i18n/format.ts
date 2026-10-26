@@ -112,6 +112,20 @@ export const formatDateTime = (
     : "—";
 };
 
+/** A timestamp as the school writes it: 30/09/2026, 10:05. */
+export const formatDateTimeShort = (
+  value: string | number | Date | null | undefined,
+  locale = currentLocale()
+): string => {
+  const d = toDate(value);
+  return d
+    ? dateFormat(locale, {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      }).format(d)
+    : "—";
+};
+
 /**
  * A payroll period ("2026-03") as a month a person reads — "March 2026",
  * "mars 2026".
@@ -153,6 +167,7 @@ export const useFormat = () => {
     date:      (v: string | number | Date | null | undefined) => formatDate(v, locale),
     dateShort: (v: string | number | Date | null | undefined) => formatDateShort(v, locale),
     dateTime:  (v: string | number | Date | null | undefined) => formatDateTime(v, locale),
+    dateTimeShort: (v: string | number | Date | null | undefined) => formatDateTimeShort(v, locale),
     monthLabel: (v: string | null | undefined) => formatMonth(v, locale),
   };
 };
