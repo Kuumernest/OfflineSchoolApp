@@ -17,7 +17,8 @@
     "check:grouping": "node scripts/check-guidance-grouping.mjs",
     "check:l10n": "node scripts/check-localization.mjs",
     "check:layout": "node scripts/check-platform-layout.mjs",
-    "check:print": "node scripts/check-report-print.mjs"
+    "check:print": "node scripts/check-report-print.mjs",
+    "check:permlabels": "node scripts/check-permission-labels.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
