@@ -29,19 +29,12 @@ const orDash = (value) => {
   return s ? esc(s) : "—";
 };
 
-/**
- * Absolute URL for the school logo.
- *
- * A printed page is rendered from a blob, a detached document or a PDF engine,
- * none of which have a base URL — so a relative `/uploads/...` path resolves
- * against nothing and the logo silently vanishes from every sheet.
- */
-const absoluteLogo = (logo, origin) => {
-  if (!logo) return null;
-  if (/^(https?:|data:)/i.test(logo)) return logo;
-  if (!origin) return null;
-  return logo.startsWith("/") ? `${origin}${logo}` : `${origin}/${logo}`;
-};
+// Every printed sheet built here — ID card, transcript, class list, receipt —
+// is generated on request and may be cached by the phone to print offline, so
+// its logo and photos are written into the page (print/imageSource.js). The
+// name is kept for the callers; it no longer only makes a URL absolute.
+const { resolveImageSrc } = require("./imageSource");
+const absoluteLogo = (logo, origin) => resolveImageSrc(logo, { origin, embed: true });
 
 const PAGE_CSS = `
   /* A4 with a margin that survives most printers' unprintable edge. */

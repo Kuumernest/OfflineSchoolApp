@@ -55,11 +55,8 @@ const bad = (res, message, code) =>
  * has no base URL of its own — a print blob in the browser, or a PDF engine on
  * a phone. Behind a proxy, x-forwarded-* is the only honest source.
  */
-const originOf = (req) => {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
-  const host  = req.headers["x-forwarded-host"]  || req.get("host");
-  return host ? `${proto}://${host}` : null;
-};
+// The first value of each forwarded header, as the report cards read them.
+const { originOf } = require("../print/imageSource");
 
 /**
  * Answers either the data or the finished sheet, from one route.

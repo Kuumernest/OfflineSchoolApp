@@ -688,17 +688,14 @@ async function loadReportTemplate(schoolId, templateId) {
  * @param {object} req        to read the protocol and host, honouring the
  *                            forwarded headers a proxy sets
  */
+const { resolveImageSrc, originOf } = require("../print/imageSource");
+
 function absoluteLogoUrl(logo, req) {
-  if (!logo) return null;
-  if (/^(https?:|data:)/i.test(logo)) return logo;
-
-  const proto = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "http")
-    .split(",")[0].trim();
-  const host  = String(req?.headers?.["x-forwarded-host"] || req?.get?.("host") || "")
-    .split(",")[0].trim();
-  if (!host) return logo;
-
-  return `${proto}://${host}${logo.startsWith("/") ? "" : "/"}${logo}`;
+  // print/imageSource.js, as a link: a published card is stored whole, and an
+  // embedded logo and photo in every stored card would cost the database the
+  // size of both, per card. It also turns the legacy inline base64 logo into a
+  // data URI rather than gluing the host onto it.
+  return resolveImageSrc(logo, { origin: originOf(req) });
 }
 
 /**
