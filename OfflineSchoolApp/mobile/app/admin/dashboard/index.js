@@ -16,7 +16,8 @@ import { getAdminStats }          from "../../../src/services/adminStats.service
 import { syncTeacherAssignments } from "../../../src/services/syncAssignments.service";
 import { getSchoolInfo }          from "../../../src/services/school.service";
 import SyncOverwriteService       from "../../../src/services/sync-overwrite.service";
-import { toDisplayUri }           from "../../../src/utils/logoUri";
+import { toDisplayUri }           from "../../../src/utils/logoUri";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { hasPermission, hasRole } from "../../../src/utils/authHelpers";
 
@@ -844,6 +845,19 @@ export default function AdminDashboard() {
               ? t("dashAdmin.controlCenter")
               : t("dashAdmin.financeCenter")}
           </Text>
+          {role === "super_admin" && (
+            <TouchableOpacity
+              style={styles.schoolRow}
+              onPress={() => router.push("/admin/school-picker")}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="business-outline" size={14} color="#4F46E5" />
+              <Text style={styles.schoolName} numberOfLines={1}>
+                {t("schoolPick.inSchool", { name: user?.schoolName || "—" })}
+              </Text>
+              <Text style={styles.schoolChange}>{t("schoolPick.change")}</Text>
+            </TouchableOpacity>
+          )}
         </View>
         {showSchoolHealth && (
           <TouchableOpacity
@@ -1011,6 +1025,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
   userName: { fontSize: 22, fontWeight: "700", color: "#111827", marginTop: 2 },
   subtitle: { fontSize: 13, color: "#4F46E5", fontWeight: "600", marginTop: 2 },
+  schoolRow:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  schoolName:   { flexShrink: 1, fontSize: 13, color: "#111827", fontWeight: "600" },
+  schoolChange: { fontSize: 13, color: "#4F46E5", fontWeight: "700" },
 
   // ── Error banner ───────────────────────────────────────
   errorBanner: {

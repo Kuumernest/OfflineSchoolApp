@@ -454,8 +454,14 @@ class SyncManagerClass {
   isStudent() { return hasRole("student"); }
 
   async getSchoolId() {
-    const { schoolId } = getCurrentAuth();
+    const { schoolId, role } = getCurrentAuth();
     if (schoolId) return schoolId;
+
+    // A super_admin's school is only ever the one they chose (auth.store
+    // enterSchool). The fallbacks below would hand them whichever school's
+    // admin last used this phone, and the server lets a super_admin sync any
+    // school — so outside a school there is nothing to sync.
+    if (role === "super_admin") return null;
 
     try {
       const userJson = await SecureStore.getItemAsync("user");

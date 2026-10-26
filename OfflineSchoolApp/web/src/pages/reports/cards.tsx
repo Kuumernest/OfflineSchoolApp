@@ -45,6 +45,8 @@ interface PreviewCard {
   id:   string;
   name: string;
   html: string;
+  /** Issues the card once its print is requested; see issueCard. */
+  issue: () => void;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -77,7 +79,7 @@ const ExamCard = ({
             {exam.name}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
-            {examTypeLabel(t, exam.type)} · {exam.term} · {exam.academicYear}
+            {examTypeLabel(t, exam.type)} · {t(`exams.term${exam.term}`, String(exam.term))} · {exam.academicYear}
           </p>
           {(exam.classNames || exam.className) && (
             <p className="text-xs text-primary-600 font-medium mt-1">
@@ -344,12 +346,14 @@ export default function ReportCardsPage() {
       });
     } catch (err) {
       const data = (err as {
-        response?: { data?: { error?: string; detail?: string } };
+        response?: { data?: { error?: string; detail?: string; code?: string } };
       })?.response?.data;
       setResult({
         success: 0,
         error:   1,
-        message: data?.detail ?? data?.error ?? t("reportCards.reissueFailed"),
+        message: data?.code === "NOT_ISSUED"
+          ? t("reportCards.reissueNotIssued")
+          : data?.detail ?? data?.error ?? t("reportCards.reissueFailed"),
       });
     } finally {
       setReissuing(false);
@@ -362,15 +366,20 @@ export default function ReportCardsPage() {
    * Three endpoints, one renderer behind all of them. The sequence one answers
    * JSON with the html inside; the term and annual ones answer the document
    * itself, because they were written for a browser to open directly.
+   *
+   * `issue` marks an actual print. Without it the card is fetched for the
+   * preview only: the server neither archives it as the parent's copy nor
+   * counts a print on its verification code.
    */
-  const cardRequest = (sid: string) => {
+  const cardRequest = (sid: string, issue = false) => {
     const lang   = i18n?.resolvedLanguage ?? "en";
+    const issued = issue ? { issue: 1 } : {};
     const school = user?.schoolName || user?.school?.name || "";
     if (cardType === "sequence") {
       return api.get(
         `/results/${selectedExam!._id}/student/${sid}/reportcard/html`,
         {
-          params: { schoolId, lang, schoolName: school },
+          params: { schoolId, lang, schoolName: school, ...issued },
           // One rendered card per request, and a class is generated one
           // pupil at a time — so this ceiling is reached per pupil, not
           // once. At 30s a slow render aborted mid-class and the run
@@ -384,9 +393,20 @@ export default function ReportCardsPage() {
       params: {
         schoolId, academicYear, classId: selectedClass!._id, lang,
         ...(cardType === "term" ? { term: termNumber } : {}),
+        ...issued,
       },
       timeout: TIMEOUTS.render,
     });
+  };
+
+  /**
+   * Issue a card once its print has been requested: the server re-renders it,
+   * archives a sequence card (the first issue wins) and counts the print. Bound
+   * at fetch time, so a selection changed since still issues the card printed.
+   * A failure here must not cost the reader the print they already have.
+   */
+  const issueCard = (sid: string) => () => {
+    cardRequest(sid, true).catch(() => {});
   };
 
   const handleGenerate = async () => {
@@ -501,7 +521,7 @@ export default function ReportCardsPage() {
             singleFailure = "closed";
             break;
           }
-          if (!showInPreviewWindow(previewWindow, html)) {
+          if (!showInPreviewWindow(previewWindow, html, { onPrint: issueCard(sid) })) {
             error++;
             singleFailure = "show";
             discardPreviewWindow();
@@ -514,7 +534,7 @@ export default function ReportCardsPage() {
           // A class — and any single card in the packaged desktop app — is
           // shown in the in-app preview. Opening one window per pupil is
           // exactly what browsers block after the first card.
-          collected.push({ id: sid, name, html });
+          collected.push({ id: sid, name, html, issue: issueCard(sid) });
         }
       } catch {
         if (stale()) return;
@@ -590,6 +610,7 @@ export default function ReportCardsPage() {
     try {
       // Resolves once the iframe has reached print(); false when it could not.
       const requested = await printHtml(previewCard.html);
+      if (requested) previewCard.issue();
       if (printRunRef.current !== run) return;
       setPreviewMessage(
         requested

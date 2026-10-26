@@ -20,6 +20,8 @@
  *   draft print       the QR row is minted and its snapshot taken before the
  *                     result is published; no archive
  *   publication       touches neither the archive nor the QR row
+ *   preview           (no ?issue=1) shows the code but archives nothing,
+ *                     counts no print and leaves the QR snapshot as it was
  *   first print after publication   archives the card (first issue wins)
  *   reprint           re-renders from live data; the archive is untouched;
  *                     the QR snapshot is refreshed from live data
@@ -28,7 +30,7 @@
  *                     and paper disagree (the "mismatch is the check
  *                     working" design, documentVerify.service.js)
  *   reissue           rewrites the archive and refreshes the QR snapshot
- *   term card         never archived; every render refreshes its QR row
+ *   term card         never archived; every print refreshes its QR row
  *
  *   node scripts/check-card-lifecycle.js
  */
@@ -93,7 +95,7 @@ const main = async () => {
     return { status: r.status, body: json };
   };
   const print = async () => {
-    const r = await call("GET", "/results/e1/student/p1/reportcard/html");
+    const r = await call("GET", "/results/e1/student/p1/reportcard/html?issue=1");
     // The archive is written after the response, fire-and-forget: give it a moment.
     await new Promise((resolve) => setTimeout(resolve, 150));
     return r.body?.data?.html ?? "";
@@ -116,6 +118,13 @@ const main = async () => {
   const pub = await call("PUT", `/results/summary/${summary._id}/publish`, { isPublished: true });
   check("publication itself writes no archive and leaves the QR row as it was",
     [pub.status, await archive(), (await qr()).printCount], [200, null, 1]);
+
+  console.log("--- a preview after publication ---");
+  await call("GET", "/results/e1/student/p1/reportcard/html");
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  check("opening the preview (no ?issue) archives nothing, even once published", await archive(), null);
+  check("and counts no print on the QR row, nor refreshes its snapshot",
+    [(await qr()).printCount, String((await qr()).refreshedAt)], [1, String(draftQr.refreshedAt)]);
 
   console.log("--- first print after publication ---");
   await print();
@@ -151,14 +160,24 @@ const main = async () => {
   await M("TermResult").create({ schoolId: S, academicYear: YEAR, term: 1, classId: "c1", studentId: "p1",
     studentName: "Pupil One", className: "Form 1", termAverage: 14, overallGrade: "B+", isPassing: true,
     isPublished: true, sequenceAverages: [{ sequence: 1, average: 15 }, { sequence: 2, average: 13 }] });
-  const termCard = () => call("GET", `/term-results/p1/report-card?academicYear=${encodeURIComponent(YEAR)}&term=1&classId=c1`);
+  const termCard = (issue = "&issue=1") => call("GET", `/term-results/p1/report-card?academicYear=${encodeURIComponent(YEAR)}&term=1&classId=c1${issue}`);
   const t1 = await termCard();
   const termQr = () => M("DocumentVerification").findOne({ schoolId: S, studentId: "p1", examId: { $regex: "^term:" } }).lean();
   const firstTermQr = await termQr();
   await termCard();
-  check("TODAY: a term card is never archived; every render refreshes its own QR row",
+  check("TODAY: a term card is never archived; every print refreshes its own QR row",
     [t1.status, await M("GeneratedReport").countDocuments({ studentId: "p1", examId: null }), (await termQr())?.printCount, (await termQr())?.code === firstTermQr?.code],
     [200, 0, 2, true]);
+  await termCard("");
+  check("a term card preview (no ?issue) shows the same code and counts no print",
+    [(await termQr())?.printCount, (await termQr())?.code === firstTermQr?.code], [2, true]);
+
+  console.log("--- a preview before any print ---");
+  await M("DocumentVerification").deleteMany({ studentId: "p1", examId: { $regex: "^term:" } });
+  await termCard("");
+  check("a code first minted by a preview starts at printCount 0", (await termQr())?.printCount, 0);
+  await termCard();
+  check("and its first print counts as one", (await termQr())?.printCount, 1);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();

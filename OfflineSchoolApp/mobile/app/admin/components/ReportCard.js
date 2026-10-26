@@ -298,7 +298,8 @@ const fetchReportCardHtml = async ({ examId, studentId, schoolId, schoolName }) 
   try {
     const res = await api.get(
       `/results/${examId}/student/${studentId}/reportcard/html`,
-      { params: { schoolId, schoolName } }
+      // Fetched only to print or share the PDF, so it issues (archives) the card.
+      { params: { schoolId, schoolName, issue: 1 } }
     );
     const body = res?.data;
     const html = typeof res === "string"

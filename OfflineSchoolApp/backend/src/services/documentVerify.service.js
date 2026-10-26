@@ -62,8 +62,12 @@ const verifyUrl = (origin, code) =>
  * keeps working, and the page always answers with the school's current
  * record. A result corrected after printing therefore shows up as a mismatch
  * between page and paper — which is the check working, not failing.
+ *
+ * `count: false` is a preview: it shows the code the paper will carry but is
+ * not a print, so it neither refreshes the snapshot nor bumps printCount. A
+ * code first minted by a preview starts at printCount 0 — nothing printed yet.
  */
-const ensure = async ({ schoolId, kind, studentId, examId, snapshot }) => {
+const ensure = async ({ schoolId, kind, studentId, examId, snapshot, count = true }) => {
   const key = {
     schoolId: String(schoolId),
     kind,
@@ -71,14 +75,16 @@ const ensure = async ({ schoolId, kind, studentId, examId, snapshot }) => {
     examId: examId ? String(examId) : "-",
   };
 
-  const existing = await DocumentVerification.findOneAndUpdate(
-    key,
-    {
-      $set: { snapshot, refreshedAt: new Date() },
-      $inc: { printCount: 1 },
-    },
-    { returnDocument: 'after' }
-  ).lean();
+  const existing = count
+    ? await DocumentVerification.findOneAndUpdate(
+        key,
+        {
+          $set: { snapshot, refreshedAt: new Date() },
+          $inc: { printCount: 1 },
+        },
+        { returnDocument: 'after' }
+      ).lean()
+    : await DocumentVerification.findOne(key).lean();
   if (existing) return existing;
 
   // First print. The unique code index can collide with astronomically low
@@ -90,6 +96,7 @@ const ensure = async ({ schoolId, kind, studentId, examId, snapshot }) => {
         ...key,
         code: mintCode(),
         snapshot,
+        ...(count ? {} : { printCount: 0 }),
       });
       return created.toObject();
     } catch (err) {
@@ -145,9 +152,9 @@ const verify = async (rawCode) => {
  * Returns null rather than throwing — a document that cannot get its QR is
  * still a valid document, exactly like the ID card's rule.
  */
-const printableBlock = async ({ schoolId, kind, studentId, examId, snapshot, origin }) => {
+const printableBlock = async ({ schoolId, kind, studentId, examId, snapshot, origin, count = true }) => {
   try {
-    const record = await ensure({ schoolId, kind, studentId, examId, snapshot });
+    const record = await ensure({ schoolId, kind, studentId, examId, snapshot, count });
     const url = verifyUrl(origin, record.code);
     const qrSvg = await QRCode.toString(url, {
       type: "svg", margin: 0, width: 120, errorCorrectionLevel: "M",

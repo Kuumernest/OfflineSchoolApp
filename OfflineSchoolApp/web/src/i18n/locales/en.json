@@ -1147,6 +1147,7 @@
     "reissueRevived": "Report card restored and replaced with a fresh copy.",
     "reissueDone": "Report card reissued — the parent’s copy now reflects the current marks.",
     "reissueFailed": "Reissue failed.",
+    "reissueNotIssued": "No issued copy to replace yet: a card is archived the first time it is printed after results are published.",
     "noStudents": "No students found in this class.",
     "printOne": "Preview & Print Report Card",
     "printAll": "Preview {{count}} Report",

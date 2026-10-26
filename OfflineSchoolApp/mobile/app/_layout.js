@@ -180,6 +180,17 @@ export default function RootLayout() {
       return;
     }
 
+    // A super_admin belongs to no school, and every admin screen works on one:
+    // until they choose (auth.store enterSchool), the school picker is the
+    // only admin screen with anything to show.
+    const onSchoolPicker = segments[0] === "admin" && segments[1] === "school-picker";
+    if (user.role === "super_admin" && !user.schoolId && !onSchoolPicker
+        && !onSetPassword && segments[0] !== "sync") {
+      console.log("🏫 super_admin with no school — redirecting to the school picker");
+      router.replace("/admin/school-picker");
+      return;
+    }
+
     if (isAuthGroup && !onSetPassword) {
       const target = getRoleRoute(user);
       console.log("🔄 On auth screen — redirecting to:", target);

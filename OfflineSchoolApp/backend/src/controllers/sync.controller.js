@@ -31,6 +31,18 @@ const { nextAdmissionNo } = require("../services/admissionNumber.service");
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * May this caller sync the named school?
+ *
+ * Their own school, or any school for a super_admin, who has none of their own
+ * and names the one they are working inside (the phone's school picker). The
+ * door (middleware/auth.js) has already refused a super_admin naming a school
+ * that does not exist or was deleted.
+ */
+const mayUseSchool = (req, schoolId) =>
+  req.user?.role === "super_admin" ||
+  req.user?.schoolId?.toString() === String(schoolId);
+
+/**
  * Builds a Mongoose updatedAt filter.
  * If lastSyncDate is in the future we clamp to epoch so the filter
  * is always present and we never accidentally return every record.
@@ -140,8 +152,7 @@ exports.pullChanges = async (req, res) => {
     }
 
     // ── Ownership guard — caller must belong to the requested school ─────
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
+    if (!mayUseSchool(req, schoolId)) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
@@ -340,8 +351,7 @@ exports.pushPeriodChanges = async (req, res) => {
       return res.status(400).json({ success: false, message: "schoolId is required" });
     }
 
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
+    if (!mayUseSchool(req, schoolId)) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
@@ -462,8 +472,7 @@ exports.pushStudentDecisions = async (req, res) => {
       return res.status(400).json({ success: false, message: "schoolId is required" });
     }
 
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
+    if (!mayUseSchool(req, schoolId)) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 

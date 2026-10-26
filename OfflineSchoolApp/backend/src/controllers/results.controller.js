@@ -976,6 +976,12 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // a ?lang= or body.lang from the viewer's interface no longer decides it.
   const lang = letterhead.language;
 
+  // An actual print sends ?issue=1; without it this is a preview. The web
+  // console fetches this same route to fill its preview, and opening one is
+  // not issuing the card: it must neither archive it as the parent's copy
+  // nor count as a print on its verification code.
+  const issuing = req.query.issue === "1" || req.query.issue === "true";
+
   /**
    * The verification strip: QR + code resolving to a public page that shows
    * what the school's records say, so a registrar elsewhere can check a paper
@@ -991,6 +997,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     studentId,
     documentKey: examId,
     req,
+    count:       issuing,
   });
 
   // Per-school template drives the layout when the school has one; the
@@ -1019,7 +1026,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     sections: layout.sections,
   });
 
-  archiveGeneratedReport({
+  if (issuing) archiveGeneratedReport({
     schoolId,
     examId,
     studentId,
@@ -1091,6 +1098,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error:   "No issued report card to reissue",
+      code:    "NOT_ISSUED",
       detail:  "A card is archived the first time it is printed after results are published.",
     });
   }

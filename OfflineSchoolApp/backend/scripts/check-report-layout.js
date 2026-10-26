@@ -225,7 +225,7 @@ const main = async () => {
   check("B switches remarks and conduct off → its own version 1", [b1.status, b1.body?.layout?.version, b1.body?.layout?.schoolId],
     [201, 1, SCHOOLS.B]);
 
-  const aCard = await seqCard("adm-A", "A", "p1");
+  const aCard = await seqCard("adm-A", "A", "p1", "?issue=1");
   const bCard = await seqCard("adm-B", "B", "p1");
   check("A's card: no results; every other block still printed", shows(aCard.html),
     { header: true, studentInfo: true, results: false, performance: true, classProfile: true, conduct: true, remarks: true, verification: true, footer: true });
@@ -300,7 +300,7 @@ const main = async () => {
   const after = await M("GeneratedReport").findOne({ examId: "A-ex1", studentId: "A-p1" }).lean();
   check("its archive is unchanged: same html, same layout", [after.renderedHtml === frozen, after.layoutVersion], [true, 1]);
 
-  const fresh = await seqCard("adm-A", "A", "p2");
+  const fresh = await seqCard("adm-A", "A", "p2", "?issue=1");
   check("a card issued after the change prints with v2", [shows(fresh.html).results, shows(fresh.html).footer, fresh.data?.layout?.version],
     [true, false, 2]);
 

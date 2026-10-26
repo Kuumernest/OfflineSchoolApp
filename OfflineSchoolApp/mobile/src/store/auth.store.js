@@ -32,6 +32,7 @@ const TOKEN_KEY         = "auth_token";
 const REFRESH_TOKEN_KEY = "auth_refresh_token";
 const USER_KEY          = "user";
 const OFFLINE_TOKEN     = "offline_mode";
+const ACTIVE_SCHOOL_KEY = "active_school";
 
 // ── Crypto helpers ─────────────────────────────────────────────────────────
 const generateSalt = () =>
@@ -60,6 +61,20 @@ const normalizeUser = (user) => {
     user.enrollmentNo = user.enrollmentNo ?? null;
   }
   return user;
+};
+
+/**
+ * A super_admin's user, with the school they are working inside mirrored in.
+ *
+ * The account has no school of its own, by design. Every screen and service on
+ * the phone reads its school from user.schoolId (about seventy places), so the
+ * chosen school is mirrored there — the same arrangement as the web console's
+ * enterSchool — and the ordinary admin screens work unchanged. Everyone else
+ * is returned untouched.
+ */
+const withActiveSchool = (user, school) => {
+  if (!user || user.role !== "super_admin" || !school?._id) return user;
+  return { ...user, schoolId: school._id, school_id: school._id, schoolName: school.name };
 };
 
 // ── Module-level sync guard ────────────────────────────────────────────────
@@ -137,6 +152,43 @@ async function forgetOtherPeoplesMessages(keepUserId) {
   }
 }
 
+/** True while the outbox still holds a change that has not reached the server. */
+async function hasPendingUploads() {
+  try {
+    const { MutationQueue } = require("../services/mutationQueue.service");
+    return (await MutationQueue.pendingKeys("")).length > 0;
+  } catch (err) {
+    // Unknown is treated as pending: switching is the step that cannot be undone.
+    console.warn("[auth] could not read the outbox:", err?.message);
+    return true;
+  }
+}
+
+/**
+ * After a super_admin changes school: forget the cached school details and
+ * pull the new school from the beginning. The sync cursor is one value for the
+ * phone, so without the reset the first pull would ask for the new school's
+ * changes since the OLD school's last sync and miss nearly everything.
+ */
+async function restartSyncForSchool() {
+  try {
+    const { clearSchoolCache } = require("../services/school.service");
+    clearSchoolCache();
+  } catch { /* non-critical */ }
+  resetSyncLock();
+  try {
+    const { SyncManager } = require("../services/syncManager");
+    await SyncManager.resetLastSync();
+    // Started if it was not: a super_admin outside any school had nothing to sync.
+    await SyncManager.ensureStarted();
+    SyncManager.syncAll({ force: true }).catch((err) =>
+      console.warn("[auth] sync after changing school failed:", err?.message)
+    );
+  } catch (err) {
+    console.warn("[auth] restarting sync after changing school failed:", err?.message);
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
   user:             null,
   token:            null,
@@ -152,6 +204,8 @@ export const useAuthStore = create((set, get) => ({
   //    name also works without needing a find-and-replace across the app.
   hasInitialized:   false,
   profileCompleted: false,
+  // The school a super_admin is working inside: { _id, name, code }, or null.
+  activeSchool:     null,
 
   setProfileCompleted: (val) => set({ profileCompleted: val }),
 
@@ -162,7 +216,7 @@ export const useAuthStore = create((set, get) => ({
   // ── SET USER ──────────────────────────────────────────────────────────────
   setUser: async (user, token) => {
     try {
-      const normalized = normalizeUser(user);
+      const normalized = withActiveSchool(normalizeUser(user), get().activeSchool);
       await Promise.all([
         SecureStore.setItemAsync(USER_KEY,  JSON.stringify(normalized)),
         SecureStore.setItemAsync(TOKEN_KEY, token || ""),
@@ -202,10 +256,11 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
 
     try {
-      const [token, userJson, storedRefresh] = await Promise.all([
+      const [token, userJson, storedRefresh, schoolJson] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         SecureStore.getItemAsync(USER_KEY),
         SecureStore.getItemAsync(REFRESH_TOKEN_KEY).catch(() => null),
+        SecureStore.getItemAsync(ACTIVE_SCHOOL_KEY).catch(() => null),
       ]);
 
       console.log("🔑 token from SecureStore:", token ? "found" : "null");
@@ -232,12 +287,15 @@ export const useAuthStore = create((set, get) => ({
         return false;
       }
 
-      const user = normalizeUser(JSON.parse(userJson));
+      let activeSchool = null;
+      try { activeSchool = schoolJson ? JSON.parse(schoolJson) : null; } catch { /* ignore */ }
+      const user = withActiveSchool(normalizeUser(JSON.parse(userJson)), activeSchool);
 
       // ✅ Single atomic set — all fields in one render
       set({
         user,
         token,
+        activeSchool: user?.role === "super_admin" ? activeSchool : null,
         refreshTokenValue: storedRefresh || null,
         hydrated:       true,
         hasInitialized: true,
@@ -481,11 +539,15 @@ export const useAuthStore = create((set, get) => ({
 
       resetSyncLock();
 
+      // A sign-in starts outside any school: a super_admin picks one next.
+      await SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY).catch(() => {});
+
       // ✅ Single atomic set — isLoading:false included so the component
       //    only re-renders once after login completes.
       set({
         user,
         token,
+        activeSchool: null,
         refreshTokenValue: refreshToken || null,
         hydrated:         true,
         hasInitialized:   true,
@@ -517,7 +579,11 @@ export const useAuthStore = create((set, get) => ({
   updateUser: async (updatedUser) => {
     try {
       const current    = get().user || {};
-      const normalized = normalizeUser({ ...current, ...updatedUser });
+      // Re-mirrored: an update carrying the server's copy of a super_admin
+      // (schoolId null) must not drop them out of the school they are in.
+      const normalized = withActiveSchool(
+        normalizeUser({ ...current, ...updatedUser }), get().activeSchool
+      );
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(normalized));
       set({ user: normalized });
       console.log("✅ Store user updated:", normalized.name);
@@ -647,10 +713,54 @@ export const useAuthStore = create((set, get) => ({
       hasInitialized:    true,
       isLoading:         false,
       profileCompleted:  false,
+      activeSchool:      null,
       error:             null,
     });
 
     return true;
+  },
+
+  // ── ENTER / LEAVE A SCHOOL (super_admin only) ─────────────────────────────
+  //
+  // Returns { ok: true } or { ok: false, reason }. Refused while changes are
+  // waiting to upload: the push names the CURRENT school, so a change made
+  // inside one school and sent after switching would be written to the other.
+  enterSchool: async (school) => {
+    const current = get().user;
+    if (!current || current.role !== "super_admin" || !school?._id) {
+      return { ok: false, reason: "notSuperAdmin" };
+    }
+    if (String(current.schoolId ?? "") === String(school._id)) return { ok: true };
+    if (await hasPendingUploads()) return { ok: false, reason: "pendingUploads" };
+
+    const activeSchool = {
+      _id:  String(school._id),
+      name: school.name ?? "",
+      code: school.code ?? null,
+    };
+    const user = withActiveSchool({ ...current }, activeSchool);
+    await Promise.all([
+      SecureStore.setItemAsync(ACTIVE_SCHOOL_KEY, JSON.stringify(activeSchool)),
+      SecureStore.setItemAsync(USER_KEY,          JSON.stringify(user)),
+    ]);
+    set({ activeSchool, user });
+    await restartSyncForSchool();
+    return { ok: true };
+  },
+
+  leaveSchool: async () => {
+    const current = get().user;
+    if (!current || current.role !== "super_admin") return { ok: false, reason: "notSuperAdmin" };
+    if (await hasPendingUploads()) return { ok: false, reason: "pendingUploads" };
+
+    const user = { ...current, schoolId: null, school_id: null, schoolName: null };
+    await Promise.all([
+      SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY).catch(() => {}),
+      SecureStore.setItemAsync(USER_KEY, JSON.stringify(user)),
+    ]);
+    set({ activeSchool: null, user });
+    await restartSyncForSchool();
+    return { ok: true };
   },
 
   // ── CLEAR STORAGE ─────────────────────────────────────────────────────────
@@ -659,6 +769,7 @@ export const useAuthStore = create((set, get) => ({
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
       SecureStore.deleteItemAsync(USER_KEY),
+      SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY),
     ]);
   },
 

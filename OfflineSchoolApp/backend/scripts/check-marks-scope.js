@@ -445,7 +445,7 @@ const check = (label, actual, expected) => {
     return null;
   };
 
-  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}&templateId=builtin`);
+  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}&templateId=builtin&issue=1`);
   check("the super admin, naming Alpha, gets the built-in card → 200", [r.status, r.body?.data?.source], [200, "builtin"]);
   let html = r.body?.data?.html ?? "";
   check("  headed and footed with Alpha's name, not the placeholder",
@@ -457,7 +457,7 @@ const check = (label, actual, expected) => {
   check("  the archived copy belongs to Alpha", [frozen?.schoolId, frozen?.templateId], [A, null]);
 
   await GeneratedReport.deleteOne({ examId: "ex-a4", studentId: "st-a3" });
-  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}`);
+  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}&issue=1`);
   html = r.body?.data?.html ?? "";
   check("naming Alpha without a template id → Alpha's default template", [r.status, r.body?.data?.source, r.body?.data?.templateId], [200, "template", "tpl-a"]);
   check("  rendered with Alpha's name inside Alpha's layout", [html.includes("alpha-layout"), html.includes("Alpha Academy")], [true, true]);
