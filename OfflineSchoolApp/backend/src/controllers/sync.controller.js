@@ -23,19 +23,8 @@ try {
   console.warn("[sync] ⚠️  Student model not found — students will be omitted from pull");
 }
 
-let School = null;
-try {
-  School = require("../db/models/School");
-} catch {
-  console.warn("[sync] ⚠️  School model not found — enrollment codes will use fallback");
-}
-
-let Counter = null;
-try {
-  Counter = require("../db/models/Counter");
-} catch {
-  console.warn("[sync] ⚠️  Counter model not found — enrollment number generation may race");
-}
+// One generator for every admission path (services/admissionNumber.service.js).
+const { nextAdmissionNo } = require("../services/admissionNumber.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -129,55 +118,6 @@ const normaliseStudentForSync = (s) => {
     createdAt:    s.createdAt    || null,
     updatedAt:    s.updatedAt    || null,
   };
-};
-
-/**
- * Atomically generates the next sequential enrollment number for a school/year.
- * Falls back to a timestamp-based suffix when the Counter model is unavailable
- * so we never silently duplicate numbers.
- */
-const generateEnrollmentNo = async (schoolId, prefix) => {
-  if (Counter) {
-    const counter = await Counter.findOneAndUpdate(
-      { _id: `enrollmentNo:${schoolId}:${prefix}` },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: 'after' }
-    );
-    return `${prefix}-${String(counter.seq).padStart(4, "0")}`;
-  }
-
-  // Graceful degradation — still sequential per process but safe across restarts
-  // because we sort descending and parse the last known value.
-  const last = await User.findOne(
-    { enrollmentNo: { $regex: `^${prefix}-` }, role: "student" },
-    { enrollmentNo: 1 },
-    { sort: { enrollmentNo: -1 } }
-  ).lean();
-
-  let nextNum = 1;
-  if (last?.enrollmentNo) {
-    const parts = last.enrollmentNo.split("-");
-    const seq   = parseInt(parts[parts.length - 1], 10);
-    if (!isNaN(seq)) nextNum = seq + 1;
-  }
-
-  return `${prefix}-${String(nextNum).padStart(4, "0")}`;
-};
-
-/**
- * Resolves a short school code used in enrollment number prefixes.
- * Returns a safe uppercase string regardless of model availability.
- */
-const resolveSchoolCode = async (schoolId) => {
-  if (School) {
-    try {
-      const school = await School.findById(schoolId).select("code").lean();
-      if (school?.code) return school.code.trim().toUpperCase().slice(0, 5);
-    } catch (err) {
-      console.warn("[sync] Could not load School for code:", err.message);
-    }
-  }
-  return String(schoolId).replace(/[^A-Z0-9]/gi, "").slice(0, 3).toUpperCase() || "SCH";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -587,10 +527,7 @@ exports.pushStudentDecisions = async (req, res) => {
             student.admissionNo || student.enrollmentNo || null;
 
           if (!enrollmentNo) {
-            const schoolCode = await resolveSchoolCode(schoolId);
-            const year       = new Date().getFullYear();
-            const prefix     = `${schoolCode}-${year}`;
-            enrollmentNo     = await generateEnrollmentNo(schoolId, prefix);
+            enrollmentNo = await nextAdmissionNo(schoolId);
           }
 
           // Generate a cryptographically random temporary password
