@@ -795,6 +795,9 @@ function renderReportCardHtml(payload, opts = {}) {
                 font-size: 11px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 20px;
                  background: #f0f4ff; padding: 12px; border-radius: 8px; margin-bottom: 14px; }
+    .info-grid--photo { grid-template-columns: 1fr 1fr 1fr auto; }
+    .info-photo { grid-column: 4; grid-row: 1 / span 2; width: 72px; height: 90px;
+                  object-fit: cover; border: 1px solid #c7d2fe; border-radius: 4px; }
     .lbl { font-weight: bold; font-size: 10px; color: #374151; text-transform: uppercase; }
     .val { font-size: 13px; font-weight: bold; color: #111827; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
@@ -908,6 +911,7 @@ ${watermark.css}
       .subtitle          { margin-bottom: 8px; font-size: 9.5px; }
 
       .info-grid         { padding: 7px; margin-bottom: 8px; gap: 2px 12px; }
+      .info-photo        { width: 48px; height: 60px; }
       .lbl               { font-size: 8px; }
       .val               { font-size: 10px; }
 
@@ -977,13 +981,20 @@ ${watermark.css}
       : ""}
   </p>` : ""}
 
-  ${on("studentInfo") ? `<div class="info-grid">
+  ${on("studentInfo") ? `<div class="info-grid${payload.photoUrl ? " info-grid--photo" : ""}">
     <div><div class="lbl">${t.studentName}</div><div class="val">${esc(payload.studentName || "—")}</div></div>
     <div><div class="lbl">${t.admissionNo}</div><div class="val">${payload.admissionNo ? "#" + esc(payload.admissionNo) : "—"}</div></div>
     <div><div class="lbl">${t.gender}</div><div class="val">${genderVal ? esc(genderVal) : "—"}</div></div>
     <div><div class="lbl">${t.dob}</div><div class="val">${dobDisplay}</div></div>
     <div><div class="lbl">${t.classLabel}</div><div class="val">${esc(payload.className || "—")}</div></div>
     <div><div class="lbl">${t.academicYear}</div><div class="val">${esc(payload.academicYear || "—")}</div></div>
+    ${payload.photoUrl
+      // The pupil's photo, which only a school's own template could print
+      // ({{student_photo}}) — the built-in layout, and every card that falls
+      // back to it, had nowhere to put one. Only when there is a photo, so a
+      // card without one is laid out exactly as before.
+      ? `<img class="info-photo" src="${esc(payload.photoUrl)}" alt="">`
+      : ""}
   </div>` : ""}
 
   ${on("results") ? `<table>

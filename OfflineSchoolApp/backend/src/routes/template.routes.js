@@ -551,20 +551,32 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
     };
   });
 
+  // The school's real letterhead and the pupil's real photo, resolved as the
+  // cards resolve them. Both were hard-coded null, so a head designing a
+  // template could never see where the logo or the photo would land.
+  const { loadSchoolForCard, absoluteLogoUrl } = require("../services/reportCardData.service");
+  const [{ school: letterhead }, pupil] = await Promise.all([
+    loadSchoolForCard(schoolId, req),
+    require("../db/models/Student").findOne({ _id: String(studentId), schoolId })
+      .select("photoUrl gender dateOfBirth").lean().catch(() => null),
+  ]);
+
   const data = {
     student: {
       fullName:        summary?.studentName || "",
       admissionNumber: summary?.admissionNo || "",
-      gender:          "",
-      dateOfBirth:     null,
+      gender:          pupil?.gender || "",
+      dateOfBirth:     pupil?.dateOfBirth || null,
+      photoUrl:        absoluteLogoUrl(pupil?.photoUrl, req),
       photoBase64:     null,
     },
     school: {
-      name:          "",
-      motto:         "",
-      address:       "",
-      phone:         "",
+      name:          letterhead.name    || "",
+      motto:         letterhead.motto   || "",
+      address:       letterhead.address || "",
+      phone:         letterhead.phone   || "",
       principalName: "",
+      logoUrl:       letterhead.logo,
       logoBase64:    null,
     },
     className:    summary?.className   || "",

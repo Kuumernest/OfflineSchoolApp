@@ -87,8 +87,11 @@ const LEAK = /Cast to|ValidationError|mongo|Mongoose|at path|E11000|TypeError|is
     "check-doc-a.pdf": Buffer.from("%PDF-1.4 alpha birth certificate"),
     "check-doc-b.pdf": Buffer.from("%PDF-1.4 beta id scan"),
     "check-doc-s.jpg": Buffer.from("\xff\xd8\xff alpha pupil photo of a report card"),
+    // Names a family's phone really produces, which the URL has to carry.
+    "check doc 100% (scan).pdf": Buffer.from("%PDF-1.4 spaced and percent"),
+    "check legacy doc.pdf":      Buffer.from("%PDF-1.4 legacy url only"),
   };
-  for (const [name, bytes] of Object.entries(files)) fs.writeFileSync(path.join(DIR, name), bytes);
+  for (const [name, bytes] of Object.entries(files)) if (bytes) fs.writeFileSync(path.join(DIR, name), bytes);
   const cleanupFiles = () => { for (const name of Object.keys(files)) { try { fs.unlinkSync(path.join(DIR, name)); } catch {} } };
 
   await StudentApplication.create([
@@ -102,6 +105,17 @@ const LEAK = /Cast to|ValidationError|mongo|Mongoose|at path|E11000|TypeError|is
       _id: "app-b", schoolId: B, studentName: "Beta Applicant", email: "parent-b@example.test",
       guardianName: "Parent B", phone: "+237600000002", classId: "form1b", status: "pending",
       documents: [{ title: "ID scan", filename: "check-doc-b.pdf", url: "/uploads/applications/check-doc-b.pdf", mimeType: "application/pdf" }],
+    },
+    {
+      // A name with a space, a "%" and brackets; and a record from before
+      // filename was kept, which knows its file only by an encoded URL and
+      // the path on the disk of whichever machine received it.
+      _id: "app-a-odd", schoolId: A, studentName: "Odd Names", email: "parent-o@example.test",
+      guardianName: "Parent O", phone: "+237600000004", classId: "form3a", status: "pending",
+      documents: [
+        { title: "Scan", filename: "check doc 100% (scan).pdf", url: "/uploads/applications/check%20doc%20100%25%20(scan).pdf", mimeType: "application/pdf" },
+        { title: "Legacy", url: "/uploads/applications/check%20legacy%20doc.pdf", path: "C:\\Users\\office\\uploads\\check legacy doc.pdf", mimeType: "application/pdf" },
+      ],
     },
     {
       _id: "app-a-enrolled", schoolId: A, studentName: "Enrolled Child", email: "parent-e@example.test",
@@ -129,6 +143,7 @@ const LEAK = /Cast to|ValidationError|mongo|Mongoose|at path|E11000|TypeError|is
   app.use("/api",          require(path.join(SRC, "routes/public.routes")));
   app.use("/api/students", optionalAuthenticate, studentRoutes);
   app.use("/api/student",  auth.authenticate,    studentRoutes);
+  app.use("/api/admin",    auth.authenticate,    require(path.join(SRC, "routes/admin.routes")));
   app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, message: err.message }));
   const server = app.listen(0);
   const ORIGIN = `http://127.0.0.1:${server.address().port}`;
@@ -231,6 +246,53 @@ const LEAK = /Cast to|ValidationError|mongo|Mongoose|at path|E11000|TypeError|is
     check("  and its link opens the file", [r.status, r.headers.get("content-type")], [200, "image/jpeg"]);
     r = await bursarA.get("/api/students/st-a1");
     check("the bursar's roster projection carries no documents at all", r.body?.student?.documents, undefined);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    console.log("\n--- the admissions screens' own endpoint presents documents the same way ---");
+    // The console and the phone list applications from /api/admin/students/
+    // pending, not /api/students/pending. That router answered with the stored
+    // record — a /uploads URL that is closed to everyone, and a path on the
+    // server's disk — so every preview from those screens failed.
+    r = await adminA.get(`/api/admin/students/pending?schoolId=${A}`);
+    const adminList = r.body?.students ?? r.body?.data ?? [];
+    const adminApp  = adminList.find((s) => (s._id ?? s.id) === "app-a");
+    check("the admin router lists the application", [r.status, Boolean(adminApp)], [200, true]);
+    check("  with no path or filename on any document", adminList.every((s) => hasNoPaths(s.documents)), true);
+    check("  and its timestamps still timestamps, not {}", typeof adminApp?.createdAt, "string");
+    r = await anon.get(adminApp?.documents?.[0]?.url || "/nowhere", { raw: true });
+    check("  and its link opens the file with no token, as a new tab does",
+      [r.status, r.bytes.equals(files["check-doc-a.pdf"])], [200, true]);
+    r = await adminA.get(`/api/admin/students/st-a1?schoolId=${A}`);
+    const adminStudent = r.body?.student ?? r.body?.data;
+    r = await anon.get(adminStudent?.documents?.[0]?.url || "/nowhere", { raw: true });
+    check("the pupil record from the admin router opens too", [r.status, r.headers.get("content-type")], [200, "image/jpeg"]);
+
+    console.log("\n--- names with spaces and special characters ---");
+    const odd = adminList.find((s) => (s._id ?? s.id) === "app-a-odd");
+    r = await anon.get(odd?.documents?.[0]?.url || "/nowhere", { raw: true });
+    check("a name with a space, a % and brackets opens", [r.status, r.bytes.equals(files["check doc 100% (scan).pdf"])], [200, true]);
+    r = await anon.get(odd?.documents?.[1]?.url || "/nowhere", { raw: true });
+    check("a record that knows its file only by an encoded URL opens",
+      [r.status, r.bytes.equals(files["check legacy doc.pdf"])], [200, true]);
+    r = await adminA.get(`/api/students/applications/app-a-odd/documents/${encodeURIComponent("check doc 100% (scan).pdf")}`, { raw: true });
+    check("  and the signed-in door takes the encoded name", r.status, 200);
+
+    console.log("\n--- what an upload stores ---");
+    r = await anon.post("/api/public/students/apply", {
+      studentName: "Uploaded Child", guardianName: "U", email: "uploaded@example.test", phone: "+237633333333",
+      schoolId: A, classId: "form3a",
+      files: [{ name: "acte de naissance.pdf", mimeType: "application/pdf", base64: Buffer.from("%PDF-1.4 uploaded").toString("base64") }],
+    });
+    check("an application with a file is taken", r.status, 201);
+    const uploaded = await StudentApplication.findOne({ email: "uploaded@example.test" }).lean();
+    const storedDoc = uploaded?.documents?.[0] ?? {};
+    check("  its document keeps the stored name, not a path on this machine's disk",
+      [Boolean(storedDoc.filename), storedDoc.path ?? null], [true, null]);
+    if (storedDoc.filename) files[storedDoc.filename] = null;   // cleaned up with the rest
+    r = await adminA.get(`/api/admin/students/pending?schoolId=${A}`);
+    const up = (r.body?.students ?? r.body?.data ?? []).find((s) => s.email === "uploaded@example.test");
+    r = await anon.get(up?.documents?.[0]?.url || "/nowhere", { raw: true });
+    check("  and staff open it from the admissions screen", [r.status, r.bytes.toString()], [200, "%PDF-1.4 uploaded"]);
 
     // ═════════════════════════════════════════════════════════════════════════
     console.log("\n--- X22: the public form answers a duplicate as it answers a new application ---");

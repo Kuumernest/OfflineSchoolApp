@@ -196,17 +196,20 @@ const generateLocalEnrollmentNo = async (db, schoolCode, year) => {
       const col  = cols.includes("enrollmentNo") ? "enrollmentNo"
                  : cols.includes("enrollment_no") ? "enrollment_no" : null;
       if (col) {
-        const row = await db.getFirstAsync(
-          `SELECT ${col} AS enrollmentNo FROM students
-           WHERE  ${col} LIKE ? ORDER BY ${col} DESC LIMIT 1`,
+        // The highest by number, not by text: 0010 (an older four-digit
+        // number) sorts below 009 as a string.
+        const rows = await db.getAllAsync(
+          `SELECT ${col} AS enrollmentNo FROM students WHERE ${col} LIKE ?`,
           [`${prefix}%`]
         );
-        if (row?.enrollmentNo) {
-          const parts  = row.enrollmentNo.split("-");
-          const lastNo = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastNo)) {
-            return `${prefix}${String(lastNo + 1).padStart(4, "0")}`;
-          }
+        const lastNo = Math.max(0, ...rows.map((r) => {
+          const parts = String(r.enrollmentNo).split("-");
+          return parseInt(parts[parts.length - 1], 10) || 0;
+        }));
+        if (lastNo > 0) {
+          // Three digits at least, as the server's generator
+          // (backend/src/services/admissionNumber.service.js) issues them.
+          return `${prefix}${String(lastNo + 1).padStart(3, "0")}`;
         }
       }
     } catch (err) {
