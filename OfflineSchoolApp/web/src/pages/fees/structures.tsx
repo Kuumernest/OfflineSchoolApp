@@ -39,9 +39,14 @@ const emptyItem = (): FeeItem => ({
   code: "", label: "", labelFr: "", amount: 0, isOptional: false,
 });
 
-// Academic year options: last year through two years ahead, "YYYY/YYYY+1".
+// Academic year options: last year through two years ahead, "YYYY/YYYY+1",
+// counted from the school year (September–July) as the fees page counts it.
+// From the calendar year, the default between January and August was NEXT
+// year's label, and newcomers are billed only from the current year's
+// structures (fees.service applyActiveStructuresForStudent).
 const ACADEMIC_YEAR_OPTIONS = (() => {
-  const y = new Date().getFullYear();
+  const now = new Date();
+  const y   = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
   return [-1, 0, 1, 2].map((i) => `${y + i}/${y + i + 1}`);
 })();
 
