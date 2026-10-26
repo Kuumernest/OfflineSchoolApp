@@ -76,6 +76,19 @@ const queryClient = new QueryClient({
   },
 });
 
+// One tab, one person's data. Signing out navigates without a reload, and the
+// cache kept the previous account's conversations and messages under keys
+// that do not name the user, so the next person to sign in on that tab was
+// served them until the refetch. Any change of who is signed in empties it.
+let cachedFor = useAuthStore.getState().user?._id ?? null;
+useAuthStore.subscribe((state) => {
+  const now = state.user?._id ?? null;
+  if (now !== cachedFor) {
+    cachedFor = now;
+    queryClient.clear();
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MOUNT
 // ─────────────────────────────────────────────────────────────────────────────

@@ -4550,6 +4550,7 @@
     "tabAll": "All"
   },
   "msgMobile": {
+    "unavailable": "This conversation isn't available to you.",
     "title": "Messages",
     "syncNote": "Showing saved conversations — no connection",
     "conversation": "Conversation",

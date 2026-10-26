@@ -255,7 +255,7 @@ const makeLoader = (stubs, pkgStubs) => {
   await enqueue("student:gone", "/students/st-gone", { name: "Renamed" }, "PUT");
   await enqueue("student:gone-del", "/students/st-gone", {}, "DELETE");
   r = await drain();
-  check("an update to a vanished record is parked as failed, with the reason kept", rows("entity_key='student:gone'").map((x) => [x.status, x.error]), [["failed", "HTTP 404"]]);
+  check("an update to a vanished record is parked as failed, with the reason kept", rows("entity_key='student:gone'").map((x) => [x.status, x.error]), [["failed", "Student not found"]]);   // the server's words, not "HTTP 404"
   check("a delete of a vanished record has nothing left to do and settles", rows("entity_key='student:gone-del'")[0].status, "synced");
 
   // ═══════════════════════════════════════════════════════════════════════════
