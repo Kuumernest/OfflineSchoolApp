@@ -40,6 +40,7 @@ const localApi     = require("./api");
 const appProtocol  = require("./appProtocol");
 const { normaliseServerUrl, checkServer } = require("./serverAddress");
 const { writeUnsentCopy, suggestedName } = require("./unsentCopy");
+const logFile      = require("./logFile");
 
 // app://school/ — the window's origin (appProtocol.js says why not file://).
 // Privileges must be registered before the app is ready.
@@ -128,6 +129,13 @@ const openDatabase = () => {
       docs, queue, state: syncState, client: api,
       // The engine sends only the signed-in account's queued requests.
       currentUser: () => session?.userId ?? null,
+      // A super_admin has no school of their own and must name one, or the feed
+      // sends them nothing. Everybody else's school comes from their token.
+      schoolId: () => (session?.role === "super_admin" ? session.schoolId : null),
+      // The cursors belong to this server and this school. No school yet (a
+      // super_admin who has not entered one) is no scope, so nothing is reset.
+      scope: () => (session?.schoolId ? `${api.serverUrl()}|${session.schoolId}` : null),
+      marks: metaBag,
       // No collection list: the server decides what this caller may mirror, so
       // the desktop holds no copy of the feed table to drift from it.
       onChange: (status) => {
@@ -243,6 +251,7 @@ const registerHandlers = () => {
     node:          process.versions.node,
     deviceCode:    metaBag.deviceCode(),
     dataDirectory: path.dirname(DB_FILE()),
+    logFile:       path.join(app.getPath("logs"), "main.log"),
     schemaVersion: store.SCHEMA_VERSION,
   }));
 
@@ -352,6 +361,11 @@ const registerHandlers = () => {
         }
       : null;
 
+    console.log(
+      `[session] ${session ? `${session.role} of school ${session.schoolId ?? "(none)"}` : "signed out"}` +
+      ` — server ${api.serverUrl() || "(none)"}`
+    );
+
     if (tokenValue) {
       sync.start();
       // Immediately, not on the next interval: somebody who has just signed in
@@ -389,6 +403,10 @@ const registerHandlers = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // First, so the database path and everything after it reach the file.
+  const logPath = logFile.install(app.getPath("logs"));
+  console.log(`[app] ${app.getName()} ${app.getVersion()} — log ${logPath ?? "(not writable)"}`);
+
   if (!openDatabase()) { app.quit(); return; }
 
   registerHandlers();

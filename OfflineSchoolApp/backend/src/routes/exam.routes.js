@@ -23,6 +23,7 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
+const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -762,7 +763,11 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
         // these; this path did not.
         maxScore:         s.maxScore    ?? totalMarks ?? 100,
         passMark:         s.passMark    ?? passMark   ?? 50,
-        weight:           s.weight      ?? 100,
+        // The subject's own coefficient unless this request weights the paper
+        // itself — as POST /:examId/subjects does. A literal 100 here counted
+        // every subject on an exam created in one request as coefficient 1,
+        // whatever the school had set, and nothing on screen said so.
+        weight:           s.weight      ?? Math.round(weightFor(coefficientOf(subjectDoc))),
         isPractical:      s.isPractical ?? false,
         isTheory:         s.isTheory    ?? true,
         isOral:           s.isOral      ?? false,

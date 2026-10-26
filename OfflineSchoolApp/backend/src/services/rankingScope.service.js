@@ -101,4 +101,4 @@ async function moveCurrentYear({ schoolId, from, to, orUnset = false }) {
   return r.modifiedCount > 0;
 }
 
-module.exports = { rosterDecides, moveCurrentYear, yearKey, YEAR_FORMAT };
+module.exports = { rosterDecides, moveCurrentYear, yearKey, yearForms, YEAR_FORMAT };

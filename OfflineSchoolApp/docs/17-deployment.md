@@ -695,8 +695,10 @@ anything.
 [ ] deploy/backend.env complete (chmod 600); backend "healthy" in docker compose ps
 [ ] Cloudflare Pages: VITE_API_URL set; Pages domain(s) in ALLOWED_ORIGINS; login works end to end
 [ ] Backups: both timers enabled (database, uploads); one successful run of each seen in the bucket; one restore drill of each passed; alerts configured
-[ ] Android: eas init + keystore generated and backed up offline; EXPO_TOKEN + PRODUCTION_API_URL set; a test tag produces an installable APK
-[ ] Desktop: an installer tested against staging (school_db) — until then DESKTOP_RELEASE_ENABLED stays unset
+[x] Android: eas init (@kuum/mobile) + keystore generated on EAS; EXPO_TOKEN + PRODUCTION_API_URL set; tag v0.1.0 built the APK (2026-10-23; checksum and baked-in API URL verified)
+[ ] Android: keystore downloaded and backed up offline; the v0.1.0 APK installed and signed in on a phone
+[x] Desktop: DESKTOP_RELEASE_ENABLED + DESKTOP_API_URL set; tag v0.1.0 built the Windows installer and portable .exe (2026-10-23; DESKTOP_API_URL = the dev backend)
+[ ] Desktop: an installer tested against staging (school_db): installs, opens without asking for a server, signs in, syncs
 [ ] npm run check:all passes on the deployment commit
 ```
 

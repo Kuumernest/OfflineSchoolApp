@@ -757,7 +757,9 @@ export default function StudentApplicationsScreen() {
   // ── Document opener ────────────────────────────────────────────────────────
 
   const openDocument = useCallback(async (doc) => {
-    const uri = doc?.uri || doc?.url || doc?.fileUrl || doc?.path || null;
+    // The server's signed link. Never `path` — that named a file on the
+    // server's disk, which the phone reported as an invalid file path.
+    const uri = doc?.url || doc?.uri || doc?.fileUrl || null;
 
     if (!uri) {
       Alert.alert(
@@ -768,7 +770,10 @@ export default function StudentApplicationsScreen() {
     }
 
     try {
-      const supported = await Linking.canOpenURL(uri);
+      // A web link is opened directly. canOpenURL answers false for https on
+      // Android 11+ unless the manifest declares a browser query, which made a
+      // perfectly good link look unopenable.
+      const supported = /^https?:\/\//i.test(uri) || await Linking.canOpenURL(uri);
       if (!supported) {
         Alert.alert(
           t("appsReview.cannotOpenTitle"),

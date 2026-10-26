@@ -432,6 +432,13 @@ const REVIEW_CATEGORIES = Object.freeze([
   "mixed_assessment", "with_intervention", "cross_subject_strength",
 ]);
 
+/**
+ * A sample, not a census: a reviewer's hour is finite, and three cases are
+ * enough to tell whether a category reads true in a school. Every category
+ * shows "reviewed / 3" on the monitoring panel for that reason. The three are
+ * spread across pupils (see reviewCasesReport) so that one pupil with many
+ * subjects cannot fill the sheet.
+ */
 const MAX_PER_CATEGORY = 3;
 
 /**
@@ -460,10 +467,10 @@ const REVIEW_REASONS = Object.freeze({
   declining:                 "engine calls this a sustained decline",
   sudden_change:             "a large fall in the most recent sequence",
   volatile:                  "marks swing widely; the engine calls the subject variable",
-  emerging_strength:         "a strength on limited evidence",
+  emerging_strength:         "strong on three or more marks, but not on every one",
   trend_on_variable_subject: "a trend claimed on a subject the engine also calls variable",
   insufficient_evidence:     "too little published history for any claim",
-  borderline_threshold:      "classification flips if a threshold moves by one mark",
+  borderline_threshold:      "a classification is added or dropped if a threshold moves by one mark",
   absence_heavy:             "several absences; only sat papers are counted",
   zero_heavy:                "several genuine zeros; check they were earned, not unentered",
   mixed_assessment:          "continuous assessment present; it must not count as an occasion",
@@ -515,10 +522,23 @@ const emptyReview = (insights) => ({
     : {}),
 });
 
-const reviewCasesReport = (cohort, run, sensitivity) => {
+/**
+ * @param {object} [opts]
+ * @param {number} [opts.maxPerCategory]  Infinity when verifying one pupil's
+ *   submission: the case a reviewer saw on the school sheet must exist in the
+ *   pupil's own run whatever the school-wide sample happened to pick.
+ */
+const reviewCasesReport = (cohort, run, sensitivity, { maxPerCategory = MAX_PER_CATEGORY } = {}) => {
   const { input, profiles, guidanceByStudent, grading } = run;
   const examById = new Map(input.exams.map((e) => [e._id, e]));
   const borderlineKeys = new Set(sensitivity.borderline.map((b) => `${b.studentId}|${b.subjectId}`));
+  // Which classification moves, and under which threshold, for each
+  // borderline subject — so the sheet can say WHICH answer one mark changes.
+  const borderlineBy = new Map();
+  for (const b of sensitivity.borderline) {
+    const k = `${b.studentId}|${b.subjectId}`;
+    borderlineBy.set(k, [...(borderlineBy.get(k) ?? []), { code: b.code, flipsUnder: b.flipsUnder.filter((m) => /[+-]1$/.test(m)) }]);
+  }
 
   // Raw-data features per pupil (not rules: counts of row states).
   const raw = new Map();
@@ -538,18 +558,29 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
     list.push(iv); interventionsBy.set(String(iv.studentId), list);
   }
 
-  const cases = [];
-  const seen = new Set();
+  // Every case the rules below would put on the sheet, before any sampling.
+  // One per category, pupil and subject NAME: subjects are per class, so a
+  // pupil who changed class has two "Chemistry" records with their marks split
+  // between them. The first record (by id) stands for both and says so; the
+  // sheet does not ask the same question twice.
+  const candidates = [];
+  const seen = new Map();
   const add = (category, studentId, subject) => {
-    const id = `${category}|${studentId}|${subject?.subjectId ?? "-"}`;
-    if (seen.has(id)) return;
-    if (cases.filter((c) => c.category === category).length >= MAX_PER_CATEGORY) return;
-    seen.add(id);
+    const name = subject ? String(subject.subjectName ?? subject.subjectId).trim().toLowerCase() : "-";
+    const id = `${category}|${studentId}|${name}`;
+    const prior = seen.get(id);
+    if (prior) { if (subject && prior.subject?.subjectId !== subject.subjectId) prior.subjectRecords += 1; return; }
+    const c = { category, studentId, subject, subjectRecords: subject ? 1 : 0 };
+    seen.set(id, c);
+    candidates.push(c);
+  };
+
+  const build = ({ category, studentId, subject, subjectRecords }) => {
     const profile = profiles.get(studentId);
     const insights = subject
       ? profile.insights.filter((i) => i.subjectId === subject.subjectId)
       : profile.insights.filter((i) => i.scope === "student");
-    cases.push({
+    return {
       // Stable: derived from what the case is ABOUT, not from its position on
       // the sheet, so adding a category later cannot renumber a fixture.
       caseId: `${category}:${studentId}:${subject?.subjectId ?? "-"}`,
@@ -581,7 +612,22 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
       // the allowed values are published in reviewCases.reviewForm; nothing
       // written here ever feeds back into the engine on its own.
       review: emptyReview(insights),
-    });
+      // Where a subject has more than one record (a class change), how many
+      // stand behind this case — the marks above are only this record's.
+      subjectRecords,
+      // For a borderline case: which classification appears or disappears,
+      // and under which one-mark move. `claimed` is whether the engine says
+      // it today, so the sheet can say "would be dropped" or "would be added".
+      borderline: category === "borderline_threshold" && subject
+        ? (borderlineBy.get(`${studentId}|${subject.subjectId}`) ?? []).map((b) => ({
+            ...b, claimed: insights.some((i) => i.code === b.code),
+          }))
+        : null,
+      // A pupil-wide case names the subjects it rests on, so "strong across
+      // subjects" beside a decline elsewhere reads as what it is: different
+      // subjects, not one subject with two answers.
+      subjects: subject ? null : (insights.find((i) => Array.isArray(i.subjects))?.subjects ?? null),
+    };
   };
 
   const studentIds = [...profiles.keys()].sort();
@@ -593,8 +639,11 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
 
     for (const s of subjects) {
       if (has("consistency_strength")(s))           add("strong_and_stable", studentId, s);
-      if (has("subject_strength", "emerging")(s))   add("emerging_strength", studentId, s);
+      // Strong on the minimum two marks is "strong, but recent"; strong on
+      // more, but not in every one, is "emerging". The same subject is never
+      // both: on two marks the two categories were the same question.
       if (has("subject_strength", "emerging")(s) && s.observations === 2) add("strong_but_recent", studentId, s);
+      else if (has("subject_strength", "emerging")(s)) add("emerging_strength", studentId, s);
       if (has("persistent_underperformance")(s))    add("weak_and_persistent", studentId, s);
       if (has("sustained_improvement")(s) && s.recentAverage !== null && s.recentAverage < grading.passMark) {
         add("weak_but_improving", studentId, s);
@@ -621,10 +670,38 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
     }
   }
 
+  // The sample. Each category takes up to maxPerCategory cases, highest
+  // priority category first, preferring the pupil with the fewest cases on
+  // the sheet so far — so a pupil with many subjects cannot fill it. A pupil
+  // may still appear in several categories; the related cases are listed on
+  // each, so a reviewer reads them together rather than as contradictions.
+  const perStudent = new Map();
+  const picked = [];
+  for (const category of [...REVIEW_CATEGORIES].sort((a, b) => priorityOf(a) - priorityOf(b))) {
+    const pool = candidates.filter((c) => c.category === category);
+    const taken = [];
+    while (taken.length < maxPerCategory && pool.length) {
+      pool.sort((a, b) => (perStudent.get(a.studentId) ?? 0) - (perStudent.get(b.studentId) ?? 0) ||
+        a.studentId.localeCompare(b.studentId) ||
+        String(a.subject?.subjectId ?? "").localeCompare(String(b.subject?.subjectId ?? "")));
+      const next = pool.shift();
+      perStudent.set(next.studentId, (perStudent.get(next.studentId) ?? 0) + 1);
+      taken.push(next);
+    }
+    picked.push(...taken);
+  }
+  const cases = picked.map(build);
+  for (const c of cases) {
+    c.related = cases
+      .filter((o) => o !== c && o.studentId === c.studentId && o.subjectId === c.subjectId)
+      .map((o) => o.category).sort((a, b) => priorityOf(a) - priorityOf(b));
+  }
+
   return {
     categories: REVIEW_CATEGORIES,
     reviewForm: REVIEW_FORM,
     priority: REVIEW_PRIORITY,
+    maxPerCategory: Number.isFinite(maxPerCategory) ? maxPerCategory : null,
     cases: cases.sort((a, b) => a.priority - b.priority || a.studentId.localeCompare(b.studentId) ||
       String(a.subjectId ?? "").localeCompare(String(b.subjectId ?? ""))),
     coverage: Object.fromEntries(REVIEW_CATEGORIES.map((c) => [c, cases.filter((x) => x.category === c).length])),
@@ -639,9 +716,10 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
  * Analyse one cohort. Pure and deterministic.
  *
  * @param {object} cohort  a cohort that validateCohort() accepted
+ * @param {object} [opts]  { maxPerCategory } — Infinity to keep every case (one pupil's verification)
  * @returns {object} machine-readable report
  */
-const analyse = (cohort) => {
+const analyse =(cohort, { maxPerCategory } = {}) => {
   const input = toEngineInput(cohort);
   const run = runEngine(cohort, engine, input);
   const baseline = classificationsOf(run.profiles);
@@ -649,7 +727,7 @@ const analyse = (cohort) => {
   const distribution = distributionReport(run);
   const sensitivity = sensitivityReport(cohort, baseline, input);
   const flags = flagsReport(evidence, distribution, sensitivity);
-  const reviewCases = reviewCasesReport(cohort, run, sensitivity);
+  const reviewCases = reviewCasesReport(cohort, run, sensitivity, maxPerCategory !== undefined ? { maxPerCategory } : {});
 
   return {
     engineVersion: ENGINE_VERSION,

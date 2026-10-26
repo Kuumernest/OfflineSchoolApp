@@ -704,7 +704,7 @@ export default function AdmissionsPage() {
 
   const openDocument = useCallback((doc: ApplicationDocument) => {
     const url = resolveDocumentUrl(
-      doc.uri || doc.url || doc.fileUrl || doc.path || null
+      doc.uri || doc.url || doc.fileUrl || null
     );
 
     if (!url) {

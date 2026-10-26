@@ -5,6 +5,7 @@ import { useTranslation }        from "react-i18next";
 import Sidebar                   from "@/components/layout/Sidebar";
 import TopBar                    from "@/components/layout/TopBar";
 import SchoolContextBar          from "@/components/layout/SchoolContextBar";
+import InitialSyncBanner         from "@/components/offline/InitialSyncBanner";
 import { useActiveSchool, useUser } from "@/store/auth.store";
 import { NAV_ITEMS }             from "@/config/navigation";
 
@@ -57,6 +58,7 @@ export default function DashboardLayout() {
 
         <TopBar onMenuClick={toggleSidebar} title={title} />
         <SchoolContextBar />
+        <InitialSyncBanner />
 
         {/*
           Capped at 1600px and centred. Left unbounded, a data table on a

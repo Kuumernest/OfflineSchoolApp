@@ -43,24 +43,77 @@ const OFFLINE_INTERVAL_MS = 15_000;
 const MAX_PAGES_PER_CYCLE = 40;
 
 /**
- * @param feedCollections  Optional. Leave it out — see the note in pull().
+ * After a cycle that stopped at the page ceiling with more still to come. A
+ * first sync of a large school is exactly that, and waiting the idle minute
+ * between each forty pages kept the screens half-filled for no reason.
  */
-const engine = ({ docs, queue, state, client, feedCollections = null, onChange = () => {}, currentUser = () => null }) => {
+const CONTINUE_INTERVAL_MS = 1_000;
+
+/**
+ * @param feedCollections  Optional. Leave it out — see the note in pull().
+ * @param schoolId         The school to ask for, for a super_admin only (who has
+ *                         none of their own). Null for everybody else.
+ * @param scope            Which server and school the cursors belong to, as one
+ *                         string. When it changes, the cursors are dropped.
+ * @param marks            Somewhere to remember the scope and whether a first
+ *                         full pull has finished for it (store.meta). Optional:
+ *                         without it neither is tracked.
+ */
+const engine = ({
+  docs, queue, state, client, feedCollections = null, onChange = () => {}, currentUser = () => null,
+  schoolId = () => null, scope = () => null, marks = null,
+}) => {
   let running  = false;
   let timer    = null;
   let stopped  = false;
 
   /** The last thing that happened, for the UI to render. */
   let status = {
-    phase:      "idle",   // idle | pushing | pulling | offline | blocked | unauthenticated
+    phase:      "idle",   // idle | pushing | pulling | offline | error | blocked | unauthenticated
+    // "done" once a full pull has finished for the current server and school;
+    // "pending" before that. See initialSync() below.
+    initialSync: "pending",
     lastCycleAt: null,
     lastError:   null,
     pushed:      0,
     pulled:      0,
   };
 
+  /**
+   * Has this machine ever finished a full pull for the server and school it is
+   * signed in to?
+   *
+   * "pending" is the state in which every screen is empty for a reason that is
+   * not "the school has nothing": the mirror has simply not been filled yet, or
+   * filling it failed. The window shows that instead of empty lists.
+   */
+  const initialSync = () => {
+    if (!marks) return "done";
+    const current = scope();
+    // No school (a super_admin on the platform pages): nothing to wait for.
+    if (!current) return "done";
+    return marks.get("initialSyncFor") === current ? "done" : "pending";
+  };
+
+  /**
+   * Cursors belong to one server and one school. Drop them when either changes.
+   *
+   * Previously nothing did: pointing an installation at another server, or a
+   * second school signing in on the same machine, carried on from the old
+   * positions and silently skipped everything older.
+   */
+  const checkScope = () => {
+    if (!marks) return;
+    const current = scope();
+    if (!current) return;
+    if (marks.get("syncScope") === current) return;
+    state.clear();
+    marks.set("syncScope", current);
+    console.log(`[sync] new scope ${current}: starting the pull from the beginning`);
+  };
+
   const publish = (next) => {
-    status = { ...status, ...next };
+    status = { ...status, ...next, initialSync: initialSync() };
     onChange(status);
   };
 
@@ -169,6 +222,10 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
    */
   const pull = async () => {
     let pulled = 0;
+    // Whether this pull reached the end of every collection, or stopped at the
+    // page ceiling with more to come.
+    let complete = false;
+    let pages = 0;
     const refusedNow = [];
     const heldBack   = [];
 
@@ -197,7 +254,8 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         cursors[row.collection] = row.cursor;
       }
 
-      const answer = await client.changes({ collections, cursors });
+      const answer = await client.changes({ collections, cursors, schoolId: schoolId() });
+      pages++;
 
       for (const r of answer.refused ?? []) refusedNow.push(r);
 
@@ -265,10 +323,10 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         if (slice.hasMore && state.cursorFor(name) !== before) more = true;
       }
 
-      if (!more) break;
+      if (!more) { complete = true; break; }
     }
 
-    return { pulled, refused: refusedNow, heldBack };
+    return { pulled, refused: refusedNow, heldBack, complete, pages };
   };
 
   // ── ONE CYCLE ───────────────────────────────────────────────────────────
@@ -299,8 +357,22 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       // problem; refusing to take any news from the server because of it would
       // make the whole machine stale over something the bursar may not look at
       // until Friday.
+      checkScope();
       publish({ phase: "pulling", pushed: pushed.sent });
+      const startedAt    = Date.now();
       const pulledResult = await pull();
+      const pullMs       = Date.now() - startedAt;
+
+      // Only a pull that reached the end of every collection counts. One that
+      // stopped at the page ceiling has more to fetch, and is continued at once
+      // (see scheduleNext) rather than declared finished.
+      if (pulledResult.complete && marks && scope()) marks.set("initialSyncFor", scope());
+
+      console.log(
+        `[sync] pulled ${pulledResult.pulled} row(s) in ${pulledResult.pages} page(s), ${pullMs} ms` +
+        (pulledResult.complete ? "" : " — more to come") +
+        (pulledResult.refused.length ? `; refused: ${pulledResult.refused.map((r) => r.collection).join(", ")}` : "")
+      );
 
       publish({
         phase:       pushed.stopped === "blocked" ? "blocked" : "idle",
@@ -310,19 +382,32 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         pulled:      pulledResult.pulled,
         refused:     pulledResult.refused,
         heldBack:    pulledResult.heldBack,
+        morePending: !pulledResult.complete,
+        lastPullMs:  pullMs,
       });
 
       return status;
     } catch (err) {
       const offline = err instanceof SyncError && err.status === null;
+      // A refusal or a server fault is "error", not "idle". Reported as idle,
+      // the window had no way to tell a failed first sync from a school with no
+      // data, and showed empty screens.
+      console.warn(
+        `[sync] cycle failed (${offline ? "unreachable" : `status ${err.status ?? "?"}`}): ${err.message}` +
+        ` — server ${client.serverUrl() || "(none)"}`
+      );
       publish({
-        phase:     offline ? "offline" : "idle",
+        phase:     offline ? "offline" : err.status === 401 ? "unauthenticated" : "error",
         lastError: err.message,
         lastCycleAt: new Date().toISOString(),
       });
       return status;
     } finally {
       running = false;
+      // A cycle run on demand (sign-in, a local write) is not followed by
+      // scheduleNext, so without this the rest of a first sync would wait the
+      // full idle interval. Re-arming is safe: scheduleNext clears any timer.
+      if (status.morePending && !stopped) scheduleNext();
     }
   };
 
@@ -333,7 +418,8 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
     clearTimeout(timer);
 
     const wait =
-      status.phase === "offline" ? OFFLINE_INTERVAL_MS :
+      status.phase === "offline" || status.phase === "error" ? OFFLINE_INTERVAL_MS :
+      status.morePending ? CONTINUE_INTERVAL_MS :
       IDLE_INTERVAL_MS;
 
     timer = setTimeout(async () => {
@@ -358,7 +444,7 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       clearTimeout(timer);
     },
 
-    status: () => status,
+    status: () => ({ ...status, initialSync: initialSync() }),
   };
 };
 
@@ -366,5 +452,6 @@ module.exports = {
   engine,
   IDLE_INTERVAL_MS,
   OFFLINE_INTERVAL_MS,
+  CONTINUE_INTERVAL_MS,
   MAX_PAGES_PER_CYCLE,
 };

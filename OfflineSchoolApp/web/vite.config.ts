@@ -91,9 +91,14 @@ export default defineConfig({
       ignored: ["**/node_modules/**", "**/dist/**", "**/.git/**"],
     },
     proxy: {
+      // xfwd: send X-Forwarded-Host/Proto. changeOrigin rewrites Host to
+      // localhost:5000, so without them every absolute image URL the server
+      // writes into a printed document (logo, photo) named localhost:5000 —
+      // broken on any device but the one running Vite.
       "/api": {
         target:       "http://localhost:5000",
         changeOrigin: true,
+        xfwd:         true,
       },
       // School logos are stored as files and served from the API server's
       // root, not from under /api. Without this the dashboard banner and the
@@ -102,6 +107,7 @@ export default defineConfig({
       "/uploads": {
         target:       "http://localhost:5000",
         changeOrigin: true,
+        xfwd:         true,
       },
     },
   },

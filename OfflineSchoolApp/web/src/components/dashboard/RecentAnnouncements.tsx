@@ -5,7 +5,7 @@ import { Megaphone, ArrowRight }   from "lucide-react";
 import { Card, CardHeader }        from "@/components/ui/Card";
 import { Badge }                   from "@/components/ui/Badge";
 import { type RecentAnnouncement } from "@/services/dashboard.service";
-import { formatDistanceToNow }     from "date-fns";
+import { timeAgo }                 from "@/i18n";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -99,7 +99,7 @@ export default function RecentAnnouncements({
                     guaranteed string so Badge.label never receives undefined. */}
                 {a.priority && (
                   <Badge
-                    label={a.priority}
+                    label={t(`announcements.priorityOpt.${a.priority}`, { defaultValue: a.priority })}
                     variant={priorityVariant(a.priority)}
                   />
                 )}
@@ -117,7 +117,7 @@ export default function RecentAnnouncements({
 
               {a.createdAt && (
                 <p className="mt-1 text-xs text-ink-faint">
-                  {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+                  {timeAgo(a.createdAt)}
                 </p>
               )}
             </button>

@@ -105,25 +105,30 @@ export default function SyncIndicator() {
   const blocked = outbox?.blocked ?? 0;
   const waiting = outbox?.pending ?? 0;
   const offline = status?.phase === "offline";
+  // The server answered, but with a fault or a refusal of the whole pull. Shown
+  // like offline: it was reported as "idle" before, so it showed nothing.
+  const errored = status?.phase === "error";
   const syncing = status?.phase === "pushing" || status?.phase === "pulling";
 
   // Nothing worth saying. See the note above about always-present indicators.
-  if (!blocked && !waiting && !offline && !syncing) return null;
+  if (!blocked && !waiting && !offline && !errored && !syncing) return null;
 
   const tone =
     blocked ? "danger" :
-    offline ? "warning" :
+    offline || errored ? "warning" :
     "muted";
 
   const label =
     blocked ? t("sync.blocked", { count: blocked }) :
     offline ? t("sync.offline") :
+    errored ? t("sync.error") :
     syncing ? t("sync.syncing") :
     t("sync.waiting", { count: waiting });
 
   const Icon =
     blocked ? AlertTriangle :
     offline ? CloudOff :
+    errored ? AlertTriangle :
     RefreshCw;
 
   return (
@@ -168,6 +173,12 @@ export default function SyncIndicator() {
               )}
               {waiting > 0 && <p>{t("sync.waitingBody", { count: waiting })}</p>}
               {offline && <p className="mt-1 text-amber-700">{t("sync.offlineBody")}</p>}
+              {errored && (
+                <p className="mt-1 text-amber-700">
+                  {t("sync.errorBody")}
+                  {status?.lastError && <span className="mt-0.5 block break-words font-mono">{status.lastError}</span>}
+                </p>
+              )}
               {status?.lastCycleAt && (
                 <p className="mt-1 text-gray-400">
                   {t("sync.lastChecked", {

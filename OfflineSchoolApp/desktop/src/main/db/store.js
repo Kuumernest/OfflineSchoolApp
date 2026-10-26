@@ -490,6 +490,17 @@ const state = (db) => ({
   all() {
     return db.prepare("SELECT * FROM sync_state ORDER BY collection").all();
   },
+
+  /**
+   * Forget every position, so the next pull starts from the beginning.
+   *
+   * For a change of server or school. A cursor is a place in ONE server's feed
+   * for ONE school; carried across to another it skips every row that school
+   * wrote before the old position, and nothing would ever offer them again.
+   */
+  clear() {
+    db.prepare("DELETE FROM sync_state").run();
+  },
 });
 
 const meta = (db) => {

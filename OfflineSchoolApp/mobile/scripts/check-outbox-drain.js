@@ -297,7 +297,9 @@ const makeLoader = (stubs, pkgStubs) => {
   await enqueue("message:m-1", { endpoint: "/messages/conversations/cv-1/messages", __reconcile: { kind: "message", clientId: "m-1" } });
   raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL`).run();
   await drain();
-  check("a refused message reaches its failure handler, with the server's reason", failedHeard, [["m-1", "HTTP 400"]]);
+  // The server's own words, not axios's "HTTP 400": they are what the failed
+  // bubble shows the person (check-message-privacy).
+  check("a refused message reaches its failure handler, with the server's reason", failedHeard, [["m-1", "classId is required"]]);
 
   // Retries used up count as failed too.
   server.perUrl.set("/messages/conversations/cv-2/messages", "500");

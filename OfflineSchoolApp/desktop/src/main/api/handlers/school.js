@@ -306,6 +306,8 @@ module.exports = [
 
         return {
           ...s,
+          // As the server's normaliseSubject: a subject with none stored is 1.
+          coefficient: Number(s.coefficient) > 0 ? Number(s.coefficient) : 1,
           class:    canonicalClassId,
           classId:  canonicalClassId,
           classObj: classRecord ? { _id: String(classRecord._id), ...classRecord } : null,

@@ -728,6 +728,7 @@ export default function StudentReportCardScreen() {
                 result={reportCardResult}
                 exam={examObj}
                 schoolName={user?.schoolName || user?.school?.name}
+                schoolLogo={user?.school?.logo || user?.schoolLogo || null}
                 examId={String(examId)}
                 studentId={String(studentId)}
                 schoolId={schoolId}

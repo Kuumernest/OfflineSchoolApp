@@ -208,9 +208,15 @@ app.get("/uploads/{*path}", (req, res, next) => {
   // sitting in clients' SQLite caches were received unsigned and every message
   // read since the signing change re-issues them. Give caches a signature
   // lifetime to refresh, then REQUIRE_MEDIA_SIGNATURE=1 enforces.
-  if (mediaSignature.isProtectedPath(relativePath)) {
+  // Judged on the path as it RESOLVES, not as it was typed: "./messages/x"
+  // and "a/../messages/x" land on uploads/messages/x, but their first segment
+  // is not "messages", so the raw string passed as unprotected and a private
+  // attachment was served without a signature. A legitimate signed URL is
+  // already canonical, so its signature verifies against the same string.
+  const canonicalPath = path.relative(uploadsRoot, filePath).split(path.sep).join("/");
+  if (mediaSignature.isProtectedPath(canonicalPath)) {
     const sig = req.query?.sig;
-    if (!mediaSignature.verifyMediaSignature(relativePath, sig)) {
+    if (!mediaSignature.verifyMediaSignature(canonicalPath, sig)) {
       if (process.env.REQUIRE_MEDIA_SIGNATURE === "1") {
         return res.status(401).json({
           error: "This link has expired. Ask for the file to be shared again.",
@@ -632,46 +638,11 @@ app.post(
         return res.json({ success: true, enrollmentNo: userDoc.enrollmentNo });
       }
 
-      let schoolCode = "SCH";
-      try {
-        const School = require("./db/models/School");
-        const school = schoolId
-          ? await School.findById(schoolId).select("code").lean()
-          : null;
-        if (school?.code) {
-          schoolCode = school.code.trim().toUpperCase().slice(0, 5);
-        } else if (schoolId) {
-          schoolCode = String(schoolId)
-            .replace(/[^A-Z0-9]/gi, "")
-            .slice(0, 3)
-            .toUpperCase() || "SCH";
-        }
-      } catch { /* School model optional */ }
-
-      const year   = new Date().getFullYear();
-      const prefix = `${schoolCode}-${year}-`;
-
-      // schoolCode comes from the school's own "code" field — escaped, not
-      // trusted: a code like "G.V.A" would otherwise build a regex whose dot
-      // matches anything and could read another school's sequence.
-      const last = await User.findOne(
-        {
-          enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` },
-          role:         "student",
-          // The sequence is the school's own: without this clause the highest
-          // number across EVERY school was read.
-          ...(schoolId ? { schoolId } : {}),
-        },
-        { enrollmentNo: 1 },
-        { sort: { enrollmentNo: -1 } }
-      ).lean();
-
-      let nextNum = 1;
-      if (last?.enrollmentNo) {
-        const parts = last.enrollmentNo.split("-");
-        const seq   = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(seq)) nextNum = seq + 1;
-      }
+      // services/admissionNumber.service.js — one shape and one sequence for
+      // every admission path. A number the student record already carries is
+      // kept: this route gives an existing pupil a login, not a new identity.
+      const { nextAdmissionNo } = require("./services/admissionNumber.service");
+      let candidate = student.enrollmentNo || student.admissionNo || await nextAdmissionNo(schoolId);
 
       // ── The first password is random, never the enrollment number ────────
       // This used to be bcrypt.hash(enrollmentNo, 12): the credential was the
@@ -686,18 +657,14 @@ app.post(
       const tempPassword = generateTempPassword();
 
       // ── Race-safe numbering ─────────────────────────────────────────────
-      // nextNum is read from the current highest number, so two admins
-      // provisioning two students at the same moment could read the same
-      // "last" row and mint the same number. The unique partial index
-      // (enrollmentNo_unique_present on the User model) is what makes the
-      // retry below sound: the loser of the race gets E11000 and simply takes
-      // the next number — the same shape as saveUserWithUniqueEnrollment in
-      // students.routes.
+      // The generator's counter already hands two simultaneous requests two
+      // numbers. The unique partial index (enrollmentNo_unique_present on the
+      // User model) is the second line: a number some older path issued
+      // outside the counter gets E11000 here, and the request takes the next —
+      // the same shape as saveUserWithUniqueEnrollment in students.routes.
       let enrollmentNo = null;
 
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        const candidate = `${prefix}${String(nextNum).padStart(4, "0")}`;
-
         try {
           if (userDoc) {
             userDoc.enrollmentNo = candidate;
@@ -740,7 +707,7 @@ app.post(
           console.warn(
             `[enrollment-number] "${candidate}" collided — taking the next number`
           );
-          nextNum += 1;
+          candidate = await nextAdmissionNo(schoolId);
         }
       }
 

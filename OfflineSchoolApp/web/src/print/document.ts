@@ -12,6 +12,28 @@
 // knows about iframes and popup blockers, the phone knows about expo-print.
 
 /**
+ * Resolves once every image in `doc` has loaded or failed, or after `limitMs`.
+ *
+ * A sheet printed before its logo or a pupil's photo has arrived prints with a
+ * blank box, and the PDF saved from that dialog keeps the blank. Failures count
+ * as settled: a missing photo must not hold the print dialog back for ever, and
+ * the template already shows its empty state for one.
+ */
+export const imagesSettled = (doc: Document, limitMs = 10_000): Promise<void> => {
+  const pending = Array.from(doc?.images ?? []).filter((img) => !img.complete);
+  if (!pending.length) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let left = pending.length;
+    const timer = setTimeout(resolve, limitMs);
+    const done = () => { if (--left === 0) { clearTimeout(timer); resolve(); } };
+    for (const img of pending) {
+      img.addEventListener("load",  done, { once: true });
+      img.addEventListener("error", done, { once: true });
+    }
+  });
+};
+
+/**
  * Print without opening a tab.
  *
  * A hidden same-origin iframe rather than `window.open`, which popup blockers
@@ -66,20 +88,25 @@ export const printHtml = (html: string): Promise<boolean> => {
         // Some browsers never fire afterprint; without this the frame leaks.
         setTimeout(() => cleanUp?.(), 60_000);
 
-        try {
-          win.focus();
-          // The load watchdog stops at the point print() is invoked. A print
-          // dialog may legitimately stay open longer than the load timeout.
-          if (timeout) {
-            clearTimeout(timeout);
-            timeout = null;
+        // The frame's load normally waits for its images; this makes it a
+        // rule rather than a browser habit, since an image added late or
+        // still decoding prints as a blank box.
+        void imagesSettled(frame.contentDocument ?? win.document).then(() => {
+          try {
+            win.focus();
+            // The load watchdog stops at the point print() is invoked. A print
+            // dialog may legitimately stay open longer than the load timeout.
+            if (timeout) {
+              clearTimeout(timeout);
+              timeout = null;
+            }
+            win.print();
+            finish(true);
+          } catch {
+            cleanUp?.();
+            finish(false);
           }
-          win.print();
-          finish(true);
-        } catch {
-          cleanUp?.();
-          finish(false);
-        }
+        });
       };
 
       const doc = frame.contentDocument;
@@ -155,23 +182,17 @@ export const showInPreviewWindow = (
       }
     };
 
-    if (print) win.addEventListener("load", requestPrint, { once: true });
-
     doc.open();
     doc.write(html);
     doc.close();
     win.focus();
 
-    // document.write does not fire `load` in every browser. Do not use a short
-    // blind timer: printing before the logo or pupil photo has loaded puts an
-    // incomplete document in front of the reader. Wait for a complete document,
-    // with a bounded fallback rather than an indefinite one.
-    if (print) {
-      setTimeout(() => {
-        if (win.closed) return;
-        if (win.document?.readyState === "complete") requestPrint();
-      }, 4000);
-    }
+    // Not a `load` listener: one added before document.open() is erased by
+    // it (the open replaces the window's listeners), so the dialog depended
+    // on a fixed 4-second timer — too soon for a slow logo or photo, which
+    // then printed blank, and needlessly late for everything else. Wait for
+    // the images themselves, with a bound.
+    if (print) void imagesSettled(win.document).then(requestPrint);
     return true;
   } catch {
     return false;

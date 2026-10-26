@@ -417,6 +417,17 @@ const row = (subjectId, subjectName, m) => ({
   check("evidence coverage: reviewable, reviewed, multi-reviewed, incomplete, the excluded count, the window, and the evidence-quality limitations as codes with counts",
     [report.evidenceCoverage.reviewable >= 30, report.evidenceCoverage.reviewed >= 30, report.evidenceCoverage.multiReviewed, report.evidenceCoverage.incomplete === report.evidenceCoverage.reviewable - report.evidenceCoverage.reviewed, report.evidenceCoverage.reviewsExcluded, report.evidenceCoverage.window.pilotRunId === real.pilotRunId, report.evidenceCoverage.shortfalls, report.evidenceCoverage.evidenceQualityLimitations.every((l) => ["MISSING_EVIDENCE", "DATA_QUALITY", "CONTEXTUAL_LIMITATION"].includes(l.group) && typeof l.code === "string" && l.reviews >= 3)],
     [true, true, 5, true, 3, true, [], true]);
+  {
+    // A review stamped with the pilot but dated before it opened is outside
+    // its window: the report must exclude it as the snapshot does.
+    const opened = (await M("IntelligencePilot").findById(real.pilotRunId).lean()).createdAt;
+    const one = await M("IntelligenceReview").findOne({ pilotRunId: real.pilotRunId }).lean();
+    await M("IntelligenceReview").updateOne({ _id: one._id }, { $set: { reviewedAt: new Date(opened.getTime() - 60_000) } });
+    const early = (await head.get(`${REAL}/report`)).body.data.evidenceCoverage;
+    await M("IntelligenceReview").updateOne({ _id: one._id }, { $set: { reviewedAt: one.reviewedAt } });
+    check("the report's window starts when the pilot opened: a review dated earlier is excluded, not counted",
+      [early.reviewsRecorded, early.reviewsExcluded], [report.evidenceCoverage.reviewsRecorded - 1, report.evidenceCoverage.reviewsExcluded + 1]);
+  }
   check("review outcomes in the brief's four words plus UNCERTAIN, as counts that add up to the reviews recorded",
     [Object.keys(report.reviewOutcomes), Object.values(report.reviewOutcomes).reduce((a, b) => a + b, 0) === report.evidenceCoverage.reviewsRecorded],
     [["SUPPORTED", "PARTLY_SUPPORTED", "NOT_SUPPORTED", "INSUFFICIENT_EVIDENCE", "UNCERTAIN"], true]);

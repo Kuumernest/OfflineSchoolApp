@@ -681,6 +681,15 @@ router.delete("/:messageId", asyncHandler(async (req, res) => {
   const isAdmin  = policy.principalKind(me) === "admin";
 
   if (!isSender && !isAdmin) {
+    // Somebody outside the conversation is told it does not exist, as every
+    // read route tells them; "you can only delete your own" confirmed that
+    // the message id was real and in their school.
+    const conversation = await Conversation.findOne({
+      _id: message.conversationId, deletedAt: null,
+    }).select("participants").lean();
+    if (!conversation || !policy.isParticipant(me, conversation)) {
+      return res.status(404).json({ success: false, error: "Message not found" });
+    }
     return res.status(403).json({
       success: false,
       error:   "You can only delete your own messages",
@@ -725,6 +734,10 @@ router.post("/:messageId/reactions", asyncHandler(async (req, res) => {
     _id: message.conversationId, deletedAt: null,
   }).lean();
 
+  // Outside the conversation: not found, as on every read route.
+  if (!conversation || !policy.isParticipant(me, conversation)) {
+    return res.status(404).json({ success: false, error: "Message not found" });
+  }
   const verdict = policy.canPostToConversation(me, conversation);
   if (!verdict.allowed) {
     return res.status(403).json({ success: false, error: verdict.reason });
