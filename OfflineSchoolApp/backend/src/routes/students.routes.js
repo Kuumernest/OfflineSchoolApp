@@ -902,9 +902,10 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
 // the answer never says whether the document exists.
 router.get("/applications/:applicationId/documents/:key", asyncHandler(async (req, res) => {
   const applicationId = String(req.params.applicationId || "");
-  let key;
-  try { key = path.basename(decodeURIComponent(String(req.params.key || ""))); }
-  catch { return sendError(res, 404, "Document not found"); }
+  // Express has already decoded the parameter. Decoding it a second time
+  // broke any name with a "%" in it — "100%.pdf" threw, "a%2520b" became
+  // another file's name.
+  const key = path.basename(String(req.params.key || ""));
   if (!applicationId || !key) return sendError(res, 404, "Document not found");
 
   let scope = null;

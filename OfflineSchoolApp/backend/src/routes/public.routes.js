@@ -288,6 +288,18 @@ const fileToDocument = (file, docType = "other") => ({
   mimeType: file.mimetype,
 });
 
+/**
+ * A document as it is saved on the application.
+ *
+ * The stored filename is the document's key, and the one door to the file
+ * (GET /api/students/applications/:id/documents/:key) resolves it against the
+ * uploads directory of whichever machine is serving. The absolute path is kept
+ * in memory only, to clean up after a refused submission: saved, it named a
+ * location on the machine that received the upload, which is wrong after a
+ * move, a restore, or a second server.
+ */
+const storedDocument = ({ path: _onDisk, ...doc }) => doc;
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 5 — CLASS NORMALISER
 // ═════════════════════════════════════════════════════════════════════════════
@@ -681,7 +693,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
       );
     }
 
-    const mergedDocs = [...existingDocs, ...docsToAdd];
+    const mergedDocs = [...existingDocs, ...docsToAdd.map(storedDocument)];
 
     await StudentApplication.findByIdAndUpdate(existing._id, {
       studentName:  studentName.trim(),
@@ -726,7 +738,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     classId:      classId.trim(),
     className:    resolvedName,
     notes:        notes?.trim() || null,
-    documents:    savedDocs,
+    documents:    savedDocs.map(storedDocument),
     status:       "pending",
     schoolId:     schoolId.trim(),
   });
