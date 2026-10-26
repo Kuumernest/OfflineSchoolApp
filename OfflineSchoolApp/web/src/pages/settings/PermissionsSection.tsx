@@ -67,7 +67,7 @@ const EMPTY_ROWS: MatrixRow[] = [];
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PermissionsSection({ schoolId }: { schoolId: string }) {
-  const { t }     = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const qc        = useQueryClient();
 
@@ -249,7 +249,12 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
               const on        = held.has(r.key);
               const isDefault = r.defaults.includes(activeRole);
               const changed   = on !== isDefault;
-              const note      = t(`permissions.note.${r.key}`, { defaultValue: "" });
+              // Only the permissions with something to say carry a note — 30 of
+              // 77. Looked up with an empty default, the rest printed their key
+              // ("permissions.note.fees.view"): i18n/index.ts sets
+              // returnEmptyString: false, which treats "" as no translation.
+              const noteKey   = `permissions.note.${r.key}`;
+              const note      = i18n.exists(noteKey) ? t(noteKey) : "";
 
               return (
                 <li key={r.key} className="flex items-start gap-3 py-3">
