@@ -702,7 +702,13 @@ router.get("/intelligence/calibration", canReport, asyncHandler(async (req, res)
   const rows = [];
   for (const school of schools) {
     const reviews = await IntelligenceReview.find({ schoolId: String(school._id), deletedAt: null })
-      .select("category classifications review reviewedBy engineVersion").lean();
+      .select("category classifications review reviewedBy reviewerRole pilotKind engineVersion").lean();
+    // Rows from before reviewerRole was stamped take the user's role.
+    const unstamped = [...new Set(reviews.filter((r) => !r.reviewerRole).map((r) => String(r.reviewedBy)))];
+    const roleOf = new Map(unstamped.length
+      ? (await User.find({ _id: { $in: unstamped } }).select("role").lean()).map((u) => [String(u._id), u.role])
+      : []);
+    const roleFor = (r) => r.reviewerRole ?? roleOf.get(String(r.reviewedBy)) ?? null;
     const feedback = analyseReviews({
       cases: reviews.map((r, i) => ({
         caseId: `${school._id}#${i}`, category: r.category,
@@ -723,6 +729,12 @@ router.get("/intelligence/calibration", canReport, asyncHandler(async (req, res)
       pilotsClosed: closed,
       reviews:    reviews.length,
       reviewers:  new Set(reviews.map((r) => String(r.reviewedBy))).size,
+      // The same reviews by the exercise they were made in, and the operator's
+      // own — so a school's one synthetic-pilot review does not read as
+      // teacher evidence, and the school page's counts can be reconciled.
+      byKind: reviews.reduce((o, r) => { const k = r.pilotKind ?? "none"; o[k] = (o[k] ?? 0) + 1; return o; },
+        { real: 0, synthetic: 0, development: 0, none: 0 }),
+      operatorReviews: reviews.filter((r) => roleFor(r) === ROLES.SUPER_ADMIN).length,
       engineVersions: [...new Set(reviews.map((r) => r.engineVersion))].sort(),
       byOutcome:  feedback.totals.byOutcome,
       byCategory: reviews.reduce((o, r) => { o[r.category] = (o[r.category] ?? 0) + 1; return o; }, {}),

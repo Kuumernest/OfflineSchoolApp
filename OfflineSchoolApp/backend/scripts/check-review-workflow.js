@@ -357,6 +357,44 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   check("the bursar cannot revise anything", (await bursar.patch(`/insights/reviews/${reviewA._id}`, { version: 2, review: revised })).status, 403);
   check("a review that does not exist → 404", (await teacherA.patch("/insights/reviews/nope", { version: 1, review: revised })).status, 404);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- 7. the operator may review, marked, and outside a pilot's evidence ---");
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  r = await operator.post("/insights/reviews", { ...body(formA), schoolId: A });
+  check("the operator records a review → 201, stamped with their role",
+    [r.status, r.body.data.reviewerRole], [201, "super_admin"]);
+  // A teacher row from before the stamp: its role is read off the user.
+  await IntelligenceReview.updateOne({ _id: reviewB._id }, { $set: { reviewerRole: null } });
+  r = await head.get("/insights/review-cases");
+  const marked = r.body.data.cases.find((c) => c.caseId === decline.caseId).reviews;
+  check("on the sheet it is marked as the operator's, and the teachers' are not",
+    marked.map((v) => [v.reviewedBy, v.operator, v.reviewerRole]).sort(),
+    [["operator", true, "super_admin"], ["teach-a", false, "teacher"], ["teach-b", false, "teacher"]]);
+  const bd = r.body.data.reviewStatus.breakdown;
+  check("the school-wide counts reconcile: on the sheet, off it, off the roll, by exercise, the operator's",
+    [r.body.data.reviewStatus.reviewsRecorded, bd.onSheet, bd.offSheet, bd.offRoll, bd.byKind, bd.operator],
+    [3, 3, 0, 0, { real: 0, synthetic: 0, development: 0, none: 3 }, 1]);
+  check("a teacher's class-scoped sheet carries no off-roll count",
+    (await teacherA.get("/insights/review-cases")).body.data.reviewStatus.breakdown.offRoll, null);
+  r = await operator.get(`/super-admin/intelligence/calibration?schoolId=${A}`);
+  check("the cross-school row says how many are the operator's and which exercise they were in",
+    [r.body.schools[0].reviews, r.body.schools[0].operatorReviews, r.body.schools[0].byKind],
+    [3, 1, { real: 0, synthetic: 0, development: 0, none: 3 }]);
+  // Inside a pilot window the operator's review is not evidence.
+  await IntelligenceReview.updateMany({ schoolId: A }, { $set: { pilotRunId: "pilot-x", pilotKind: "real" } });
+  const reviewCases = require(path.join(SRC, "services/intelligence/reviewCases.service"));
+  const pkg = await reviewCases.reviewPackage({ schoolId: A, classIds: null }, { userId: null, role: "school_admin" }, { pilotRunId: "pilot-x" });
+  check("a pilot's evidence counts the two teachers and leaves the operator's review out, saying so",
+    [pkg.reviewStatus.reviewsRecorded, pkg.reviewStatus.reviewers, pkg.window.operator, pkg.window.excluded], [2, 2, 1, 1]);
+  check("an off-roll pupil's review is counted as such, not lost",
+    await (async () => {
+      await mongoose.connection.collection("students").updateOne({ _id: "st-a1" }, { $set: { deletedAt: new Date() } });
+      const s = (await head.get("/insights/review-cases")).body.data.reviewStatus;
+      await mongoose.connection.collection("students").updateOne({ _id: "st-a1" }, { $set: { deletedAt: null } });
+      return [s.reviewsRecorded, s.breakdown.offRoll];
+    })(), [0, 3]);
+
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);
 
