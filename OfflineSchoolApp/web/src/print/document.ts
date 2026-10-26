@@ -158,11 +158,12 @@ export const openPreviewWindow = (): Window | null => {
  * the caller can say the card was not shown instead of counting it as success.
  * `print` asks for the print dialog once the document has loaded; it never
  * claims the dialog appeared, because the browser does not tell us.
+ * `onPrint` runs once print() has been invoked, and not if it never was.
  */
 export const showInPreviewWindow = (
   win: Window,
   html: string,
-  { print = true }: { print?: boolean } = {}
+  { print = true, onPrint }: { print?: boolean; onPrint?: () => void } = {}
 ): boolean => {
   if (!win || win.closed) return false;
 
@@ -177,6 +178,7 @@ export const showInPreviewWindow = (
       try {
         win.focus();
         win.print();
+        onPrint?.();
       } catch {
         // The preview is still readable; the reader can print from it.
       }

@@ -1147,6 +1147,7 @@
     "reissueRevived": "Bulletin restauré et remplacé par une nouvelle copie.",
     "reissueDone": "Bulletin réédité — la copie des parents reflète désormais les notes actuelles.",
     "reissueFailed": "La réédition a échoué.",
+    "reissueNotIssued": "Aucune copie remise à remplacer pour l’instant : un bulletin est archivé la première fois qu’il est imprimé après la publication des résultats.",
     "noStudents": "Aucun élève dans cette classe.",
     "printOne": "Aperçu et impression du bulletin",
     "printAll": "Aperçu de {{count}} bulletin",

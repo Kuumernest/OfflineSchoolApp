@@ -283,6 +283,8 @@ router.get(
         cardVerification({
           data, schoolId, studentId: req.params.studentId,
           documentKey: periodDocumentKey(data), req,
+          // Only an actual print (?issue=1) counts; a preview shows the code.
+          count: req.query.issue === "1" || req.query.issue === "true",
         }),
         reportLayout.currentLayout(schoolId),
       ]);

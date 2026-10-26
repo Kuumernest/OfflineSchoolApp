@@ -779,10 +779,11 @@ async function loadSchoolForCard(schoolId, req) {
  * @param {string} p.studentId
  * @param {string} p.documentKey  what stands in for the exam id
  * @param {object} p.req        for the origin the QR points at
+ * @param {boolean} [p.count]   false for a preview: show the code, count no print
  * @returns {Promise<{code, url, qrSvg}|null>} null if a code cannot be issued —
  *   a document that cannot get its QR is still a valid document
  */
-async function cardVerification({ data, schoolId, studentId, documentKey, req }) {
+async function cardVerification({ data, schoolId, studentId, documentKey, req, count = true }) {
   if (!schoolId) return null;
 
   /*
@@ -819,6 +820,7 @@ async function cardVerification({ data, schoolId, studentId, documentKey, req })
   })();
 
   return docVerify.printableBlock({
+    count,
     schoolId: String(schoolId),
     kind:     "report_card",
     studentId: String(studentId),
