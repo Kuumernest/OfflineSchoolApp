@@ -246,6 +246,7 @@ const _openDatabase = async () => {
         code         TEXT,
         teacher_id   TEXT,
         teacher_name TEXT,
+        coefficient  REAL DEFAULT NULL,
         is_active    INTEGER DEFAULT 1,
         deleted_at   TEXT,
         created_at   TEXT,

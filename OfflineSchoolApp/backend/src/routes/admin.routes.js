@@ -1656,7 +1656,9 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
     const teacher = subjectTeacherMap.get(String(s._id)) || null;
 
     return {
-      ...s,
+      // normaliseSubject, so a subject from before the coefficient field lists
+      // as 1 here as it does on every other read, rather than as nothing.
+      ...normaliseSubject(s),
       class:    canonicalClassId,
       classId:  canonicalClassId,
       classObj: classRecord
