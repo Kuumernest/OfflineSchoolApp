@@ -31,8 +31,17 @@ const { cascadeCoefficient, coefficientOf } =
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch((err) => next(err));
 
+// Documents inside any payload leave as their presentation — title, type and
+// a signed, short-lived link — exactly as the students router sends them.
+// This router answered the console's and the phone's admissions screens with
+// the stored record instead: a /uploads/applications URL that server.js
+// closes to everyone, and the file's path on the server's disk. Opening either
+// failed, so staff could not preview any document an applicant had sent.
 const sendSuccess = (res, data, status = 200) =>
-  res.status(status).json({ success: true, ...data });
+  res.status(status).json({
+    success: true,
+    ...require("../utils/applicationDocuments").redactDocumentsDeep(res.req, data),
+  });
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
@@ -198,6 +207,7 @@ const parseCoefficient = (raw) => {
 // a local mirror when there is no connection and must return the identical
 // shape. See OfflineSchoolApp/shared/students.js for why it is not copied.
 const { normaliseStudentDoc } = require("../../../shared/students");
+const { nextAdmissionNo } = require("../services/admissionNumber.service");
 
 // ─── Multi-collection student helpers ────────────────────────────────────────
 
@@ -1656,7 +1666,9 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
     const teacher = subjectTeacherMap.get(String(s._id)) || null;
 
     return {
-      ...s,
+      // normaliseSubject, so a subject from before the coefficient field lists
+      // as 1 here as it does on every other read, rather than as nothing.
+      ...normaliseSubject(s),
       class:    canonicalClassId,
       classId:  canonicalClassId,
       classObj: classRecord
@@ -2285,47 +2297,9 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
   let enrollmentNo = existingEnrollmentNo;
 
   if (!enrollmentNo) {
-    const school     = await School.findById(resolvedSchoolId).lean().catch(() => null);
-    const schoolCode =
-      school?.code?.trim().toUpperCase().slice(0, 5) ||
-      (resolvedSchoolId || "SCH")
-        .replace(/[^A-Z0-9]/gi, "")
-        .slice(0, 3)
-        .toUpperCase() ||
-      "SCH";
-    const year   = new Date().getFullYear();
-    const prefix = `${schoolCode}/${year}/`;
-
-    // Highest existing sequence across both collections AND both identifier
-    // fields.
-    //
-    // This used to search `admissionNo` only. Records exist whose number lives
-    // solely in `enrollmentNo` — students approved before the two fields were
-    // written together — and they were invisible here, so the generator would
-    // hand out a number that was already in use and the approval would then
-    // fail on the unique index. Matching on either field is what stops that.
-    const numberQuery = {
-      $or: [
-        { admissionNo:  { $regex: `^${prefix}` } },
-        { enrollmentNo: { $regex: `^${prefix}` } },
-      ],
-    };
-
-    const [studentRows, appRows] = await Promise.all([
-      S   ? S.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => [])   : [],
-      App ? App.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => []) : [],
-    ]);
-
-    let nextSeq = 1;
-    for (const row of [...studentRows, ...appRows]) {
-      for (const value of [row.admissionNo, row.enrollmentNo]) {
-        if (!value || !String(value).startsWith(prefix)) continue;
-        const seq = parseInt(String(value).slice(prefix.length), 10);
-        if (!isNaN(seq) && seq >= nextSeq) nextSeq = seq + 1;
-      }
-    }
-
-    enrollmentNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+    // The same generator as every other admission path, so an applicant and a
+    // pupil added directly get numbers of one shape from one sequence.
+    enrollmentNo = await nextAdmissionNo(resolvedSchoolId);
     console.log(`[approve] Generated enrollment number: ${enrollmentNo}`);
   }
 
@@ -2729,7 +2703,16 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
   );
   if (!student) return sendError(res, 404, "Student not found");
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: "Student restored",
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
@@ -2783,14 +2766,17 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   if (!student) return sendError(res, 404, "Student not found");
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // Joining a class mid-year is joining its fees. Active structures covering
-  // the destination class apply now; anything the student was already billed
-  // for (including by a structure that covers both old and new class) is
-  // skipped by the unique index. Never throws.
+  // Joining a class mid-year is joining its fees. The old class's charges for
+  // the year are voided (payments stay with the student and count against the
+  // new ones), and active structures covering the destination class apply
+  // now; anything the student was already billed for (including by a
+  // structure that covers both old and new class) is skipped by the unique
+  // index. Never throws.
   const billing = await billStudentForClass({
     schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
     student:  { _id: student._id, classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2803,6 +2789,7 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
     // definition and the reply has to carry the new class's name.
     message: "Student moved to new class",
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));
@@ -2847,46 +2834,8 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
     return sendSuccess(res, { enrollmentNo: existing });
   }
 
-  // Generate a new one
-  const school     = await School.findById(resolvedSchoolId).lean().catch(() => null);
-  const schoolCode =
-    school?.code?.trim().toUpperCase().slice(0, 5) ||
-    (resolvedSchoolId || "SCH")
-      .replace(/[^A-Z0-9]/gi, "")
-      .slice(0, 3)
-      .toUpperCase() ||
-    "SCH";
-  const year   = new Date().getFullYear();
-  const prefix = `${schoolCode}/${year}/`;
-
-  const latestNos = await Promise.all([
-    S
-      ? S.find({ admissionNo: { $regex: `^${prefix}` } })
-          .sort({ admissionNo: -1 })
-          .limit(1)
-          .lean()
-          .catch(() => [])
-      : [],
-    App
-      ? App.find({ admissionNo: { $regex: `^${prefix}` } })
-          .sort({ admissionNo: -1 })
-          .limit(1)
-          .lean()
-          .catch(() => [])
-      : [],
-  ]);
-
-  let nextSeq = 1;
-  for (const results of latestNos) {
-    if (results.length > 0) {
-      const last  = results[0].admissionNo || "";
-      const parts = last.split("/");
-      const seq   = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(seq) && seq >= nextSeq) nextSeq = seq + 1;
-    }
-  }
-
-  const enrollmentNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  // Generate a new one — services/admissionNumber.service.js, as everywhere.
+  const enrollmentNo = await nextAdmissionNo(resolvedSchoolId);
 
   // Persist it to whichever collection the student is in
   const updateFields = {

@@ -766,7 +766,22 @@
     "nothingUnread": "Nothing was left unread.",
     "removeBody": "“{{title}}” will disappear for everyone who can currently see it.",
     "none": "No announcements yet",
-    "noneHint": "Post one to reach staff, students, or a particular class."
+    "noneHint": "Post one to reach staff, students, or a particular class.",
+    "countLine": "{{count}} posted · pinned notices appear first",
+    "countLine_other": "{{count}} posted · pinned notices appear first",
+    "byAuthor": "by {{name}}",
+    "audienceOpt": {
+      "all": "Everyone",
+      "teachers": "Teachers only",
+      "students": "Students only",
+      "class": "Specific classes"
+    },
+    "priorityOpt": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    }
   },
   "timetable": {
     "title": "Timetable",
@@ -1368,6 +1383,7 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "justNow": "Just now",
     "title": "Notifications",
     "readAll": "Read all",
     "none": "No notifications yet",
@@ -3169,6 +3185,8 @@
     "waitingBody": "{{count}} change(s) recorded on this computer have not been sent yet. They will go as soon as there is a connection.",
     "offline": "Offline",
     "offlineBody": "The school's server cannot be reached. Work carries on here and is sent when the connection returns.",
+    "error": "Sync error",
+    "errorBody": "The server answered with an error, so nothing new was received. It is tried again automatically.",
     "syncing": "Syncing",
     "blocked": "{{count}} need attention",
     "needsAttention": "Refused by the server",
@@ -3178,6 +3196,16 @@
     "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
     "syncNow": "Check now",
     "lastChecked": "Last checked at {{time}}"
+  },
+  "initialSync": {
+    "loadingTitle": "Downloading your school's data to this computer…",
+    "loadingBody": "The first time can take a few minutes, and about a minute longer if the server was asleep. Lists stay empty until it finishes.",
+    "failedTitle": "Your school's data has not been downloaded to this computer yet",
+    "failedOffline": "The server could not be reached. Empty lists here do not mean the data is gone — it is still on the server.",
+    "failedSession": "This computer's session with the server has ended. Sign out and sign in again, then try again.",
+    "failedError": "The server answered with an error. Empty lists here do not mean the data is gone — it is still on the server.",
+    "logFile": "Details are in {{path}}",
+    "retry": "Try again"
   },
   "academicStructure": {
     "title": "Academic Structure",
@@ -3548,7 +3576,7 @@
       "insufficient_evidence": "Insufficient evidence"
     },
     "category": {
-      "borderline_threshold": "Borderline: one mark either way changes the answer",
+      "borderline_threshold": "Borderline: one mark on a threshold adds or removes a classification",
       "declining": "Decline",
       "sudden_change": "Sudden change",
       "weak_and_persistent": "Weak and persistent",
@@ -3557,7 +3585,7 @@
       "trend_on_variable_subject": "Trend on a variable subject",
       "strong_but_recent": "Strong, but recent",
       "emerging_strength": "Emerging strength",
-      "insufficient_evidence": "Insufficient evidence",
+      "insufficient_evidence": "Too little history to conclude",
       "volatile": "Volatile",
       "strong_and_stable": "Strong and stable",
       "absence_heavy": "Many absences",
@@ -3566,7 +3594,7 @@
       "with_intervention": "With an intervention"
     },
     "reason": {
-      "borderline_threshold": "one mark either way would change what the system says",
+      "borderline_threshold": "moving one threshold by a single mark changes what the system says — the line below names which classification",
       "declining": "the system reads a fall — is it the student, or the paper?",
       "sudden_change": "the latest step is large — is it a genuine change?",
       "weak_and_persistent": "several marks below the pass mark — is the picture right?",
@@ -3574,8 +3602,8 @@
       "cross_subject_strength": "several subjects strong together — the system names them and claims no domain",
       "trend_on_variable_subject": "a trend read on a subject whose marks swing — is the trend real?",
       "strong_but_recent": "strong, on little history — too early to say so?",
-      "emerging_strength": "the first signs of a strength — is it there?",
-      "insufficient_evidence": "the system declined to conclude — was that right?",
+      "emerging_strength": "strong on three or more marks, but not on every one — is the strength there?",
+      "insufficient_evidence": "the system declined to conclude for lack of published marks — was that right?",
       "volatile": "marks that swing widely — is any reading sound here?",
       "strong_and_stable": "strong and steady — does that match the student?",
       "absence_heavy": "many absences — did they distort the reading?",
@@ -3588,9 +3616,9 @@
       "partially_confirmed": "Partially confirmed",
       "rejected": "Not supported",
       "uncertain": "Uncertain",
-      "unreviewed": "Unreviewed",
+      "unreviewed": "Submitted without a verdict",
       "partially_appropriate": "Partly supported",
-      "insufficient_evidence": "Insufficient evidence"
+      "insufficient_evidence": "Reviewer: evidence not enough to judge"
     },
     "pattern": {
       "DATA_QUALITY_OFTEN_CITED": "Reviewers often pointed at the data rather than the rule",
@@ -3605,7 +3633,7 @@
       "reviewers": "{{n}} reviewers",
       "agree": "{{n}} agree",
       "differ": "{{n}} differ",
-      "byCategory": "By category (reviewed / cases, several)",
+      "byCategory": "By category (reviewed / cases sampled — up to {{n}} per category, several)",
       "catCounts": "{{r}} / {{c}}, {{m}} with several",
       "byOutcome": "How reviewers answered",
       "sharesWithheld": "Too few reviews for shares to mean anything; counts only.",
@@ -3633,7 +3661,7 @@
       "p4": "Disagreement is valuable evidence. If the system is wrong about a student you know, say so — that is exactly what this exercise is for.",
       "p5": "Review independently. You will not see what colleagues answered until you have submitted your own review; please do not discuss a case before then.",
       "p6": "Where the problem is the data rather than the rule — a missing result, a hard paper, an absence — tick the data-quality codes. They are counted separately.",
-      "p7": "Nobody has told the system it is expected to be right. It is being tested."
+      "p7": "The system is on trial here. Do not assume it is right: check each conclusion against what you know of the student."
     },
     "pilot": {
       "heading": "Validation pilot",
@@ -3986,6 +4014,30 @@
       "pending": "The school analysis is being prepared. This page will update by itself when it is ready.",
       "stillPending": "The school analysis is taking longer than usual. Reload the page to check again.",
       "failed": "The school analysis could not be completed. The head or the platform operator can retry it."
+    },
+    "noRegNo": "No registration number",
+    "borderline": {
+      "drop": "One mark would remove “{{code}}” ({{moves}}).",
+      "add": "One mark would add “{{code}}” ({{moves}})."
+    },
+    "restsOn": "Rests on: {{subjects}}. Other subjects can still be declining.",
+    "related": {
+      "subject": "{{subject}} is also on this sheet as: {{categories}}. Each is a separate question about the same marks.",
+      "student": "This student is also on this sheet as: {{categories}}."
+    },
+    "subjectRecords": "{{subject}} is recorded as {{n}} separate subjects (likely a class change); the marks here are from one record only.",
+    "operatorReview": "Platform operator — not teacher evidence",
+    "ledger": {
+      "onSheet": "{{n}} on today's cases",
+      "offSheet": "{{n}} on cases no longer on the sheet",
+      "offRoll": "{{n}} on students no longer on the roll (not counted above)",
+      "kind": {
+        "real": "{{n}} in a real pilot",
+        "synthetic": "{{n}} in a synthetic pilot",
+        "development": "{{n}} in a development pilot",
+        "none": "{{n}} outside any pilot"
+      },
+      "operator": "{{n}} by the platform operator (never pilot evidence)"
     }
   },
   "strengths": {

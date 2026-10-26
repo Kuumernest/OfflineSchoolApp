@@ -292,6 +292,38 @@ check("no case carries a name, phone, email or balance",
 check("the thresholds a case names are real thresholds with their current values",
   cases.flatMap((c) => c.thresholdsInvolved).every((t) =>
     t.value === (t.threshold === "passMark" || t.threshold === "strongMark" ? report.evidence.grading[t.threshold] : prod[t.threshold])), true);
+check("the sheet samples at most three cases per category, and says so",
+  [report.reviewCases.maxPerCategory, Math.max(...Object.values(report.reviewCases.coverage))], [3, 3]);
+check("one subject is never both 'strong, but recent' and 'emerging strength'",
+  cases.filter((c) => c.category === "emerging_strength").filter((c) =>
+    cases.some((o) => o.category === "strong_but_recent" && o.studentId === c.studentId && o.subjectId === c.subjectId)), []);
+check("no pupil, category and subject name appears twice",
+  (() => { const k = cases.map((c) => `${c.category}|${c.studentId}|${String(c.subjectName ?? "-").toLowerCase()}`); return k.length - new Set(k).size; })(), 0);
+check("a borderline case names the classification one mark moves, and whether it is claimed today",
+  cases.filter((c) => c.category === "borderline_threshold").every((c) =>
+    c.borderline.length > 0 && c.borderline.every((b) => typeof b.code === "string" && typeof b.claimed === "boolean" && b.flipsUnder.length > 0)), true);
+check("each case lists the other categories its pupil and subject are on the sheet under",
+  cases.every((c) => Array.isArray(c.related) && c.related.every((k) =>
+    cases.some((o) => o.category === k && o.studentId === c.studentId && o.subjectId === c.subjectId))), true);
+{
+  // One pupil with many subjects must not fill the sheet: give S01 ten copies
+  // of each of its subjects and check it still takes at most one case per
+  // category while another pupil has a candidate there.
+  const heavy = clone(synthetic);
+  for (const r of heavy.results.filter((x) => x.studentId === "S01")) {
+    const extra = [];
+    for (let i = 0; i < 10; i++) for (const s of r.subjects) extra.push({ ...s, subjectId: `${s.subjectId}${i}`, subjectName: `${s.subjectName} ${i}` });
+    r.subjects.push(...extra);
+  }
+  const all = analysis.analyse(heavy, { maxPerCategory: Infinity }).reviewCases.cases;
+  const sampled = analysis.analyse(heavy).reviewCases.cases;
+  const crowded = Object.keys(report.reviewCases.coverage).filter((k) => {
+    const pool = all.filter((c) => c.category === k);
+    const others = new Set(pool.filter((c) => c.studentId !== "S01").map((c) => c.studentId)).size;
+    return sampled.filter((c) => c.category === k && c.studentId === "S01").length > Math.max(1, 3 - others);
+  });
+  check("a pupil with many subjects cannot fill a category other pupils could share", crowded, []);
+}
 check("provenance is carried into the report so synthetic can never read as evidence",
   report.provenance.kind, "synthetic");
 check("and the markdown says so in its first lines",

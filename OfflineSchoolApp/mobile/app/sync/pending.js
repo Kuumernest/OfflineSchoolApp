@@ -97,7 +97,7 @@ export default function PendingChangesScreen() {
       // force: the user tapped "sync now". Without it the global 15 s gap
       // could reject the call and the button would appear to do nothing.
       await SyncManager.ensureStarted();
-      await SyncManager.syncAll({ force: true });
+      await SyncManager.syncAll({ force: true, full: true });
     } catch (err) {
       console.warn("[pending] sync failed:", err.message);
     } finally {

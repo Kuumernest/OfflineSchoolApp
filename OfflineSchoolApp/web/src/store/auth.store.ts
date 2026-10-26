@@ -391,6 +391,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           hasInitialized:  true,
           error:           null,
         });
+        // The desktop keeps its token in memory only, so after a restart it has
+        // none until it is told again. Without this a reopened desktop showed
+        // the signed-in screens over a mirror that never synced.
+        tellDesktop(token, user);
         return true;
       }
 
@@ -451,6 +455,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     storage.setItem("activeSchool", JSON.stringify(school));
     storage.setItem("user", JSON.stringify(user));
     set({ activeSchool: school, user });
+    // The desktop syncs a super_admin's data only for the school they are in.
+    tellDesktop(get().token, user);
   },
 
   leaveSchool: () => {
@@ -463,6 +469,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const user: AuthUser = { ...current, schoolId: "", schoolName: undefined, school: null };
     storage.setItem("user", JSON.stringify(user));
     set({ activeSchool: null, user });
+    tellDesktop(get().token, user);
   },
 
   // ── setUser ────────────────────────────────────────────────────────────────

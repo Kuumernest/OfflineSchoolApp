@@ -5,6 +5,12 @@ const Counter     = require("../db/models/Counter");
 const FeeCharge   = require("../db/models/FeeCharge");
 const FeePayment  = require("../db/models/FeePayment");
 const FeeStructure = require("../db/models/FeeStructure");
+const School       = require("../db/models/School");
+const Student      = require("../db/models/Student");
+const { yearKey, yearForms } = require("./rankingScope.service");
+
+/** What a late fee is raised as (feeReminders.service PENALTY_CODE). */
+const LATE_CODE = "LATE";
 
 /**
  * Everything that knows how a balance is calculated.
@@ -202,36 +208,101 @@ const applyStructure = async ({ structure, students, raisedBy }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Bill one student from every active structure that covers their class.
+ * The school's current academic year, as School.settings.academicYear keeps it
+ * ("2026/2027"; "2026-2027" is the same year), or null when none is set.
+ *
+ * Nothing is billed automatically without one. Guessing the year from the
+ * calendar would bill a family for the wrong year's price list, and an unset
+ * year is something the office can see and fix; a wrong bill is not.
+ */
+const currentYearOf = async (schoolId) => {
+  const school = await School.findById(schoolId).select("settings.academicYear").lean().catch(() => null);
+  const year   = yearKey(school?.settings?.academicYear);
+  return year || null;
+};
+
+const voidCharges = async (filter, { by, reason }) => {
+  const res = await FeeCharge.updateMany(
+    { ...filter, voidedAt: null, deletedAt: null, code: { $ne: LATE_CODE } },
+    { $set: { voidedAt: new Date(), voidedBy: by ?? null, voidReason: reason } }
+  );
+  return res.modifiedCount ?? 0;
+};
+
+/**
+ * Bill one student from every active structure that covers their class, for
+ * the school's CURRENT academic year.
  *
  * A structure is applied from a button, to the approved students who exist at
- * that moment. Anyone admitted — or moved into a class — afterwards missed it,
- * and their account stayed at zero until a bursar noticed and re-applied the
- * structure by hand. This closes that gap: every entry point that puts a
- * student into a class calls this.
+ * that moment. Anyone admitted, approved, restored or moved into a class
+ * afterwards missed it. Every entry point that puts a student into a class
+ * calls this, so the class's fees follow the student in. Full amounts: a
+ * student who joins mid-year owes the class's fees like everyone in it, and an
+ * individual reduction is a waiver, which has an approval behind it.
  *
- * Self-limiting, not new arithmetic: it reuses applyStructure(), whose unique
- * (studentId, structureId, code, term) index means a student already billed by
- * a structure is not billed again by it. A structure that covers several
- * classes bills the student's own class items exactly as the button would.
+ * Only the current year's structures. Structures are not switched off when a
+ * year ends, so "every active structure for this class" also meant last
+ * year's, and a newcomer could be billed for a year they were never here.
  *
- * Never throws: a billing failure must not fail an admission. Whatever goes
- * wrong is logged and reported in the returned counts instead.
+ * Only an approved student. The callers all approve first, but the rule lives
+ * here so a new caller cannot bill an applicant.
  *
- * @returns {Promise<{structures:number, raised:number, skipped:number}>}
+ * leavingOtherClasses (a transfer): the student's charges for the year from
+ * class structures that do NOT cover the new class are voided first. Charges
+ * from a school-wide structure stay (it bills the new class too), and so do
+ * late fees, which were earned. Payments are untouched: they belong to the
+ * student and the year, not to a charge, so what was paid counts against the
+ * new class's fees.
+ *
+ * Self-limiting: applyStructure()'s unique (studentId, structureId, code, term)
+ * index means a student already billed by a structure is not billed again by
+ * it, so replays and double submissions raise nothing.
+ *
+ * Never throws: a billing failure must not fail an admission or a move.
+ *
+ * @returns {Promise<{structures:number, raised:number, skipped:number, voided:number, reason?:string, error?:string}>}
  */
-const applyActiveStructuresForStudent = async ({ schoolId, student, raisedBy }) => {
-  const classId   = student?.classId ?? null;
-  const studentId = student?._id     ? String(student._id) : null;
-  if (!schoolId || !studentId || !classId) {
-    return { structures: 0, raised: 0, skipped: 0 };
-  }
+const applyActiveStructuresForStudent = async ({ schoolId, student, raisedBy, leavingOtherClasses = false }) => {
+  const none      = { structures: 0, raised: 0, skipped: 0, voided: 0 };
+  const classId   = student?.classId ? String(student.classId) : null;
+  const studentId = student?._id     ? String(student._id)     : null;
+  if (!schoolId || !studentId || !classId) return none;
 
   try {
+    const row = await Student.findOne({ _id: studentId, schoolId: String(schoolId) })
+      .select("status deletedAt").lean();
+    if (!row || row.deletedAt || row.status !== "approved") {
+      return { ...none, reason: "NOT_APPROVED" };
+    }
+
+    const year = await currentYearOf(schoolId);
+    if (!year) {
+      console.warn(`[fees] No current academic year for school ${schoolId}: student ${studentId} not billed`);
+      return { ...none, reason: "NO_CURRENT_YEAR" };
+    }
+
+    let voided = 0;
+    if (leavingOtherClasses) {
+      const elsewhere = await FeeStructure.find({
+        schoolId,
+        academicYear: { $in: yearForms(year) },
+        deletedAt:    null,
+        "classIds.0": { $exists: true },   // class structures only, never school-wide
+        classIds:     { $ne: classId },
+      }).select("_id").lean();
+      if (elsewhere.length) {
+        voided = await voidCharges(
+          { schoolId, studentId, structureId: { $in: elsewhere.map((x) => String(x._id)) } },
+          { by: raisedBy, reason: "Moved to another class" }
+        );
+      }
+    }
+
     const structures = await FeeStructure.find({
       schoolId,
-      isActive:  true,
-      deletedAt: null,
+      academicYear: { $in: yearForms(year) },
+      isActive:     true,
+      deletedAt:    null,
       $or: [
         { classIds: classId },        // a structure naming this class
         { classIds: { $size: 0 } },   // an empty list means school-wide
@@ -250,17 +321,61 @@ const applyActiveStructuresForStudent = async ({ schoolId, student, raisedBy }) 
       skipped += result.skipped;
     }
 
-    if (raised > 0) {
+    if (raised > 0 || voided > 0) {
       console.log(
-        `[fees] ${raised} charge(s) raised for student ${studentId} ` +
-        `from ${structures.length} active structure(s)`
+        `[fees] Student ${studentId}: ${raised} charge(s) raised from ` +
+        `${structures.length} structure(s) for ${year}` +
+        (voided ? `, ${voided} charge(s) from the previous class voided` : "")
       );
     }
-    return { structures: structures.length, raised, skipped };
+    return { structures: structures.length, raised, skipped, voided };
   } catch (err) {
     console.warn(`[fees] Auto-billing student ${studentId} failed:`, err.message);
-    return { structures: 0, raised: 0, skipped: 0, error: err.message };
+    return { ...none, error: err.message };
   }
+};
+
+/**
+ * Applying a replacement structure voids what the one it replaces charged.
+ *
+ * A price list cannot be edited once published: the school deactivates it and
+ * publishes a corrected one. Applying the new one used to leave the old one's
+ * charges standing, so the class owed both. Now, for each student this apply
+ * covers, the charges from an INACTIVE structure for the same year and term
+ * that billed the same student's class (class-specific for class-specific,
+ * school-wide for school-wide) are voided. Payments are untouched and count
+ * against the new charges. Late fees stay.
+ *
+ * @returns {Promise<number>} charges voided
+ */
+const voidReplacedCharges = async ({ structure, students, by }) => {
+  const schoolWide = !(structure.classIds ?? []).length;
+  const replaced = await FeeStructure.find({
+    schoolId:     structure.schoolId,
+    academicYear: { $in: yearForms(structure.academicYear) },
+    term:         structure.term ?? null,
+    _id:          { $ne: String(structure._id) },
+    isActive:     false,
+    deletedAt:    null,
+    ...(schoolWide ? { classIds: { $size: 0 } } : { "classIds.0": { $exists: true } }),
+  }).lean();
+  if (!replaced.length) return 0;
+
+  let voided = 0;
+  for (const old of replaced) {
+    const covered = students.filter((s) =>
+      schoolWide || (old.classIds ?? []).includes(String(s.classId)));
+    if (!covered.length) continue;
+    voided += await voidCharges(
+      {
+        schoolId:    structure.schoolId,
+        structureId: String(old._id),
+        studentId:   { $in: covered.map((s) => String(s._id)) },
+      },
+      { by, reason: "Replaced by a new fee structure" }
+    );
+  }
+  return voided;
 };
 
 /**
@@ -313,5 +428,7 @@ module.exports = {
   balancesFor,
   applyStructure,
   applyActiveStructuresForStudent,
+  voidReplacedCharges,
+  currentYearOf,
 };
 

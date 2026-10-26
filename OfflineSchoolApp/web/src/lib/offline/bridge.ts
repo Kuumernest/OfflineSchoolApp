@@ -39,7 +39,11 @@ export interface OutboxSummary {
 }
 
 export interface SyncStatus {
-  phase:       "idle" | "pushing" | "pulling" | "offline" | "blocked" | "unauthenticated";
+  phase:       "idle" | "pushing" | "pulling" | "offline" | "error" | "blocked" | "unauthenticated";
+  /** "done" once a full pull has finished for this server and school. */
+  initialSync?: "pending" | "done";
+  /** The last pull stopped at the page ceiling; the next cycle continues it. */
+  morePending?: boolean;
   lastCycleAt: string | null;
   lastError:   string | null;
   pushed:      number;
@@ -69,6 +73,7 @@ export interface DesktopInfo {
   node:          string;
   deviceCode:    string;
   dataDirectory: string;
+  logFile?:      string;
   schemaVersion: number;
 }
 

@@ -95,13 +95,14 @@ const STATUS_VARIANT: Record<
 };
 
 function StatusPill({ status }: { status?: string }) {
-  const label = status ?? "unknown";
+  const { t } = useTranslation();
+  const key   = (status ?? "unknown").toLowerCase();
   return (
     <Badge
-      variant={STATUS_VARIANT[label.toLowerCase()] ?? "default"}
-      className="shrink-0 capitalize"
+      variant={STATUS_VARIANT[key] ?? "default"}
+      className="shrink-0"
     >
-      {label}
+      {t(`examStatus.${key}`, { defaultValue: status ?? key })}
     </Badge>
   );
 }

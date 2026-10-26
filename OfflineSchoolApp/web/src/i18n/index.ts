@@ -19,6 +19,8 @@
 import i18n                from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector     from "i18next-browser-languagedetector";
+import { formatDistanceToNow, type Locale } from "date-fns";
+import { enGB, fr as frDates }  from "date-fns/locale";
 
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
@@ -96,5 +98,16 @@ i18n.on("languageChanged", syncDocumentLanguage);
 export const currentLocale = (): string =>
   SUPPORTED_LANGUAGES.find((l) => l.code === i18n.resolvedLanguage)?.locale ??
   "en-CM";
+
+/**
+ * The date-fns locale for the active language. date-fns writes English unless
+ * it is handed one, so "about 2 months ago" showed on a French console.
+ */
+export const dateLocale = (): Locale =>
+  i18n.resolvedLanguage === "fr" ? frDates : enGB;
+
+/** "3 months ago" / "il y a 3 mois", in the console's language. */
+export const timeAgo = (date: string | number | Date): string =>
+  formatDistanceToNow(new Date(date), { addSuffix: true, locale: dateLocale() });
 
 export default i18n;

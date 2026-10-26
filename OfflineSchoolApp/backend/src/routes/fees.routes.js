@@ -23,6 +23,7 @@ const {
   balanceFor,
   balancesFor,
   applyStructure,
+  voidReplacedCharges,
 } = require("../services/fees.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
@@ -279,19 +280,23 @@ router.post("/structures/:id/apply", canWrite, asyncHandler(async (req, res) => 
     return bad(res, "No approved students match those classes", "NO_STUDENTS");
   }
 
-  const result = await applyStructure({
-    structure,
-    students,
-    raisedBy: req.user?._id ? String(req.user._id) : null,
-  });
+  const raisedBy = req.user?._id ? String(req.user._id) : null;
+  const result = await applyStructure({ structure, students, raisedBy });
+
+  // A replacement: what the deactivated structure it replaces charged these
+  // students for the same year and term is voided, so the class does not owe
+  // both price lists. Payments stay and count against the new charges.
+  const voided = await voidReplacedCharges({ structure, students, by: raisedBy });
 
   return res.status(201).json({
     success:  true,
     students: students.length,
     ...result,
-    message: result.skipped
+    voided,
+    message: (result.skipped
       ? `${result.raised} charge(s) raised; ${result.skipped} already existed and were left alone.`
-      : `${result.raised} charge(s) raised.`,
+      : `${result.raised} charge(s) raised.`) +
+      (voided ? ` ${voided} charge(s) from the structure it replaces were voided.` : ""),
   });
 }));
 

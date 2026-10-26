@@ -225,38 +225,8 @@ const sendEmailSafe = async ({ to, template, data, context = "" }) => {
 // SECTION 2 — ENROLLMENT NUMBER HELPERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-const resolveSchoolCode = async (schoolId) => {
-  if (!schoolId) return "SCH";
-  try {
-    const School = getSchoolModel();
-    if (School) {
-      const school = await School.findById(schoolId).select("code").lean();
-      if (school?.code) return school.code.trim().toUpperCase().slice(0, 5);
-    }
-  } catch (err) {
-    console.warn("[resolveSchoolCode] failed:", err.message);
-  }
-  return String(schoolId).replace(/[^A-Z0-9]/gi, "").slice(0, 3).toUpperCase() || "SCH";
-};
-
-const buildEnrollmentNo = async (schoolCode, year) => {
-  const prefix = `${schoolCode}-${year}-`;
-
-  const last = await User.findOne(
-    { enrollmentNo: { $regex: `^${escapeRegex(prefix)}` }, role: "student" },
-    { enrollmentNo: 1 },
-    { sort: { enrollmentNo: -1 } }
-  ).lean();
-
-  let nextNum = 1;
-  if (last?.enrollmentNo) {
-    const parts = last.enrollmentNo.split("-");
-    const seq   = parseInt(parts[parts.length - 1], 10);
-    if (!Number.isNaN(seq)) nextNum = seq + 1;
-  }
-
-  return `${prefix}${String(nextNum).padStart(4, "0")}`;
-};
+// One generator for every admission path — see the service for why.
+const { nextAdmissionNo } = require("../services/admissionNumber.service");
 
 const saveUserWithUniqueEnrollment = async (userAccount, seedNo, schoolId) => {
   let enrollmentNo = seedNo;
@@ -274,8 +244,7 @@ const saveUserWithUniqueEnrollment = async (userAccount, seedNo, schoolId) => {
       console.warn(
         `[enrollment] "${enrollmentNo}" collided — regenerating (attempt ${attempt + 1})`
       );
-      const schoolCode = await resolveSchoolCode(schoolId);
-      enrollmentNo     = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
+      enrollmentNo     = await nextAdmissionNo(schoolId);
     }
   }
 
@@ -548,8 +517,6 @@ const findDuplicateStudent = async ({
 
 const provisionStudentAccount = async ({ student, schoolId, displayName, emailRaw }) => {
   const tempPassword = generateTempPassword();
-  const schoolCode   = await resolveSchoolCode(schoolId);
-  const seedNo       = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
 
   let userAccount   = null;
   let isNewUser     = false;
@@ -602,7 +569,9 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
       isActive:          true,
       password:          tempPassword,
       mustResetPassword: true,
-      enrollmentNo:      seedNo,
+      // Issued here, not up front: a number is taken from the sequence only
+      // for an account that has none, so re-provisioning leaves no gap.
+      enrollmentNo:      await nextAdmissionNo(schoolId),
     };
     if (canAttachEmail) userFields.email = emailRaw;
 
@@ -611,7 +580,7 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
     emailAttached = canAttachEmail;
   }
 
-  const targetNo     = userAccount.enrollmentNo || seedNo;
+  const targetNo     = userAccount.enrollmentNo || await nextAdmissionNo(schoolId);
   const enrollmentNo = await saveUserWithUniqueEnrollment(userAccount, targetNo, schoolId);
 
   return { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser };
@@ -902,9 +871,10 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
 // the answer never says whether the document exists.
 router.get("/applications/:applicationId/documents/:key", asyncHandler(async (req, res) => {
   const applicationId = String(req.params.applicationId || "");
-  let key;
-  try { key = path.basename(decodeURIComponent(String(req.params.key || ""))); }
-  catch { return sendError(res, 404, "Document not found"); }
+  // Express has already decoded the parameter. Decoding it a second time
+  // broke any name with a "%" in it — "100%.pdf" threw, "a%2520b" became
+  // another file's name.
+  const key = path.basename(String(req.params.key || ""));
   if (!applicationId || !key) return sendError(res, 404, "Document not found");
 
   let scope = null;
@@ -1823,7 +1793,18 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
       ...(schoolId ? { schoolId } : {}),
     }).lean();
     if (existing) {
+      // Billed on the replay as well. A first attempt that saved the student
+      // and then failed before billing (a dropped connection, a restart) is
+      // retried by the outbox and lands here; returning early left that
+      // student with no fees. Charges already raised are skipped by the
+      // unique index, so a replay of a complete enrolment raises nothing.
+      const billing = await billStudentForClass({
+        schoolId,
+        student:  { _id: existing._id, classId: existing.classId },
+        raisedBy: req.user?._id ? String(req.user._id) : null,
+      });
       return sendSuccess(res, {
+        feesRaised:    billing.raised,
         // Reduced shape: an idempotency replay needs identity, class and
         // enrolment number — not the document the office keeps.
         student:       pickRoster(normaliseStudent(existing)),
@@ -2156,7 +2137,15 @@ const handleApprove = asyncHandler(async (req, res) => {
 
     console.log(`✅ Application approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+    // Approved into a class is joining its fees, as on the admin approve route.
+    const billing = await billStudentForClass({
+      schoolId: String(appRecord.schoolId || schoolId || ""),
+      student:  { _id: student._id, classId: String(targetClass._id) },
+      raisedBy: req.user?._id ? String(req.user._id) : null,
+    });
+
     return sendSuccess(res, {
+      feesRaised:   billing.raised,
       emailSent:    emailResult.success,
       warning:      notice,
       message:      notice
@@ -2231,7 +2220,14 @@ const handleApprove = asyncHandler(async (req, res) => {
 
   console.log(`✅ Student approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: String(targetClass._id) },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised:   billing.raised,
     emailSent:    emailResult.success,
     warning:      notice,
     message:      notice
@@ -2791,7 +2787,16 @@ router.patch("/:id/restore", authenticate, canManage, asyncHandler(async (req, r
     await User.findByIdAndUpdate(student.userId, { $set: { isActive: true } }).catch(() => {});
   }
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: `"${resolveDisplayName(student)}" has been restored`,
     data:    normaliseStudent(student.toObject()),
     overwrote,
@@ -2838,13 +2843,15 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   console.log(`[move] "${resolveDisplayName(student)}" ${prev} → ${student.classId}`);
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // The destination class's active structures apply to this student now;
-  // charges that already exist (e.g. a structure covering both classes) are
-  // skipped by the unique index. Never throws.
+  // The old class's charges for the year are voided and the destination
+  // class's apply now (payments stay with the student and count against the
+  // new ones); charges that already exist (e.g. a structure covering both
+  // classes) are skipped by the unique index. Never throws.
   const billing = await billStudentForClass({
     schoolId,
     student:  { _id: student._id, classId: student.classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2855,6 +2862,7 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" moved to ${className}`,
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    { ...normaliseStudent(student.toObject()), className },
     overwrote,
   });

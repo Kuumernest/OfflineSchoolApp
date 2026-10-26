@@ -148,6 +148,9 @@ export default function ThreadScreen() {
   // A read-only conversation (an archived class group, a broadcast) takes no
   // replies: the server refuses them (403), so no composer is offered.
   const [readOnly, setReadOnly] = useState(false);
+  // The server answered "not found": not a thread this person is in. Its
+  // stored copy has been deleted; say so rather than show an empty thread.
+  const [gone,     setGone]     = useState(false);
   // The header under the status bar and the composer above the navigation
   // bar: Android draws edge-to-edge, iOS has the notch and home indicator.
   const pad = useScreenInsets({ top: 0, bottom: 0 });
@@ -175,7 +178,8 @@ export default function ThreadScreen() {
   }, [id]);
 
   const refresh = useCallback(async () => {
-    await MessageService.syncMessages(id, myId);
+    const res = await MessageService.syncMessages(id, myId);
+    if (res?.gone) { setGone(true); setMessages([]); setLoading(false); return; }
     await loadLocal();
     // Fetch the other participant's read state for read receipts.
     const readState = await MessageService.getParticipantReadState(id);
@@ -341,6 +345,10 @@ export default function ThreadScreen() {
           {item.state === "failed" && (
             <TouchableOpacity onPress={() => handleRetry(item._id)} hitSlop={8} accessibilityRole="button">
               <Text style={s.failedNote}>{t("msgMobile.failedNote")}</Text>
+              {/* Why: the server's reason, kept by the outbox. Without it a
+                  refused message looked like a bad connection, and tapping
+                  retry failed the same way every time. */}
+              {!!item.error && <Text style={s.failedReason}>{item.error}</Text>}
             </TouchableOpacity>
           )}
         </View>
@@ -378,7 +386,7 @@ export default function ThreadScreen() {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={s.emptyText}>{t("msgMobile.emptyThread")}</Text>
+              <Text style={s.emptyText}>{t(gone ? "msgMobile.unavailable" : "msgMobile.emptyThread")}</Text>
             </View>
           }
         />
@@ -407,7 +415,7 @@ export default function ThreadScreen() {
         </View>
       )}
 
-      {readOnly ? (
+      {gone ? null : readOnly ? (
         <View style={[s.readOnlyBar, { paddingBottom: 10 + pad.paddingBottom }]}>
           <Text style={s.readOnlyText}>{t("msgMobile.readOnlyNote")}</Text>
         </View>
@@ -495,6 +503,7 @@ const s = StyleSheet.create({
   bubbleTimeMine: { color: "#BFDBFE" },
 
   failedNote: { fontSize: 10, color: C.white, marginTop: 3, textDecorationLine: "underline" },
+  failedReason: { fontSize: 10, color: C.white, marginTop: 2, opacity: 0.9 },
 
   readOnlyBar: {
     backgroundColor: C.white, paddingHorizontal: 16, paddingTop: 12,

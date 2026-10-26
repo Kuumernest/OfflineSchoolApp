@@ -55,8 +55,14 @@ const CONTENT_TYPES = {
 
 /** The stored filename of one document — the only handle the API exposes. */
 const documentKey = (doc) => {
-  const raw = doc?.filename || String(doc?.url || "").split("?")[0] || "";
-  const base = path.basename(String(raw));
+  let raw = doc?.filename;
+  if (!raw) {
+    // A URL holds the name percent-encoded ("birth%20cert.pdf"); the file on
+    // disk, and the key the route compares with, is the decoded name.
+    raw = String(doc?.url || "").split("?")[0];
+    try { raw = decodeURIComponent(raw); } catch { /* keep it as stored */ }
+  }
+  const base = path.basename(String(raw || ""));
   return base && base !== "." && base !== ".." ? base : null;
 };
 
@@ -121,6 +127,11 @@ const presentDocuments = (req, applicationId, docs) =>
 const redactDocumentsDeep = (req, value, depth = 0) => {
   if (depth > 4 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => redactDocumentsDeep(req, v, depth + 1));
+  // Plain records only. A Date, an ObjectId or a Buffer is a value: walking
+  // its (absent) own keys rebuilt it as {}, which JSON then sent as {} where a
+  // timestamp belonged.
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
 
   const out = {};
   for (const [k, v] of Object.entries(value)) {

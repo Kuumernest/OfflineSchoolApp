@@ -200,6 +200,41 @@ const main = async () => {
     (await Announcement.findById("ann-b").lean())?.title, "Corrected centrally");
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a super_admin working in a school sees that school's list ---");
+  // A super_admin has no school of their own; the console names the one they
+  // are in with ?schoolId=. The list and the stats read req.user.schoolId,
+  // asked for { schoolId: null } and answered "0 posted" for a school whose
+  // desktop mirror showed five announcements.
+
+  const rootList = await call("GET", `/api/announcements?schoolId=${SCHOOL_B}`);
+  check("the list is the named school's", [rootList.status, (rootList.body?.announcements ?? []).map((a) => a._id)], [200, ["ann-b"]]);
+
+  const rootStats = await call("GET", `/api/announcements/stats/summary?schoolId=${SCHOOL_B}`);
+  check("and so are the counts", [rootStats.status, rootStats.body?.data?.total], [200, 1]);
+
+  const rootNoSchool = await call("GET", "/api/announcements");
+  check("naming no school is refused, not answered with an empty list", rootNoSchool.status, 400);
+
+  const rootPost = await call("POST", "/api/announcements", {
+    schoolId: SCHOOL_B, title: "From the platform", body: "Posted centrally", audience: "all",
+  });
+  check("a notice a super_admin posts is stored in the school they named",
+    [rootPost.status, (await Announcement.findById(rootPost.body?.announcement?._id).lean())?.schoolId], [201, SCHOOL_B]);
+
+  const rootPostNoSchool = await call("POST", "/api/announcements", {
+    title: "Nowhere", body: "No school named", audience: "all",
+  });
+  check("and one naming no school is refused rather than stored with none", rootPostNoSchool.status, 400);
+
+  actor = {
+    _id: "admin-a", id: "admin-a", role: ROLES.SCHOOL_ADMIN,
+    schoolId: SCHOOL_A, email: "head@a.com",
+  };
+  const aNamesB = await call("GET", `/api/announcements?schoolId=${SCHOOL_B}`);
+  check("a school admin naming another school still gets only their own",
+    (aNamesB.body?.announcements ?? []).map((a) => a.schoolId), [SCHOOL_A]);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and the id duality the helper was written for still works ---");
 
   // findByAnyId exists because an id may be a 24-character hex string stored as
