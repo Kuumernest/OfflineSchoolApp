@@ -13,7 +13,7 @@ import {
   deleteClass,
   fetchSubjects,
   createSubject,
-  updateSubject,
+  updateSubjectDetailed,
   deleteSubject,
 }                                                        from "@/services/class.service";
 import { fetchTeachers }                                 from "@/services/teacher.service";
@@ -31,6 +31,8 @@ import { Badge }                                         from "@/components/ui/B
 import { Modal }                                         from "@/components/ui/Modal";
 import { SearchInput }                                   from "@/components/ui/SearchInput";
 import { FormField, Input, SelectField }                 from "@/components/ui/FormField";
+import { useToast }                                    from "@/components/ui/Toast";
+import { coefficientCascadeNotice }                    from "@/pages/subjects/coefficientCascade";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
@@ -70,7 +72,20 @@ const buildSubjectSchema = (t: Translate) => z.object({
   code:      z.string().optional(),
   classId:   z.string().min(1, t("subjectsEdit.errClassRequired")),
   teacherId: z.string().optional(),
+  // Same bounds as the subject pages and the server (parseCoefficient in
+  // admin.routes.js). Blank is allowed: on create the server applies 1, on an
+  // edit it leaves the stored value alone.
+  coefficient: z.string().optional().refine((v) => {
+    const raw = (v ?? "").trim();
+    return raw === "" || Number.isFinite(Number(raw));
+  }, t("subjectsEdit.errCoefficientNumber"))
+    .refine((v) => (v ?? "").trim() === "" || Number(v) >= 0.1, t("subjectsEdit.errCoefficientMin"))
+    .refine((v) => (v ?? "").trim() === "" || Number(v) <= 20,  t("subjectsEdit.errCoefficientMax")),
 });
+
+/** "" → leave to the server; anything else was validated as a number above. */
+const coefficientValue = (raw?: string): number | undefined =>
+  raw && raw.trim() !== "" ? Number(raw.trim()) : undefined;
 
 /*
  * The form types come from the builders' return types, not from a placeholder
@@ -127,6 +142,7 @@ const resolveSubjectTeacherName = (
 
 export default function ClassesPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
   const qc       = useQueryClient();
@@ -242,7 +258,7 @@ export default function ClassesPage() {
   // ── Subject form ───────────────────────────────────────
   const subjectForm = useForm<SubjectForm>({
     resolver:      zodResolver(subjectRules),
-    defaultValues: { name: "", code: "", classId: "", teacherId: "" },
+    defaultValues: { name: "", code: "", classId: "", teacherId: "", coefficient: "" },
   });
 
   const openSubjectModal = (sub?: Subject) => {
@@ -254,12 +270,14 @@ export default function ClassesPage() {
             code:      sub.code      ?? "",
             classId:   sub.classId   ?? "",
             teacherId: sub.teacherId ?? "",
+            coefficient: String(sub.coefficient ?? 1),
           }
         : {
             name:      "",
             code:      "",
             classId:   filterClassId ?? "",
             teacherId: "",
+            coefficient: "",
           }
     );
     setSubjectModal(true);
@@ -271,11 +289,26 @@ export default function ClassesPage() {
   };
 
   const subjectMutation = useMutation({
-    mutationFn: (values: SubjectForm) =>
-      editingSubject
-        ? updateSubject(editingSubject._id, { ...values, schoolId })
-        : createSubject({ ...values, schoolId }),
-    onSuccess: () => {
+    mutationFn: async ({ coefficient, ...values }: SubjectForm) => {
+      const coeff = coefficientValue(coefficient);
+      if (!editingSubject) {
+        await createSubject({ ...values, schoolId, coefficient: coeff });
+        return null;
+      }
+      // Sent only when it changed: the field opens on the value the list
+      // shows, which is 1 for a subject that never had one stored, and
+      // resaving that should not write a coefficient nobody chose.
+      const changed = coeff !== undefined && coeff !== editingSubject.coefficient;
+      const { cascade } = await updateSubjectDetailed(editingSubject._id, {
+        ...values, schoolId, ...(changed && { coefficient: coeff }),
+      });
+      return cascade;
+    },
+    onSuccess: (cascade) => {
+      // The edit page says where a coefficient change went; this modal edits
+      // the same field and owes the head the same account.
+      const notice = coefficientCascadeNotice(t, cascade);
+      if (notice) toast(notice);
       qc.invalidateQueries({ queryKey: ["subjects", schoolId] });
       closeSubjectModal();
     },
@@ -637,6 +670,22 @@ export default function ClassesPage() {
           </FormField>
 
           <FormField
+            label={t("subjects.coefficientLabel")}
+            error={subjectForm.formState.errors.coefficient?.message}
+            hint={t("subjects.coefficientHint")}
+          >
+            <Input
+              {...subjectForm.register("coefficient")}
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min={0.1}
+              max={20}
+              placeholder={t("subjects.coefficientPh")}
+            />
+          </FormField>
+
+          <FormField
             label={t("academic.class")}
             error={subjectForm.formState.errors.classId?.message}
             required
@@ -853,6 +902,7 @@ function SubjectsTable({
             {([
             t("academic.subject"),
             t("common.code"),
+            t("subjects.coefficientLabel"),
             t("academic.class"),
             t("academic.teacher"),
             "",
@@ -881,6 +931,10 @@ function SubjectsTable({
                 {sub.code
                   ? <Badge variant="secondary">{sub.code}</Badge>
                   : "—"}
+              </td>
+
+              <td className="px-4 py-3 text-gray-600 tabular-nums">
+                {sub.coefficient}
               </td>
 
               <td className="px-4 py-3 text-gray-600">

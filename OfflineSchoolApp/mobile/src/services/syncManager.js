@@ -942,6 +942,8 @@ class SyncManagerClass {
       await safeAddColumn(db, "subjects", "classId",      "TEXT");
       await safeAddColumn(db, "subjects", "teacher_id",   "TEXT");
       await safeAddColumn(db, "subjects", "teacher_name", "TEXT");
+      // NULL = a subject the server holds no coefficient for, which reads as 1.
+      await safeAddColumn(db, "subjects", "coefficient",  "REAL DEFAULT NULL");
       await safeAddColumn(db, "subjects", "created_at",   "TEXT DEFAULT NULL");
       await safeAddColumn(db, "subjects", "updated_at",   "TEXT");
     } catch (err) {
@@ -2376,18 +2378,22 @@ class SyncManagerClass {
           await db.runAsync(
             `INSERT INTO subjects
                (id, schoolId, school_id, classId, class_id, name, code,
-                teacher_id, teacher_name, _synced, deleted_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
+                teacher_id, teacher_name, coefficient, _synced, deleted_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId = excluded.schoolId, school_id = excluded.school_id,
                classId = excluded.classId, class_id = excluded.class_id,
                name = excluded.name, code = excluded.code,
                teacher_id = excluded.teacher_id, teacher_name = excluded.teacher_name,
+               coefficient = excluded.coefficient,
                _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at`,
             [
               String(id), s.schoolId, s.schoolId,
               String(classId), String(classId),
               s.name, s.code || "", teacherId, teacherName,
+              // Kept so the edit screen can show what is stored, rather than
+              // opening blank and leaving the admin to guess.
+              Number(s.coefficient) > 0 ? Number(s.coefficient) : null,
               s.updatedAt || ts,
             ]
           );

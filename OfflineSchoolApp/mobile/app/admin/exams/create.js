@@ -506,7 +506,9 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
               maxScore:    String(form.totalMarks || "100"),
               passMark:    String(form.passMark   || "50"),
               // Report-card coefficient — sent to the API as weight = coeff × 100.
-              coefficient: "1",
+              // Starts at the subject's own; a literal "1" was sent as an
+              // explicit weight of 100 and overrode it on every exam made here.
+              coefficient: String(Number(subject.coefficient) > 0 ? Number(subject.coefficient) : 1),
             },
           },
         },

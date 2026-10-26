@@ -311,9 +311,22 @@ const fetchReportCardHtml = async ({ examId, studentId, schoolId, schoolName }) 
   }
 };
 
+/**
+ * The logo as an <img src> this offline page can use, or null.
+ *
+ * Only a data: URI or a full URL: a server path ("/uploads/logos/…") has no
+ * host to resolve against inside the PDF engine, and printing nothing beats
+ * printing a broken image. Quoted characters are refused rather than escaped.
+ */
+const logoSrc = (logo) => {
+  const v = typeof logo === "string" ? logo.trim() : "";
+  if (!v || /["<>]/.test(v)) return null;
+  return /^(data:image\/|https?:\/\/)/i.test(v) ? v : null;
+};
+
 // `t` (and the BCP-47 `locale` for the date) are passed in: this is a
 // module-scope builder, so it cannot call the hook itself.
-function buildPdfHtml({ result, exam, schoolName, t, locale }) {
+function buildPdfHtml({ result, exam, schoolName, schoolLogo, t, locale }) {
   const subjects = result.subjectBreakdown || [];
   const abs      = t("reportCardDoc.absent");
 
@@ -396,6 +409,7 @@ function buildPdfHtml({ result, exam, schoolName, t, locale }) {
       </style>
     </head>
     <body>
+      ${logoSrc(schoolLogo) ? `<img class="logo" src="${logoSrc(schoolLogo)}" alt="" style="max-height:64px;max-width:160px;display:block;margin:0 auto 6px">` : ""}
       <h1>${schoolName || t("reportCardDoc.school")}</h1>
       <p style="font-size:10px;color:#2563EB;font-weight:700;
                 letter-spacing:1.5px;margin-top:2px">
@@ -515,7 +529,7 @@ export default function ReportCard({
   result,
   exam,
   schoolName,
-  schoolLogo,           // reserved for future image use
+  schoolLogo,
   examId,               // for the shared backend HTML renderer
   studentId,            // for the shared backend HTML renderer
   schoolId,             // for the shared backend HTML renderer
@@ -533,7 +547,7 @@ export default function ReportCard({
       if (html) return html;
     }
     // Fallback: local builder (offline / no identifiers passed down).
-    return buildPdfHtml({ result, exam, schoolName, t, locale });
+    return buildPdfHtml({ result, exam, schoolName, schoolLogo, t, locale });
   };
 
   const handlePrint = useCallback(async () => {
@@ -543,7 +557,7 @@ export default function ReportCard({
     } catch (err) {
       Alert.alert(t("reportCardDoc.printError"), errorText(t, err));
     }
-  }, [result, exam, schoolName, examId, studentId, schoolId]);
+  }, [result, exam, schoolName, schoolLogo, examId, studentId, schoolId]);
 
   const handleShare = useCallback(async () => {
     try {
@@ -563,7 +577,7 @@ export default function ReportCard({
     } catch (err) {
       Alert.alert(t("reportCardDoc.shareError"), errorText(t, err));
     }
-  }, [result, exam, schoolName, examId, studentId, schoolId]);
+  }, [result, exam, schoolName, schoolLogo, examId, studentId, schoolId]);
 
   // Every hook above must run on every render. This guard used to sit before
   // the two useCallback hooks, so the hook count jumped from 1 to 3 the moment
