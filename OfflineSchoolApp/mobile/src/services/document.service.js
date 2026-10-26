@@ -59,6 +59,26 @@ const cachePut = async (key, schoolId, html) => {
 };
 
 /**
+ * The server's reason for a refusal, from a body read as text.
+ *
+ * The request asks for text so the HTML survives, which means an error body
+ * arrives as a string too: a JSON refusal unparsed, or a proxy's HTML page.
+ * Left alone, the reader saw only "Request failed with status code 400".
+ */
+const refusalReason = (body) => {
+  const text = typeof body === "string" ? body.trim() : "";
+  if (!text) return null;
+  try {
+    const json = JSON.parse(text);
+    return json?.message || json?.error || null;
+  } catch {
+    // A proxy's error page: its title is the useful part ("400 Bad Request").
+    const title = /<title>([^<]*)<\/title>/i.exec(text);
+    return title ? title[1].trim() : null;
+  }
+};
+
+/**
  * Fetch a document, falling back to the last copy of THIS document.
  *
  * The fallback is deliberately narrow — same class, same variant, same language.
@@ -85,6 +105,12 @@ const fetchDocument = async ({ kind, path, id, schoolId, variant, lang }) => {
   } catch (err) {
     const cached = await cacheGet(key);
     if (cached) return cached;
+    const reason = refusalReason(err?.response?.data);
+    if (reason) {
+      err.message = `${reason} (${err.response.status})`;
+      // Parsed, so a refusal the server names with a code is translated.
+      try { err.response.data = JSON.parse(err.response.data); } catch { /* html */ }
+    }
     throw err;
   }
 };

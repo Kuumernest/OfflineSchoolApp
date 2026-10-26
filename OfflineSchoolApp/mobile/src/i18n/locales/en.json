@@ -7284,5 +7284,19 @@
     "RULE_FIXED": "This rule is the same for every school and cannot be changed.",
     "PROMOTION_RUN_EXISTS": "A promotion run for this year was made from these results. Discard the draft, or reverse the run, first.",
     "CLASS_REQUIRED": "Choose a class: results are unpublished one class at a time."
+  },
+  "schoolPick": {
+    "title": "Choose a school",
+    "blurb": "A super admin works inside one school at a time. Pick the school to manage on this phone.",
+    "search": "Search by name, code or city",
+    "none": "No schools found.",
+    "loadFailed": "Could not load the schools. Check your connection.",
+    "current": "Working in {{name}}",
+    "leave": "Leave",
+    "change": "Change school",
+    "inSchool": "School: {{name}}",
+    "pendingUploads": "Some changes on this phone have not been uploaded yet. Sync them before changing school, or they would be sent to the wrong school.",
+    "openPending": "See pending changes",
+    "failed": "Could not change school."
   }
 }

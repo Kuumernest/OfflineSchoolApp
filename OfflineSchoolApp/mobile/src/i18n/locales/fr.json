@@ -7284,5 +7284,19 @@
     "RULE_FIXED": "Cette règle est la même pour toutes les écoles et ne peut pas être modifiée.",
     "PROMOTION_RUN_EXISTS": "Une proposition de passage de l'année a été faite à partir de ces résultats. Supprimez d'abord le brouillon, ou annulez la proposition.",
     "CLASS_REQUIRED": "Choisissez une classe : la publication s'annule classe par classe."
+  },
+  "schoolPick": {
+    "title": "Choisir un établissement",
+    "blurb": "Un super administrateur travaille dans un établissement à la fois. Choisissez celui à gérer sur ce téléphone.",
+    "search": "Rechercher par nom, code ou ville",
+    "none": "Aucun établissement trouvé.",
+    "loadFailed": "Impossible de charger les établissements. Vérifiez votre connexion.",
+    "current": "Établissement : {{name}}",
+    "leave": "Quitter",
+    "change": "Changer d’établissement",
+    "inSchool": "Établissement : {{name}}",
+    "pendingUploads": "Des modifications de ce téléphone n’ont pas encore été envoyées. Synchronisez-les avant de changer d’établissement, sinon elles seraient envoyées au mauvais établissement.",
+    "openPending": "Voir les modifications en attente",
+    "failed": "Impossible de changer d’établissement."
   }
 }

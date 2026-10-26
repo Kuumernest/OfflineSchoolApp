@@ -54,6 +54,7 @@ const SRC  = path.join(ROOT, "src");
     password: "check-only-password", role, schoolId, isActive: true });
   await user("adm-a", "school_admin", A);
   await user("adm-b", "school_admin", B);
+  await user("sup", "super_admin", null);
   await user("tea-a", "teacher", A);
   await user("u-st1", "student", A);
   await M("Class").create({ _id: "c1", schoolId: A, name: "Form 1" });
@@ -85,7 +86,8 @@ const SRC  = path.join(ROOT, "src");
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const tok = (id, role, schoolId) => jwt.sign({ id, role, schoolId }, process.env.JWT_SECRET, { expiresIn: "1h" });
-  const TOK = { a: tok("adm-a", "school_admin", A), b: tok("adm-b", "school_admin", B), pupil: tok("u-st1", "student", A) };
+  const TOK = { a: tok("adm-a", "school_admin", A), b: tok("adm-b", "school_admin", B), pupil: tok("u-st1", "student", A),
+    sup: tok("sup", "super_admin", null) };
   const call = async (who, method, p, body) => {
     const r = await fetch(base + p, { method, headers: { Authorization: `Bearer ${TOK[who]}`, "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -292,6 +294,22 @@ const SRC  = path.join(ROOT, "src");
   check("a new device's first pull: live records only, no removals",
     [fresh.visible("subjects").includes("s1"), fresh.visible("classes").includes("c2"), fresh.last.body.data.deletedItems],
     [false, false, []]);
+
+  // ═══ 10. a super_admin syncs the school they chose ═══
+  console.log("--- a super_admin inside a school (the phone's school picker) ---");
+  // A real school id: the door only looks up ids of the stored form.
+  const C = "68e1000000000000000c0c01";
+  await M("School").create({ _id: C, name: "School C", email: "c@example.test", isActive: true });
+  await M("Class").create({ _id: "cc", schoolId: C, name: "C Form 1" });
+  await M("Student").create({ _id: "stc", userId: "u-stc", schoolId: C, classId: "cc", studentName: "Pupil stc",
+    enrollmentNo: "EN-stc", status: "approved", isActive: true });
+  const sup = device("sup", C); await sup.pull();
+  check("a super_admin pulls the school they named, and only that school",
+    [sup.last.status, sup.visible("classes"), sup.visible("students")], [200, ["cc"], ["stc"]]);
+  check("a school admin still cannot pull another school",
+    (await call("a", "GET", `/sync/pull?schoolId=${C}`)).status, 403);
+  check("a super_admin naming a school that does not exist is refused at the door",
+    (await call("sup", "GET", "/sync/pull?schoolId=no-such-school")).status, 404);
 
   server.close();
   await mongoose.disconnect();
