@@ -10,6 +10,12 @@ To resume: `git log master..HEAD --oneline`, then the first unticked item below.
 Rules already decided: coefficients always applied; an absent subject is
 removed with its coefficient; CA on/off per school; grading is /20.
 
+## Decisions from the owner (2026-10-27)
+
+- A8: several teachers on one class-subject are allowed; every screen lists them all.
+- B2: school hours and periods are each school's own setting — no fixed defaults; warn when they disagree.
+- B3: age range warning starts at Form 1 = 9–14, then +2 years per level up.
+
 ## Phase A — wrong numbers (fix first)
 
 - [x] **A1** Class positions: rank denominator = pupils in that class with results (Term Results page and printed report card; find where "50" comes from). — `52088d7`
@@ -24,7 +30,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 ## Phase B — validation rules
 
-- [ ] **B1** Timetable: no lessons in Break/non-teaching rows; only a teacher assigned to that class+subject; Wednesday column width.
+- [x] **B1** Timetable: no lessons in Break/non-teaching rows; only a teacher assigned to that class+subject; Wednesday column width. — `shared/timetableRules.js`; existing bad slots listed by the Phase D report
 - [ ] **B2** School hours: one source of truth between Settings and Periods; warn on conflict; header counts teaching periods only.
 - [ ] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite).
 - [ ] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects.
@@ -56,4 +62,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 ## Notes / skipped
 
 - A5: Term and Annual Results showed `overallGrade`, which for schools on the shipped bands is a US letter (A+…F); replaced with the stored remark. The bands themselves (and their `gpaPoints`) were left in the data model.
-- A8: Form 1 English has two active assignments (Mr Buh, Mr Kum); every screen now shows both. Whether a class-subject may have only one teacher is a rule for the owner to decide — not enforced.
+- A8: Form 1 English has two active assignments (Mr Buh, Mr Kum); every screen shows both — allowed (owner, 2026-10-27).
