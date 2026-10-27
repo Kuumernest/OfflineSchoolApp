@@ -311,6 +311,8 @@ results: {
   missingGrades: number;
   averagePerformance: number;
   passRate: number;
+  /** What the pass rate covers: this school year's published sequences. */
+  passRateScope?: { academicYear: string; withResults: number; passed: number; passMark: number };
   /**
    * The exams behind the two actionable counts, capped at twenty.
    *

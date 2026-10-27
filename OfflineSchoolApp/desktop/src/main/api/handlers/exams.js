@@ -1,6 +1,10 @@
 // desktop/src/main/api/handlers/exams.js
 "use strict";
 
+const { summaryPassRate, DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
+const { currentAcademicYearOf } = require("../../../../../shared/academicYear");
+const { CA_TYPE } = require("../../../../../shared/caAssessment");
+
 /**
  * Exams.
  *
@@ -72,6 +76,21 @@ module.exports = [
 
       const base = { schoolId, deletedAt: null };
 
+      // The one pass rate (shared/passRate.js), over the server's scope:
+      // this school year's published sequence papers (no CA rows), each
+      // average /20 against the school's pass mark.
+      const passScope = (() => {
+        const year  = currentAcademicYearOf(docs.get("school", schoolId));
+        const forms = new Set([year, year.replace("/", "-")]);
+        const papers = new Set(docs.find("exam", { schoolId, deletedAt: null })
+          .filter((e) => forms.has(String(e.academicYear)) && e.type !== CA_TYPE)
+          .map((e) => String(e._id)));
+        const rows = docs.find("resultSummary", { schoolId, isPublished: true })
+          .filter((r) => !r.deletedAt && papers.has(String(r.examId)));
+        const passMark = docs.find("gradingConfig", { schoolId })[0]?.passMark ?? DEFAULT_PASS_MARK;
+        return { academicYear: year, passMark, ...summaryPassRate(rows, passMark) };
+      })();
+
       const results = {
         exams: {
           total:     docs.count("exam", base),
@@ -95,12 +114,12 @@ module.exports = [
             if (!valid.length) return 0;
             return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
           })(),
-          passRate: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const passed = rows.filter((r) => r.isPassing).length;
-            return Math.round((passed / rows.length) * 100);
-          })(),
+          // The one pass rate (shared/passRate.js), over the server's scope:
+          // this school year's published sequence papers (no CA rows), each
+          // average /20 against the school's pass mark.
+          passRate:      passScope.rate ?? 0,
+          passRateScope: { academicYear: passScope.academicYear, withResults: passScope.withResults,
+                           passed: passScope.passed, passMark: passScope.passMark },
 
           // WHICH exams the two actionable counts are about, capped at twenty
           // as the server caps them. The results strip turns each count into a

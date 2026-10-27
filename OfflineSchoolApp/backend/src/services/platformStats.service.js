@@ -8,6 +8,8 @@ const TermResult   = require("../db/models/TermResult");
 const AnnualResult = require("../db/models/AnnualResult");
 const FeeCharge    = require("../db/models/FeeCharge");
 const { outstandingBySchool } = require("./fees.service");
+const { currentAcademicYearOf, yearKey } = require("../../../shared/academicYear");
+const { DEFAULT_PASS_MARK } = require("../../../shared/passRate");
 const { StudentAttendance } = require("../db/models/Attendance");
 
 /**
@@ -25,9 +27,10 @@ const { StudentAttendance } = require("../db/models/Attendance");
  *                `rate` is present ÷ marked: the share of register entries
  *                that were "present". Late and excused are shown separately
  *                and are NOT in the numerator, matching /admin/attendance/stats.
- *   academics    TermResult rows (not deleted): count, mean termAverage, and
- *                passRate = isPassing ÷ count. Filtered by academicYear and
- *                term where given.
+ *   academics    TermResult rows (not deleted, with an average): count, mean
+ *                termAverage, and passRate = term averages at or above the
+ *                school's pass mark ÷ count (shared/passRate.js). The chosen
+ *                year, else each school's current year; the term if given.
  *   promotion    AnnualResult rows by promotionStatus. `rate` is
  *                (promoted + graduated) ÷ decided, where decided excludes
  *                "pending" — an undecided pupil is not a failed one.
@@ -97,6 +100,14 @@ const computePlatformStats = async (filters) => {
     ? allSchools.filter((s) => String(s._id) === schoolId)
     : allSchools;
 
+  // Results are read for one year per school: the chosen one, else the
+  // school's own current year.
+  const yearScope = schools.map((s) => {
+    const year = academicYear ? yearKey(academicYear) : currentAcademicYearOf(s);
+    return { schoolId: String(s._id), academicYear: { $in: [year, year.replace("/", "-")] } };
+  });
+  if (!yearScope.length) yearScope.push({ schoolId: null });
+
   const [students, teachers, attendance, results, annual, owed] =
     await Promise.all([
       Student.aggregate([
@@ -118,13 +129,19 @@ const computePlatformStats = async (filters) => {
           excused: countIf(statusIs("status", "excused")),
         } },
       ]),
+      // The one pass rate (shared/passRate.js): a term average /20 against
+      // that school's own pass mark, over the term results that have an
+      // average, in the chosen year — else each school's current year (it
+      // was every term of every year, by a stored flag).
       TermResult.aggregate([
-        { $match: { ...sf, ...yr, ...tm, deletedAt: null } },
+        { $match: { ...tm, deletedAt: null, termAverage: { $ne: null }, $or: yearScope } },
+        { $lookup: { from: "gradingconfigs", localField: "schoolId", foreignField: "schoolId", as: "gc" } },
+        { $addFields: { passMark: { $ifNull: [{ $arrayElemAt: ["$gc.passMark", 0] }, DEFAULT_PASS_MARK] } } },
         { $group: {
           _id:       "$schoolId",
           n:         { $sum: 1 },
-          sum:       { $sum: { $ifNull: ["$termAverage", 0] } },
-          passing:   countIf({ $eq: ["$isPassing", true] }),
+          sum:       { $sum: "$termAverage" },
+          passing:   countIf({ $gte: ["$termAverage", "$passMark"] }),
           published: countIf({ $eq: ["$isPublished", true] }),
         } },
       ]),
@@ -186,6 +203,7 @@ const computePlatformStats = async (filters) => {
         published: r?.published ?? 0,
         average:   nResults > 0 ? round1((r?.sum ?? 0) / nResults) : null,
         passRate:  pct(r?.passing ?? 0, nResults),
+        academicYear: academicYear ? yearKey(academicYear) : currentAcademicYearOf(s),
       },
       promotion: {
         decided,

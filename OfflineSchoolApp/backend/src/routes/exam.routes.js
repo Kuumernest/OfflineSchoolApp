@@ -24,6 +24,12 @@ const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
 const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
+const { scopedPassRate } = require("../services/classStats.service");
+const { currentYearOf } = require("../services/fees.service");
+const { calendarAcademicYear } = require("../../../shared/academicYear");
+
+/** The school's current year: its setting, else the calendar's. */
+const schoolYearOf = async (schoolId) => (await currentYearOf(schoolId)) || calendarAcademicYear();
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -245,7 +251,6 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
       $group: {
         _id:       null,
         avg:       { $avg: "$percentage" },
-        passCount: { $sum: { $cond: ["$isPassing", 1, 0] } },
         total:     { $sum: 1 },
       },
     },
@@ -260,8 +265,11 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
 
   const averagePerformance = avgResult[0]?.avg
     ? Math.round(avgResult[0].avg) : 0;
-  const passRate = avgResult[0]?.total > 0
-    ? Math.round((avgResult[0].passCount / avgResult[0].total) * 100) : 0;
+  // The one pass rate (shared/passRate.js), over a stated scope: this school
+  // year's published sequence results. It was every published summary the
+  // school ever had, read by a stored flag one writer set against a fixed 10.
+  const passScope = await scopedPassRate({ schoolId, academicYear: await schoolYearOf(schoolId) });
+  const passRate = passScope.rate ?? 0;
 
   return res.json({
     success: true,
@@ -273,6 +281,8 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
         missingGrades:      studentsWithMissingGrades,
         averagePerformance,
         passRate,
+        passRateScope:      { academicYear: passScope.academicYear, withResults: passScope.withResults,
+                              passed: passScope.passed, passMark: passScope.passMark },
         // WHICH exams the two actionable counts are about.
         //
         // The results strip on the exams page turns each count into a link, and
@@ -348,7 +358,6 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
         {
           $group: {
             _id:       null,
-            passCount: { $sum: { $cond: ["$isPassing", 1, 0] } },
             total:     { $sum: 1 },
             avgPct:    { $avg: "$percentage" },
           },
@@ -365,9 +374,13 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
       }),
     ]);
 
-  const passRate = passAgg[0]?.total > 0
-    ? Math.round((passAgg[0].passCount / passAgg[0].total) * 100)
-    : 0;
+  // The one pass rate (shared/passRate.js) over the scope asked for — the
+  // school's current year when none is.
+  const passScope = await scopedPassRate({
+    schoolId, academicYear: academicYear || await schoolYearOf(schoolId),
+    term: term || null, classId: classId || null,
+  });
+  const passRate = passScope.rate ?? 0;
 
   const averagePerformance = passAgg[0]?.avgPct != null
     ? Math.round(passAgg[0].avgPct)
@@ -425,6 +438,9 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
         missingGrades,
         averagePerformance,
         passRate,
+        passRateScope:      { academicYear: passScope.academicYear, term: passScope.term,
+                              withResults: passScope.withResults, passed: passScope.passed,
+                              passMark: passScope.passMark },
         // The exams behind the two actionable counts, so the strip can link to
         // the screen where the work is done rather than to a page about
         // something else.

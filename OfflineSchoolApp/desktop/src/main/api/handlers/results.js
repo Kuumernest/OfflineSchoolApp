@@ -44,6 +44,7 @@
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
+const { summaryPassRate, DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
 
 /**
  * True when the student sat none of the subjects — used to keep a fully-absent
@@ -73,7 +74,7 @@ const isFullyAbsent = (result) => {
  * controller does, so a subject analysis rendered offline reads the same
  * shape (and the same percentage scale) as one rendered online.
  */
-const generateStats = (results) => {
+const generateStats = (results, passMark) => {
   if (!results.length) {
     return {
       totalStudents:     0,
@@ -94,8 +95,9 @@ const generateStats = (results) => {
 
   const present = results.filter((r) => !isFullyAbsent(r));
   const absent  = results.filter((r) =>  isFullyAbsent(r));
-  const passed  = present.filter((r) => r.isPassing);
-  const failed  = present.filter((r) => !r.isPassing);
+  // The one pass rate (shared/passRate.js), as the server's examStatistics:
+  // average /20 against the school's pass mark, over pupils with results.
+  const pr = summaryPassRate(results, passMark);
 
   // Percentage per row: the denormalized field when the mirror has it, else
   // derived from the /20-style average against the row's max total, else the
@@ -173,18 +175,17 @@ const generateStats = (results) => {
     total:       a.total,
   }));
 
-  const passRate = present.length
-    ? Math.round((passed.length / present.length) * 10000) / 100
-    : 0;
+  const passRate = pr.rate ?? 0;
 
   // `classAverage` is kept as an alias of `average` for any screen still
   // reading the old key; the server's controller speaks `average`.
   return {
-    totalStudents: results.length,
+    totalStudents: pr.withResults,
     present:       present.length,
     absent:        absent.length,
-    passed:        passed.length,
-    failed:        failed.length,
+    passed:        pr.passed,
+    failed:        pr.failed,
+    passMark:      passMark ?? DEFAULT_PASS_MARK,
     passRate,
     average,
     classAverage:  average,
@@ -287,7 +288,8 @@ module.exports = [
       const filter = { examId: String(params.examId), schoolId, deletedAt: null };
       if (query.classId) filter.classId = String(query.classId).trim();
 
-      return ok({ data: generateStats(docs.find("resultSummary", filter)) });
+      const passMark = docs.find("gradingConfig", { schoolId })[0]?.passMark ?? DEFAULT_PASS_MARK;
+      return ok({ data: generateStats(docs.find("resultSummary", filter), passMark) });
     },
   },
 

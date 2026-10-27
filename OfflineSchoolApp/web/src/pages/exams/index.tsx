@@ -1395,7 +1395,12 @@ export default function ExamsPage() {
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
             icon={BookOpen}   color="bg-teal-50 text-teal-600"
-            sub={t("exams.schoolAvg")}
+            sub={dashData?.dashboard?.results?.passRateScope
+              ? t("exams.passRateScope", {
+                  year: dashData.dashboard.results.passRateScope.academicYear,
+                  mark: dashData.dashboard.results.passRateScope.passMark,
+                })
+              : t("exams.schoolAvg")}
             onClick={() => navigate("/exams/results")}
           />
         </div>

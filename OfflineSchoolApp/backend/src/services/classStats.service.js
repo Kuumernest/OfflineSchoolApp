@@ -34,6 +34,8 @@
 
 const ResultSummary = require("../db/models/ResultSummary");
 const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
+const { summaryPassRate } = require("../../../shared/passRate");
+const { passMarkOf } = require("./passMark.service");
 const TermResult    = require("../db/models/TermResult");
 const AnnualResult  = require("../db/models/AnnualResult");
 
@@ -85,9 +87,15 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
 
   const results = await ResultSummary.find(filter).lean();
 
-  const totalStudents = results.length;
-  const passed = results.filter((r) => r.isPassing).length;
-  const failed = totalStudents - passed;
+  // The one pass rate (shared/passRate.js): each pupil's average on /20
+  // against the school's pass mark, over the pupils with results — a pupil
+  // absent from every paper is in neither count. It read the stored
+  // isPassing over every row, absent pupils included.
+  const passMark = await passMarkOf(schoolId ?? results[0]?.schoolId);
+  const pr = summaryPassRate(results, passMark);
+  const totalStudents = pr.withResults;
+  const passed = pr.passed;
+  const failed = pr.failed;
 
   // Average / highest / lowest use each student's overall percentage (0-100),
   // not the /20 average stored on the summary. r.average mixes scales when
@@ -101,9 +109,7 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
     : 0;
   const highest = percentages.length ? Math.max(...percentages) : 0;
   const lowest  = percentages.length ? Math.min(...percentages) : 0;
-  const passRate = totalStudents > 0
-    ? Math.round((passed / totalStudents) * 10000) / 100
-    : 0;
+  const passRate = pr.rate ?? 0;
 
   const gpas = results
     .map((r) => r.gpa)
@@ -166,6 +172,7 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
     totalStudents,
     passed,
     failed,
+    passMark,
     average,
     highest,
     lowest,
@@ -174,6 +181,37 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
     gradeDistribution,
     subjectStats,
   };
+}
+
+/**
+ * The pass rate over a stated scope of sequences — a year, optionally a term
+ * and a class — for the exams overview (shared/passRate.js).
+ *
+ * Scoped through the exams, not the summaries: a summary written before the
+ * server stored academicYear on it has none, and its `term` is a string.
+ * Sequence papers only — a CA's own summary is already inside its paper's,
+ * and counting it would count the pupil twice.
+ *
+ * @returns {Promise<{ academicYear, term, passMark, withResults, passed, failed, rate }>}
+ */
+async function scopedPassRate({ schoolId, academicYear, term = null, classId = null, onlyPublished = true }) {
+  const Exam = require("../db/models/Exam");
+  const { CA_TYPE } = require("../../../shared/caAssessment");
+  const forms = [...new Set([String(academicYear), String(academicYear).replace("/", "-"), String(academicYear).replace("-", "/")])];
+  const exams = await Exam.find({
+    schoolId: String(schoolId), academicYear: { $in: forms }, deletedAt: null, type: { $ne: CA_TYPE },
+    ...(term ? { term: Number(term) } : {}),
+  }).select("_id").lean();
+  const filter = { schoolId: String(schoolId), examId: { $in: exams.map((e) => String(e._id)) }, deletedAt: null };
+  if (onlyPublished) filter.isPublished = true;
+  if (classId) filter.classId = String(classId);
+  const [rows, passMark] = await Promise.all([
+    exams.length
+      ? ResultSummary.find(filter).select("average percentage calcVersion subjectBreakdown.isAbsent subjectBreakdown.isExempt").lean()
+      : [],
+    passMarkOf(schoolId),
+  ]);
+  return { academicYear, term: term ? Number(term) : null, passMark, ...summaryPassRate(rows, passMark) };
 }
 
 /**
@@ -252,6 +290,7 @@ async function annualClassStats({ schoolId, academicYear, classId }) {
 }
 
 module.exports = {
+  scopedPassRate,
   cohortFigures,
   examStatistics,
   sequenceClassStats,

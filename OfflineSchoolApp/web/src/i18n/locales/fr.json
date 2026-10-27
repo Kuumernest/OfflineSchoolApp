@@ -955,6 +955,7 @@
     "moreCount": "+{{count}} de plus",
     "timelineRange": "Chronologie du {{from}} au {{to}}",
     "schoolAvg": "moyenne école",
+    "passRateScope": "{{year}} · moyenne de passage {{mark}}/20",
     "missingGrades": "Mentions manquantes",
     "avgScore": "Note moyenne",
     "adjustFilters": "Essayez d'ajuster ou d'effacer vos filtres",

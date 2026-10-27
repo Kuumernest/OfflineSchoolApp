@@ -955,6 +955,7 @@
     "moreCount": "+{{count}} more",
     "timelineRange": "Timeline from {{from}} to {{to}}",
     "schoolAvg": "school avg",
+    "passRateScope": "{{year}} · pass mark {{mark}}/20",
     "missingGrades": "Missing grades",
     "avgScore": "Avg score",
     "adjustFilters": "Try adjusting or clearing your filters",
