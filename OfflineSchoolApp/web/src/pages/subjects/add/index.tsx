@@ -216,7 +216,7 @@ function ResultsSummary({
         <button
           type="button"
           onClick={onDone}
-          className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
+          className="w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
         >
           {t("common.done")}
         </button>
@@ -743,7 +743,7 @@ export default function AddSubjectPage() {
                 "text-sm font-bold text-white transition-colors",
                 isBusy
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {isBusy ? (

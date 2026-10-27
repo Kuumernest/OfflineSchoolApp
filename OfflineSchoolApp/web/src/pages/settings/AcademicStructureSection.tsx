@@ -554,7 +554,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
             "flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition",
             saving || !weightsValid
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800"
+              : "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800"
           )}
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

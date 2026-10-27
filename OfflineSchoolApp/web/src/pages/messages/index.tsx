@@ -321,9 +321,9 @@ export default function MessagesPage() {
         </div>
         <button
           onClick={() => setComposing(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2
+          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2
                      text-sm font-semibold text-white transition-colors
-                     hover:bg-blue-700"
+                     hover:bg-primary-700"
         >
           <Plus size={16} />
           {t("messages.newConversation")}
@@ -634,9 +634,9 @@ export default function MessagesPage() {
                         (!draft.trim() && pending.length === 0) ||
                         sendMutation.isPending
                       }
-                      className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5
+                      className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5
                                  text-sm font-semibold text-white transition-colors
-                                 hover:bg-blue-700 disabled:opacity-50"
+                                 hover:bg-primary-700 disabled:opacity-50"
                     >
                       {sendMutation.isPending
                         ? <Loader2 size={15} className="animate-spin" />

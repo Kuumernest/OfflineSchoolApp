@@ -205,7 +205,7 @@ export default function TeacherAssignmentDetailPage() {
           </button>
           <button
             onClick={handleAssignMore}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             <Plus size={16} />
             {t("assignments.assignMore")}

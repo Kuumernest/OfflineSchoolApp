@@ -1665,8 +1665,8 @@ const ResultsTab = ({
                 <button
                   onClick={handleProcess}
                   disabled={processResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-indigo-600 text-white
-                             text-xs font-bold rounded-lg hover:bg-indigo-700
+                  className="mt-2 px-4 py-1.5 bg-primary-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-primary-700
                              disabled:opacity-60 transition-colors"
                 >
                   {processResults.isPending ? t("exams.calculating") : t("exams.calculateResults")}
@@ -1731,8 +1731,8 @@ const ResultsTab = ({
                 <button
                   onClick={handlePublish}
                   disabled={publishResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-purple-600 text-white
-                             text-xs font-bold rounded-lg hover:bg-purple-700
+                  className="mt-2 px-4 py-1.5 bg-primary-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-primary-700
                              disabled:opacity-60 transition-colors"
                 >
                   {publishResults.isPending ? t("exams.publishing") : t("exams.publishResults")}

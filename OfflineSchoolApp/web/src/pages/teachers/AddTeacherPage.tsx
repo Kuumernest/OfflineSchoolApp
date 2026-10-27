@@ -268,7 +268,7 @@ export default function AddTeacherPage() {
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleAddAnother}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white
                            font-semibold py-3 rounded-xl transition-colors"
               >
                 {t("teachersAdd.another")}
@@ -414,7 +414,7 @@ export default function AddTeacherPage() {
             type="submit"
             disabled={isDisabled}
             className="w-full flex items-center justify-center gap-2
-                       bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300
+                       bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300
                        text-white font-bold py-3.5 rounded-xl transition-colors mt-2"
           >
             {saving ? (

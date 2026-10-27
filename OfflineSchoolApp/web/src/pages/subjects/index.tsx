@@ -118,9 +118,9 @@ const FilterChip = ({ label, isActive, onClick }: FilterChipProps) => (
     className={cn(
       "shrink-0 rounded-full border px-4 py-1.5 text-sm font-semibold",
       "transition-colors duration-150 focus-visible:outline-none",
-      "focus-visible:ring-2 focus-visible:ring-emerald-500",
+      "focus-visible:ring-2 focus-visible:ring-primary-500",
       isActive
-        ? "border-emerald-600 bg-emerald-600 text-white"
+        ? "border-emerald-600 bg-primary-600 text-white"
         : "border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:bg-gray-200"
     )}
   >
@@ -625,7 +625,7 @@ export default function AdminSubjectsPage() {
 
         <button
           onClick={() => navigate("/subjects/add")}
-          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700"
         >
           <Plus size={18} />
           {t("subjects.add")}

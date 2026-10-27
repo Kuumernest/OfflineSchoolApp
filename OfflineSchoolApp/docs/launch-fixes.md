@@ -44,12 +44,13 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
 - [x] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing. — `minChangeObservations` in shared/intelligence/subjectInsights.js; a fall already called a decline is not repeated as a sudden change; "strength is emerging" reworded (it echoed the "emerging" confidence badge)
 - [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`
-- [ ] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
+- [x] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
   - [x] dates — `shared/dateFormat.js` (web `fmt.date`/`fmt.dateTime`/`utils/formatDate`; mobile copy in `mobile/src/i18n/format.js`); `web: check:dates`
   - [x] Admissions vs Applications — the screen is "Admissions" everywhere (page title, dashboard card, banner, search); `/students/applications` redirects there
   - [x] class-name casing — class group headings no longer upper-case the name ("FORM 5" → "Form 5")
   - [x] Fees group header — "Form 5 – 5 owing"
   - [x] line icons only — colour emoji used as icons replaced by lucide line icons (exams, results, report cards, assignments, subjects, teachers, applications); emoji removed from web + mobile strings; `web: check:icons`
+  - [x] one primary button colour — 26 hand-made indigo/blue/purple filled buttons and 11 green "main action" buttons now `primary-*`; green kept only for approve / publish / copied (`success`); `web: check:buttons`
 - [ ] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student.
 - [ ] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20".
 - [ ] **C10** Student profile: results, attendance, fee balance, guardian contact. *(may go to follow-up PR)*
@@ -75,3 +76,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - C5: the rules changed but `ENGINE_VERSION` stays "1.0.0" — pilot reviews are filed under that version; bumping it (so pre- and post-C5 reviews are told apart) is the owner's call.
 - C7: `web/scripts/check-localization.mjs` has one failure that predates this branch's C7 work ("the exam page offers Unpublish while any class's results are out") — not a date issue; left for the final suite run.
 - C7: `web/src/pages/students/applications/index.tsx` (and `components/applications/*`) is no longer routed — the old address redirects to Admissions. Left in place; delete in a follow-up.
+- C7: icons and button colour were done on web; the mobile app already uses Ionicons line icons (its emoji were in strings, now removed) — its button colours were not audited.

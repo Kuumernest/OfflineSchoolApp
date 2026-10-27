@@ -310,9 +310,9 @@ function SaveButton({
       onClick={onClick}
       disabled={loading}
       className="
-        mt-6 flex items-center gap-2 rounded-xl bg-indigo-600
+        mt-6 flex items-center gap-2 rounded-xl bg-primary-600
         px-6 py-3 text-sm font-semibold text-white
-        hover:bg-indigo-700 disabled:opacity-50 transition
+        hover:bg-primary-700 disabled:opacity-50 transition
       "
     >
       {loading
@@ -1027,8 +1027,8 @@ function ProfileSection() {
               onClick={handleChangePassword}
               disabled={savingPw}
               className="
-                flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5
-                text-sm font-semibold text-white hover:bg-indigo-700
+                flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5
+                text-sm font-semibold text-white hover:bg-primary-700
                 disabled:opacity-50 transition
               "
             >
@@ -1781,7 +1781,7 @@ function AdminsSection({
                   </button>
                   <button
                     onClick={closeModal}
-                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                    className="flex-1 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
                   >
                     {t("common.done")}
                   </button>
@@ -1839,7 +1839,7 @@ function AdminsSection({
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 transition"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 {creating ? t("settings.creating") : t("settings.createAdmin")}
@@ -2128,7 +2128,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save")}

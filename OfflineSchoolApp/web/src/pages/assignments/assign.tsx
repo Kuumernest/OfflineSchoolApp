@@ -94,7 +94,7 @@ const StepIndicator = ({
             disabled={!isCompleted}
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors",
-              isActive    && "bg-indigo-600 text-white",
+              isActive    && "bg-primary-600 text-white",
               isCompleted && !isActive && "cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600",
               !isActive && !isCompleted && "bg-gray-200 text-gray-500"
             )}
@@ -429,7 +429,7 @@ export default function AssignTeacherPage() {
             </button>
             <button
               onClick={() => navigate("/teachers/assignments")}
-              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
+              className="flex-1 rounded-xl bg-primary-600 py-2.5 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
             >
               {t("common.done")}
             </button>
@@ -720,7 +720,7 @@ export default function AssignTeacherPage() {
               {selectedSubjects.length > 0 && (
                 <button
                   onClick={() => setStep(4)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
                 >
                   {t("assignments.reviewSelection", { count: selectedSubjects.length })}
                   <ChevronRight size={16} />
@@ -824,7 +824,7 @@ export default function AssignTeacherPage() {
                 "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-colors",
                 mutation.isPending || selectedSubjects.length === 0
                   ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {mutation.isPending ? (

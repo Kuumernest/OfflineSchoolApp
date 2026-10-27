@@ -467,8 +467,8 @@ export default function EditTeacherPage() {
           <p className="text-sm text-red-600 text-center max-w-sm">{loadError}</p>
           <button
             onClick={() => loadAll()}
-            className="bg-indigo-600 text-white text-sm font-semibold
-                       px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-colors"
+            className="bg-primary-600 text-white text-sm font-semibold
+                       px-5 py-2.5 rounded-lg hover:bg-primary-700 transition-colors"
           >
             {t("common.retry")}
           </button>
@@ -518,7 +518,7 @@ export default function EditTeacherPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700
+          className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
                      disabled:opacity-60 text-white text-sm font-bold
                      px-4 py-2 rounded-lg transition-colors"
         >

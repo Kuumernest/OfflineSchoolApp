@@ -1144,7 +1144,7 @@ return (
       <button
         onClick={handleSubmit}
         disabled={submitting}
-        className="px-8 py-2.5 bg-green-600 hover:bg-green-700
+        className="px-8 py-2.5 bg-primary-600 hover:bg-primary-700
                    text-white rounded-xl text-sm font-semibold
                    transition-colors disabled:opacity-60
                    flex items-center gap-2"

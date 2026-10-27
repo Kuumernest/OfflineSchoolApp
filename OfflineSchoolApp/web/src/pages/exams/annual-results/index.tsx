@@ -154,7 +154,7 @@ export default function AnnualResultsPage() {
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
             computeMutation.isPending || needsClass
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-indigo-600 text-white hover:bg-indigo-700"
+              : "bg-primary-600 text-white hover:bg-primary-700"
           )}
         >
           {computeMutation.isPending ? (

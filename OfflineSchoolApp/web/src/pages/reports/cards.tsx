@@ -1034,7 +1034,7 @@ export default function ReportCardsPage() {
                * screen to say what was missing.
                */
               disabled={!periodChosen || !selectedClass || generating}
-              className="w-full py-3 bg-green-600 hover:bg-green-700
+              className="w-full py-3 bg-primary-600 hover:bg-primary-700
                          text-white rounded-xl font-semibold text-sm
                          transition-colors disabled:opacity-50
                          flex items-center justify-center gap-2"
@@ -1148,7 +1148,7 @@ export default function ReportCardsPage() {
               type="button"
               onClick={handlePrintPreview}
               disabled={!previewCard}
-              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700
+              className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"
             >

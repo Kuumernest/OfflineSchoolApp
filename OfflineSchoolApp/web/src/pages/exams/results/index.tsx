@@ -806,8 +806,8 @@ export default function ExamResultsPage() {
         </div>
         <Link
           to="/reports/cards"
-          className="px-4 py-2 bg-green-600 text-white rounded-xl
-                     text-sm font-semibold hover:bg-green-700
+          className="px-4 py-2 bg-primary-600 text-white rounded-xl
+                     text-sm font-semibold hover:bg-primary-700
                      transition-colors"
         >
           <Printer className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.title")}

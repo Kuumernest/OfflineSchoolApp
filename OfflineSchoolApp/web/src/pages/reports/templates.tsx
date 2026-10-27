@@ -180,7 +180,7 @@ export default function TemplatesPage() {
             </button>
             <button
               onClick={() => navigate("/reports/builder")}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
+              className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold px-4 py-2 rounded-lg
                          transition-colors"
             >
@@ -243,7 +243,7 @@ export default function TemplatesPage() {
               <button
                 onClick={handleSeedDefault}
                 disabled={actionId === "__seed__"}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
+                className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
                            disabled:opacity-50 text-white text-sm font-semibold
                            px-5 py-2.5 rounded-lg transition-colors"
               >

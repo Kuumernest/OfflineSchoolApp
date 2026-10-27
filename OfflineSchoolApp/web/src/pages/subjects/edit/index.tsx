@@ -311,7 +311,7 @@ export default function EditSubjectPage() {
         </p>
         <button
           onClick={() => navigate("/subjects")}
-          className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+          className="mt-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           {t("subjectsEdit.back")}
         </button>
@@ -560,7 +560,7 @@ export default function EditSubjectPage() {
                 "text-sm font-bold text-white transition-colors",
                 isBusy || !hasChanges
                   ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {isBusy ? (
