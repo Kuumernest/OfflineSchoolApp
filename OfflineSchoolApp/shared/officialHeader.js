@@ -101,6 +101,39 @@ const OFFICIAL = {
   },
 };
 
+/**
+ * Cameroon's ten regions, in each column's language (A9, decided 2026-10-27).
+ *
+ * The French column printed the region as the school typed it — "Délégation
+ * Régionale de NORTH WEST". The stored name is matched whatever its case,
+ * accents, hyphens or abbreviation ("NW", "Far North", "Extrême-Nord") and
+ * printed in the column's own language, the French with its article: "du
+ * Nord-Ouest", "de l'Adamaoua". A region not in the table prints as typed.
+ */
+const REGIONS = [
+  { en: "Adamawa",    fr: "Adamaoua",     frOf: "de l'Adamaoua",    aka: ["adamawa", "adamaoua"] },
+  { en: "Centre",     fr: "Centre",       frOf: "du Centre",        aka: ["centre", "center"] },
+  { en: "East",       fr: "Est",          frOf: "de l'Est",         aka: ["east", "est"] },
+  { en: "Far North",  fr: "Extrême-Nord", frOf: "de l'Extrême-Nord", aka: ["far north", "extreme north", "extreme nord", "fn"] },
+  { en: "Littoral",   fr: "Littoral",     frOf: "du Littoral",      aka: ["littoral"] },
+  { en: "North",      fr: "Nord",         frOf: "du Nord",          aka: ["north", "nord"] },
+  { en: "North West", fr: "Nord-Ouest",   frOf: "du Nord-Ouest",    aka: ["north west", "northwest", "nord ouest", "nw"] },
+  { en: "West",       fr: "Ouest",        frOf: "de l'Ouest",       aka: ["west", "ouest"] },
+  { en: "South",      fr: "Sud",          frOf: "du Sud",           aka: ["south", "sud"] },
+  { en: "South West", fr: "Sud-Ouest",    frOf: "du Sud-Ouest",     aka: ["south west", "southwest", "sud ouest", "sw"] },
+];
+
+const regionKey = (name) => String(name ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase().replace(/[-_.]+/g, " ").replace(/\s+/g, " ").trim()
+  .replace(/^(the )?region (of |de l'|de la |du |de )?|^(the )|\s+region$/g, "").trim();
+
+/** The region in the table for a stored name, or null. */
+const regionOf = (name) => {
+  const k = regionKey(name);
+  return k ? REGIONS.find((r) => r.aka.includes(k)) ?? null : null;
+};
+
 /** The separator a real card prints between the blocks of a margin column. */
 const SEPARATOR = "**********************";
 
@@ -116,6 +149,15 @@ const SEPARATOR = "**********************";
  * @returns {{country, peace, ministry, regional: string|null,
  *            divisional: string|null, schoolType: string|null}}
  */
+/** "Regional Delegation of North West" / "Délégation Régionale du Nord-Ouest". */
+const regionalLine = (lang, region) => {
+  const known = regionOf(region);
+  if (lang === "fr") {
+    return known ? `Délégation Régionale ${known.frOf}` : `${OFFICIAL.fr.regional} ${region}`;
+  }
+  return `${OFFICIAL.en.regional} ${known ? known.en : region}`;
+};
+
 const headerColumn = (lang, school = {}) => {
   const l = lang === "fr" ? "fr" : "en";
   const o = OFFICIAL[l];
@@ -128,7 +170,7 @@ const headerColumn = (lang, school = {}) => {
     country:    o.country,
     peace:      o.peace,
     ministry:   o.ministry[ministryFor(type)],
-    regional:   region   ? `${o.regional} ${region}`     : null,
+    regional:   region   ? regionalLine(l, region)        : null,
     divisional: division ? `${o.divisional} ${division}` : null,
     schoolType: o.types[type] ?? null,
   };
@@ -169,6 +211,6 @@ const reportTitle = (period, lang = "en") => {
 };
 
 module.exports = {
-  officialHeader, headerColumn, reportTitle, ministryFor,
-  OFFICIAL, MINISTRIES, SEPARATOR,
+  officialHeader, headerColumn, reportTitle, ministryFor, regionOf,
+  OFFICIAL, MINISTRIES, SEPARATOR, REGIONS,
 };

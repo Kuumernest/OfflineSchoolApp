@@ -20,7 +20,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **A6** Rankings per class: class filter on exam analytics, rank within class; bottom-5 sorted ascending and numbered consistently. — `shared/examAnalytics.js` topAndBottom
 - [x] **A7** Marks progress "2/0 entered": denominator = enrolled pupils in the class. — exam submissions now carry `totalStudents`
 - [x] **A8** Teacher assignments: one source of truth (class-subject assignment) for Subjects page, exam marks screen, report card. — `shared/classSubjectTeachers.js`
-- [ ] **A9** French report header: all 10 region names translated; remark typo "Faire" → "Fair".
+- [x] **A9** French report header: all 10 region names translated; remark typo "Faire" → "Fair". — regions in `shared/officialHeader.js`; "Faire" is in a school's saved grading scale (data, not code) → repaired by the Phase D script after go-ahead
 
 ## Phase B — validation rules
 
