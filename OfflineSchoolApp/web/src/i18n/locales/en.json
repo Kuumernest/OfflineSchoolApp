@@ -2999,7 +2999,7 @@
       "grade_drop": "Average fell {{from}} → {{to}} /20",
       "subjects_failed": "{{count}} subjects failed",
       "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
-      "fees_outstanding": "Owes {{balance}}"
+      "fees_outstanding": "Owes {{balance}} (overdue)"
     }
   },
   "verif": {

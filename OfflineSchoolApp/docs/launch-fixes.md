@@ -43,7 +43,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **C3** Attendance "–" instead of 0% when nobody was marked; 7-day chart counts school days only. — `schoolDaysOnly`, `dayRate` in shared/attendance.js
 - [x] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
 - [x] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing. — `minChangeObservations` in shared/intelligence/subjectInsights.js; a fall already called a decline is not repeated as a sudden change; "strength is emerging" reworded (it echoed the "emerging" confidence badge)
-- [ ] **C6** Students to watch: fee debt only when overdue.
+- [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`
 - [ ] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
 - [ ] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student.
 - [ ] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20".

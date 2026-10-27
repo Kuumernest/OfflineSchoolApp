@@ -5,7 +5,7 @@ const Student             = require("../db/models/Student");
 const Class               = require("../db/models/Class");
 const Homework            = require("../db/models/Homework");
 const { StudentAttendance } = require("../db/models/Attendance");
-const { balancesFor }     = require("./fees.service");
+const { candidates: overdueFees } = require("./feeReminders.service");
 const academicHistory     = require("./intelligence/academicHistory.service");
 const { passMarkOf }      = require("./passMark.service");
 const { sequenceFigureOn20 } = require("../../../shared/academicRules");
@@ -71,7 +71,7 @@ const THRESHOLDS = {
   subjectsFailed: 3,
   minHomework:  2,
   homeworkMissRate: [[0.5, 2], [0.25, 1]],
-  feeRatio:     0.5,         // owing half or more of what was billed
+  feeRatio:     0.5,         // owing half or more of what was billed (overdue only)
 };
 
 const TIER = (score) => (score >= 5 ? "high" : score >= 3 ? "medium" : "low");
@@ -81,7 +81,7 @@ const TIER = (score) => (score >= 5 ? "high" : score >= 3 ? "medium" : "low");
  * students: [{ studentId, name, enrollmentNo, classId, className, score, tier,
  *              signals: [{ code, points, data }] }]
  */
-const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
+const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date() }) => {
   const sinceKey = dayKey(new Date(Date.now() - days * 86_400_000));
   const todayKey = dayKey(new Date());
 
@@ -96,7 +96,7 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
 
   const passMark = await passMarkOf(schoolId);
 
-  const [attendanceAgg, history, homework, balances] = await Promise.all([
+  const [attendanceAgg, history, homework, overdue] = await Promise.all([
     // One row per (student, status) in the window.
     StudentAttendance.aggregate([
       { $match: { schoolId, studentId: { $in: ids }, date: { $gte: sinceKey } } },
@@ -112,9 +112,14 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
       schoolId, isPublished: true, deletedAt: null,
       dueDate: { $gte: sinceKey, $lte: todayKey },
     }).select("classId dueDate submissions.studentId").lean(),
-    // All-time balance, deliberately not scoped to a year: a family two terms
-    // behind is more of a warning sign, not less.
-    balancesFor({ schoolId, studentIds: ids }),
+    // Fee debt only once it is OVERDUE (C6): a family that owes this term's
+    // fees before their due date is not a pupil to watch. "Overdue" is the
+    // Fee reminders answer, read from the same function, so the two screens
+    // never disagree — due dates, payment plans, undated charges and all.
+    // Balances are all-time: a family two terms behind is more of a warning
+    // sign, not less.
+    overdueFees({ schoolId, mode: "overdue", asOf })
+      .then((rows) => new Map(rows.map((r) => [String(r.studentId), r]))),
   ]);
 
   // ── Fold the raw rows into per-student shapes ───────────────────────────────
@@ -217,13 +222,14 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
       }
     }
 
-    const money = balances.get(id);
+    const money = overdue.get(id);
     if (money && money.balance > 0) {
-      const billed = money.charged - money.waived;
+      // billed net of waivers: what is owed plus what has been paid.
+      const billed = money.balance + money.paid;
       const heavy = billed > 0 && money.balance / billed >= THRESHOLDS.feeRatio;
       signals.push({
         code: "fees_outstanding", points: heavy ? 2 : 1,
-        data: { balance: money.balance, billed },
+        data: { balance: money.balance, billed, daysOverdue: money.daysOverdue },
       });
     }
 
