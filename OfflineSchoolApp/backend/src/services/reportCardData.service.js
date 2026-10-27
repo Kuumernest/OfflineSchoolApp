@@ -82,14 +82,21 @@ const weightedMark = (parts) => {
 /**
  * Per-subject marks for every pupil in a class, over a set of exams.
  *
+ * Scoped to the class. A term's exams are the school's, sat by every class,
+ * and reading their scores unscoped ranked a pupil's subjects against the
+ * whole school: a Form 1 of three printed "1st / 50" beside each subject.
+ *
  * @returns {Map<studentId, Map<subjectKey, {subjectName, mark, coefficient}>>}
  */
-async function subjectMarksAcross(exams, weightOf) {
+async function subjectMarksAcross(exams, weightOf, classId) {
   const examIds = exams.map((e) => String(e._id));
   if (examIds.length === 0) return { byStudent: new Map(), subjects: new Map() };
 
   const [scores, examSubjects] = await Promise.all([
-    StudentScore.find({ examId: { $in: examIds }, deletedAt: null })
+    StudentScore.find({
+      examId: { $in: examIds }, deletedAt: null,
+      ...(classId ? { classId: String(classId) } : {}),
+    })
       .select("studentId examId examSubjectId subjectId score maxScore isAbsent isExempt")
       .lean(),
     ExamSubject.find({ examId: { $in: examIds }, deletedAt: null })
@@ -99,6 +106,13 @@ async function subjectMarksAcross(exams, weightOf) {
       .select("_id examId subjectId subjectName weight maxScore")
       .lean(),
   ]);
+
+  // A deleted pupil's marks are not ranked against: the class position
+  // beside these subject positions does not count them either.
+  const deleted = new Set((await Student.find({
+    _id: { $in: [...new Set(scores.map((sc) => String(sc.studentId)))] },
+    deletedAt: { $ne: null },
+  }).select("_id").lean()).map((s) => String(s._id)));
 
   // examSubjectId → the subject it belongs to. The subject, not the paper, is
   // what a mark is aggregated under: the same subject is a different
@@ -122,7 +136,7 @@ async function subjectMarksAcross(exams, weightOf) {
   for (const sc of scores) {
     const es      = sc.examSubjectId ? esById.get(String(sc.examSubjectId)) : null;
     const subject = String(es?.subjectId ?? sc.subjectId ?? "");
-    if (!subject) continue;
+    if (!subject || deleted.has(String(sc.studentId))) continue;
     const mark = outOf20(sc, es?.maxScore);
     if (mark == null) continue;
 
@@ -398,7 +412,7 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
   );
 
   const { byStudent } = await subjectMarksAcross(
-    exams, (examId) => weightByExam.get(examId) ?? 50
+    exams, (examId) => weightByExam.get(examId) ?? 50, classId
   );
 
   const classInfo = await classInfoFor(classId, record.className);
@@ -544,7 +558,7 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
   const weightByExam = sequenceAssessment.weightsWithCa(exams, shareOf, caSettings);
 
   const { byStudent } = await subjectMarksAcross(
-    exams, (examId) => weightByExam.get(examId) ?? 1
+    exams, (examId) => weightByExam.get(examId) ?? 1, classId
   );
 
   const classInfo = await classInfoFor(classId, record.className);

@@ -211,6 +211,27 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
  */
 const studentKey = (student) => String(student._id);
 
+/**
+ * The pupils a class's term ranking counts when the roster cannot decide:
+ * those computed now, plus any other pupil with a sequence mark in this
+ * class's summaries who has not been deleted.
+ *
+ * @returns {Promise<string[]>}
+ */
+async function pupilsWithTermMarks({ ctx, byStudent, computedIds, schoolId }) {
+  const keep = new Set(computedIds.map(String));
+  const others = [...byStudent.keys()].filter((id) =>
+    !keep.has(id) && termResultFields({ context: ctx, summaries: byStudent.get(id) }).hasAnyMark
+  );
+  if (others.length) {
+    const live = await mongoose.model("Student")
+      .find({ _id: { $in: others }, schoolId, deletedAt: null })
+      .select("_id").lean();
+    for (const s of live) keep.add(String(s._id));
+  }
+  return [...keep];
+}
+
 /** Every summary for a class in one query, grouped by pupil. */
 async function summariesByStudent({ examIds, classId, schoolId }) {
   if (!examIds.length) return new Map();
@@ -382,17 +403,20 @@ async function computeClassTermAverages({
   if (await rosterDecides({ schoolId, academicYear, classId })) {
     await computeTermPositions({ schoolId, academicYear, term, classId, keep: computedIds });
   } else {
-    let removed = 0;
     if (noMarkIds.length) {
-      removed = (await TermResult.deleteMany({
+      await TermResult.deleteMany({
         schoolId, academicYear, term, classId, studentId: { $in: noMarkIds }, isPublished: { $ne: true },
-      })).deletedCount;
+      });
     }
-    // Positions only mean something once there is something to rank, or
-    // once a row the last places counted has gone.
-    if (ops.length || removed) {
-      await computeTermPositions({ schoolId, academicYear, term, classId });
-    }
+    // Ranked every run, not only when this one wrote or removed a row: a
+    // class whose rows are unchanged can still be carrying a wrong class size.
+    // Ranked over the pupils who have results in this class, never over
+    // whatever rows exist: rows a past run left for pupils with no mark here,
+    // or for pupils since deleted, made a class of three print "1st / 50".
+    // A pupil who has moved on keeps their place — their marks are still
+    // in this class's summaries.
+    const keep = await pupilsWithTermMarks({ ctx, byStudent, computedIds, schoolId });
+    await computeTermPositions({ schoolId, academicYear, term, classId, keep });
   }
 
   // Every class's pupils, so after this class's rows are settled. A

@@ -46,12 +46,15 @@ const check = (label, actual, expected) => {
 // And for term grade and school places (schoolRanking.service): term compute
 // reads the term's rows and their classes' levels (+2) and writes the places
 // that moved (+1, when any did).
+//
+// And for the term and annual cards: which of the class's scored pupils have
+// been deleted, so their marks are not ranked against (+1, one per card).
 const CEILING = {
   "process one exam, one class": 16,
   "term compute, one class": 15,
   "sequence card payload": 12,
-  "term card": 11,
-  "annual card": 11,
+  "term card": 12,
+  "annual card": 12,
   "promotion generateRun": 10,
   "progression?year (HTTP)": 8,
   "calculate & save (HTTP)": 26,

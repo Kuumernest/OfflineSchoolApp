@@ -85,7 +85,7 @@ const main = async () => {
   for (const [examId, byPupil] of Object.entries(marks))
     for (const [pupil, bySubject] of Object.entries(byPupil))
       for (const [sid, score] of Object.entries(bySubject))
-        rows.push({ _id: `${examId}-${pupil}-${sid}`, examId, schoolId: S, studentId: pupil,
+        rows.push({ _id: `${examId}-${pupil}-${sid}`, examId, schoolId: S, studentId: pupil, classId: CLS,
           examSubjectId: `es-${examId}-${sid}`, subjectId: sid, score, maxScore: 20,
           isAbsent: false, isExempt: false, deletedAt: null });
   await Score.collection.insertMany(rows);

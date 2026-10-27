@@ -412,7 +412,13 @@ async function computeClassAnnualAverages({
   // class size (rankingScope.service says why only this year): the positions
   // keep exactly the pupils computed here. Unpublished only; a published row
   // refused the class above.
-  const keep = await rosterDecides({ schoolId, academicYear, classId }) ? computedIds : null;
+  //
+  // Otherwise the pupils with a term result in this class who have not been
+  // deleted — never simply every row that exists, which is how a class of
+  // three printed "1st / 50".
+  const keep = await rosterDecides({ schoolId, academicYear, classId })
+    ? computedIds
+    : await pupilsWithTermResults({ schoolId, academicYear, classId });
 
   // Compute class positions
   await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded, keep });
@@ -422,6 +428,18 @@ async function computeClassAnnualAverages({
   if (schoolPlaces) await rankAcrossClasses(AnnualResult, { schoolId, academicYear }, "annualAverage");
 
   return { computed, skipped: skipped + noTerms, noTerms };
+}
+
+/** The pupils with a term result in a class who have not been deleted. */
+async function pupilsWithTermResults({ schoolId, academicYear, classId }) {
+  const ids = (await TermResult.distinct("studentId", {
+    schoolId, academicYear, classId, deletedAt: null,
+  })).map(String);
+  if (!ids.length) return [];
+  const live = await mongoose.model("Student")
+    .find({ _id: { $in: ids }, schoolId, deletedAt: null })
+    .select("_id").lean();
+  return live.map((s) => String(s._id));
 }
 
 /**
