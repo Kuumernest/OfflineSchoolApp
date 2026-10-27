@@ -9,6 +9,7 @@ import {
   Calendar, BarChart2, ChevronLeft, ChevronRight,
   X, MoreVertical,
   BookOpen, AlertTriangle,
+  Download, Printer, Archive, BarChart3, Pencil, PenLine, Trash2,
 } from "lucide-react";
 import {
   useExams,
@@ -246,7 +247,7 @@ const AlertsPanel = ({
       <div className="max-h-80 overflow-y-auto">
         {!alerts.length ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-2xl mb-2">🎉</p>
+            <CheckCircle className="w-6 h-6 mx-auto mb-2 text-green-500" aria-hidden />
             <p className="text-sm text-gray-400">{t("exams.noAlerts")}</p>
           </div>
         ) : (
@@ -295,11 +296,11 @@ const QuickActionsMenu = ({
 
   const actions = [
     {
-      id: "schedule", icon: "➕", label: t("exams.qaSchedule"),
+      id: "schedule", icon: <Plus className="w-4 h-4" aria-hidden />, label: t("exams.qaSchedule"),
       onClick: () => { navigate("/exams/new"); onClose(); },
     },
     {
-      id: "export", icon: "📊", label: t("exams.qaExportCsv"),
+      id: "export", icon: <Download className="w-4 h-4" aria-hidden />, label: t("exams.qaExportCsv"),
       onClick: async () => {
         try {
           const res = await api.get("/exams/reports/results", {
@@ -319,19 +320,19 @@ const QuickActionsMenu = ({
       },
     },
     {
-      id: "print", icon: "🖨️", label: t("exams.qaPrintTimetable"),
+      id: "print", icon: <Printer className="w-4 h-4" aria-hidden />, label: t("exams.qaPrintTimetable"),
       onClick: () => { window.print(); onClose(); },
     },
     {
-      id: "archive", icon: "🗑️", label: t("exams.qaArchiveCompleted"),
+      id: "archive", icon: <Archive className="w-4 h-4" aria-hidden />, label: t("exams.qaArchiveCompleted"),
       onClick: () => { onArchiveCompleted(); onClose(); },
     },
     {
-      id: "cards", icon: "📋", label: t("exams.qaReportCards"),
+      id: "cards", icon: <FileText className="w-4 h-4" aria-hidden />, label: t("exams.qaReportCards"),
       onClick: () => { navigate("/reports/cards"); onClose(); },
     },
     {
-      id: "analytics", icon: "📈", label: t("results.analytics"),
+      id: "analytics", icon: <BarChart3 className="w-4 h-4" aria-hidden />, label: t("results.analytics"),
       onClick: () => { navigate("/exams/results"); onClose(); },
     },
   ];
@@ -499,17 +500,17 @@ const ExamRow = ({
                   <Link to={`/exams/${exam._id}?tab=details`}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     onClick={() => setMenuOpen(false)}>
-                    ✏️ {t("common.edit")}
+                    <Pencil className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.edit")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=marks`}
                     className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
                     onClick={() => setMenuOpen(false)}>
-                    ✏️ {t("exams.enterMarks")}
+                    <PenLine className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.enterMarks")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=results`}
                     className="block px-4 py-2 text-sm text-green-600 hover:bg-green-50"
                     onClick={() => setMenuOpen(false)}>
-                    📊 {t("exams.viewResults")}
+                    <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.viewResults")}
                   </Link>
 
                   <hr className="my-1 border-gray-100" />
@@ -517,7 +518,7 @@ const ExamRow = ({
                     onClick={() => { onDelete(exam._id, exam.name); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-2 text-sm text-red-600
                                hover:bg-red-50">
-                    🗑️ {t("common.delete")}
+                    <Trash2 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.delete")}
                   </button>
                 </div>
               )}

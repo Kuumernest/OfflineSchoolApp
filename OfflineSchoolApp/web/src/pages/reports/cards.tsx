@@ -1,7 +1,7 @@
 // web/src/pages/reports/cards.tsx
 import { useState, useEffect, useRef } from "react";
 import { Link }                from "react-router-dom";
-import { ArrowRight }          from "lucide-react";
+import { ArrowRight, BarChart3, AlertTriangle, CheckCircle, Printer, RefreshCw } from "lucide-react";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
@@ -676,7 +676,7 @@ export default function ReportCardsPage() {
                      border-indigo-200 rounded-xl text-sm font-semibold
                      hover:bg-indigo-100 transition-colors"
         >
-          📊 {t("reportCards.viewResults")}
+          <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.viewResults")}
         </Link>
       </div>
 
@@ -1017,7 +1017,7 @@ export default function ReportCardsPage() {
                   ? "bg-amber-50 text-amber-700"
                   : "bg-green-50 text-green-700"
                 }`}>
-                {result.error > 0 ? "⚠️" : "✅"} {result.message}
+                {result.error > 0 ? <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden /> : <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />}{result.message}
               </div>
             )}
 
@@ -1047,7 +1047,7 @@ export default function ReportCardsPage() {
                 </>
               ) : (
                 <>
-                  🖨️{" "}
+                  <Printer className="w-4 h-4" aria-hidden />
                   {selectedStudent
                     ? t("reportCards.printOne")
                     : t("reportCards.printAll", { count: students.length })}
@@ -1068,7 +1068,7 @@ export default function ReportCardsPage() {
                            disabled:opacity-50 flex items-center
                            justify-center gap-2"
               >
-                {reissuing ? t("reportCards.reissuing") : `♻️ ${t("reportCards.reissue")}`}
+                {reissuing ? t("reportCards.reissuing") : <><RefreshCw className="w-4 h-4" aria-hidden />{t("reportCards.reissue")}</>}
               </button>
             )}
 

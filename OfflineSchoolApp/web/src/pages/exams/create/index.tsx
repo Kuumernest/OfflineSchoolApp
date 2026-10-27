@@ -15,6 +15,7 @@ import {
   examTypeLabel,
 } from "@/constants/exam.constants";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
+import { AlertTriangle } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -869,7 +870,7 @@ return (
     {Object.keys(assignments).length === 0 ? (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4
                       text-amber-700 text-sm text-center">
-        {t("examCreate.noSubjectsWarning")}
+        <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("examCreate.noSubjectsWarning")}
       </div>
     ) : (
       <div className="space-y-3">

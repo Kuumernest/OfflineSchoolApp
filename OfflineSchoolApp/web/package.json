@@ -20,7 +20,8 @@
     "check:print": "node scripts/check-report-print.mjs",
     "check:permlabels": "node scripts/check-permission-labels.mjs",
     "check:activenav": "node scripts/check-active-nav.mjs",
-    "check:dates": "node scripts/check-date-format.mjs"
+    "check:dates": "node scripts/check-date-format.mjs",
+    "check:icons": "node scripts/check-line-icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

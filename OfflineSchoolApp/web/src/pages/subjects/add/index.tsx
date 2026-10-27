@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Square,
   X,
+  CheckCircle, XCircle,
 } from "lucide-react";
 
 import { useUser }       from "@/store/auth.store";
@@ -172,7 +173,7 @@ function ResultsSummary({
       {succeeded.length > 0 && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="mb-2 text-sm font-bold text-emerald-800">
-            ✅ Created in {succeeded.length}{" "}
+            <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Created in {succeeded.length}{" "}
             {succeeded.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">
@@ -188,7 +189,7 @@ function ResultsSummary({
       {failed.length > 0 && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
           <p className="mb-2 text-sm font-bold text-red-800">
-            ❌ Failed in {failed.length}{" "}
+            <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Failed in {failed.length}{" "}
             {failed.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">

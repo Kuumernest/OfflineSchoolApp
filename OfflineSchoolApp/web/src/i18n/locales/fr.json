@@ -1108,7 +1108,7 @@
     "promoSequenceHint": "* indique les examens de passage de l’année, fixés dans la structure académique. Ils ne décident pas du passage.",
     "createFailed": "Impossible de créer l’examen.",
     "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite",
-    "noSubjectsWarning": "⚠️ Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
+    "noSubjectsWarning": "Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
   },
   "reportCards": {
     "allStudents": "Les {{count}} élève",

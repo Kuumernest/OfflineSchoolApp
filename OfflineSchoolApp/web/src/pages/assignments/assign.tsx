@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Search,
   X,
+  CheckCircle, XCircle,
 } from "lucide-react";
 
 import { useUser }            from "@/store/auth.store";
@@ -402,7 +403,7 @@ export default function AssignTeacherPage() {
                   "text-sm font-semibold",
                   r.ok ? "text-emerald-800" : "text-red-800"
                 )}>
-                  {r.ok ? "✅" : "❌"} {r.className}
+                  {r.ok ? <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden /> : <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />}{r.className}
                 </p>
                 <p className="mt-0.5 text-xs text-gray-500">
                   {r.subjects.join(", ")}

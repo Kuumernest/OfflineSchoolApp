@@ -18,6 +18,8 @@ import type {
   ResultSummary,
   SubjectStat,
 }                                     from "@/types/exam.types";
+import { Trophy, BarChart3, Calculator, Pin, Printer } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -108,15 +110,18 @@ const Spinner = () => (
 const EmptyState = ({
   icon, title, subtitle,
 }: {
-  icon: string; title: string; subtitle?: string;
-}) => (
+  icon: LucideIcon; title: string; subtitle?: string;
+}) => {
+  const Icon = icon;
+  return (
   <div className="flex flex-col items-center justify-center
                   py-20 text-center text-gray-400">
-    <span className="text-5xl mb-3">{icon}</span>
+    <Icon className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} aria-hidden />
     <p className="font-semibold text-gray-600 text-lg">{title}</p>
     {subtitle && <p className="text-sm mt-1 max-w-sm">{subtitle}</p>}
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // EXAM PICKER
@@ -509,7 +514,7 @@ const RankingsTable = ({
   if (rankings.length === 0) {
     return (
       <EmptyState
-        icon="🏆"
+        icon={Trophy}
         title={t("results.noRankings")}
         subtitle={t("results.processFirst")}
       />
@@ -552,10 +557,7 @@ const RankingsTable = ({
               // Judged on /20 against the school's pass mark by the server.
               const passing = r.passes ?? r.isPassing;
               const color   = passing ? "text-green-600" : "text-red-600";
-              const medal   =
-                pos === 1 ? "🥇" :
-                pos === 2 ? "🥈" :
-                pos === 3 ? "🥉" : null;
+              const podium  = pos >= 1 && pos <= 3;
 
               return (
                 <tr key={r._id || r.studentId}
@@ -564,13 +566,9 @@ const RankingsTable = ({
                   {/* Position */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      {medal ? (
-                        <span className="text-lg">{medal}</span>
-                      ) : (
-                        <span className="font-bold text-gray-500">
-                          #{pos}
-                        </span>
-                      )}
+                      <span className={`font-bold ${podium ? "text-amber-600" : "text-gray-500"}`}>
+                        #{pos}
+                      </span>
                       {total > 0 && (
                         <span className="text-xs text-gray-300">
                           /{total}
@@ -702,7 +700,7 @@ const TopBottomStudents = ({
       {/* Top performers */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg">🏆</span>
+          <Trophy className="w-5 h-5 text-amber-500" aria-hidden />
           <h3 className="font-semibold text-gray-900 text-sm">
             {t("results.topStudents", { count: n })}
           </h3>
@@ -715,7 +713,7 @@ const TopBottomStudents = ({
       {/* Bottom performers — need attention */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg">📌</span>
+          <Pin className="w-5 h-5 text-red-500" aria-hidden />
           <h3 className="font-semibold text-gray-900 text-sm">
             {t("results.needsAttention", { count: n })}
           </h3>
@@ -812,7 +810,7 @@ export default function ExamResultsPage() {
                      text-sm font-semibold hover:bg-green-700
                      transition-colors"
         >
-          🖨️ {t("reportCards.title")}
+          <Printer className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.title")}
         </Link>
       </div>
 
@@ -837,7 +835,7 @@ export default function ExamResultsPage() {
           {!selectedExamId ? (
             <div className="bg-white rounded-xl border border-gray-100">
               <EmptyState
-                icon="📊"
+                icon={BarChart3}
                 title={t("results.selectToView")}
                 subtitle={t("results.chooseExam")}
               />
@@ -849,7 +847,7 @@ export default function ExamResultsPage() {
           ) : !stats || stats.totalStudents === 0 ? (
             <div className="bg-white rounded-xl border border-gray-100">
               <EmptyState
-                icon="🧮"
+                icon={Calculator}
                 title={t("results.none")}
                 subtitle={t("results.processFromDetail")}
               />

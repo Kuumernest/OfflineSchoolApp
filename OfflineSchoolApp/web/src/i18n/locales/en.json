@@ -1108,7 +1108,7 @@
     "promoSequenceHint": "* marks this year's promotion exams, set in the academic structure. They do not decide promotion.",
     "createFailed": "Could not create the exam.",
     "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right",
-    "noSubjectsWarning": "⚠️ No subjects assigned. You can add them later from the exam detail."
+    "noSubjectsWarning": "No subjects assigned. You can add them later from the exam detail."
   },
   "reportCards": {
     "allStudents": "All {{count}} student",

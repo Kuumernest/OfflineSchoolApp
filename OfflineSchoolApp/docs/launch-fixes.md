@@ -49,6 +49,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
   - [x] Admissions vs Applications — the screen is "Admissions" everywhere (page title, dashboard card, banner, search); `/students/applications` redirects there
   - [x] class-name casing — class group headings no longer upper-case the name ("FORM 5" → "Form 5")
   - [x] Fees group header — "Form 5 – 5 owing"
+  - [x] line icons only — colour emoji used as icons replaced by lucide line icons (exams, results, report cards, assignments, subjects, teachers, applications); emoji removed from web + mobile strings; `web: check:icons`
 - [ ] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student.
 - [ ] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20".
 - [ ] **C10** Student profile: results, attendance, fee balance, guardian contact. *(may go to follow-up PR)*

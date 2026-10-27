@@ -9,6 +9,7 @@ import {
   ArrowLeft, UserPlus, Mail, User,
   Key, Lock, AlertCircle, CheckCircle,
   Copy, Check,
+  KeyRound,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
@@ -234,13 +235,13 @@ export default function AddTeacherPage() {
                   {t("teachersAdd.shareManually")}
                 </p>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">📧 {t("common.email")}</p>
+                  <p className="text-xs text-yellow-700 font-medium"><Mail className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.email")}</p>
                   <p className="text-sm font-mono text-gray-900 mt-0.5">
                     {success.teacherEmail}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">🔑 {t("students.tempPassword")}</p>
+                  <p className="text-xs text-yellow-700 font-medium"><KeyRound className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("students.tempPassword")}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-sm font-mono text-gray-900 flex-1">
                       {success.tempPassword}

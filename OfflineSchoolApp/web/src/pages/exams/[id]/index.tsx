@@ -30,6 +30,8 @@ import {
   examTypeLabel,
 }                                            from "@/constants/exam.constants";
 import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
+import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -171,12 +173,12 @@ const NEXT_STATUSES: Record<string, ExamStatus[]> = {
 };
 
 const SUBMISSION_META: Record<string, {
-  color: string; bg: string; labelKey: string; icon: string;
+  color: string; bg: string; labelKey: string; icon: LucideIcon;
 }> = {
-  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: "⏳" },
-  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", labelKey: "examSubmission.awaitingApproval", icon: "📬" },
-  approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: "✅" },
-  rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: "❌" },
+  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: Hourglass },
+  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", labelKey: "examSubmission.awaitingApproval", icon: Inbox },
+  approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: CheckCircle },
+  rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: XCircle },
 };
 
 const EMPTY_SCORE: ScoreEntry = {
@@ -210,15 +212,18 @@ const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
 const EmptyState = ({
   icon, title, subtitle,
 }: {
-  icon: string; title: string; subtitle?: string;
-}) => (
+  icon: LucideIcon; title: string; subtitle?: string;
+}) => {
+  const Icon = icon;
+  return (
   <div className="flex flex-col items-center justify-center
                   py-16 text-center text-gray-400">
-    <span className="text-5xl mb-3">{icon}</span>
+    <Icon className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} aria-hidden />
     <p className="font-semibold text-gray-600">{title}</p>
     {subtitle && <p className="text-sm mt-1">{subtitle}</p>}
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // TAB 1 — DETAILS
@@ -653,7 +658,7 @@ const DetailsTab = ({
               <div key={sub._id}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">{meta.icon}</span>
+                    <meta.icon className={`w-4 h-4 ${meta.color}`} aria-hidden />
                     <span className="text-sm font-semibold text-gray-800">
                       {sub.subjectName}
                     </span>
@@ -1269,7 +1274,7 @@ const MarksTab = ({
   if (submissions.length === 0) {
     return (
       <EmptyState
-        icon="📭"
+        icon={Inbox}
         title={t("exams.noSubjectsShort")}
         subtitle={t("exams.addSubjectsHint")}
       />
@@ -1365,7 +1370,7 @@ const MarksTab = ({
                   className="flex items-center gap-4 p-4"
                   onClick={() => toggleSubject(sub._id)}
                 >
-                  <span className="text-xl shrink-0">{meta.icon}</span>
+                  <meta.icon className={`w-5 h-5 shrink-0 ${meta.color}`} aria-hidden />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1497,7 +1502,7 @@ const MarksTab = ({
                 {sub.submissionStatus === "rejected" && sub.rejectReason && (
                   <div className="mx-4 mb-3 px-3 py-2 bg-red-50 rounded-lg
                                   text-xs text-red-600 border border-red-100">
-                    ❌ {t("exams.rejectedReason", { reason: sub.rejectReason })}
+                    <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.rejectedReason", { reason: sub.rejectReason })}
                   </div>
                 )}
               </div>
@@ -1604,8 +1609,10 @@ const ResultsTab = ({
           {/* Step 1 */}
           <div className={`flex items-start gap-3 p-3 rounded-xl
             ${allMarksEntered ? "bg-green-50" : "bg-amber-50"}`}>
-            <span className="text-lg mt-0.5">
-              {allMarksEntered ? "✅" : "⏳"}
+            <span className="mt-0.5">
+              {allMarksEntered
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Hourglass className="w-5 h-5 text-amber-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1638,8 +1645,10 @@ const ResultsTab = ({
                 ? "bg-indigo-50"
                 : "bg-gray-50 opacity-60"
             }`}>
-            <span className="text-lg mt-0.5">
-              {resultsProcessed ? "✅" : "🧮"}
+            <span className="mt-0.5">
+              {resultsProcessed
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Calculator className="w-5 h-5 text-indigo-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1687,8 +1696,10 @@ const ResultsTab = ({
                 ? "bg-purple-50"
                 : "bg-gray-50 opacity-60"
             }`}>
-            <span className="text-lg mt-0.5">
-              {resultsPublished ? "✅" : "📢"}
+            <span className="mt-0.5">
+              {resultsPublished
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Megaphone className="w-5 h-5 text-indigo-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1761,7 +1772,7 @@ const ResultsTab = ({
       ) : results.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100">
           <EmptyState
-            icon="📊"
+            icon={BarChart3}
             title={t("exams.noResultsYet")}
             subtitle={
               currentStep === 1
@@ -1925,7 +1936,7 @@ export default function ExamDetailPage() {
   if (error || !exam) {
     return (
       <div className="text-center py-16">
-        <p className="text-5xl mb-4">😕</p>
+        <SearchX className="w-12 h-12 mx-auto mb-4 text-gray-300" strokeWidth={1.5} aria-hidden />
         <p className="font-semibold text-gray-700">{t("exams.notFound")}</p>
         <button
           onClick={() => navigate("/exams")}
