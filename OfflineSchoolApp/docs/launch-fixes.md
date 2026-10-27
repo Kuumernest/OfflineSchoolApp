@@ -10,6 +10,19 @@ To resume: `git log master..HEAD --oneline`, then the first unticked item below.
 Rules already decided: coefficients always applied; an absent subject is
 removed with its coefficient; CA on/off per school; grading is /20.
 
+## Rule: one guardian, many children (owner, 2026-10-27)
+
+A parent/guardian can have several children at the school. Siblings sharing
+the same guardian name, email or phone is normal, valid data — not a duplicate
+and not test data. Every change must keep this true: no uniqueness on guardian
+email/phone across pupils; one portal code can cover several children and the
+parent can switch between them; "code covers no student" only for zero
+children; fees and overdue are per child while the parent sees all of them;
+cleanup clears only explicitly listed fake addresses. Checked across the whole
+branch on 2026-10-27 — only D1 broke it (fixed). `check:siblings` (a guardian
+with three children) and the family-of-three case in `check:portalcodes` guard
+it. Also in the repo's `CLAUDE.md`.
+
 ## Decisions from the owner (2026-10-27)
 
 - A8: several teachers on one class-subject are allowed; every screen lists them all.

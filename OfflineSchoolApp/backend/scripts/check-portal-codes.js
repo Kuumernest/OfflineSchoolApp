@@ -49,6 +49,11 @@ const SRC = path.join(__dirname, "..", "src");
   await pupil("bih", "Bih", " Mrs Tem ");
   await pupil("cho", "Cho", "Mr Ndi");
   await pupil("dan", "Dan", "Mr Fon", { deletedAt: new Date() });
+  // One guardian, three children — the ordinary family, not a duplicate.
+  for (const [id, name] of [["eve", "Eve"], ["fay", "Fay"], ["gus", "Gus"]]) {
+    await pupil(id, name, "Mrs Bate", { guardianEmail: "bate@gmail.com", guardianPhone: "+237670000001" });
+  }
+  await pupil("hal", "Hal", "Mrs Bate", { deletedAt: new Date() });
 
   const yesterday = new Date(Date.now() - 86_400_000);
   const access = (_id, studentIds, extra = {}) => M("GuardianAccess").create({
@@ -58,6 +63,8 @@ const SRC = path.join(__dirname, "..", "src");
   await access("nolab", ["cho"], { lastSeenAt: yesterday });
   await access("gone",  ["dan"]);
   await access("empty", []);
+  await access("bate",  ["eve", "fay", "gus"]);
+  await access("part",  ["hal", "eve"]);
 
   const auth = require(path.join(__dirname, "..", "middleware", "auth"));
   const app  = express();
@@ -86,6 +93,14 @@ const SRC = path.join(__dirname, "..", "src");
   check("a code with no children at all is flagged", row("empty").linkedToNoStudent, true);
   check("codes that open a current pupil are not",
     [row("tem").linkedToNoStudent, row("nolab").linkedToNoStudent], [false, false]);
+
+  console.log("\n--- one guardian, three children ---");
+  check("one code lists all three children, in order",
+    (row("bate").children ?? []).map((c) => c.name), ["Eve", "Fay", "Gus"]);
+  check("the guardian is named once, and the code is not flagged",
+    [row("bate").guardianNames, row("bate").linkedToNoStudent], [["Mrs Bate"], false]);
+  check("a code with one child left of two is not flagged (only zero children is)",
+    [row("part").linkedToNoStudent, (row("part").children ?? []).map((c) => c.name)], [false, ["Eve"]]);
 
   server.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
