@@ -40,7 +40,6 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
 import { conversationMatches, participantName } from "./participants";
-import { currentLocale } from "@/i18n";
 import { formatDay, formatTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
