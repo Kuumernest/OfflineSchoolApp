@@ -70,7 +70,12 @@ export interface SystemHealthStats {
   unassignedTeachers:       number;
   // row 2
   totalClasses:             number;
+  /** Class-subject pairs: Mathematics in Form 1 and in Form 2 are two (B4). */
   totalSubjects:            number;
+  /** Distinct subject names across the school; null when the server sent none. */
+  distinctSubjects:         number | null;
+  /** Class-subjects no active assignment covers (B4). */
+  unassignedClassSubjects:  number;
   assignedSubjects:         number;
   activeAnnouncements:      number;
   // row 3
@@ -396,6 +401,8 @@ interface AdminStatsPayload {
   unassignedTeachers?:       number;
   totalClasses?:             number;
   totalSubjects?:            number;
+  distinctSubjects?:         number | null;
+  unassignedClassSubjects?:  number;
   totalAssignments?:         number;   // backend key → maps to assignedSubjects
   activeAnnouncements?:      number;
   totalPeriods?:             number;
@@ -421,6 +428,8 @@ export async function fetchSystemHealth(
     unassignedTeachers:       0,
     totalClasses:             0,
     totalSubjects:            0,
+    distinctSubjects:         null,
+    unassignedClassSubjects:  0,
     assignedSubjects:         0,
     activeAnnouncements:      0,
     totalPeriods:             0,
@@ -450,6 +459,8 @@ export async function fetchSystemHealth(
       unassignedTeachers:       n(s.unassignedTeachers),
       totalClasses:             n(s.totalClasses),
       totalSubjects:            n(s.totalSubjects),
+      distinctSubjects:         s.distinctSubjects == null ? null : n(s.distinctSubjects),
+      unassignedClassSubjects:  n(s.unassignedClassSubjects),
       assignedSubjects:         n(s.totalAssignments),   // key rename
       activeAnnouncements:      n(s.activeAnnouncements),
       totalPeriods:             n(s.totalPeriods),

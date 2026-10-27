@@ -120,6 +120,12 @@ export default function SystemHealthGrid({
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
+              {/* B4: the pairs, then how many distinct subjects they are. */}
+              {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
+                <p className="text-xs text-ink-muted">
+                  {t("health.distinctSubjects", { count: stats.distinctSubjects })}
+                </p>
+              )}
             </div>
           );
         })}

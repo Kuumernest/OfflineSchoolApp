@@ -351,7 +351,7 @@ const STAT_ROWS = [
   [
     { key: "totalClasses",        labelKey: "dashAdmin.sClasses",      icon: "school",           color: "#7C3AED" },
     { key: "totalSubjects",       labelKey: "dashAdmin.sSubjects",     icon: "book",             color: "#059669" },
-    { key: "assignedSubjects",    labelKey: "dashAdmin.hAssigned",     icon: "git-branch",       color: "#DB2777" },
+    { key: "unassignedClassSubjects", labelKey: "dashAdmin.hNoTeacher", icon: "git-branch",       color: "#DC2626" },
     { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        color: "#7C3AED" },
   ],
   [
@@ -724,6 +724,17 @@ export default function AdminDashboard() {
         type:    "warning",
         icon:    "people-outline",
         message: t("dashAdmin.alertUnassignedTeachers", { count: stats.unassignedTeachers }),
+        route:   "/admin/assignments",
+      });
+    }
+
+    // B4: class-subjects nobody teaches.
+    if (stats.unassignedClassSubjects > 0) {
+      list.push({
+        id:      "class-subjects-unassigned",
+        type:    "warning",
+        icon:    "book-outline",
+        message: t("dashAdmin.alertClassSubjectsUnassigned", { count: stats.unassignedClassSubjects }),
         route:   "/admin/assignments",
       });
     }

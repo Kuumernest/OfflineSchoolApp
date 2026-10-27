@@ -10,7 +10,7 @@ const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
-const { teachersFor } = require("../services/classSubjectTeacher.service");
+const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -698,6 +698,12 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
   const classesWithoutSubjects =
     Math.max(0, totalClasses - allClassesWithSubjects.length);
 
+  // Class-subject coverage (B4): "Subjects" was the class-subject pairs, and
+  // nothing said how many had no teacher.
+  const coverage = schoolId
+    ? await coverageFor(schoolId).catch(() => null)
+    : null;
+
   const assignedSubjects =
     allClassesWithSubjects.length > 0
       ? await Subject.countDocuments({
@@ -745,7 +751,9 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     totalTeachers,
     unassignedTeachers,
     totalClasses,
-    totalSubjects,
+    totalSubjects:           coverage ? coverage.classSubjects : totalSubjects,
+    distinctSubjects:        coverage ? coverage.distinctSubjects : null,
+    unassignedClassSubjects: coverage ? coverage.unassigned.length : 0,
     assignedSubjects,
     totalAssignments,
     incompleteTimetableSlots,
@@ -1609,6 +1617,17 @@ router.get("/classes/:classId/subjects", requirePermission("subjects.view"), asy
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 7 — SUBJECTS
 // ═════════════════════════════════════════════════════════════════════════════
+
+// The class-subjects no active assignment covers, for the Teachers page (B4).
+router.get("/class-subjects/unassigned", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+  const cov = await coverageFor(schoolId);
+  return sendSuccess(res, {
+    classSubjects: cov.classSubjects, distinctSubjects: cov.distinctSubjects,
+    unassigned: cov.unassigned, total: cov.unassigned.length,
+  });
+}));
 
 router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
   const schoolId    = resolveSchoolId(req, req.query.schoolId);

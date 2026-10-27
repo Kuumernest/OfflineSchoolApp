@@ -368,7 +368,7 @@
     "totalTeachers": "Enseignants",
     "unassignedTeachers": "Non affectés",
     "totalClasses": "Classes",
-    "totalSubjects": "Matières",
+    "totalSubjects": "Matières par classe",
     "assignedSubjects": "Affectées",
     "activeAnnouncements": "Communiqués",
     "totalPeriods": "Périodes de cours",
@@ -376,7 +376,10 @@
     "timetableConflicts": "Conflits",
     "classesWithoutSubjects": "Sans matières",
     "totalReportTemplates": "Modèles",
-    "defaultTemplateSet": "Modèle par défaut"
+    "defaultTemplateSet": "Modèle par défaut",
+    "unassignedClassSubjects": "Sans enseignant",
+    "distinctSubjects": "{{count}} matière",
+    "distinctSubjects_other": "{{count}} matières distinctes"
   },
   "examStatus": {
     "draft": "Brouillon",
@@ -608,7 +611,12 @@
     "none": "Aucun enseignant",
     "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières.",
     "noneMatch": "Aucun résultat pour cette recherche",
-    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre."
+    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre.",
+    "unassignedTitle": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "unassignedTitle_other": "{{count}} matières-classes sur {{total}} sans enseignant",
+    "unassignedHint": "Aucun enseignant ne peut y saisir de notes, et le bulletin n'affiche aucun enseignant pour ces lignes.",
+    "unassignedShow": "Afficher",
+    "unassignedHide": "Masquer"
   },
   "subjects": {
     "title": "Matières",
@@ -3151,7 +3159,9 @@
     "titleConflicts": "Conflits d’emploi du temps",
     "titleNoTimetable": "Emplois du temps incomplets",
     "titleNoAssignments": "Aucune attribution",
-    "titleGeneric": "Alerte système"
+    "titleGeneric": "Alerte système",
+    "classSubjectsUnassigned": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "classSubjectsUnassigned_other": "{{count}} matières-classes sur {{total}} sans enseignant"
   },
   "modules": {
     "classes": "Classes",

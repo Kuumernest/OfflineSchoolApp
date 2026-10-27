@@ -33,7 +33,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **B1** Timetable: no lessons in Break/non-teaching rows; only a teacher assigned to that class+subject; Wednesday column width. — `shared/timetableRules.js`; existing bad slots listed by the Phase D report
 - [x] **B2** School hours: one source of truth between Settings and Periods; warn on conflict; header counts teaching periods only. — both stay school-set (owner); warning on Settings + Periods; dashboard counts teaching periods only
 - [ ] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite).
-- [ ] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects.
+- [x] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects. — `classSubjectCoverage`; `GET /admin/class-subjects/unassigned`
 - [ ] **B5** Year pickers on Progression and Academic structure default to the school's current academic year.
 
 ## Phase C — UX fixes (after A and B)

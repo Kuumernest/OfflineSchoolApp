@@ -24,6 +24,7 @@ const EMPTY_STATS = {
   timetableConflicts:       0,
   stalePendingApps:         0,
   totalPeriods:             0,
+  unassignedClassSubjects:  0,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -208,6 +209,8 @@ const fetchAdminStatsFromServer = async () => {
           timetableConflicts:       raw.timetableConflicts       ?? 0,
           stalePendingApps:         raw.stalePendingApps         ?? 0,
           totalPeriods:             raw.totalPeriods             ?? 0,
+          // B4: the server's count of class-subjects with no teacher.
+          unassignedClassSubjects:  raw.unassignedClassSubjects  ?? 0,
         };
 
         // ── Consistency guard: server vs local teacher counts ──

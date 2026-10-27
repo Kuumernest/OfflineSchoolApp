@@ -47,5 +47,23 @@ check("an inactive assignment names nobody", at("f1", "ma-f1"), null);
 check("an assignment to a user who no longer exists names nobody", at("f1", "ph-f1"), null);
 check("a populated teacher ref reads as its id", at("f1", "en-f1")?.teacherIds.includes("buh"), true);
 
+console.log("--- coverage (B4) ---");
+const { classSubjectCoverage } = require("../../shared/classSubjectTeachers");
+const SUBJECTS = [
+  { _id: "fr-f1", name: "French",  classId: "f1" },
+  { _id: "en-f1", name: "English", classId: "f1" },
+  { _id: "ma-f1", name: "Maths",   class: "f1" },          // only the inactive assignment
+  { _id: "ph-f1", name: "Physics", classId: "f1" },        // a ghost teacher
+  { _id: "en-f2", name: "english", classId: "f2" },        // the same subject in another class
+  { _id: "ma-f2", name: "Maths",   classId: "f2" },
+  { _id: "old",   name: "Latin",   classId: "f1", deletedAt: new Date() },
+  { _id: "x",     name: "Music",   classId: "gone" },      // a class no longer live
+];
+const cov = classSubjectCoverage(SUBJECTS, byPair, new Set(["f1", "f2"]));
+check("class-subject pairs, not counting a deleted subject or a dead class", cov.classSubjects, 6);
+check("distinct subjects: English in two classes is one subject", cov.distinctSubjects, 4);
+check("the pairs no active assignment covers",
+  cov.unassigned.map((u) => `${u.classId}/${u.subjectName}`), ["f1/Maths", "f1/Physics", "f2/Maths"]);
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

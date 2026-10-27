@@ -51,4 +51,28 @@ function assignedTeachers(assignments, userOf) {
   return out;
 }
 
-module.exports = { assignedTeachers, pairKey };
+/**
+ * How many class-subjects a school has, how many distinct subjects that is,
+ * and which class-subjects no active assignment covers (B4, decided
+ * 2026-10-27). The dashboard said "Subjects: 105" for 105 class-subject pairs
+ * — Mathematics in Form 1 and in Form 2 are two — and nowhere said that 69 of
+ * them had no teacher.
+ *
+ * @param {Array} subjects    Subject rows (one per class); deleted ones are skipped
+ * @param {Set<string>} [liveClassIds]  only subjects of these classes count
+ * @param {Map} byPair        assignedTeachers(...)
+ */
+function classSubjectCoverage(subjects, byPair, liveClassIds = null) {
+  const live = (subjects || []).filter((s) => {
+    if (!s || s.deletedAt) return false;
+    const cid = s.classId || s.class;
+    return cid && (!liveClassIds || liveClassIds.has(String(cid)));
+  });
+  const names = new Set(live.map((s) => String(s.name || "").trim().toLowerCase()).filter(Boolean));
+  const unassigned = live
+    .filter((s) => !byPair.has(pairKey(s.classId || s.class, s._id)))
+    .map((s) => ({ subjectId: String(s._id), subjectName: s.name || null, classId: String(s.classId || s.class) }));
+  return { classSubjects: live.length, distinctSubjects: names.size, unassigned };
+}
+
+module.exports = { assignedTeachers, pairKey, classSubjectCoverage };

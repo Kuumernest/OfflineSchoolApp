@@ -368,7 +368,7 @@
     "totalTeachers": "Teachers",
     "unassignedTeachers": "Unassigned",
     "totalClasses": "Classes",
-    "totalSubjects": "Subjects",
+    "totalSubjects": "Class-subjects",
     "assignedSubjects": "Assigned",
     "activeAnnouncements": "Notices",
     "totalPeriods": "Teaching periods",
@@ -376,7 +376,10 @@
     "timetableConflicts": "Conflicts",
     "classesWithoutSubjects": "No subjects",
     "totalReportTemplates": "Templates",
-    "defaultTemplateSet": "Has default"
+    "defaultTemplateSet": "Has default",
+    "unassignedClassSubjects": "No teacher",
+    "distinctSubjects": "{{count}} subject",
+    "distinctSubjects_other": "{{count}} distinct subjects"
   },
   "examStatus": {
     "draft": "Draft",
@@ -608,7 +611,12 @@
     "none": "No teachers yet",
     "firstOne": "Add a teacher to give them an account and assign them subjects.",
     "noneMatch": "Nothing matches that search",
-    "searchPageOnly": "Search only covers the current page — try another page or clear the filter."
+    "searchPageOnly": "Search only covers the current page — try another page or clear the filter.",
+    "unassignedTitle": "{{count}} of {{total}} class-subject has no teacher",
+    "unassignedTitle_other": "{{count}} of {{total}} class-subjects have no teacher",
+    "unassignedHint": "Their marks cannot be entered by a teacher and their report-card rows print no teacher.",
+    "unassignedShow": "Show them",
+    "unassignedHide": "Hide"
   },
   "subjects": {
     "title": "Subjects",
@@ -3151,7 +3159,9 @@
     "titleConflicts": "Timetable Conflicts",
     "titleNoTimetable": "Incomplete Timetables",
     "titleNoAssignments": "No Teacher Assignments",
-    "titleGeneric": "System Alert"
+    "titleGeneric": "System Alert",
+    "classSubjectsUnassigned": "{{count}} of {{total}} class-subject has no teacher",
+    "classSubjectsUnassigned_other": "{{count}} of {{total}} class-subjects have no teacher"
   },
   "modules": {
     "classes": "Classes",

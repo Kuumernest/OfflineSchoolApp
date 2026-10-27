@@ -5728,7 +5728,7 @@
     "sTeachers": "Enseignants",
     "hUnassigned": "Non attribués",
     "sClasses": "Classes",
-    "sSubjects": "Matières",
+    "sSubjects": "Matières par classe",
     "hAssigned": "Attribuées",
     "hNotices": "Annonces",
     "hPeriods": "Périodes",
@@ -5755,6 +5755,11 @@
     "alertNoTimetable": {
       "one": "{{count}} classe sans emploi du temps ({{pct}} %)",
       "other": "{{count}} classes sans emploi du temps ({{pct}} %)"
+    },
+    "hNoTeacher": "Sans enseignant",
+    "alertClassSubjectsUnassigned": {
+      "one": "{{count}} matière-classe sans enseignant",
+      "other": "{{count}} matières-classes sans enseignant"
     }
   },
   "sync": {

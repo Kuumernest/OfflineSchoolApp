@@ -5728,7 +5728,7 @@
     "sTeachers": "Teachers",
     "hUnassigned": "Unassigned",
     "sClasses": "Classes",
-    "sSubjects": "Subjects",
+    "sSubjects": "Class-subjects",
     "hAssigned": "Assigned",
     "hNotices": "Notices",
     "hPeriods": "Periods",
@@ -5755,6 +5755,11 @@
     "alertNoTimetable": {
       "one": "{{count}} class without timetable ({{pct}}%)",
       "other": "{{count}} classes without timetable ({{pct}}%)"
+    },
+    "hNoTeacher": "No teacher",
+    "alertClassSubjectsUnassigned": {
+      "one": "{{count}} class-subject has no teacher",
+      "other": "{{count}} class-subjects have no teacher"
     }
   },
   "sync": {

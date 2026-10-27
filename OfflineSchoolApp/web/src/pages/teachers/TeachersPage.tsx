@@ -18,6 +18,7 @@ import {
   Users,
   BookMarked,
   AlertCircle,
+  AlertTriangle,
   ClipboardList,
 } from "lucide-react";
 
@@ -267,6 +268,8 @@ export default function TeachersPage() {
         <Stat icon={BookMarked} label={t("teachers.subjectsCovered")}  value={totals.subjects} />
       </div>
 
+      <UnassignedClassSubjects schoolId={schoolId} />
+
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>
         <div className="p-4 border-b border-gray-100">
@@ -450,6 +453,72 @@ const initials = (name?: string): string =>
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("") || "?";
+
+/**
+ * Class-subjects no active assignment covers (B4). 69 of 105 had no teacher
+ * and nothing on this page said so. Grouped by class, folded by default — the
+ * count is the point; the list is for working through it.
+ */
+interface UnassignedRow { subjectId: string; subjectName: string | null; classId: string; className: string | null }
+
+function UnassignedClassSubjects({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({
+    queryKey: ["class-subjects-unassigned", schoolId],
+    queryFn:  async () => {
+      const { data } = await api.get("/admin/class-subjects/unassigned", { params: { schoolId } });
+      const body = data?.data ?? data;
+      return { rows: (body?.unassigned ?? []) as UnassignedRow[], total: Number(body?.classSubjects ?? 0) };
+    },
+    enabled: !!schoolId,
+  });
+  const byClass = useMemo(() => {
+    const m = new Map<string, { className: string; subjects: string[] }>();
+    for (const r of data?.rows ?? []) {
+      const g = m.get(r.classId) ?? { className: r.className ?? "—", subjects: [] };
+      g.subjects.push(r.subjectName ?? "—");
+      m.set(r.classId, g);
+    }
+    return [...m.values()];
+  }, [data]);
+  if (!data || data.rows.length === 0) return null;
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/60">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">
+              {t("teachers.unassignedTitle", { count: data.rows.length, total: data.total })}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">{t("teachers.unassignedHint")}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)}>
+            {open ? t("teachers.unassignedHide") : t("teachers.unassignedShow")}
+          </Button>
+          <Button size="sm" onClick={() => navigate("/teachers/assignments")}>
+            {t("nav.assignments")}
+          </Button>
+        </div>
+      </div>
+      {open && (
+        <ul className="mt-3 space-y-1.5 text-sm">
+          {byClass.map((g) => (
+            <li key={g.className}>
+              <span className="font-semibold text-gray-800">{g.className}:</span>{" "}
+              <span className="text-gray-600">{g.subjects.join(", ")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 function Stat({
   icon: Icon,

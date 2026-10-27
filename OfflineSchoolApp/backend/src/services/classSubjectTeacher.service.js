@@ -53,4 +53,35 @@ async function withAssignedTeachers(examSubjects, schoolId) {
   });
 }
 
-module.exports = { teachersFor, withAssignedTeachers };
+/**
+ * The school's class-subject coverage (B4): pairs, distinct subjects, and the
+ * pairs no active assignment covers, with their class names. Subjects of
+ * inactive or deleted classes are not on anyone's timetable and do not count.
+ */
+async function coverageFor(schoolId) {
+  const Subject = require("../db/models/Subject");
+  const Class   = require("../db/models/Class");
+  const { classSubjectCoverage } = require("../../../shared/classSubjectTeachers");
+  const [subjects, classes, rows] = await Promise.all([
+    Subject.find({ schoolId: String(schoolId), deletedAt: null }).select("name class classId deletedAt").lean(),
+    // Class.deletedAt is Mixed; "not deleted" is any of these, as notDeletedClause.
+    Class.find({ schoolId: String(schoolId), isActive: { $ne: false }, deletedAt: { $in: [null, "", 0, false] } }).select("name").lean(),
+    TeacherAssignment.find({ schoolId: String(schoolId), isActive: { $ne: false } }).select("teacher class classId subject isActive").lean(),
+  ]);
+  const users = rows.length
+    ? await User.find({ _id: { $in: [...new Set(rows.map((r) => String(r.teacher)))] } }).select("name").lean()
+    : [];
+  const userOf = new Map(users.map((u) => [String(u._id), u]));
+  const byPair = assignedTeachers(rows, (id) => userOf.get(id) ?? null);
+  const className = new Map(classes.map((c) => [String(c._id), c.name]));
+  const cov = classSubjectCoverage(subjects, byPair, new Set(className.keys()));
+  return {
+    ...cov,
+    unassigned: cov.unassigned
+      .map((u) => ({ ...u, className: className.get(u.classId) ?? null }))
+      .sort((a, b) => String(a.className).localeCompare(String(b.className), undefined, { numeric: true })
+        || String(a.subjectName).localeCompare(String(b.subjectName))),
+  };
+}
+
+module.exports = { teachersFor, withAssignedTeachers, coverageFor };
