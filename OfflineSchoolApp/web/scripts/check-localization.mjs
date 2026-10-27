@@ -298,8 +298,13 @@ check("no hand-rolled English plural remains", handRolled, []);
   const pages = ["src/pages/exams/[id]/index.tsx", "src/pages/exams/term-results/index.tsx", "src/pages/exams/annual-results/index.tsx"];
   check("an Unpublish action beside Publish for sequences, terms and years",
     pages.map((f) => (read(f).match(/<UnpublishButton\s+layer="(sequence|term|annual)"/) || [])[1] ?? null), ["sequence", "term", "annual"]);
+  const examPage = read("src/pages/exams/[id]/index.tsx");
+  // Inline, or held in `anyPublished` and tested before the Unpublish button.
+  const anyOut = /results\.some\(\(r\) => r\.isPublished\) && \(/.test(examPage)
+    || (/const anyPublished\s*=\s*results\.some\(\(r\) => r\.isPublished\);/.test(examPage)
+      && /\{anyPublished && \(\s*<div[^>]*>\s*<UnpublishButton/.test(examPage));
   check("the exam page offers Unpublish while any class's results are out, for those classes",
-    /results\.some\(\(r\) => r\.isPublished\) && \(/.test(read("src/pages/exams/[id]/index.tsx")) && /r\.classId && r\.isPublished/.test(read("src/pages/exams/[id]/index.tsx")), true);
+    anyOut && /r\.classId && r\.isPublished/.test(examPage), true);
   const btn = read("src/components/results/UnpublishButton.tsx");
   check("the dialog asks for a reason (4+ characters) and says issued cards stay as issued",
     [/reason\.trim\(\)\.length >= 4/.test(btn), /unpublish\.issuedStay/.test(btn)], [true, true]);
@@ -330,6 +335,22 @@ check("no hand-rolled English plural remains", handRolled, []);
 // label, and date-fns left on its default locale. None was a missing key, so
 // the parity check could not see them.
 // ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the parent portal's marks: a comma in French ---");
+{
+  // Lifted out of format.ts (types dropped) and run, so the check is the rule.
+  const src = read("src/pages/portal/format.ts").replace(/: string \| undefined/g, "").replace(/: number \| null \| undefined/g, "").replace(/: string/g, "");
+  const grab = (name) => new RegExp(`const ${name} = ([\\s\\S]*?);\\n`).exec(src)?.[1];
+  const decimalSign = new Function(`return ${grab("decimalSign")}`)();
+  const on20 = new Function("decimalSign", `return ${grab("on20")}`)(decimalSign);
+  const mark = new Function("decimalSign", `return ${grab("mark")}`)(decimalSign);
+  check("averages and marks: 14,24 and 12,5 in French; 14.24 and 12.5 in English",
+    [on20(14.24, "fr"), mark(12.5, "fr"), on20(14.24, "en"), mark(12.5, "en"), on20(null, "fr")],
+    ["14,24", "12,5", "14.24", "12.5", "–"]);
+  const screens = ["HomeScreen", "ResultsScreen", "TrendChart"].map((f) => read(`src/pages/portal/${f}.tsx`)).join("\n");
+  check("no portal screen writes a mark with toFixed(2) or prints normalizedMark bare",
+    [/\.toFixed\(2\)/.test(screens), /\{s\.normalizedMark \?\?/.test(screens), /on20\([^,()]+\)/.test(screens)], [false, false, false]);
+}
+
 console.log("--- announcements, badges and relative dates, in French ---");
 {
   check("fr: audience options",

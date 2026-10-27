@@ -50,6 +50,7 @@ const comms         = require("../services/communication/conversation.service");
 // yields an object with no .find, which fails only when the route is called.
 const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
+const Exam          = require("../db/models/Exam");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
@@ -315,6 +316,96 @@ router.get("/me", asyncHandler(async (req, res) => {
   });
 }));
 
+/** Exam names for result rows: a parent reads "2nd Sequence", not "term 1". */
+async function examNamesFor(schoolId, rows) {
+  const ids = [...new Set(rows.map((r) => r.examId).filter(Boolean).map(String))];
+  if (!ids.length) return new Map();
+  const exams = await Exam.find({ _id: { $in: ids }, schoolId }).select("name").lean();
+  return new Map(exams.map((e) => [String(e._id), e.name]));
+}
+
+const isoDay = (d) => d.toISOString().slice(0, 10);
+
+/** A notice's moment, as a number to sort by: sent, else created. */
+const timeOf = (n) => new Date(n.sentAt || n.createdAt || 0).getTime() || 0;
+
+/**
+ * GET /home: one card per child, in one request (a parent on slow data
+ * should not wait for fifteen). Every figure is read the way the screen it
+ * leads to reads it, so the card and the page never disagree:
+ *
+ *   latest      the newest published result: average /20 and class position,
+ *               with the one before it for the change (/results)
+ *   attendance  this month, present ÷ marked (/attendance with from/to)
+ *   fees        the family ledger's balance (/fees); overdue and the due date
+ *               by the school's own rule (feeReminders.candidates, as fee
+ *               reminders and Students to watch use)
+ *   nextExam    the class's next exam that has not started
+ *   news        the latest announcement for this family (/announcements)
+ */
+router.get("/home", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds } = req.portal;
+  const children = await portal.childrenOf(schoolId, studentIds);
+  const ids      = children.map((c) => c._id);
+  const classIds = [...new Set(children.map((c) => c.classId).filter(Boolean).map(String))];
+
+  const now        = new Date();
+  const today      = isoDay(now);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const reminders  = require("../services/feeReminders.service");
+
+  const [classes, summaries, marks, owing, ledgers, exams, news] = await Promise.all([
+    Class.find({ _id: { $in: classIds }, schoolId }).select("name").lean(),
+    ResultSummary.find({ schoolId, studentId: { $in: ids }, isPublished: true, deletedAt: null })
+      .select("studentId examId academicYear term average classPosition totalInClass publishedAt")
+      .sort({ publishedAt: -1, academicYear: -1, term: -1 }).lean(),
+    StudentAttendance.find({ schoolId, studentId: { $in: ids }, date: { $gte: monthStart, $lte: today } })
+      .select("studentId status").lean(),
+    reminders.candidates({ schoolId, onlyStudentIds: ids, mode: "all", asOf: now }).catch(() => []),
+    Promise.all(ids.map((studentId) => fees.familyLedger({ schoolId, studentId, academicYear: null }).catch(() => null))),
+    Exam.find({
+      schoolId, deletedAt: null,
+      $or: [{ classId: { $in: classIds } }, { classIds: { $in: classIds } }],
+      status: { $in: ["draft", "scheduled", "ongoing"] },
+      startDate: { $gte: today },
+    }).select("name startDate endDate classId classIds").sort({ startDate: 1 }).lean(),
+    announcementsFor({ schoolId, studentIds, limit: 1 }),
+  ]);
+
+  const className = new Map(classes.map((c) => [String(c._id), c.name]));
+  const examName  = await examNamesFor(schoolId, summaries);
+  const owingById = new Map(owing.map((r) => [String(r.studentId), r]));
+
+  const cards = children.map((c, i) => {
+    const mine = summaries.filter((r) => String(r.studentId) === c._id);
+    const [latest, previous] = mine;
+    const days = marks.filter((m) => String(m.studentId) === c._id);
+    const present = days.filter((m) => m.status === "present").length;
+    const due = owingById.get(c._id) ?? null;
+    const next = exams.find((e) => [e.classId, ...(e.classIds ?? [])].map(String).includes(String(c.classId)));
+    return {
+      ...c,
+      className: c.classId ? (className.get(String(c.classId)) ?? null) : null,
+      latest: latest ? {
+        resultId: String(latest._id), examName: examName.get(String(latest.examId)) ?? null,
+        academicYear: latest.academicYear, term: latest.term, average: latest.average,
+        position: latest.classPosition ?? null, outOf: latest.totalInClass ?? null,
+        previousAverage: previous?.average ?? null,
+        previousExamName: previous ? (examName.get(String(previous.examId)) ?? null) : null,
+      } : null,
+      attendance: { from: monthStart, present, marked: days.length,
+        rate: days.length ? Math.round((present / days.length) * 100) : null },
+      fees: ledgers[i] ? {
+        balance: ledgers[i].totals?.balance ?? 0,
+        isOverdue: Boolean(due?.isOverdue), dueDate: due?.earliestDue ?? null, daysOverdue: due?.daysOverdue ?? 0,
+      } : null,
+      nextExam: next ? { name: next.name, startDate: next.startDate, endDate: next.endDate ?? null } : null,
+    };
+  });
+
+  return res.json({ success: true, data: { children: cards, latestNews: news[0] ?? null } });
+}));
+
 /** The fee account: what was charged, what has been paid, what is left. */
 router.get("/fees", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
@@ -544,9 +635,9 @@ router.get("/notifications", asyncHandler(async (req, res) => {
       sentAt:    n.sentAt,
       createdAt: n.createdAt,
     })),
-  ].sort((a, b) =>
-    String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
-  );
+  // Newest first, by time. String() of a Date is "Tue Oct 13 …", so comparing
+  // those sorted the list by weekday name.
+  ].sort((a, b) => timeOf(b) - timeOf(a));
 
   // Nothing is marked read here any more.
   //
@@ -718,12 +809,16 @@ router.get("/results", asyncHandler(async (req, res) => {
 
   const rows = await ResultSummary.find({
     schoolId, studentId, isPublished: true, deletedAt: null,
-  }).sort({ academicYear: -1, term: -1 }).lean();
+  // Newest first within a term too: two sequences share term 1, and Home's
+  // "latest result" must be the one this list leads with.
+  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean();
+  const examName = await examNamesFor(schoolId, rows);
 
   return res.json({
     success: true,
     data: rows.map((r) => ({
       _id: r._id, academicYear: r.academicYear, term: r.term,
+      examName: examName.get(String(r.examId)) ?? null,
       className: r.className, average: r.average, percentage: r.percentage,
       overallGrade: r.overallGrade, classPosition: r.classPosition,
       totalInClass: r.totalInClass, isPassing: r.isPassing,
@@ -1186,8 +1281,11 @@ router.get("/attendance", asyncHandler(async (req, res) => {
 }));
 
 /** School announcements a parent should see. */
-router.get("/announcements", asyncHandler(async (req, res) => {
-  const { schoolId, studentIds } = req.portal;
+/**
+ * What the school has published for these children's guardians: the one
+ * query behind /announcements and the latest notice on /home.
+ */
+async function announcementsFor({ schoolId, studentIds, limit = 30 }) {
 
   // ── Every child's class, and only what concerns them ─────────────────────
   //
@@ -1247,20 +1345,22 @@ router.get("/announcements", asyncHandler(async (req, res) => {
       { $or: [{ publishAt: null }, { publishAt: { $exists: false } }, { publishAt: { $lte: now } }] },
       { $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gte: now } }] },
     ],
-  }).sort({ isPinned: -1, createdAt: -1 }).limit(30).lean();
+  }).sort({ isPinned: -1, createdAt: -1 }).limit(limit).lean();
 
-  return res.json({
-    success: true,
-    data: rows.map((a) => ({
-      _id: a._id, title: a.title, body: a.body ?? a.message ?? null,
-      createdAt: a.createdAt, priority: a.priority ?? null,
-      isPinned: a.isPinned ?? false,
-      // Which of this parent's children the notice concerns, when it names
-      // any. A parent with three children reading "bring PE kit on Thursday"
-      // needs to know which of them it is about.
-      forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
-    })),
-  });
+  return rows.map((a) => ({
+    _id: a._id, title: a.title, body: a.body ?? a.message ?? null,
+    createdAt: a.createdAt, priority: a.priority ?? null,
+    isPinned: a.isPinned ?? false,
+    // Which of this parent's children the notice concerns, when it names
+    // any. A parent with three children reading "bring PE kit on Thursday"
+    // needs to know which of them it is about.
+    forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
+  }));
+}
+
+router.get("/announcements", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds } = req.portal;
+  return res.json({ success: true, data: await announcementsFor({ schoolId, studentIds }) });
 }));
 
 /**

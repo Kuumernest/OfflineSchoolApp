@@ -112,7 +112,7 @@ export interface PortalSchool {
 export interface PortalFees {
   charges:  { _id: string; label: string | null; code: string | null;
               amount: number; waivedAmount: number;
-              academicYear: string; term: string | null }[];
+              academicYear: string; term: string | null; dueDate?: string | null }[];
   payments: { _id: string; receiptNo: string | null; amount: number;
               method: string | null; reference: string | null;
               receivedAt: string; academicYear: string; isReversal: boolean }[];
@@ -121,10 +121,14 @@ export interface PortalFees {
 
 export interface PortalResult {
   _id: string; academicYear: string | null; term: string | null;
+  /** "2nd Sequence": what a parent recognises, where the term alone repeats. */
+  examName?: string | null;
   className: string | null; average: number | null; percentage: number | null;
   overallGrade: string | null; classPosition: number | null;
   totalInClass: number | null; isPassing: boolean;
-  subjects: { subjectName: string | null; normalizedMark: number | null;
+  overallRemark?: string | null; issuedAt?: string | null;
+  subjects: { subjectId?: string; subjectName: string | null; normalizedMark: number | null;
+              coefficient?: number | null; remark?: string | null;
               grade: string | null; isPassing: boolean; isAbsent?: boolean }[];
 }
 
@@ -147,6 +151,9 @@ export interface PortalAttendance {
   dailySummaries?: {
     date: string;
     status: string;
+    /** First scan in and last scan out at the gate, when the school has one. */
+    arrivedAt?: string | null;
+    departedAt?: string | null;
     present: number;
     absent: number;
     late: number;
@@ -257,6 +264,8 @@ export interface PortalMe {
    * no indication anywhere that a message had arrived.
    */
   unreadMessages?: number;
+  /** Notices this guardian has not opened yet: the Messages badge counts them too. */
+  unreadNotices?: number;
 }
 
 export const fetchMe = async (studentId?: string | null): Promise<PortalMe> =>
@@ -268,8 +277,38 @@ export const fetchFees = async (studentId?: string | null): Promise<PortalFees> 
 export const fetchResults = async (studentId?: string | null): Promise<PortalResult[]> =>
   unwrap(await client.get("/results", childParams(studentId)).then((r) => r.data));
 
-export const fetchAttendance = async (studentId?: string | null): Promise<PortalAttendance> =>
-  unwrap(await client.get("/attendance", childParams(studentId)).then((r) => r.data));
+/** A window of days (YYYY-MM-DD), or everything recorded when none is given. */
+export const fetchAttendance = async (
+  studentId?: string | null, range?: { from: string; to: string },
+): Promise<PortalAttendance> =>
+  unwrap(await client.get("/attendance", {
+    params: { ...(studentId ? { studentId } : {}), ...(range ?? {}) },
+  }).then((r) => r.data));
+
+/** One child's card on Home: every figure read as the screen it leads to reads it. */
+export interface PortalHomeChild extends PortalStudent {
+  latest: {
+    resultId: string; examName: string | null; academicYear: string | null; term: string | null;
+    average: number | null; position: number | null; outOf: number | null;
+    previousAverage: number | null; previousExamName: string | null;
+  } | null;
+  attendance: { from: string; present: number; marked: number; rate: number | null };
+  fees: { balance: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
+  nextExam: { name: string; startDate: string; endDate: string | null } | null;
+}
+
+export interface PortalHome {
+  children:   PortalHomeChild[];
+  latestNews: PortalAnnouncement | null;
+}
+
+/** Every child at once, in one request: a parent on slow data waits for one. */
+export const fetchHome = async (): Promise<PortalHome> =>
+  unwrap(await client.get("/home").then((r) => r.data));
+
+/** The card exactly as the school issued it (404 NOT_ISSUED when it has not). */
+export const fetchReportCard = async (resultId: string, studentId?: string | null): Promise<{ html: string; issuedAt: string }> =>
+  unwrap(await client.get(`/results/${resultId}/report-card`, childParams(studentId)).then((r) => r.data));
 
 export const fetchAnnouncements = async (studentId?: string | null): Promise<PortalAnnouncement[]> =>
   unwrap(await client.get("/announcements", childParams(studentId)).then((r) => r.data));
@@ -307,7 +346,19 @@ export interface PortalNotification {
    */
   conversationId?: string;
   unread?:         number;
+  /** Whether this guardian has opened it (per guardian: two parents read separately). */
+  read?:           boolean;
+  /** The child it is about. */
+  studentId?:      string | null;
 }
+
+/** Mark one notice read; returns the server's new unread count. */
+export const markNoticeRead = async (noticeId: string): Promise<number | null> =>
+  (await client.post(`/notifications/${noticeId}/read`)).data?.unreadNotices ?? null;
+
+/** Mark every notice read, for a parent coming back after a week of gate scans. */
+export const markAllNoticesRead = async (): Promise<number | null> =>
+  (await client.post("/notifications/read-all")).data?.unreadNotices ?? null;
 
 export const fetchNotifications = async (studentId?: string | null): Promise<PortalNotification[]> =>
   unwrap(await client.get("/notifications", childParams(studentId)).then((r) => r.data));
@@ -380,9 +431,14 @@ export const markPortalRead = async (
   await client.post(`/messages/conversations/${conversationId}/read`, { seq });
 };
 
-export async function fetchReceiptHtml(paymentId: string, lang: string): Promise<string> {
+/**
+ * The receipt for one payment. The child is named: the server looks the
+ * payment up in that child's account, and without it a second child's receipt
+ * was looked for in the first child's and not found.
+ */
+export async function fetchReceiptHtml(paymentId: string, lang: string, studentId?: string | null): Promise<string> {
   const { data } = await client.get(`/receipt/${paymentId}`, {
-    params: { lang },
+    params: { lang, ...(studentId ? { studentId } : {}) },
     responseType: "text",
     transformResponse: [(body: string) => body],
   });

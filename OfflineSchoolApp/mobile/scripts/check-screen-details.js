@@ -61,11 +61,49 @@ check("a guardian's message goes with a clientId, kept for a resend of the same 
 check("a successful reload clears an earlier load error", /setReads\(payload\.participantReads \?\? \[\]\);\s*setError\(null\);/.test(guardian), true);
 check("the portal service sends the clientId", /clientId \? \{ body, clientId \} : \{ body \}/.test(read("src/services/portal.service.js")), true);
 
-console.log("--- portal tabs ---");
+const portal0 = read("app/portal/index.js");
+check("a report card names the child, so a second child's card is found (404 \"Result not found\" before)",
+  [/fetchReportCardHtml = async \(summaryId, studentId = null\)/.test(read("src/services/portal.service.js")),
+   /fetchReportCardHtml\(summary\._id, childId \?\? me\?\.selectedId\)/.test(read("app/portal/index.js"))], [true, true]);
+
+{
+  // A paid term showed "Overdue · 59d": the badge read each charge's due date
+  // and ignored the payments. Overdue is the account's, from the server's rule.
+  const fees = read("src/components/portal/FeesScreen.js");
+  check("Fees says overdue once, for the account, never per charge",
+    [/status\?\.isOverdue/.test(fees), /\b(r|c|charge)\.isOverdue\b|daysOverdue/.test(fees + portal0),
+     /fetchHome\(\)/.test(portal0)], [true, false, true]);
+}
+
+{
+  // The portal's marks: a comma in French, on the phone as on the web. The
+  // helpers are lifted out of theme.js and run, so the check is the rule.
+  const theme = read("src/components/portal/theme.js");
+  const grab = (name) => new RegExp(`const ${name} = ([\\s\\S]*?);\\n`).exec(theme)?.[1];
+  const decimalSign = new Function(`return ${grab("decimalSign")}`)();
+  const on20 = new Function("decimalSign", `return ${grab("on20")}`)(decimalSign);
+  const mark = new Function("decimalSign", `return ${grab("mark")}`)(decimalSign);
+  check("averages and marks: 14,24 and 12,5 in French; 14.24 and 12.5 in English",
+    [on20(14.24, "fr"), mark(12.5, "fr"), on20(14.24, "en"), mark(12.5, "en"), on20(null, "fr")],
+    ["14,24", "12,5", "14.24", "12.5", "–"]);
+  const screens = ["HomeScreen", "ResultsScreen", "TrendChart"].map((f) => read(`src/components/portal/${f}.js`)).join("\n");
+  check("no portal screen writes a mark with toFixed(2) or prints normalizedMark bare",
+    [/\.toFixed\(2\)/.test(screens), /\{sub\.normalizedMark \?\?/.test(screens), /on20\([^,()]+\)/.test(screens)], [false, false, false]);
+}
+
+console.log("--- portal navigation ---");
+// Six tabs in a sideways scroll across the top became five sections in a bar
+// along the bottom (the redesign). What the old check guarded still holds: a
+// label is one line and shrinks before it wraps mid-word.
 const portal = read("app/portal/index.js");
-check("the six tabs sit in a horizontal scroll, one line each",
-  [/<ScrollView horizontal showsHorizontalScrollIndicator=\{false\} contentContainerStyle=\{styles\.tabsRow\}>/.test(portal),
-   /styles\.tabTextOn\]\} numberOfLines=\{1\}/.test(portal), /tab: \{\s*flex: 1,/.test(portal)], [true, true, false]);
+const tabsBar = read("src/components/portal/BottomTabs.js");
+check("the five sections sit in a bottom bar, each label one line",
+  [/<BottomTabs\b/.test(portal), (tabsBar.match(/\{ key: "\w+",/g) ?? []).length,
+   /numberOfLines=\{1\}\s*adjustsFontSizeToFit/.test(tabsBar), /<ScrollView horizontal[^>]*styles\.tabsRow/.test(portal)],
+  [true, 5, true, false]);
+const messages = read("src/components/portal/MessagesScreen.js");
+check("Messages' three lists are one segmented row, one line each",
+  [/const MSG_VIEWS = \["messages", "notices", "news"\]/.test(messages), /styles\.segmentTextOn\]\} numberOfLines=\{1\}/.test(messages)], [true, true]);
 
 console.log("--- the pupil-result screen (changed on this branch) ---");
 const result = read("app/admin/exams/results/[examId]/student/[studentId].js");

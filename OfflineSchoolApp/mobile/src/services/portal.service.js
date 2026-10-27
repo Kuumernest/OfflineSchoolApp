@@ -185,12 +185,16 @@ const cacheGet = async (section) => {
  * A 401 is NOT cached over: a revoked code must reach the screen as an error,
  * not be masked by yesterday's figures.
  */
-const load = async (section, path, studentId) => {
-  const key = studentId ? `${section}:${studentId}` : section;
+const load = async (section, path, studentId, range = null) => {
+  // A month of attendance is its own copy: October offline must not show
+  // September's figures under October's name.
+  const base = studentId ? `${section}:${studentId}` : section;
+  const key  = range ? `${base}:${range.from}:${range.to}` : base;
 
   try {
+    const params = { ...(studentId ? { studentId } : {}), ...(range ?? {}) };
     const { data } = await client.get(path, {
-      params: studentId ? { studentId } : undefined,
+      params: Object.keys(params).length ? params : undefined,
     });
     const payload = data?.data ?? data;
     await cachePut(key, payload);
@@ -208,8 +212,16 @@ export const fetchFees          = (studentId) => load("fees", "/fees", studentId
 export const fetchFeeReminders  = (studentId) => load("fee-reminders", "/fees/reminders", studentId);
 export const fetchNotifications = (studentId) => load("notifications", "/notifications", studentId);
 export const fetchResults       = (studentId) => load("results", "/results", studentId);
-export const fetchAttendance    = (studentId) => load("attendance", "/attendance", studentId);
+/** A window of days ({ from, to } as YYYY-MM-DD), or everything recorded. */
+export const fetchAttendance    = (studentId, range = null) => load("attendance", "/attendance", studentId, range);
 export const fetchAnnouncements = (studentId) => load("news", "/announcements", studentId);
+
+/**
+ * Every child's card for Home, in one request: a parent on slow data waits for
+ * one round trip, not one per child. Read the same way as the web's Home, so
+ * the two never disagree about a balance or an overdue.
+ */
+export const fetchHome          = () => load("home", "/home");
 
 /**
  * Mark one notice read.
@@ -286,10 +298,14 @@ export const markRead = async (conversationId, seq) => {
   }
 };
 
-/** The printable receipt, as HTML the phone turns into a PDF. */
-export const fetchReceiptHtml = async (paymentId, lang = "en") => {
+/**
+ * The printable receipt, as HTML the phone turns into a PDF. The child is
+ * named: the server looks the payment up in that child's account, and without
+ * it a second child's receipt was looked for in the first child's.
+ */
+export const fetchReceiptHtml = async (paymentId, lang = "en", studentId = null) => {
   const { data } = await client.get(`/receipt/${paymentId}`, {
-    params: { lang },
+    params: { lang, ...(studentId ? { studentId } : {}) },
     responseType: "text",
     transformResponse: [(body) => body],
   });
@@ -302,8 +318,13 @@ export const fetchReceiptHtml = async (paymentId, lang = "en") => {
  * printed, never a re-render. A 404 with code NOT_ISSUED means the marks were
  * published but the school has not issued a card yet.
  */
-export const fetchReportCardHtml = async (summaryId) => {
-  const { data } = await client.get(`/results/${summaryId}/report-card`);
+export const fetchReportCardHtml = async (summaryId, studentId = null) => {
+  // The child is named, as for a receipt: the server looks the result up in
+  // that child's record, and without it a second child's card was looked for
+  // in the first child's and came back "Result not found".
+  const { data } = await client.get(`/results/${summaryId}/report-card`, {
+    params: studentId ? { studentId } : undefined,
+  });
   return data?.data ?? null;
 };
 
@@ -335,7 +356,7 @@ export const fetchReportCardHtml = async (summaryId) => {
 export default {
   login, signOut, getToken, setToken, clearToken, getRefreshToken, hasSession,
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
-  fetchResults, fetchAttendance, fetchAnnouncements,
+  fetchResults, fetchAttendance, fetchAnnouncements, fetchHome,
   fetchReceiptHtml, fetchReportCardHtml,
   markNoticeRead, markAllNoticesRead,
   // Messaging. The omission that caused all of the above.

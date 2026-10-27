@@ -23,9 +23,16 @@ import * as Print from "expo-print";
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
-import { formatMoney, formatDateShort, formatTime } from "../../src/i18n/format";
+import { formatDateShort } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
-import { conversationName } from "../../src/utils/participantName";
+import BottomTabs     from "../../src/components/portal/BottomTabs";
+import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
+import HomeScreen     from "../../src/components/portal/HomeScreen";
+import ResultsScreen  from "../../src/components/portal/ResultsScreen";
+import AttendanceScreen, { monthKey, monthRange } from "../../src/components/portal/AttendanceScreen";
+import FeesScreen     from "../../src/components/portal/FeesScreen";
+import MessagesScreen from "../../src/components/portal/MessagesScreen";
+import { LanguageToggle } from "../../src/components/portal/ui";
 
 const C = {
   primary:   "#3B4996",
@@ -45,68 +52,15 @@ const C = {
   canvas:    "#F4F5F8",
 };
 
-// "notices" is what the school has already sent this parent by email or SMS —
-// gate arrivals, absences, fee reminders, published results. The records
-// existed all along; nothing in the portal read them.
-const TABS = ["fees", "results", "attendance", "notices", "news", "messages"];
-
-// Results arrive sorted newest-first (academic year desc, then term desc).
-// Grouping preserves that order while giving each school year its own
-// section — the way a report-card file is kept year by year.
-const groupResultsByYear = (rows) => {
-  const groups = [];
-  const index  = {};
-  for (const r of rows ?? []) {
-    const year = r.academicYear || "—";
-    if (!index[year]) {
-      index[year] = { year, items: [] };
-      groups.push(index[year]);
-    }
-    index[year].items.push(r);
-  }
-  return groups;
-};
-
-// Trim trailing zeros on a mark: 18.00 → "18", 16.40 → "16.4".
-const trimMark = (v) => {
-  if (v == null || v === "") return "—";
-  const n = Number(v);
-  return Number.isNaN(n) ? "—" : String(Math.round(n * 100) / 100);
-};
-
-// Attendance statuses arrive as English words; map them through i18n so a
-// French portal stays French.
-// One row per notification kind the portal is allowed to show. Keyed on the
-// kind the server sends, so a kind that is added server-side and not listed
-// here falls back rather than rendering a blank card.
-const NOTICE_META = {
-  "gate.arrival":     { icon: "log-in-outline",       fg: "#12683A", bg: "#EEF7F1", labelKey: "portal.noticeArrival" },
-  "gate.departure":   { icon: "log-out-outline",      fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeDeparture" },
-  "attendance.absent":{ icon: "alert-circle-outline", fg: "#9F2318", bg: "#FDF2F1", labelKey: "portal.noticeAbsent" },
-  "fee.reminder":     { icon: "cash-outline",          fg: "#96570B", bg: "#FDF6EC", labelKey: "portal.noticeFeeReminder" },
-  "fee.payment":      { icon: "receipt-outline",       fg: "#12683A", bg: "#EEF7F1", labelKey: "portal.noticePayment" },
-  "result.published": { icon: "school-outline",        fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeResults" },
-  "announcement":     { icon: "megaphone-outline",     fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeAnnouncement" },
-  // Not a row in the Notification queue — see the notices fetcher. That
-  // collection is a delivery queue for email and SMS, and a row per message
-  // would be a message per message.
-  "message":          { icon: "chatbubble-outline",    fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeMessage" },
-  default:            { icon: "notifications-outline", fg: "#4F5A70", bg: "#F4F5F8", labelKey: "portal.noticeOther" },
-};
-
-const ATTD_STATUS_KEY = {
-  "Present":                      "portal.present",
-  "Absent":                       "portal.absent",
-  "Late":                         "portal.late",
-  "Excused":                      "portal.excused",
-  "Partial absence":              "portal.partialAbsence",
-  "Present with partial absence": "portal.presentPartial",
-};
+// The screens that are about one child, and so carry the child switcher. Home
+// shows every child at once; Messages covers the whole family.
+const PER_CHILD = ["results", "attendance", "fees"];
 
 export default function ParentPortalScreen() {
   const router          = useRouter();
   const { t, language } = useTranslation();
   const screenPad       = useScreenInsets({ top: 24, bottom: 28 });
+  const headPad         = useScreenInsets({ top: 8, bottom: 0 });
 
   const [checking, setChecking] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
@@ -115,14 +69,24 @@ export default function ParentPortalScreen() {
   const [code, setCode]     = useState("");
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState(null);
+  const codeField           = useRef(null);
 
-  const [tab, setTab]         = useState("fees");
+  // Which of the five sections is on screen, and inside Messages which list.
+  // `tab` is what is fetched: one of the five, or one of Messages' three.
+  const [screen, setScreen]   = useState("home");
+  const [msgView, setMsgView] = useState("messages");
+  const tab = screen === "messages" ? msgView : screen;
+  // The month Attendance shows, "YYYY-MM"; this month to begin with.
+  const [month, setMonth]     = useState(() => monthKey(new Date()));
   const [me, setMe]           = useState(null);
   // Which child is on screen. Null means "whichever the server picks first",
   // which is what a parent with one child gets and never has to think about.
   const [childId, setChildId] = useState(null);
   const [section, setSection] = useState(null);
   const [feeReminders, setFeeReminders] = useState(null);
+  // The account's overdue and due date, by the school's own rule: the figure
+  // Home shows, read from the same card so the two never disagree.
+  const [feeStatus, setFeeStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [printing, setPrinting] = useState(null);
@@ -142,6 +106,7 @@ export default function ParentPortalScreen() {
     setMe(null);
     setSection(null);
     setChildId(null);
+    setScreen("home");
     setCode("");
   }, []);
 
@@ -204,9 +169,11 @@ export default function ParentPortalScreen() {
       if (!childId && selected) setChildId(selected);
 
       const fetcher = {
+        // Every child's card in one request; the child is not passed.
+        home:       PortalService.fetchHome,
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
-        attendance: PortalService.fetchAttendance,
+        attendance: (id) => PortalService.fetchAttendance(id, monthRange(month)),
         // Notices, including the threads with something unread in them.
         //
         // The merge used to happen here, on the phone: two requests, sorted
@@ -227,14 +194,22 @@ export default function ParentPortalScreen() {
       // being handed to another tab's markup.
       setSection({ ...loaded, tab });
 
-      // Also fetch fee reminders when on the fees tab
+      // On Fees, the payment plan and the account's status as well.
       if (tab === "fees") {
+        const id = childId ?? selected;
         try {
-          const remindersRes = await PortalService.fetchFeeReminders(childId ?? selected);
+          const remindersRes = await PortalService.fetchFeeReminders(id);
           if (!current()) return;
           setFeeReminders(remindersRes.data);
         } catch {
           if (current()) setFeeReminders(null);
+        }
+        try {
+          const homeRes = await PortalService.fetchHome();
+          if (!current()) return;
+          setFeeStatus(homeRes.data?.children?.find((c) => String(c._id) === String(id))?.fees ?? null);
+        } catch {
+          if (current()) setFeeStatus(null);
         }
       }
     } catch (err) {
@@ -249,7 +224,7 @@ export default function ParentPortalScreen() {
   // `t` was a dependency while the notices fetcher named an untitled thread
   // with it. The server names them now, so nothing in here translates and
   // keeping it would refetch all six tabs on a language switch for no reason.
-  }, [tab, childId, handle401]);
+  }, [tab, childId, handle401, month]);
 
   useEffect(() => {
     if (signedIn) loadAll();
@@ -326,6 +301,13 @@ export default function ParentPortalScreen() {
     }
   }, []);
 
+  /** To a section, and from a Home card to that child's page. */
+  const open = useCallback((id, next, view = null) => {
+    if (id) setChildId(id);
+    if (view) setMsgView(view);
+    setScreen(next);
+  }, []);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try { await loadAll(); } finally { setRefreshing(false); }
@@ -352,7 +334,7 @@ export default function ParentPortalScreen() {
   const printReceipt = async (paymentId) => {
     setPrinting(paymentId);
     try {
-      const html = await PortalService.fetchReceiptHtml(paymentId, language ?? "en");
+      const html = await PortalService.fetchReceiptHtml(paymentId, language ?? "en", childId ?? me?.selectedId);
       await Print.printAsync({ html });
     } catch (err) {
       if (!(await handle401(err))) {
@@ -368,7 +350,7 @@ export default function ParentPortalScreen() {
   const openReportCard = async (summary) => {
     setPrinting(`card-${summary._id}`);
     try {
-      const card = await PortalService.fetchReportCardHtml(summary._id);
+      const card = await PortalService.fetchReportCardHtml(summary._id, childId ?? me?.selectedId);
       if (card?.html) await Print.printAsync({ html: card.html });
     } catch (err) {
       if (err?.response?.status === 404) {
@@ -402,27 +384,47 @@ export default function ParentPortalScreen() {
       >
         <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={[styles.loginBody, screenPad]} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={{ alignSelf: "flex-start" }}>
-            <Ionicons name="chevron-back" size={24} color={C.inkBody} />
-          </TouchableOpacity>
+          <View style={styles.loginTop}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
+            >
+              <Ionicons name="chevron-back" size={24} color={C.inkBody} />
+            </TouchableOpacity>
+            <LanguageToggle />
+          </View>
 
-          <Text style={styles.loginTitle}>{t("portal.title")}</Text>
-          <Text style={styles.loginIntro}>{t("portal.intro")}</Text>
+          <View style={styles.loginHead}>
+            <View style={styles.loginBadge}>
+              <Ionicons name="school-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.loginTitle} accessibilityRole="header">{t("portal.title")}</Text>
+            <Text style={styles.loginIntro}>{t("portal.intro")}</Text>
+          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t("portal.admissionNo")}</Text>
+          <View style={styles.loginCard}>
+            <Text style={styles.label} nativeID="portal-admission-label">{t("portal.admissionNo")}</Text>
             <TextInput
               style={styles.input}
               value={admissionNo}
               onChangeText={setAdmissionNo}
               autoCapitalize="characters"
               autoCorrect={false}
+              autoComplete="username"
+              returnKeyType="next"
+              onSubmitEditing={() => codeField.current?.focus()}
+              submitBehavior="submit"
+              accessibilityLabelledBy="portal-admission-label"
+              accessibilityHint={t("portal.admissionHint")}
               placeholderTextColor={C.inkFaint}
             />
             <Text style={styles.hint}>{t("portal.admissionHint")}</Text>
 
-            <Text style={styles.label}>{t("portal.code")}</Text>
+            <Text style={styles.label} nativeID="portal-code-label">{t("portal.code")}</Text>
             <TextInput
+              ref={codeField}
               // Not secureTextEntry: the parent is reading this off a slip of
               // paper, and hiding it only causes typing mistakes.
               style={[styles.input, styles.codeInput]}
@@ -430,28 +432,40 @@ export default function ParentPortalScreen() {
               onChangeText={setCode}
               autoCapitalize="characters"
               autoCorrect={false}
+              autoComplete="one-time-code"
+              returnKeyType="go"
+              onSubmitEditing={() => { if (admissionNo.trim() && code.trim() && !busy) submit(); }}
+              accessibilityLabelledBy="portal-code-label"
+              accessibilityHint={t("portal.codeHint")}
               placeholder="ABCD-EFGH"
               placeholderTextColor={C.inkFaint}
             />
             <Text style={styles.hint}>{t("portal.codeHint")}</Text>
 
             {error && (
-              <View style={styles.errorBox}>
+              <View style={styles.errorBox} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                <Ionicons name="alert-circle-outline" size={18} color={C.danger} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
             <TouchableOpacity
+              testID="portal-sign-in"
               style={[styles.submit, (!admissionNo.trim() || !code.trim() || busy) && styles.submitOff]}
               onPress={submit}
               disabled={!admissionNo.trim() || !code.trim() || busy}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !admissionNo.trim() || !code.trim() || busy, busy }}
             >
               {busy
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.submitText}>{t("portal.signIn")}</Text>}
             </TouchableOpacity>
+          </View>
 
+          <View style={styles.footRow}>
+            <Ionicons name="help-circle-outline" size={18} color={C.inkMuted} />
             <Text style={styles.footNote}>{t("portal.noAccount")}</Text>
           </View>
         </ScrollView>
@@ -493,104 +507,34 @@ export default function ParentPortalScreen() {
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={styles.header}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title} numberOfLines={1}>
-            {me?.student?.name || t("portal.title")}
-          </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {me?.student?.enrollmentNo}
-            {me?.student?.className ? ` · ${me.student.className}` : ""}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={leave} hitSlop={10}>
+      {/* The school, the language, the way out. */}
+      <View style={[styles.header, { paddingTop: headPad.paddingTop }]}>
+        <Text style={styles.title} numberOfLines={1}>
+          {me?.school?.name || t("portal.title")}
+        </Text>
+        <LanguageToggle />
+        <TouchableOpacity
+          onPress={leave}
+          hitSlop={8}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("portal.signOut")}
+        >
           <Ionicons name="log-out-outline" size={22} color={C.inkBody} />
         </TouchableOpacity>
       </View>
 
-      {/* Child switcher — only when there is a choice to make. A parent with
-          one child should not be shown a control with one option. */}
-      {(me?.children?.length ?? 0) > 1 && (
-        <View style={styles.childBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.childRow}>
-            {me.children.map((c) => {
-              const on = (childId ?? me.selectedId) === c._id;
-              return (
-                <TouchableOpacity
-                  key={c._id}
-                  style={[styles.childChip, on && styles.childChipOn]}
-                  onPress={() => setChildId(c._id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.childChipText, on && styles.childChipTextOn]}
-                        numberOfLines={1}>
-                    {c.name || c.enrollmentNo}
-                  </Text>
-                  {c.className ? (
-                    <Text style={[styles.childChipMeta, on && styles.childChipTextOn]}
-                          numberOfLines={1}>
-                      {c.className}
-                    </Text>
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+      {/* Whose page this is, on the three screens about one child. */}
+      {PER_CHILD.includes(screen) && (
+        <ChildSwitcher
+          family={me?.children}
+          selected={childId ?? me?.selectedId}
+          onSelect={setChildId}
+        />
       )}
 
-      {/* The unread count on the tab itself.
-          A parent had no indication anywhere that a message had arrived: the
-          count existed on every thread and nothing carried it to a place it
-          could be seen without first opening the tab it was about. It rides on
-          /portal/me, which is the one request every load makes whatever tab is
-          showing — a badge that needs a second request to a tab nobody has
-          opened is a badge no client draws. */}
-      <View style={styles.tabs}>
-        {/* Six tabs at 360 px leave about 60 px each, less than "Attendance"
-            or "Informations": they fill the width when they fit, and scroll
-            sideways when they do not, rather than wrapping mid-word. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
-        {TABS.map((key) => {
-          // Messages counts unread threads; Notices counts school notices
-          // that arrived since the parent last opened that tab. Deliberately
-          // disjoint — the notices list carries an unread-thread row too, and
-          // a number showing up in two badges at once is a number nobody
-          // trusts.
-          const unread =
-            key === "messages" ? (me?.unreadMessages ?? 0) :
-            key === "notices"  ? (me?.unreadNotices  ?? 0) : 0;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[styles.tab, tab === key && styles.tabOn]}
-              onPress={() => setTab(key)}
-              activeOpacity={0.8}
-              accessibilityLabel={
-                unread > 0
-                  ? `${t(`portal.${key}`)} (${t("portal.unreadCount", { count: unread })})`
-                  : t(`portal.${key}`)
-              }
-            >
-              <Text style={[styles.tabText, tab === key && styles.tabTextOn]} numberOfLines={1}>
-                {t(`portal.${key}`)}
-              </Text>
-              {unread > 0 ? (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>
-                    {unread > 9 ? "9+" : unread}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-        </ScrollView>
-      </View>
-
       <ScrollView
-        contentContainerStyle={[styles.body, { paddingBottom: screenPad.paddingBottom }]}
+        contentContainerStyle={styles.body}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />
         }
@@ -606,605 +550,55 @@ export default function ParentPortalScreen() {
           </View>
         )}
 
-        {loading && !data ? (
-          <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
-        ) : (
-          <>
-            {/* ── Fees ── */}
-            {tab === "fees" && data && (
-              <>
-                <View style={[
-                  styles.balanceCard,
-                  (data.totals?.balance ?? 0) > 0 ? styles.owes : styles.clear,
-                ]}>
-                  <Text style={styles.balanceLabel}>
-                    {(data.totals?.balance ?? 0) > 0 ? t("portal.balance") : t("portal.settled")}
-                  </Text>
-                  <Text style={[
-                    styles.balanceValue,
-                    { color: (data.totals?.balance ?? 0) > 0 ? C.danger : C.success },
-                  ]}>
-                    {formatMoney(data.totals?.balance ?? 0)}
-                  </Text>
-                  <View style={styles.balanceRow}>
-                    <Text style={styles.balanceMeta}>
-                      {t("portal.charged")} {formatMoney(data.totals?.charged ?? 0)}
-                    </Text>
-                    <Text style={styles.balanceMeta}>
-                      {t("portal.paid")} {formatMoney(data.totals?.paid ?? 0)}
-                    </Text>
-                  </View>
-                </View>
+        {/* Home draws its own placeholders. */}
+        {tab === "home" && (
+          <HomeScreen data={data} loading={loading} onOpen={open} />
+        )}
 
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>{t("fees.payments")}</Text>
-                  {(data.payments?.length ?? 0) === 0 ? (
-                    <Text style={styles.empty}>{t("portal.noPayments")}</Text>
-                  ) : (
-                    data.payments.map((p) => (
-                      <View key={p._id} style={styles.line}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {p.receiptNo || "—"}
-                            {p.isReversal ? ` · ${t("portal.reversalNote")}` : ""}
-                          </Text>
-                          <Text style={styles.lineMeta}>{formatDateShort(p.receivedAt)}</Text>
-                        </View>
-                        <Text style={[
-                          styles.lineAmount, p.amount < 0 && { color: C.danger },
-                        ]}>
-                          {formatMoney(p.amount)}
-                        </Text>
-                        <TouchableOpacity onPress={() => printReceipt(p._id)} hitSlop={8}>
-                          {printing === p._id
-                            ? <ActivityIndicator color={C.primary} size="small" />
-                            : <Ionicons name="print-outline" size={18} color={C.primary} />}
-                        </TouchableOpacity>
-                      </View>
-                    ))
-                  )}
-                </View>
+        {tab === "results" && (
+          <ResultsScreen
+            data={data}
+            loading={loading}
+            childId={childId ?? me?.selectedId}
+            printing={printing}
+            onOpenReportCard={openReportCard}
+          />
+        )}
 
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>{t("fees.charges")}</Text>
-                  {(data.charges?.length ?? 0) === 0 ? (
-                    <Text style={styles.empty}>{t("portal.noCharges")}</Text>
-                  ) : (
-                    data.charges.map((c) => (
-                      <View key={c._id} style={styles.line}>
-                        <Text style={styles.lineLabel} numberOfLines={1}>
-                          {c.label || c.code}
-                        </Text>
-                        <Text style={styles.lineAmount}>{formatMoney(c.amount)}</Text>
-                      </View>
-                    ))
-                  )}
-                </View>
+        {tab === "attendance" && (
+          <AttendanceScreen data={data} loading={loading} month={month} onMonth={setMonth} />
+        )}
 
-                {/* Fee Reminders */}
-                {feeReminders?.reminders?.length > 0 && (
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.feeReminders")}</Text>
-                    <Text style={styles.cardHint}>{t("portal.feeRemindersHint")}</Text>
-                    {feeReminders.reminders.map((r) => (
-                      <View key={r.chargeId} style={styles.line}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {r.label || r.code}
-                          </Text>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
-                            <Text style={[
-                              styles.lineMeta,
-                              r.isOverdue && { color: C.danger, fontWeight: "700" },
-                            ]}>
-                              {t("portal.dueBy")} {formatDateShort(r.dueDate)}
-                            </Text>
-                            {r.isOverdue && (
-                              <View style={[styles.badge, { backgroundColor: C.dangerBg }]}>
-                                <Text style={[styles.badgeText, { color: C.danger }]}>
-                                  {t("portal.overdue")} · {r.daysOverdue}d
-                                </Text>
-                              </View>
-                            )}
-                            {r.isDueSoon && !r.isOverdue && (
-                              <View style={[styles.badge, { backgroundColor: C.warningBg }]}>
-                                <Text style={[styles.badgeText, { color: C.warning }]}>
-                                  {t("portal.dueSoon")}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                        <Text style={styles.lineAmount}>{formatMoney(r.netAmount)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+        {tab === "fees" && (
+          <FeesScreen
+            data={data}
+            loading={loading}
+            plan={feeReminders?.hasPlan ? feeReminders.plan : null}
+            status={feeStatus}
+            childName={me?.student?.name ?? null}
+            printing={printing}
+            onPrintReceipt={printReceipt}
+          />
+        )}
 
-                {/* Payment Plan */}
-                {feeReminders?.hasPlan && feeReminders.plan && (
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.paymentPlan")}</Text>
-                    {feeReminders.plan.reason && (
-                      <Text style={styles.cardHint}>{feeReminders.plan.reason}</Text>
-                    )}
-                    {feeReminders.plan.instalments?.map((inst) => {
-                      const isPast = new Date(inst.dueDate) < new Date();
-                      return (
-                        <View key={inst.seq} style={styles.line}>
-                          <Text style={[styles.lineLabel, isPast && { textDecorationLine: "line-through", color: C.inkMuted }]}>
-                            {t("portal.instalment")} {inst.seq} — {formatDateShort(inst.dueDate)}
-                          </Text>
-                          <Text style={styles.lineAmount}>{formatMoney(inst.amount)}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* ── Results — mirrors the issued report card ── */}
-            {tab === "results" && (
-              (data?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noResults")}</Text>
-                </View>
-              ) : (
-                groupResultsByYear(data).map((group) => (
-                  <View key={group.year} style={{ marginBottom: 4 }}>
-                    <View style={styles.yearHeader}>
-                      <Ionicons name="school-outline" size={15} color={C.primary} />
-                      <Text style={styles.yearHeaderText}>{group.year}</Text>
-                      <Text style={styles.yearHeaderCount}>
-                        {t("portal.resultsCount", { count: group.items.length })}
-                      </Text>
-                    </View>
-
-                    {group.items.map((r) => (
-                      <View key={r._id} style={styles.card}>
-                        <View style={styles.resultHead}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.cardTitle}>
-                              {r.term || "—"} · {r.className || ""}
-                            </Text>
-                            <Text style={styles.lineMeta}>
-                              {r.subjectsTotal
-                                ? t("portal.subjectsSummary", {
-                                    passed: r.subjectsPassed ?? 0,
-                                    failed: r.subjectsFailed ?? 0,
-                                  })
-                                : ""}
-                            </Text>
-                          </View>
-                          <View style={{ alignItems: "flex-end" }}>
-                            {/* The figure was rendered bare, which left a
-                                parent looking at "14" with nothing saying what
-                                it was — and no way to tell 14/20 from 14%. The
-                                label and the denominator are the whole point of
-                                the number. */}
-                            <Text style={styles.averageLabel}>
-                              {t("portal.average")}
-                            </Text>
-                            <Text style={styles.average}>
-                              {trimMark(r.average)}
-                              <Text style={styles.averageOutOf}> / 20</Text>
-                            </Text>
-                            {r.classPosition && (
-                              <Text style={styles.lineMeta}>
-                                {t("portal.position")} {r.classPosition}
-                                {r.totalInClass ? ` / ${r.totalInClass}` : ""}
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-
-                        {r.overallGrade && (
-                          <View
-                            style={[
-                              styles.gradeChip,
-                              r.isPassing
-                                ? { backgroundColor: C.successBg }
-                                : { backgroundColor: C.dangerBg },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.gradeChipText,
-                                { color: r.isPassing ? C.success : C.danger },
-                              ]}
-                            >
-                              {t("portal.overallGrade")}: {r.overallGrade}
-                              {r.gpa != null ? ` · GPA ${trimMark(r.gpa)}` : ""}
-                            </Text>
-                          </View>
-                        )}
-
-                        {r.subjects?.map((s, i) => (
-                          <View key={i} style={styles.subjectRow}>
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text style={styles.lineLabel} numberOfLines={1}>
-                                {s.subjectName || "—"}
-                              </Text>
-                              <Text style={styles.subjectMeta} numberOfLines={2}>
-                                {s.isAbsent
-                                  ? "Absent"
-                                  : `${trimMark(s.score)}${s.maxScore ? `/${s.maxScore}` : ""}`}
-                                {s.coefficient
-                                  ? ` · ${t("portal.coefficient")} ${s.coefficient}`
-                                  : ""}
-                                {!s.isAbsent && s.remark
-                                  ? ` · ${s.remark}`
-                                  : ""}
-                              </Text>
-                            </View>
-                            <View style={{ alignItems: "flex-end" }}>
-                              <Text style={styles.subjectMark}>
-                                {s.isAbsent ? "—" : trimMark(s.normalizedMark)}
-                                <Text style={styles.subjectMarkScale}>/20</Text>
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.subjectGrade,
-                                s.isAbsent
-                                  ? { backgroundColor: C.warningBg }
-                                  : s.isPassing
-                                    ? { backgroundColor: C.successBg }
-                                    : { backgroundColor: C.dangerBg },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.gradeChipText,
-                                  {
-                                    color: s.isAbsent
-                                      ? C.warning
-                                      : s.isPassing ? C.success : C.danger,
-                                  },
-                                ]}
-                              >
-                                {s.isAbsent ? "ABS" : (s.grade || "—")}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-
-                        {r.principalRemark && (
-                          <View style={styles.resultFooter}>
-                            <Text style={styles.cardHint}>
-                              {t("portal.principalRemark")}
-                            </Text>
-                            <Text style={styles.remarkText}>
-                              {r.principalRemark}
-                            </Text>
-                          </View>
-                        )}
-
-                        <TouchableOpacity
-                          style={styles.reportCardBtn}
-                          activeOpacity={0.8}
-                          onPress={() => openReportCard(r)}
-                        >
-                          {printing === `card-${r._id}` ? (
-                            <ActivityIndicator size="small" color={C.primary} />
-                          ) : (
-                            <Ionicons name="document-text-outline" size={16} color={C.primary} />
-                          )}
-                          <Text style={styles.reportCardBtnText}>
-                            {t("portal.viewReportCard")}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                ))
-              )
-            )}
-
-            {/* ── Attendance — rate, status counts and recent days ── */}
-            {tab === "attendance" && (
-              // A school that scans at the gate but keeps no period register
-              // had nothing on this tab at all, because the empty test only
-              // asked about register rows.
-              (data?.total ?? 0) === 0 && (data?.gate?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noAttendance")}</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.card}>
-                    <Text style={styles.balanceLabel}>{t("portal.attendanceRate")}</Text>
-                    <Text style={[styles.balanceValue, { color: C.ink }]}>{data.rate}%</Text>
-                    <Text style={styles.lineMeta}>
-                      {t("portal.daysRecorded", { count: data.total })}
-                    </Text>
-                  </View>
-
-                  <View style={styles.attdCounts}>
-                    {["present", "absent", "late", "excused"].map((key) => (
-                      <View key={key} style={styles.attdCell}>
-                        <Text style={styles.attdCellValue}>
-                          {data.tally?.[key] ?? 0}
-                        </Text>
-                        <Text style={styles.attdCellLabel}>{t(`portal.${key}`)}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* The gate.
-                      A parent could not see what time their child reached
-                      school. The scan does notify them, but only when the
-                      child was late or left early — which is the right rule
-                      for a push and the wrong one for a page somebody chose
-                      to open. */}
-                  {(data.gate?.length ?? 0) > 0 && (
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("portal.gateTimes")}</Text>
-                      <Text style={styles.lineMeta}>{t("portal.gateBlurb")}</Text>
-
-                      {data.gate.slice(0, 14).map((day) => (
-                        <View key={day.date} style={styles.gateRow}>
-                          <Text style={styles.gateDate} numberOfLines={1}>
-                            {formatDateShort(day.date)}
-                          </Text>
-
-                          <View style={styles.gateTimes}>
-                            <Text style={styles.gateLabel}>{t("portal.arrived")}</Text>
-                            <Text style={styles.gateValue}>
-                              {day.arrivedAt ? formatTime(day.arrivedAt) : "—"}
-                            </Text>
-                          </View>
-
-                          <View style={styles.gateTimes}>
-                            <Text style={styles.gateLabel}>{t("portal.left")}</Text>
-                            <Text style={styles.gateValue}>
-                              {day.departedAt ? formatTime(day.departedAt) : "—"}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {(data.dailySummaries?.length ?? 0) > 0 && (
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("portal.recentDays")}</Text>
-                      {data.dailySummaries.slice(0, 14).map((day) => (
-                        <View key={day.date} style={styles.recentDayRow}>
-                          <View
-                            style={[
-                              styles.recentDayDot,
-                              {
-                                backgroundColor:
-                                  day.status?.toLowerCase().includes("absent")
-                                    ? C.danger
-                                    : day.status?.toLowerCase().includes("late")
-                                      ? C.warning
-                                      : C.success,
-                              },
-                            ]}
-                          />
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {formatDateShort(day.date)}
-                          </Text>
-                          <Text style={styles.recentDayStatus}>
-                            {t(ATTD_STATUS_KEY[day.status] ?? "portal.present")}
-                          </Text>
-                          <Text style={styles.recentDayMeta}>
-                            {day.present}P{day.absent ? ` · ${day.absent}A` : ""}
-                            {day.late ? ` · ${day.late}L` : ""}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </>
-              )
-            )}
-
-            {/* ── Messages ── */}
-            {tab === "messages" && (
-              <>
-                <TouchableOpacity
-                  style={styles.newMsgBtn}
-                  onPress={() => router.push("/portal/messages/new")}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="create-outline" size={17} color="#FFFFFF" />
-                  <Text style={styles.newMsgText}>{t("msgMobile.newMessage")}</Text>
-                </TouchableOpacity>
-
-                {(data ?? []).length === 0 ? (
-                  <Text style={styles.emptyMsg}>{t("msgMobile.emptyTitle")}</Text>
-                ) : (
-                  (data ?? []).map((c) => (
-                    <TouchableOpacity
-                      key={c._id}
-                      style={styles.convoRow}
-                      activeOpacity={0.7}
-                      onPress={() => router.push(`/portal/messages/${c._id}`)}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.convoTitle} numberOfLines={1}>
-                          {/* otherParticipants excludes this guardian, which
-                              is why the server sends it — joining every
-                              participant showed a parent their own name over
-                              a message from the school. participants is the
-                              fallback for an older server. */}
-                          {conversationName(
-                            c, c.otherParticipants || c.participants, t
-                          )}
-                        </Text>
-                        <Text style={styles.convoPreview} numberOfLines={1}>
-                          {c.lastMessagePreview || t("portal.noMessages")}
-                        </Text>
-                      </View>
-                      {c.unread > 0 && (
-                        <View style={styles.convoBadge}>
-                          <Text style={styles.convoBadgeText}>{c.unread}</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))
-                )}
-              </>
-            )}
-
-            {/* ── Notices ─────────────────────────────────────────────────
-                Everything the school has already sent this parent by email or
-                SMS: gate arrivals and departures, absences, fee reminders,
-                published results. The records existed from the moment each
-                message went out — nothing in the portal had ever read them, so
-                a parent whose phone lost the SMS had no second place to look. */}
-            {tab === "notices" && (data?.length ?? 0) > 0 &&
-              (me?.unreadNotices ?? 0) > 0 && (
-                <TouchableOpacity
-                  style={styles.markAllBtn}
-                  onPress={markAllNotices}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                >
-                  <Ionicons name="checkmark-done-outline" size={15} color={C.primary} />
-                  <Text style={styles.markAllText}>{t("portal.markAllRead")}</Text>
-                </TouchableOpacity>
-              )}
-
-            {tab === "notices" && (
-              (data?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noNotices")}</Text>
-                </View>
-              ) : (
-                data.map((n) => {
-                  const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
-                  // Whose notice it is. The list covers every child on the
-                  // access now rather than only the one selected — a parent
-                  // looking at their eldest should still learn the younger one
-                  // was absent — so "was not recorded at school today" needs a
-                  // name against it. Only worth showing when there are two.
-                  const about = (me?.children?.length ?? 0) > 1
-                    ? (me.children.find((c) => String(c._id) === String(n.studentId))?.name ?? null)
-                    : null;
-                  // A notice about a message that cannot be opened from the
-                  // notice is a dead end; the rest have nowhere to go.
-                  //
-                  // Straight into the thread now, rather than switching to the
-                  // Messages tab and leaving the parent to find the row again.
-                  // Every card is tappable now, because tapping is what marks
-                  // it read. A message notice also opens its thread; the rest
-                  // have nowhere to go and are simply acknowledged.
-                  //
-                  // The message rows carry no `read` of their own — an unread
-                  // thread stops being a notice at all once the thread is
-                  // opened, which the thread screen's own marker handles.
-                  const isNotice = !n.conversationId;
-                  const unreadCard = isNotice && n.read === false;
-                  return (
-                    <TouchableOpacity
-                      key={n._id}
-                      style={[styles.card, unreadCard && styles.cardUnread]}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        if (n.conversationId) {
-                          router.push(`/portal/messages/${n.conversationId}`);
-                          return;
-                        }
-                        if (unreadCard) markNotice(n._id);
-                      }}
-                      accessibilityLabel={
-                        unreadCard ? `${t(meta.labelKey)} · ${t("portal.unreadNotice")}` : undefined
-                      }
-                    >
-                      <View style={styles.noticeHead}>
-                        <View style={[styles.noticeIcon, { backgroundColor: meta.bg }]}>
-                          <Ionicons name={meta.icon} size={14} color={meta.fg} />
-                        </View>
-                        <Text style={styles.noticeKind} numberOfLines={1}>
-                          {t(meta.labelKey)}
-                        </Text>
-                        {n.unread > 0 ? (
-                          <View style={styles.convoBadge}>
-                            <Text style={styles.convoBadgeText}>{n.unread}</Text>
-                          </View>
-                        ) : null}
-                        {/* A dot rather than a number: there is only ever one
-                            of this notice, and "1" beside every new card is
-                            noise. */}
-                        {unreadCard ? <View style={styles.unreadDot} /> : null}
-                        <Text style={[styles.lineMeta, styles.noticeMeta]} numberOfLines={1}>
-                          {formatDateShort(n.sentAt || n.createdAt)}
-                          {about ? ` · ${about}` : ""}
-                        </Text>
-                      </View>
-
-                      {n.subject ? (
-                        <Text style={styles.cardTitle}>{n.subject}</Text>
-                      ) : null}
-                      {n.body ? (
-                        <Text style={styles.newsBody}>{n.body}</Text>
-                      ) : null}
-
-                      {/* A queued notice has not left the school yet, and a
-                          failed one never will — saying so is kinder than a
-                          silent absence when a parent is asking why they were
-                          not told.
-
-                          Only those two. This was every status except "sent",
-                          which was safe while the server hid skipped rows and
-                          is not now that it shows them: a skipped notice is
-                          one the school never tried to send — an on-time
-                          arrival, or a family with no email address — and
-                          telling a parent it was not emailed, on the screen
-                          where they are reading it, is an apology for
-                          nothing. There is also no such translation: the key
-                          would have rendered as portal.noticeStatus_skipped
-                          on screen, because until now it could never be
-                          reached. */}
-                      {n.status === "pending" || n.status === "failed" ? (
-                        <Text style={styles.noticePending}>
-                          {t(`portal.noticeStatus_${n.status}`)}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                })
-              )
-            )}
-
-            {tab === "news" && (
-              (data?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noNews")}</Text>
-                </View>
-              ) : (
-                data.map((a) => {
-                  // Which of this parent's children the notice is about, when
-                  // it names any. The list now carries notices for every
-                  // child's class rather than only the one on screen — which
-                  // is the fix — and that makes "bring PE kit on Thursday"
-                  // ambiguous for a parent with three children unless the card
-                  // says whose Thursday it is.
-                  const about = (a.forStudents ?? [])
-                    .map((id) => (me?.children ?? [])
-                      .find((c) => String(c._id) === String(id))?.name)
-                    .filter(Boolean);
-                  return (
-                    <View key={a._id} style={styles.card}>
-                      <Text style={styles.cardTitle}>{a.title || "—"}</Text>
-                      <Text style={styles.lineMeta}>
-                        {formatDateShort(a.createdAt)}
-                        {about.length ? ` · ${about.join(", ")}` : ""}
-                      </Text>
-                      {a.body ? <Text style={styles.newsBody}>{a.body}</Text> : null}
-                    </View>
-                  );
-                })
-              )
-            )}
-          </>
+        {screen === "messages" && (
+          <MessagesScreen
+            tab={tab}
+            onView={setMsgView}
+            data={data}
+            loading={loading}
+            me={me}
+            markNotice={markNotice}
+            markAllNotices={markAllNotices}
+          />
         )}
       </ScrollView>
+
+      <BottomTabs
+        screen={screen}
+        onChange={(next) => open(null, next)}
+        badges={{ messages: (me?.unreadMessages ?? 0) + (me?.unreadNotices ?? 0) }}
+      />
     </View>
   );
 }
@@ -1213,51 +607,27 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.canvas },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  loginBody:  { paddingHorizontal: 20, gap: 10 },
-  loginTitle: { fontSize: 24, fontWeight: "700", color: C.ink, marginTop: 12 },
-  loginIntro: { fontSize: 13, color: C.inkMuted, marginBottom: 10 },
+  loginBody:  { paddingHorizontal: 16, gap: 16, flexGrow: 1 },
+  loginTop:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  loginHead:  { alignItems: "center", marginTop: 8 },
+  loginBadge: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: C.primary,
+    alignItems: "center", justifyContent: "center", marginBottom: 12,
+  },
+  loginTitle: { fontSize: 26, fontWeight: "700", color: C.ink, textAlign: "center" },
+  loginIntro: { marginTop: 4, fontSize: 15, color: C.inkMuted, textAlign: "center", lineHeight: 21 },
+  loginCard: {
+    backgroundColor: C.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: C.line, padding: 18,
+  },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
+    paddingHorizontal: 16, paddingBottom: 10,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  title:    { fontSize: 16, fontWeight: "700", color: C.ink },
-  subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
-
-  childBar: {
-    backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  childRow:  { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  childChip: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 9,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
-    minWidth: 96,
-  },
-  childChipOn:      { backgroundColor: C.primary, borderColor: C.primary },
-  childChipText:    { fontSize: 13, fontWeight: "600", color: C.inkBody },
-  childChipMeta:    { fontSize: 10, color: C.inkFaint, marginTop: 1 },
-  childChipTextOn:  { color: "#fff" },
-
-  tabs: {
-    flexDirection: "row", backgroundColor: C.surface,
-    borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  tabsRow: { flexGrow: 1 },
-  tab: {
-    flexGrow: 1, minWidth: 64, paddingHorizontal: 10, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent",
-    // Row rather than centre-only, so the badge sits beside the word instead
-    // of over it. The gap holds the label in place whether or not it is there.
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
-  },
-  tabOn:     { borderBottomColor: C.primary },
-  tabBadge: {
-    minWidth: 16, paddingHorizontal: 4, paddingVertical: 1,
-    borderRadius: 8, backgroundColor: C.danger, alignItems: "center",
-  },
-  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
-  tabText:   { fontSize: 12, fontWeight: "600", color: C.inkMuted },
-  tabTextOn: { color: C.primary },
+  title:   { flex: 1, minWidth: 0, fontSize: 16, fontWeight: "700", color: C.ink },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 10 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
@@ -1268,188 +638,28 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
-  balanceCard:  { borderRadius: 12, borderWidth: 1, padding: 16 },
-  owes:         { backgroundColor: C.dangerBg,  borderColor: "#F2D3CF" },
-  clear:        { backgroundColor: C.successBg, borderColor: "#C3E2D0" },
-  balanceLabel: { fontSize: 11, fontWeight: "600", color: C.inkMuted, textTransform: "uppercase", letterSpacing: 0.6 },
-  balanceValue: { marginTop: 6, fontSize: 30, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  balanceRow:   { flexDirection: "row", gap: 16, marginTop: 8 },
-  balanceMeta:  { fontSize: 11, color: C.inkMuted, fontVariant: ["tabular-nums"] },
-
-  card: {
-    backgroundColor: C.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: C.line, padding: 14,
-  },
-  cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink },
-  cardHint:  { fontSize: 11, color: C.inkFaint, marginTop: 2, marginBottom: 8 },
-  badge: {
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
-  },
-  badgeText: { fontSize: 10, fontWeight: "700" },
-
-  label: { fontSize: 12, fontWeight: "600", color: C.inkBody, marginBottom: 5, marginTop: 10 },
+  // Fields a thumb can hit and an eye can read off a slip of paper.
+  label: { fontSize: 14, fontWeight: "600", color: C.inkBody, marginBottom: 6, marginTop: 12 },
   input: {
-    height: 46, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
-    paddingHorizontal: 12, fontSize: 16, color: C.ink, backgroundColor: C.surface,
+    height: 52, borderRadius: 10, borderWidth: 1, borderColor: "#D5D9E2",
+    paddingHorizontal: 14, fontSize: 17, color: C.ink, backgroundColor: C.surface,
   },
   codeInput: { fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", letterSpacing: 2 },
-  hint: { marginTop: 4, fontSize: 11, color: C.inkFaint },
+  hint: { marginTop: 5, fontSize: 13, color: C.inkMuted, lineHeight: 18 },
 
   errorBox: {
-    marginTop: 12, padding: 10, borderRadius: 9,
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    marginTop: 14, padding: 12, borderRadius: 10,
     backgroundColor: C.dangerBg, borderWidth: 1, borderColor: "#F2D3CF",
   },
-  errorText: { fontSize: 12, color: C.danger },
+  errorText: { flex: 1, fontSize: 14, color: C.danger, lineHeight: 20 },
 
   submit: {
-    marginTop: 18, height: 48, borderRadius: 10, backgroundColor: C.primary,
+    marginTop: 20, height: 52, borderRadius: 12, backgroundColor: C.primary,
     alignItems: "center", justifyContent: "center",
   },
   submitOff:  { opacity: 0.45 },
-  submitText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  footNote:   { marginTop: 14, fontSize: 11, color: C.inkFaint, lineHeight: 16 },
-
-  line: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  lineLabel:  { flex: 1, fontSize: 13, color: C.inkBody },
-  lineMeta:   { marginTop: 2, fontSize: 11, color: C.inkFaint },
-  lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
-  grade:      { fontSize: 12, fontWeight: "700", width: 28, textAlign: "right" },
-
-  resultHead: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 6 },
-  noticeHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  noticeIcon: {
-    width: 24, height: 24, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
-  // Beside the kind: shrinks (and ends in …) before it pushes the row wider.
-  noticeMeta: { flexShrink: 1, maxWidth: "50%" },
-  noticeKind: { flex: 1, fontSize: 12, fontWeight: "700", color: C.inkBody },
-  noticePending: { marginTop: 6, fontSize: 11, fontWeight: "600", color: C.warning },
-
-  averageLabel: {
-    fontSize:      10,
-    fontWeight:    "600",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color:         C.inkFaint ?? "#9CA3AF",
-    marginBottom:  1,
-  },
-  average:    { fontSize: 18, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  // The denominator rides inside the figure so it wraps with it and stays
-  // visually subordinate — the mark is what a parent reads first.
-  averageOutOf: { fontSize: 11, fontWeight: "600", color: C.inkFaint ?? "#9CA3AF" },
-
-  newsBody: { marginTop: 8, fontSize: 13, color: C.inkBody, lineHeight: 19 },
-  empty:    { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
-
-  // ── Results — report-card mirror ──────────────────────────────────────────
-  yearHeader: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10,
-    backgroundColor: C.primaryBg, borderRadius: 10,
-  },
-  yearHeaderText:  { flex: 1, fontSize: 14, fontWeight: "700", color: C.ink },
-  yearHeaderCount: { fontSize: 11, fontWeight: "600", color: C.inkMuted },
-
-  gradeChip: {
-    alignSelf: "flex-start", marginBottom: 6,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
-  },
-  gradeChipText: { fontSize: 11, fontWeight: "700" },
-
-  subjectRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  subjectMeta:      { fontSize: 10, color: C.inkFaint, marginTop: 2, lineHeight: 14 },
-  subjectMark:      { fontSize: 14, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  subjectMarkScale: { fontSize: 9, color: C.inkFaint },
-  subjectGrade: {
-    minWidth: 30, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 11,
-    fontSize: 11, fontWeight: "700", textAlign: "center", overflow: "hidden",
-  },
-  resultFooter:  { marginTop: 6 },
-  remarkText:    { fontSize: 11, color: C.inkMuted, fontStyle: "italic", marginTop: 2, lineHeight: 15 },
-  reportCardBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    marginTop: 8, paddingVertical: 9, borderRadius: 9,
-    borderWidth: 1, borderColor: C.primary, backgroundColor: C.primaryBg,
-  },
-  reportCardBtnText: { fontSize: 12, fontWeight: "700", color: C.primary },
-
-  // ── Attendance breakdown ──────────────────────────────────────────────────
-  attdCounts: { flexDirection: "row", gap: 8, marginTop: 12 },
-  attdCell: {
-    flex: 1, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
-    borderRadius: 9, paddingVertical: 8, alignItems: "center",
-  },
-  attdCellValue: { fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  attdCellLabel: { fontSize: 10, color: C.inkFaint, marginTop: 2 },
-
-  recentDayRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-
-  // The gate row: date, then arrival and departure as two labelled columns.
-  // Times are tabular so a fortnight of arrivals reads as a column rather than
-  // a ragged list — which is the whole point of looking at it.
-  gateRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  gateDate:  { flex: 1, fontSize: 13, color: C.ink, fontWeight: "600" },
-  gateTimes: { width: 78, alignItems: "flex-end" },
-  gateLabel: { fontSize: 10, color: C.inkFaint, textTransform: "uppercase", letterSpacing: 0.4 },
-  gateValue: {
-    fontSize: 14, color: C.ink, fontWeight: "600",
-    fontVariant: ["tabular-nums"],
-  },
-  recentDayDot:    { width: 8, height: 8, borderRadius: 4 },
-  recentDayMeta:   { fontSize: 10, color: C.inkFaint, fontVariant: ["tabular-nums"] },
-  recentDayStatus: { fontSize: 11, fontWeight: "600" },
-
-  // ── Messages ──────────────────────────────────────────────────────────────
-  newMsgBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: C.ink, borderRadius: 10,
-    paddingVertical: 11, marginBottom: 12,
-  },
-  newMsgText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
-  emptyMsg:   { fontSize: 13, color: C.inkFaint, textAlign: "center", paddingVertical: 24 },
-
-  convoRow: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  convoTitle:   { fontSize: 14, fontWeight: "600", color: C.ink },
-  convoPreview: { fontSize: 12, color: C.inkFaint, marginTop: 2 },
-  convoBadge: {
-    minWidth: 20, paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: 10, backgroundColor: C.ink, alignItems: "center",
-  },
-  convoBadgeText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
-  // An unread notice: a tinted edge down the left of the card and a dot by
-  // the kind. Colour is not carrying this alone — the dot is a second cue for
-  // anyone who cannot pick the tint out.
-  cardUnread: {
-    borderLeftWidth: 3,
-    borderLeftColor: C.primary,
-    backgroundColor: C.primaryBg,
-  },
-  // Shown only while there is something to clear, so it is never a button
-  // that does nothing.
-  markAllBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingVertical: 9, marginBottom: 10, borderRadius: 10,
-    borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
-  },
-  markAllText: { fontSize: 13, fontWeight: "600", color: C.primary },
-  unreadDot: {
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: C.primary,
-  },
+  submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  footRow:    { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingHorizontal: 4 },
+  footNote:   { flex: 1, fontSize: 14, color: C.inkMuted, lineHeight: 20 },
 });
