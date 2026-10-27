@@ -30,6 +30,7 @@ import timetableService, {
 } from "../../../src/services/timetableService";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import ConflictTypeBadge from "./components/ConflictTypeBadge";
 
 const DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -70,6 +71,7 @@ const withLocalCopy = async (entry, fn) => {
 
 export default function TimetableConflictsScreen() {
   const router = useRouter();
+  const pad    = useScreenInsets({ top: 12 });
   const { t, language } = useTranslation();
   const mountedRef = useRef(true);
 
@@ -219,7 +221,7 @@ export default function TimetableConflictsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
@@ -431,7 +433,6 @@ const styles = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     paddingHorizontal: 16,
-    paddingTop:        52,
     paddingBottom:     12,
     backgroundColor:   "#FFFFFF",
     borderBottomWidth: 1,
