@@ -16,6 +16,8 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - B2: school hours and periods are each school's own setting — no fixed defaults; warn when they disagree.
 - B3: age range warning: Form 1 = 9–14; each level up the minimum rises 1 year and the maximum 2 (Upper Sixth 15–26). Option (b), confirmed 2026-10-27.
 
+- D1: pupils sharing one test email — clear the shared email, keep the pupils (owner, 2026-10-27).
+
 ## Phase A — wrong numbers (fix first)
 
 - [x] **A1** Class positions: rank denominator = pupils in that class with results (Term Results page and printed report card; find where "50" comes from). — `52088d7`
