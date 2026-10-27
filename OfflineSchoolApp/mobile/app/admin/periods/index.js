@@ -208,8 +208,9 @@ export default function PeriodsScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("periodsAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>
-            {periods.filter((p) => p.isActive).length} active
-            {periods.length > 0 ? ` of ${periods.length}` : ""}
+            {/* Teaching periods only (B2): breaks are rows, not periods. */}
+            {periods.filter((p) => p.isActive && !p.isBreak).length} teaching
+            {periods.length > 0 ? ` of ${periods.filter((p) => !p.isBreak).length}` : ""}
           </Text>
         </View>
         <TouchableOpacity

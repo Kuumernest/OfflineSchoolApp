@@ -371,7 +371,7 @@
     "totalSubjects": "Subjects",
     "assignedSubjects": "Assigned",
     "activeAnnouncements": "Notices",
-    "totalPeriods": "Periods",
+    "totalPeriods": "Teaching periods",
     "incompleteTimetableSlots": "No timetable",
     "timetableConflicts": "Conflicts",
     "classesWithoutSubjects": "No subjects",
@@ -5477,5 +5477,11 @@
     "failed": "The address could not be checked. Try again.",
     "current": "Server: {{url}}",
     "change": "Change server"
+  },
+  "schoolHours": {
+    "conflictTitle": "School hours and periods disagree",
+    "conflictBody": "Settings say the school day runs {{open}}–{{close}}, but the periods run {{from}}–{{to}}. Change whichever is wrong.",
+    "editInSettings": "Edit school hours in Settings",
+    "editPeriods": "Edit periods"
   }
 }

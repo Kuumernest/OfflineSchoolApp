@@ -371,7 +371,7 @@
     "totalSubjects": "Matières",
     "assignedSubjects": "Affectées",
     "activeAnnouncements": "Communiqués",
-    "totalPeriods": "Créneaux",
+    "totalPeriods": "Périodes de cours",
     "incompleteTimetableSlots": "Sans emploi du temps",
     "timetableConflicts": "Conflits",
     "classesWithoutSubjects": "Sans matières",
@@ -5477,5 +5477,11 @@
     "failed": "Impossible de vérifier l'adresse. Réessayez.",
     "current": "Serveur : {{url}}",
     "change": "Changer de serveur"
+  },
+  "schoolHours": {
+    "conflictTitle": "Les horaires et les périodes ne concordent pas",
+    "conflictBody": "Les paramètres indiquent une journée de {{open}} à {{close}}, mais les périodes vont de {{from}} à {{to}}. Corrigez celui qui est faux.",
+    "editInSettings": "Modifier les horaires dans les paramètres",
+    "editPeriods": "Modifier les périodes"
   }
 }

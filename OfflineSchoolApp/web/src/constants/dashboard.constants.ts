@@ -201,7 +201,7 @@ export const HEALTH_METRIC_ROWS: HealthMetric[][] = [
     { key: "activeAnnouncements", label: "Notices",       icon: Megaphone                       },
   ],
   [
-    { key: "totalPeriods",             label: "Periods",      icon: Clock                       },
+    { key: "totalPeriods",             label: "Teaching periods", icon: Clock                       },
     { key: "incompleteTimetableSlots", label: "No Timetable", icon: Calendar, alertOnNonZero: true },
     { key: "timetableConflicts",       label: "Conflicts",    icon: FileText, alertOnNonZero: true },
     { key: "classesWithoutSubjects",   label: "No Subjects",  icon: School, alertOnNonZero: true },

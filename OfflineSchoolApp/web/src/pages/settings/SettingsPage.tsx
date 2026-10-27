@@ -19,6 +19,9 @@ import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
 import { roleLabel }             from "@/utils/roleLabel";
+import { useQuery }              from "@tanstack/react-query";
+import { fetchPeriods }          from "@/services/period.service";
+import { SchoolHoursWarning }    from "@/components/settings/SchoolHoursWarning";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -350,6 +353,12 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 
   const set = <K extends keyof SchoolSettings>(key: K, val: SchoolSettings[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
+
+  const periodsQ = useQuery({
+    queryKey: ["periods", schoolId, false],
+    queryFn:  () => fetchPeriods(schoolId),
+    enabled:  !!schoolId,
+  });
 
   useEffect(() => {
     (async () => {
@@ -734,7 +743,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             </div>
           </div>
 
-          {/* Hours */}
+          {/* Hours — and where the period grid disagrees with them (B2) */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>{t("settings.startTime")}</FieldLabel>
@@ -745,6 +754,12 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <Input value={form.schoolEndTime} onChange={(v) => set("schoolEndTime", v)} type="time" />
             </div>
           </div>
+          <SchoolHoursWarning
+            schoolStart={form.schoolStartTime}
+            schoolEnd={form.schoolEndTime}
+            periods={periodsQ.data ?? []}
+            fixLink={{ to: "/periods", label: t("schoolHours.editPeriods") }}
+          />
         </div>
       </Card>
 

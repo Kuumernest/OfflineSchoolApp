@@ -677,8 +677,10 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
         // deletedAt and leaves isActive untouched — so without the clause every
         // retired period stayed in this count. The mobile local calculation
         // already excludes deleted rows, which made the two dashboards disagree.
+        // Teaching periods only (B2): a Break is a row on the grid, not a
+        // period a lesson can go in. Counting breaks said 9 where there were 8.
         return Period.countDocuments(
-          addNotDeleted({ ...baseQuery, isActive: true })
+          addNotDeleted({ ...baseQuery, isActive: true, isBreak: { $ne: true } })
         );
       } catch { return 0; }
     })(),

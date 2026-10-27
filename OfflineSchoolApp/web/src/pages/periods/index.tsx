@@ -40,7 +40,8 @@ import {
   padTime,
 } from "@/services/period.service";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/axios";
+import api, { getErrorMessage } from "@/lib/axios";
+import { SchoolHoursWarning } from "@/components/settings/SchoolHoursWarning";
 import { cn } from "@/utils/cn";
 import type { Period } from "@/types/timetable.types";
 import { useTranslation } from "react-i18next";
@@ -196,6 +197,17 @@ export default function PeriodsPage() {
     if (ok) removeMutation.mutate(p._id);
   };
 
+  // The school's hours from Settings, to say when the grid disagrees (B2).
+  const hoursQ = useQuery({
+    queryKey: ["school-hours", schoolId],
+    queryFn:  async () => {
+      const { data } = await api.get("/admin/school-info", { params: { schoolId } });
+      const s = data?.school || data;
+      return { start: s?.schoolStartTime ?? null, end: s?.schoolEndTime ?? null };
+    },
+    enabled: !!schoolId,
+  });
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const teaching = periods.filter((p) => !p.isBreak && p.isActive);
 
@@ -254,6 +266,13 @@ export default function PeriodsPage() {
           </Button>
         </div>
       </div>
+
+      <SchoolHoursWarning
+        schoolStart={hoursQ.data?.start}
+        schoolEnd={hoursQ.data?.end}
+        periods={periods}
+        fixLink={{ to: "/settings", label: t("schoolHours.editInSettings") }}
+      />
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>

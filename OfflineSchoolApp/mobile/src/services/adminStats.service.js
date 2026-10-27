@@ -645,6 +645,9 @@ if (assign.table) {
       const p = [...sfPeriod.params];
       q += sfPeriod.clause;
       if (isActiveCol) q += ` AND ${isActiveCol} = 1`;
+      // Teaching periods only (B2), as the server counts them.
+      const breakCol = pickColumn(periodCols, ["isbreak", "is_break", "isBreak"]);
+      if (breakCol) q += ` AND COALESCE(${breakCol}, 0) = 0`;
       q += notDeletedClause(deletedCol);
       queries.push(safeCount(db, q, p));
     } else {
