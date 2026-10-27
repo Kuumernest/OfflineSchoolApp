@@ -114,10 +114,12 @@ export default function MessageAuditPage() {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-bold text-gray-900">
-              {opened.title || `${opened.kind} conversation`}
+              {opened.title || t("messages.audit.kinds.conversationOf", {
+                kind: t(`messages.audit.kinds.${opened.kind}`, { defaultValue: opened.kind }),
+              })}
             </h1>
             <p className="text-xs text-gray-500">
-              {opened.participants?.length ?? 0} participants · opened as an audit
+              {t("messages.audit.openedAsAudit", { count: opened.participants?.length ?? 0 })}
             </p>
           </div>
         </div>
@@ -316,7 +318,9 @@ export default function MessageAuditPage() {
                       {summariseParticipants(c.participants ?? [], t)}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600">{c.kind}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-600">
+                    {t(`messages.audit.kinds.${c.kind}`, { defaultValue: c.kind })}
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-gray-600">
                     {c.participants?.length ?? 0}
                   </td>

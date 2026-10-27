@@ -41,7 +41,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **C1** Fee account page header: student's name and class.
 - [x] **C2** Loading states/skeletons instead of blank tables; report card speed (~3s each); batch class print (bulk query, no N+1). — measured: a card is 23 queries (constant per pupil); time was sequential round trips
 - [x] **C3** Attendance "–" instead of 0% when nobody was marked; 7-day chart counts school days only. — `schoolDaysOnly`, `dayRate` in shared/attendance.js
-- [ ] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
+- [x] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
 - [ ] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing.
 - [ ] **C6** Students to watch: fee debt only when overdue.
 - [ ] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
@@ -66,3 +66,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - B2: the dashboard period-count fix (exclude breaks) has no automated test — the admin dashboard endpoint has no fixture harness yet.
 - B3: mobile add/edit student forms have no inline check yet; the server normalises or refuses what they send.
 - C2: no true server-side bulk print endpoint yet. A card already reads its class in a constant 23 queries (measured); the cost was ~20 sequential round trips per card and one card at a time. Fixed by parallel reads within a card and 4 cards in flight. A single bulk endpoint would cut further; follow-up if prints are still slow on the real database.
+- C4: the pilot section is hidden in the UI for everyone but Super Admin; the server's pilot endpoints still accept any role holding the `insights.pilot` permission (changing role permissions is a policy call — not done).

@@ -1313,7 +1313,7 @@
     "assignTeacher": "Assign a teacher",
     "loadFailed": "Couldn't load assignments",
     "byTeacher": "By teacher",
-    "brokenLinks": "Broken links",
+    "brokenLinks": "Assignments to fix",
     "teachersAssigned": "Teachers assigned",
     "classesCovered": "Classes covered",
     "totalLessons": "Total lessons",
@@ -2991,7 +2991,7 @@
     "empty": "Nobody is flagged",
     "emptyHint": "No student currently trips any signal. Flags appear as attendance, results, homework and fee records come in.",
     "noMatch": "No flagged students match these filters",
-    "footnote": "Built only from records the school already keeps — nothing here asked anyone for extra data entry. Thresholds live in the server's early-warning service.",
+    "footnote": "Built only from records the school already keeps — nothing here asked anyone for extra data entry.",
     "sig": {
       "absence": "Absent {{absent}} of {{marked}} marked days",
       "late": "Late {{late}} times",
@@ -3094,7 +3094,16 @@
       "lastActivity": "Last activity",
       "directConversation": "Direct conversation",
       "read": "Read",
-      "searchPh": "Search by name — staff, student, or a student’s parent"
+      "searchPh": "Search by name — staff, student, or a student’s parent",
+      "kinds": {
+        "direct": "Direct",
+        "class": "Class",
+        "subject": "Subject",
+        "group": "Group",
+        "conversationOf": "{{kind}} conversation"
+      },
+      "openedAsAudit": "{{count}} participant · audit view",
+      "openedAsAudit_other": "{{count}} participants · audit view"
     },
     "auditNotice": "This read is recorded. Deleted messages are shown in full here — that is the point of an audit — and are not visible to participants.",
     "noneMatching": "No conversation matches “{{query}}”.",
@@ -3688,7 +3697,7 @@
       "heading": "Validation pilot",
       "none": "No pilot is open for this school.",
       "kind": {
-        "synthetic": "Synthetic (fixtures)",
+        "synthetic": "Practice data",
         "development": "Development (testing the workflow)",
         "real": "Real (authorised school, own teachers)"
       },
@@ -3722,7 +3731,7 @@
       "openKind": "Kind of exercise",
       "openLabel": "Label (optional)",
       "openScope": "Classes (leave empty for the whole school)",
-      "openHint": "One open pilot per school. Only a pilot of kind “real” — an authorised school reviewed by its own teachers — produces calibration evidence.",
+      "openHint": "One open pilot per school. Only a pilot of kind “real” — an authorised school reviewed by its own teachers — counts towards tuning the suggestions.",
       "advance": "Move to {{state}}",
       "note": "Note for the record (optional)",
       "decisionHeading": "Decision",
@@ -5384,7 +5393,7 @@
   },
   "academicRules": {
     "title": "How results are calculated",
-    "intro": "The same for every school, decided by the project owner. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
+    "intro": "The same for every school. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
     "year": "Academic year",
     "statement": {
       "sequence": "Sequence average: each subject's mark out of 20 (CA blended in by the school's CA/paper split when CA is on; the paper alone when CA is off), weighted by the subject's coefficient.",

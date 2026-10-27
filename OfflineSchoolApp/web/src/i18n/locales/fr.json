@@ -1313,7 +1313,7 @@
     "assignTeacher": "Affecter un enseignant",
     "loadFailed": "Impossible de charger les affectations",
     "byTeacher": "Par enseignant",
-    "brokenLinks": "Liens rompus",
+    "brokenLinks": "Attributions à corriger",
     "teachersAssigned": "Enseignants affectés",
     "classesCovered": "Classes couvertes",
     "totalLessons": "Total des cours",
@@ -2991,7 +2991,7 @@
     "empty": "Aucun élève signalé",
     "emptyHint": "Aucun élève ne déclenche de signal pour l'instant. Les signalements apparaissent au fil des présences, résultats, devoirs et paiements.",
     "noMatch": "Aucun élève signalé ne correspond à ces filtres",
-    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire. Les seuils se trouvent dans le service early-warning du serveur.",
+    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire.",
     "sig": {
       "absence": "Absent {{absent}} jours sur {{marked}} pointés",
       "late": "{{late}} retards",
@@ -3094,7 +3094,16 @@
       "lastActivity": "Dernière activité",
       "directConversation": "Conversation directe",
       "read": "Lire",
-      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève"
+      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève",
+      "kinds": {
+        "direct": "Directe",
+        "class": "Classe",
+        "subject": "Matière",
+        "group": "Groupe",
+        "conversationOf": "Conversation {{kind}}"
+      },
+      "openedAsAudit": "{{count}} participant · consultation d'audit",
+      "openedAsAudit_other": "{{count}} participants · consultation d'audit"
     },
     "auditNotice": "Cette consultation est enregistrée. Les messages supprimés sont affichés ici en entier — c’est l’objet d’un audit — et ne sont pas visibles par les participants.",
     "noneMatching": "Aucune conversation ne correspond à « {{query}} ».",
@@ -3688,7 +3697,7 @@
       "heading": "Pilote de validation",
       "none": "Aucun pilote ouvert pour cet établissement.",
       "kind": {
-        "synthetic": "Synthétique (jeux de données)",
+        "synthetic": "Données d'essai",
         "development": "Développement (test du flux)",
         "real": "Réel (établissement autorisé, ses propres enseignants)"
       },
@@ -3722,7 +3731,7 @@
       "openKind": "Type d'exercice",
       "openLabel": "Libellé (facultatif)",
       "openScope": "Classes (vide = tout l'établissement)",
-      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — produit des preuves de calibration.",
+      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — sert à ajuster les suggestions.",
       "advance": "Passer à {{state}}",
       "note": "Note pour le dossier (facultatif)",
       "decisionHeading": "Décision",
@@ -5384,7 +5393,7 @@
   },
   "academicRules": {
     "title": "Comment les résultats sont calculés",
-    "intro": "Identique pour toutes les écoles, décidé par le responsable du projet. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
+    "intro": "Identique pour toutes les écoles. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
     "year": "Année scolaire",
     "statement": {
       "sequence": "Moyenne de séquence : la note de chaque matière sur 20 (CC intégré selon la répartition CC/épreuve de l'école quand le CC est activé ; l'épreuve seule sinon), pondérée par le coefficient de la matière.",

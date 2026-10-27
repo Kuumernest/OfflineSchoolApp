@@ -882,7 +882,7 @@
     "assignTeacher": "Assign a teacher",
     "loadFailed": "Couldn't load assignments",
     "byTeacher": "By teacher",
-    "brokenLinks": "Broken links",
+    "brokenLinks": "Assignments to fix",
     "teachersAssigned": "Teachers assigned",
     "classesCovered": "Classes covered",
     "totalLessons": "Total lessons",
