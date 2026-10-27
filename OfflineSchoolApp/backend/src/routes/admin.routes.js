@@ -2869,6 +2869,22 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
   return sendSuccess(res, { enrollmentNo });
 }));
 
+// GET /admin/students/:id/overview — the profile's results, attendance, fee
+// balance and guardian contact in one read (C10). Fees only for a caller who
+// may see fees; the rest is what students.viewFull already shows.
+router.get("/students/:id/overview", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
+  const S = getStudent();
+  const student = S && await S.findOne(getTenantQuery(req, req.params.id))
+    .select("schoolId guardianName guardianPhone guardianEmail").lean();
+  if (!student) return sendError(res, 404, "Student not found");
+
+  const withFees = await require("../services/permissions.service").can(req.user, "fees.view");
+  const data = await require("../services/studentOverview.service").overviewFor({
+    schoolId: String(student.schoolId), student, withFees,
+  });
+  return sendSuccess(res, { overview: data });
+}));
+
 router.get("/students/:id", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
   const id = String(req.params.id).trim();
   const S   = getStudent();

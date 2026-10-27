@@ -5524,5 +5524,20 @@
     "save": "Save ages",
     "saved": "Age ranges saved",
     "errSave": "Could not save the age ranges"
+  },
+  "studentOverview": {
+    "results": "Latest results",
+    "noResults": "No published results yet.",
+    "position": "{{position}} of {{outOf}}",
+    "attendance": "Attendance — last {{days}} days",
+    "attendanceBreakdown": "{{present}} present, {{late}} late, {{absent}} absent, {{excused}} excused",
+    "notMarked": "Not marked on any register in this period.",
+    "fees": "Fees {{year}}",
+    "openAccount": "Open account",
+    "settled": "Settled",
+    "feesBreakdown": "Billed {{charged}} · paid {{paid}}",
+    "guardian": "Guardian",
+    "noGuardian": "No guardian contact recorded.",
+    "unavailable": "The summary could not be loaded."
   }
 }

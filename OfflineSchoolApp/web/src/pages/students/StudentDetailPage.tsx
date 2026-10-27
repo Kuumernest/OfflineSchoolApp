@@ -47,6 +47,7 @@ import {
 } from "@/services/document.service";
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
 import { formatDay } from "../../../../shared/dateFormat.js";
+import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -1277,6 +1278,11 @@ export default function StudentDetailPage() {
             iconColor="text-gray-400"
           />
         </Section>
+
+        {/* ── Results, attendance, fees, guardian (C10) ── */}
+        <div className="lg:col-span-2">
+          <StudentOverviewCard studentId={student._id} />
+        </div>
 
         {/* ── ID card photo ── */}
         <div className="lg:col-span-2">

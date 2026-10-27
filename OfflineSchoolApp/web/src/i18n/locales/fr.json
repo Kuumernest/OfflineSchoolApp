@@ -5524,5 +5524,20 @@
     "save": "Enregistrer les âges",
     "saved": "Tranches d'âge enregistrées",
     "errSave": "Impossible d'enregistrer les tranches d'âge"
+  },
+  "studentOverview": {
+    "results": "Derniers résultats",
+    "noResults": "Aucun résultat publié pour l'instant.",
+    "position": "{{position}} sur {{outOf}}",
+    "attendance": "Assiduité — {{days}} derniers jours",
+    "attendanceBreakdown": "{{present}} présent(s), {{late}} retard(s), {{absent}} absence(s), {{excused}} excusée(s)",
+    "notMarked": "Pointé sur aucun registre pendant cette période.",
+    "fees": "Frais {{year}}",
+    "openAccount": "Ouvrir le compte",
+    "settled": "Soldé",
+    "feesBreakdown": "Facturé {{charged}} · payé {{paid}}",
+    "guardian": "Tuteur",
+    "noGuardian": "Aucun contact de tuteur enregistré.",
+    "unavailable": "Le résumé n'a pas pu être chargé."
   }
 }
