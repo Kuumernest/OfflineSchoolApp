@@ -571,7 +571,11 @@
     "writeDown": "Write these down before leaving this page — they are not shown again, and recovering them means resetting the account.",
     "noActiveClassesEnroll": "There are no active classes to enroll into.",
     "firstOne": "Add your first student to get started",
-    "unassignedClass": "Unassigned"
+    "unassignedClass": "Unassigned",
+    "phoneInvalid": "A Cameroon number has 9 digits starting with 6 or 2 (e.g. 677 12 34 56).",
+    "phoneHint": "Saved as +237 and 9 digits.",
+    "dobFuture": "The date of birth cannot be in the future.",
+    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved."
   },
   "teachers": {
     "title": "Teachers",
@@ -5493,5 +5497,12 @@
     "conflictBody": "Settings say the school day runs {{open}}–{{close}}, but the periods run {{from}}–{{to}}. Change whichever is wrong.",
     "editInSettings": "Edit school hours in Settings",
     "editPeriods": "Edit periods"
+  },
+  "ageRanges": {
+    "title": "Usual ages per class",
+    "hint": "A pupil whose age falls outside these is still saved — the form only asks the office to check the date of birth. Leave blank for the default (Form 1: 9–14, each level up: minimum +1, maximum +2).",
+    "save": "Save ages",
+    "saved": "Age ranges saved",
+    "errSave": "Could not save the age ranges"
   }
 }

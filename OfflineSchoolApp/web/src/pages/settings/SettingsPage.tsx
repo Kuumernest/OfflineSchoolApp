@@ -19,7 +19,9 @@ import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
 import { roleLabel }             from "@/utils/roleLabel";
-import { useQuery }              from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useStudentAgeRanges }   from "@/hooks/useSchoolYear";
+import { defaultAgeRange }       from "@/utils/studentValidation";
 import { fetchPeriods }          from "@/services/period.service";
 import { SchoolHoursWarning }    from "@/components/settings/SchoolHoursWarning";
 import { useTranslation } from "react-i18next";
@@ -764,7 +766,74 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       <SaveButton onClick={handleSave} loading={saving} label={t("settings.saveSchool")} />
+
+      <StudentAgeRangesCard schoolId={schoolId} />
     </div>
+  );
+}
+
+/**
+ * The usual age per class level (B3): only ever a warning on the student
+ * form. Blank keeps the default — Form 1 9–14, each level up the minimum +1
+ * and the maximum +2. Saved on its own, apart from the school form above.
+ */
+const LEVEL_NAMES = ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5", "Lower Sixth", "Upper Sixth"];
+
+function StudentAgeRangesCard({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const saved = useStudentAgeRanges();
+  const [edits, setEdits] = useState<Record<string, { min: string; max: string }>>({});
+  const [saving, setSaving] = useState(false);
+
+  const valueOf = (level: number, key: "min" | "max") =>
+    edits[level]?.[key] ?? String(saved?.[String(level)]?.[key] ?? "");
+  const setValue = (level: number, key: "min" | "max", v: string) =>
+    setEdits((e) => ({ ...e, [level]: { min: valueOf(level, "min"), max: valueOf(level, "max"), [key]: v } }));
+
+  const save = async () => {
+    const ranges: Record<string, { min: number; max: number }> = {};
+    for (let level = 1; level <= 7; level += 1) {
+      const min = valueOf(level, "min"), max = valueOf(level, "max");
+      if (min === "" && max === "") continue;
+      const def = defaultAgeRange(level);
+      ranges[level] = { min: min === "" ? def.min : Number(min), max: max === "" ? def.max : Number(max) };
+    }
+    setSaving(true);
+    try {
+      await api.put("/admin/school-info", { schoolId, studentAgeRanges: Object.keys(ranges).length ? ranges : null });
+      await qc.invalidateQueries({ queryKey: ["school-basics"] });
+      setEdits({});
+      toast({ title: t("ageRanges.saved"), kind: "success" });
+    } catch (err) {
+      toast({ title: t("ageRanges.errSave"), message: extractMessage(err, t), kind: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardTitle>{t("ageRanges.title")}</CardTitle>
+      <p className="-mt-3 mb-4 text-sm text-gray-500">{t("ageRanges.hint")}</p>
+      <div className="grid gap-2">
+        {LEVEL_NAMES.map((name, i) => {
+          const level = i + 1;
+          const def = defaultAgeRange(level);
+          return (
+            <div key={level} className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2">
+              <span className="text-sm text-gray-700">{name}</span>
+              <Input type="number" value={valueOf(level, "min")} placeholder={String(def.min)}
+                     onChange={(v) => setValue(level, "min", v)} />
+              <Input type="number" value={valueOf(level, "max")} placeholder={String(def.max)}
+                     onChange={(v) => setValue(level, "max", v)} />
+            </div>
+          );
+        })}
+      </div>
+      <SaveButton onClick={save} loading={saving} label={t("ageRanges.save")} />
+    </Card>
   );
 }
 

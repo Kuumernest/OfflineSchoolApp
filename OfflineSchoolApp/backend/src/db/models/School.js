@@ -74,6 +74,14 @@ const isValidTimezone = (tz) => {
  */
 const settingsSchema = new mongoose.Schema(
   {
+    /**
+     * The school's own age range per class level, { "1": { min, max }, … }
+     * (B3, shared/studentValidation.js). Null: the decided default — Form 1
+     * 9–14, each level up the minimum +1 and the maximum +2. Only ever a
+     * warning on the student form, never a refusal.
+     */
+    studentAgeRanges: { type: mongoose.Schema.Types.Mixed, default: null },
+
     academicYear: {
       type:    String,
       default: null,

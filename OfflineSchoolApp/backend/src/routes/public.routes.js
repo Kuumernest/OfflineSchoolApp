@@ -520,6 +520,8 @@ router.get(
  *       Content-Type: multipart/form-data
  *       Body: { studentName, ... } + file parts on field "documents"
  */
+const { normalisePhone } = require("../../../shared/studentValidation");
+
 const handleApplyRequest = asyncHandler(async (req, res) => {
   const isJson =
     (req.headers["content-type"] || "").includes("application/json");
@@ -541,6 +543,10 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
   if (!studentName?.trim())  errors.push("Student name is required");
   if (!guardianName?.trim()) errors.push("Guardian name is required");
   if (!phone?.trim())        errors.push("Phone number is required");
+  // B3: stored as +237 and nine digits (shared/studentValidation.js).
+  const phoneCheck = phone?.trim() ? normalisePhone(phone) : { value: null };
+  if (phoneCheck.error) errors.push(phoneCheck.error);
+  const phoneStored = phoneCheck.value;
   if (!(typeof classId === "string" ? classId.trim() : ""))      errors.push("Please select a class");
   if (!schoolId?.trim())     errors.push("Please select a school");
   if (!email?.trim()) {
@@ -698,7 +704,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     await StudentApplication.findByIdAndUpdate(existing._id, {
       studentName:  studentName.trim(),
       guardianName: guardianName.trim(),
-      phone:        phone.trim(),
+      phone:        phoneStored,
       classId:      classId.trim(),
       className:    resolvedName,
       notes:        notes?.trim() || null,
@@ -734,7 +740,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     studentName:  studentName.trim(),
     guardianName: guardianName.trim(),
     email:        emailClean,
-    phone:        phone.trim(),
+    phone:        phoneStored,
     classId:      classId.trim(),
     className:    resolvedName,
     notes:        notes?.trim() || null,

@@ -14,7 +14,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 - A8: several teachers on one class-subject are allowed; every screen lists them all.
 - B2: school hours and periods are each school's own setting — no fixed defaults; warn when they disagree.
-- B3: age range warning starts at Form 1 = 9–14, then +2 years per level up.
+- B3: age range warning: Form 1 = 9–14; each level up the minimum rises 1 year and the maximum 2 (Upper Sixth 15–26). Option (b), confirmed 2026-10-27.
 
 ## Phase A — wrong numbers (fix first)
 
@@ -32,7 +32,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 - [x] **B1** Timetable: no lessons in Break/non-teaching rows; only a teacher assigned to that class+subject; Wednesday column width. — `shared/timetableRules.js`; existing bad slots listed by the Phase D report
 - [x] **B2** School hours: one source of truth between Settings and Periods; warn on conflict; header counts teaching periods only. — both stay school-set (owner); warning on Settings + Periods; dashboard counts teaching periods only
-- [ ] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite).
+- [x] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite). — `shared/studentValidation.js`; admission format was already single (admissionNumber.service.js), mismatches go in the Phase D report
 - [x] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects. — `classSubjectCoverage`; `GET /admin/class-subjects/unassigned`
 - [x] **B5** Year pickers on Progression and Academic structure default to the school's current academic year. — `useSchoolYear` reads `currentAcademicYear` from school-info
 
@@ -64,3 +64,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - A5: Term and Annual Results showed `overallGrade`, which for schools on the shipped bands is a US letter (A+…F); replaced with the stored remark. The bands themselves (and their `gpaPoints`) were left in the data model.
 - A8: Form 1 English has two active assignments (Mr Buh, Mr Kum); every screen shows both — allowed (owner, 2026-10-27).
 - B2: the dashboard period-count fix (exclude breaks) has no automated test — the admin dashboard endpoint has no fixture harness yet.
+- B3: mobile add/edit student forms have no inline check yet; the server normalises or refuses what they send.

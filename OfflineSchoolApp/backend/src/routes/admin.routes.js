@@ -12,6 +12,7 @@ const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
 const { currentAcademicYearOf } = require("../../../shared/academicYear");
+const { checkAgeRanges } = require("../../../shared/studentValidation");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -3860,7 +3861,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "postalCode schoolType termSystem registrationNumber foundedYear " +
     "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
-    "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear";
+    "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear settings.studentAgeRanges";
 
   if (includeLogo) {
     const school = await School.findById(schoolId)
@@ -3923,7 +3924,16 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     region, division,
     academicYearStart, academicYearEnd, nextTermResumption, schoolDays,
     schoolStartTime, schoolEndTime, removeLogo, defaultLanguage,
+    studentAgeRanges,
   } = req.body;
+
+  // B3: the school's own age range per class level, or null for the defaults.
+  let ageRanges;
+  if (studentAgeRanges !== undefined) {
+    const r = checkAgeRanges(studentAgeRanges);
+    if (r.error) return sendError(res, 400, r.error);
+    ageRanges = r.value;
+  }
 
   // The language every report card of the school prints in (docs/41 §7).
   if (defaultLanguage !== undefined && !["en", "fr"].includes(defaultLanguage)) {
@@ -3966,6 +3976,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(schoolDays       !== undefined && { schoolDays                            }),
     ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
     ...(schoolEndTime    !== undefined && { schoolEndTime                         }),
+    ...(ageRanges        !== undefined && { "settings.studentAgeRanges": ageRanges }),
     ...(applicationsOpen !== undefined && { applicationsOpen                      }),
     ...(defaultLanguage  !== undefined && { defaultLanguage                       }),
   };

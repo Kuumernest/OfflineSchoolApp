@@ -24,6 +24,7 @@ const { authenticate } = require("../../middleware/auth");
 const Student       = require("../db/models/Student");
 const User          = require("../db/models/User");
 const Class         = require("../db/models/Class");
+const { checkStudentInput, normalisePhone, PHONE_FIELDS, ageWarning } = require("../../../shared/studentValidation");
 const Announcement  = require("../db/models/Announcement");
 // The school-scoped announcement lookup, shared with announcement.routes.js and
 // the read/acknowledge handlers in server.js.
@@ -54,6 +55,27 @@ const sendSuccess = (res, data, status = 200) =>
     success: true,
     ...applicationDocuments.redactDocumentsDeep(res.req, data),
   });
+
+/**
+ * B3 (shared/studentValidation.js): a date of birth in the future is refused,
+ * a Cameroon phone is stored as +237 and nine digits (or refused), and an age
+ * outside the class level's range comes back as a warning. The stored forms
+ * replace what was typed in `body`, so the route below reads them.
+ *
+ * @returns {Promise<{ errors: string[], warnings: object[] }>}
+ */
+const checkAndNormaliseStudentInput = async (body, schoolId, classId) => {
+  const School = getSchoolModel();
+  const [cls, school] = await Promise.all([
+    classId ? Class.findOne({ _id: String(classId), ...(schoolId ? { schoolId: String(schoolId) } : {}) }).select("name").lean().catch(() => null) : null,
+    schoolId && School ? School.findById(String(schoolId)).select("settings.studentAgeRanges").lean().catch(() => null) : null,
+  ]);
+  const { errors, values, warnings } = checkStudentInput(body, {
+    className: cls?.name ?? null, ageRanges: school?.settings?.studentAgeRanges ?? null,
+  });
+  if (!errors.length) Object.assign(body, values);
+  return { errors, warnings };
+};
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
@@ -640,6 +662,9 @@ async function logOverwriteIfNeeded({
 // ═════════════════════════════════════════════════════════════════════════════
 
 router.post("/apply", asyncHandler(async (req, res) => {
+  const input = await checkAndNormaliseStudentInput(req.body, req.body?.schoolId, req.body?.classId);
+  if (input.errors.length) return sendError(res, 400, input.errors.join("; "), { errors: input.errors });
+
   const {
     firstName, lastName, name, email, phone, dateOfBirth,
     gender, address, guardianName, guardianPhone, guardianEmail,
@@ -754,6 +779,7 @@ router.post("/apply", asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     message: "Application submitted successfully. You will be notified once reviewed.",
     data:    { id: student._id, name: displayName, status: "pending" },
+    warnings: input.warnings,
   }, 201);
 }));
 
@@ -1763,6 +1789,9 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
+  const input = await checkAndNormaliseStudentInput(req.body, schoolId, req.body?.classId);
+  if (input.errors.length) return sendError(res, 400, input.errors.join("; "), { errors: input.errors });
+
   const {
     id,
     firstName, lastName, name, email, phone, dateOfBirth,
@@ -1947,6 +1976,8 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     emailSent: emailResult.success,
     warning:   notice,
+    // B3: e.g. an age outside the class level's range — saved, but worth a look.
+    warnings:  input.warnings,
     feesRaised: billing.raised,
     message:   notice
       ? `${displayName} enrolled in ${className}. ${notice}`
@@ -2472,6 +2503,9 @@ const coerceEditable = (field, raw) => {
       : { error: `${field} is not a valid email address` };
   }
 
+  // B3: phones stored as +237 and nine digits (shared/studentValidation.js).
+  if (PHONE_FIELDS.includes(field)) return normalisePhone(raw, field);
+
   if (field === "dateOfBirth") {
     const v = String(raw).trim();
     // Stored as a string, so it is compared as one. Anchored to the format the
@@ -2693,9 +2727,23 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     `by ${req.user?.name || req.user?._id}`
   );
 
+  // B3: a new date of birth outside the class level's usual ages is saved,
+  // and said so.
+  let warnings = [];
+  if (changed.dateOfBirth && student.classId) {
+    const School = getSchoolModel();
+    const [cls, school] = await Promise.all([
+      Class.findOne({ _id: String(student.classId) }).select("name").lean().catch(() => null),
+      School ? School.findById(String(student.schoolId)).select("settings.studentAgeRanges").lean().catch(() => null) : null,
+    ]);
+    const w = ageWarning(changed.dateOfBirth, cls?.name, school?.settings?.studentAgeRanges ?? null);
+    if (w) warnings = [w];
+  }
+
   return sendSuccess(res, {
     message:   "Student record updated.",
     changed:   Object.keys(changed),
+    warnings,
     overwrote: overwrote ? { id: overwrote._id } : null,
     data:      student.toObject(),
   });
