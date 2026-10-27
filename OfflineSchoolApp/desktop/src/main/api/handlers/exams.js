@@ -5,6 +5,17 @@ const { summaryPassRate, DEFAULT_PASS_MARK } = require("../../../../../shared/pa
 const { examAnalytics, rowsOn20 } = require("../../../../../shared/examAnalytics");
 const { currentAcademicYearOf } = require("../../../../../shared/academicYear");
 const { CA_TYPE } = require("../../../../../shared/caAssessment");
+const { assignedTeachers, pairKey } = require("../../../../../shared/classSubjectTeachers");
+
+/** Exam-subject rows with the class-subject assignment's teacher (A8), as the server's withAssignedTeachers. */
+const withAssignedTeachers = (docs, schoolId, rows) => {
+  const byPair = assignedTeachers(docs.find("teacherAssignment", { schoolId }),
+    (id) => docs.get("user", id) ?? null);
+  return rows.map((es) => {
+    const t = byPair.get(pairKey(es.classId, es.subjectId)) ?? null;
+    return { ...es, teacherId: t?.teacherIds[0] ?? null, teacherIds: t?.teacherIds ?? [], teacherName: t?.teacherName ?? null };
+  });
+};
 
 /**
  * Exams.
@@ -270,7 +281,6 @@ module.exports = [
 
       const examId = String(params.examId);
       const filter = { examId, schoolId, deletedAt: null };
-      if (query.teacherId) filter.teacherId = String(query.teacherId);
 
       // Enrolled pupils per class — the "entered / total" denominator (A7):
       // the register's roster, approved, active, not deleted.
@@ -284,7 +294,11 @@ module.exports = [
         return enrolled.get(key);
       };
 
-      const submissions = docs.find("examSubject", filter).map((es) => ({
+      // The teacher is the assignment's, so "a teacher's subjects" is filtered
+      // after it is read, not on the copy the exam carries.
+      const assigned = withAssignedTeachers(docs, schoolId, docs.find("examSubject", filter))
+        .filter((es) => !query.teacherId || es.teacherIds.includes(String(query.teacherId)));
+      const submissions = assigned.map((es) => ({
         ...es,
         totalStudents: enrolledIn(es.classId),
         totalScoresEntered: docs

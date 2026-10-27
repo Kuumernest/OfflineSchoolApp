@@ -29,8 +29,7 @@
  */
 
 const classStats        = require("./classStats.service");
-const TeacherAssignment = require("../db/models/TeacherAssignment");
-const User              = require("../db/models/User");
+const { teachersFor }   = require("./classSubjectTeacher.service");
 const TermResult        = require("../db/models/TermResult");
 const AnnualResult      = require("../db/models/AnnualResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
@@ -156,38 +155,16 @@ async function gradingFor(schoolId) {
  *   joined by a comma where a school really has assigned more than one.
  */
 async function subjectTeachers({ schoolId, classId, subjectIds }) {
+  // The class-subject assignment, read the one way every screen reads it
+  // (services/classSubjectTeacher.service.js, A8): active assignments of this
+  // class and subject, names sorted, two teachers joined with ", ".
   const out = new Map();
   const ids = [...new Set((subjectIds || []).map(String).filter(Boolean))];
   if (!schoolId || !classId || !ids.length) return out;
-
-  const rows = await TeacherAssignment.find({
-    schoolId: String(schoolId),
-    class:    String(classId),
-    subject:  { $in: ids },
-    isActive: true,
-  }).select("teacher subject").lean().catch(() => []);
-  if (!rows.length) return out;
-
-  const teachers = await User.find({
-    _id: { $in: [...new Set(rows.map((r) => String(r.teacher)))] },
-  }).select("name").lean().catch(() => []);
-  const nameOf = new Map(teachers.map((t) => [String(t._id), t.name]));
-
-  // Several teachers on one subject is allowed by the model (the unique
-  // index is on teacher+class+subject), and both names belong on the row
-  // rather than on two rows for the same subject. Sorted, because two
-  // printings of the same card must not disagree about the order of names —
-  // the database returns them in whatever order it finds them.
-  const namesBySubject = new Map();
-  for (const r of rows) {
-    const name = nameOf.get(String(r.teacher));
-    if (!name) continue;
-    const key = String(r.subject);
-    if (!namesBySubject.has(key)) namesBySubject.set(key, []);
-    namesBySubject.get(key).push(name);
-  }
-  for (const [subject, names] of namesBySubject) {
-    out.set(subject, [...new Set(names)].sort((a, b) => a.localeCompare(b)).join(", "));
+  const lookup = await teachersFor({ schoolId, classIds: [classId], subjectIds: ids });
+  for (const id of ids) {
+    const t = lookup(classId, id);
+    if (t?.teacherName) out.set(id, t.teacherName);
   }
   return out;
 }

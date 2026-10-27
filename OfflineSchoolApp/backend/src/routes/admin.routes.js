@@ -10,6 +10,7 @@ const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
+const { teachersFor } = require("../services/classSubjectTeacher.service");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -1631,39 +1632,28 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
   ];
   const allSubjectIds = rawSubjects.map((s) => String(s._id));
 
-  const [classRecords, assignments] = await Promise.all([
+  // The teacher is the class-subject assignment's, read the one way every
+  // screen reads it (services/classSubjectTeacher.service.js, A8): the active
+  // assignments of this subject in this class. It took the first assignment
+  // found for the subject — active or not — and fell back to a stored name.
+  const [classRecords, teacherOf] = await Promise.all([
     allClassIds.length > 0
       ? Class.find({ _id: { $in: allClassIds } })
           .select("name section level")
           .lean()
       : [],
-    TeacherAssignment.find({ subject: { $in: allSubjectIds } })
-      .populate("teacher", "name email")
-      .lean(),
+    teachersFor({ schoolId: schoolId || rawSubjects[0]?.schoolId, subjectIds: allSubjectIds }),
   ]);
 
   const classMap = new Map(classRecords.map((c) => [String(c._id), c]));
-
-  const subjectTeacherMap = new Map();
-  for (const a of assignments) {
-    const sid = String(a.subject?._id || a.subject || "");
-    if (!sid || subjectTeacherMap.has(sid)) continue;
-    const t = a.teacher;
-    if (t) {
-      subjectTeacherMap.set(sid, {
-        _id:   String(t._id || t),
-        name:  t.name  || "",
-        email: t.email || "",
-      });
-    }
-  }
 
   const subjects = rawSubjects.map((s) => {
     const canonicalClassId = s.class || s.classId || null;
     const classRecord      = canonicalClassId
       ? classMap.get(String(canonicalClassId)) || null
       : null;
-    const teacher = subjectTeacherMap.get(String(s._id)) || null;
+    const assigned = teacherOf(canonicalClassId, s._id);
+    const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
     return {
       // normaliseSubject, so a subject from before the coefficient field lists
@@ -1674,9 +1664,10 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
       classObj: classRecord
         ? { _id: String(classRecord._id), ...classRecord }
         : null,
-      teacherId:   teacher?._id  || s.teacherId  || s.teacher_id || null,
-      teacher_id:  teacher?._id  || s.teacher_id || s.teacherId  || null,
-      teacherName: teacher?.name || s.teacherName || null,
+      teacherId:   teacher?._id  || null,
+      teacher_id:  teacher?._id  || null,
+      teacherIds:  assigned?.teacherIds ?? [],
+      teacherName: teacher?.name || null,
       teacher:     teacher       || null,
     };
   });
@@ -1890,17 +1881,10 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
     to:        coefficientOf(subject),
   });
 
-  const assignment = await TeacherAssignment.findOne({
-    subject: String(subject._id),
-  }).populate("teacher", "name email").lean();
-
-  const teacher = assignment?.teacher
-    ? {
-        _id:   String(assignment.teacher._id),
-        name:  assignment.teacher.name  || "",
-        email: assignment.teacher.email || "",
-      }
-    : null;
+  // The class-subject assignment, as the Subjects list reads it (A8).
+  const subjectClassId = subject.classId || subject.class || null;
+  const assigned = (await teachersFor({ schoolId: subject.schoolId, subjectIds: [String(subject._id)] }))(subjectClassId, subject._id);
+  const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
   console.log(`✅ Subject updated: ${subject.name}`);
   return sendSuccess(res, {

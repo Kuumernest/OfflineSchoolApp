@@ -19,7 +19,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **A5** /20 everywhere on results analytics, exams overview, Students to watch; no GPA, no letter grades; the school's remark scale. — `shared/examAnalytics.js`
 - [x] **A6** Rankings per class: class filter on exam analytics, rank within class; bottom-5 sorted ascending and numbered consistently. — `shared/examAnalytics.js` topAndBottom
 - [x] **A7** Marks progress "2/0 entered": denominator = enrolled pupils in the class. — exam submissions now carry `totalStudents`
-- [ ] **A8** Teacher assignments: one source of truth (class-subject assignment) for Subjects page, exam marks screen, report card.
+- [x] **A8** Teacher assignments: one source of truth (class-subject assignment) for Subjects page, exam marks screen, report card. — `shared/classSubjectTeachers.js`
 - [ ] **A9** French report header: all 10 region names translated; remark typo "Faire" → "Fair".
 
 ## Phase B — validation rules
@@ -56,3 +56,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 ## Notes / skipped
 
 - A5: Term and Annual Results showed `overallGrade`, which for schools on the shipped bands is a US letter (A+…F); replaced with the stored remark. The bands themselves (and their `gpaPoints`) were left in the data model.
+- A8: Form 1 English has two active assignments (Mr Buh, Mr Kum); every screen now shows both. Whether a class-subject may have only one teacher is a rule for the owner to decide — not enforced.

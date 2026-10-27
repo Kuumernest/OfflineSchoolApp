@@ -25,6 +25,7 @@ const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
 const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
 const { scopedPassRate, withAverage20 } = require("../services/classStats.service");
+const { withAssignedTeachers } = require("../services/classSubjectTeacher.service");
 const { currentYearOf } = require("../services/fees.service");
 const { calendarAcademicYear } = require("../../../shared/academicYear");
 
@@ -596,7 +597,8 @@ router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) 
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
-  const subjects = await ExamSubject.find(query).lean();
+  // The teacher is the class-subject assignment's (A8), not the exam's copy.
+  const subjects = await withAssignedTeachers(await ExamSubject.find(query).lean(), schoolId);
   const entered  = await enteredCountsFor({ schoolId, ...(examId ? { examId } : {}), ...(classId ? { classId } : {}) });
   const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
   const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));
@@ -991,7 +993,7 @@ router.get("/:examId/subjects", staffOnly, asyncHandler(async (req, res) => {
     schoolId,
     deletedAt: null,
   }).lean();
-  return res.json({ success: true, subjects });
+  return res.json({ success: true, subjects: await withAssignedTeachers(subjects, schoolId) });
 }));
 
 router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
@@ -1585,9 +1587,11 @@ router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
     schoolId,
     deletedAt: null,
   };
-  if (teacherId) query.teacherId = teacherId;
-
-  const subjects = await ExamSubject.find(query).lean();
+  // The teacher is the class-subject assignment's (A8), not the one copied
+  // onto the exam when it was made — so "a teacher's subjects" is filtered
+  // after the assignment is read, not on the copy.
+  const subjects = (await withAssignedTeachers(await ExamSubject.find(query).lean(), schoolId))
+    .filter((es) => !teacherId || es.teacherIds.includes(String(teacherId)));
   const entered  = await enteredCountsFor({ examId: req.params.examId, schoolId });
   const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
   const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));

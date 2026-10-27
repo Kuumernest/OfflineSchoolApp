@@ -510,7 +510,7 @@ const main = async () => {
   //
   //   sub-1  a subject under `classId`, with a teacher who exists
   //   sub-2  a subject under `class` instead — both spellings are in the data
-  //   sub-3  two assignments; the FIRST one read wins and the second is ignored
+  //   sub-3  two assignments; both are named, sorted (A8)
   //   sub-4  an assignment recorded under teacherId, which the endpoint does
   //          not read, so no teacher is attached
   //   sub-5  a teacher id resolving to no user at all — populate leaves the id
@@ -583,8 +583,10 @@ const main = async () => {
   check("the joined class is projected, not sent whole",
     Object.keys(bySub.get("sub-1").classObj).sort(),
     ["_id", "level", "name", "section"]);
-  check("two assignments on one subject shows the first",
-    bySub.get("sub-3").teacher._id, "t1");
+  // A8: the class-subject assignment is read one way on every screen — both
+  // active teachers, sorted by name, the first of them as the row's teacher.
+  check("two assignments on one subject shows both, sorted by name",
+    [bySub.get("sub-3").teacher._id, bySub.get("sub-3").teacherName], ["t2", "M. Etoa, Mme Fomba"]);
   check("an assignment under teacherId attaches no teacher",
     bySub.get("sub-4").teacher, null);
   // populate sets the field to null when it finds nothing, so the subject comes

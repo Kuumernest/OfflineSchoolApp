@@ -670,9 +670,19 @@ export async function assembleReportData({
         await resolveColumnOptional("teacher_assignments", COL.DELETED_AT), "ta"
       )}`;
 
+      // Read as the server reads it (shared/classSubjectTeachers.js, A8): the
+      // ACTIVE assignments of this class and subject, each teacher once, names
+      // sorted and joined — it kept whichever row came last.
       const asns = await DB.query(asnSql, asnPrms);
+      const namesBySubject = {};
       for (const a of asns) {
-        teacherBySubject[a[asnCols.subjectCol]] = a.teacher_name || "";
+        if (a.isActive === 0 || a.isActive === false || a.is_active === 0) continue;
+        if (!a.teacher_name) continue;
+        const key = a[asnCols.subjectCol];
+        (namesBySubject[key] = namesBySubject[key] || new Set()).add(a.teacher_name);
+      }
+      for (const [key, names] of Object.entries(namesBySubject)) {
+        teacherBySubject[key] = [...names].sort((x, y) => x.localeCompare(y)).join(", ");
       }
       console.log("[ReportData] Teacher assignments:", asns.length);
     } catch (err) {

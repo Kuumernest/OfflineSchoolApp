@@ -22,6 +22,8 @@
  * thing that matters for a mirror.
  */
 
+const { assignedTeachers, pairKey } = require("../../../../../shared/classSubjectTeachers");
+
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 /**
@@ -269,40 +271,19 @@ module.exports = [
       }
 
       // ── The teacher join ────────────────────────────────────────────────
-      const subjectIds = new Set(raw.map((s) => String(s._id)));
-      const assignments = docs.find("teacherAssignment", { schoolId });
-
-      const subjectTeacher = new Map();
-      for (const a of assignments) {
-        const sid = String(a.subject?._id ?? a.subject ?? "");
-        if (!sid || !subjectIds.has(sid) || subjectTeacher.has(sid)) continue;
-
-        // `teacher` only. The endpoint reads a.teacher and nothing else, so an
-        // assignment recorded under teacherId attaches no teacher there either —
-        // reproducing that rather than being cleverer than it.
-        const ref = a.teacher;
-        if (!ref) continue;
-
-        const id   = String(ref?._id ?? ref);
-        const user = docs.get("user", id);
-
-        // No user, no teacher — populate sets the field to null when it finds
-        // nothing, so the endpoint attaches nothing. See the note above.
-        if (!user) continue;
-
-        subjectTeacher.set(sid, {
-          _id:   id,
-          name:  user.name  ?? "",
-          email: user.email ?? "",
-        });
-      }
+      // The class-subject assignment, read as the server reads it
+      // (shared/classSubjectTeachers.js, A8): this subject's ACTIVE
+      // assignments in this class, names sorted and joined.
+      const byPair = assignedTeachers(docs.find("teacherAssignment", { schoolId }),
+        (id) => docs.get("user", id) ?? null);
 
       const subjects = raw.map((s) => {
         const canonicalClassId = s.class || s.classId || null;
         const classRecord = canonicalClassId
           ? classMap.get(String(canonicalClassId)) ?? null
           : null;
-        const teacher = subjectTeacher.get(String(s._id)) ?? null;
+        const assigned = byPair.get(pairKey(canonicalClassId, s._id)) ?? null;
+        const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
         return {
           ...s,
@@ -311,9 +292,10 @@ module.exports = [
           class:    canonicalClassId,
           classId:  canonicalClassId,
           classObj: classRecord ? { _id: String(classRecord._id), ...classRecord } : null,
-          teacherId:   teacher?._id  || s.teacherId  || s.teacher_id || null,
-          teacher_id:  teacher?._id  || s.teacher_id || s.teacherId  || null,
-          teacherName: teacher?.name || s.teacherName || null,
+          teacherId:   teacher?._id  || null,
+          teacher_id:  teacher?._id  || null,
+          teacherIds:  assigned?.teacherIds ?? [],
+          teacherName: teacher?.name || null,
           teacher:     teacher       || null,
         };
       });

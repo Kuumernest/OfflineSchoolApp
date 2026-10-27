@@ -162,7 +162,9 @@ const check = (label, actual, expected) => {
   // ── 3. submissions: one grouped count ──
   console.log("\n--- submissions ---");
   const sub = await counted(() => get("/exams/ex-1/submissions", TEACHER));
-  check("twelve subjects, a constant number of queries (no count per subject)", [sub.r.status, sub.r.body.submissions.length, sub.n <= 6], [200, 12, true]);
+  // Eight: the five it had, plus one grouped read each for the enrolled
+  // pupils (A7), the class-subject assignments and their teachers (A8).
+  check("twelve subjects, a constant number of queries (no count per subject)", [sub.r.status, sub.r.body.submissions.length, sub.n <= 8], [200, 12, true]);
   check("and every subject counts its marks", sub.r.body.submissions.map((x) => x.totalScoresEntered).sort((a, b) => a - b), [5, 5, 5, 5, 5, 5, 40, 40, 40, 40, 40, 40]);
   // A7: "2/0 entered" — the denominator is the class's enrolled pupils.
   check("and each counts its class's enrolled pupils, out of which marks are entered",
