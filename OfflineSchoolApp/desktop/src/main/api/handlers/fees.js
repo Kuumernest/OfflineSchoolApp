@@ -316,7 +316,16 @@ module.exports = [
         ? planStatusLocal(plan, totals.paid, Date.now())
         : null;
 
-      return ok({ data: { charges, payments, totals, plan, planStatus } });
+      // C1: whose account this is, as the server answers it.
+      const pupil = docs.get("student", studentId);
+      const student = pupil && String(pupil.schoolId) === String(schoolId) ? {
+        _id:         String(pupil._id),
+        name:        displayName(pupil) || null,
+        admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+        className:   (pupil.classId && docs.get("class", pupil.classId)?.name) || pupil.className || null,
+      } : null;
+
+      return ok({ data: { student, charges, payments, totals, plan, planStatus } });
     },
   },
 ];

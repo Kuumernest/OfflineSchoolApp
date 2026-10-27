@@ -315,7 +315,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
   const scope = { schoolId, studentId, deletedAt: null };
   if (academicYear) scope.academicYear = academicYear;
 
-  const [charges, payments, totals, plan] = await Promise.all([
+  const [charges, payments, totals, plan, pupil] = await Promise.all([
     FeeCharge.find(scope).sort({ createdAt: 1 }).lean(),
     FeePayment.find(scope).sort({ receivedAt: 1 }).lean(),
     balanceFor({ schoolId, studentId, academicYear }),
@@ -327,7 +327,17 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
       schoolId, studentId, status: "active", deletedAt: null,
       ...(academicYear ? { academicYear } : {}),
     }).lean(),
+    // C1: whose account this is, for the page header.
+    Student.findOne({ _id: studentId, schoolId })
+      .select("firstName lastName studentName name enrollmentNo admissionNo classId className").lean(),
   ]);
+  const cls = pupil?.classId ? await Class.findOne({ _id: pupil.classId }).select("name").lean() : null;
+  const student = pupil ? {
+    _id:         String(pupil._id),
+    name:        displayName(pupil) || null,
+    admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+    className:   cls?.name || pupil.className || null,
+  } : null;
 
   // Where they stand against it, computed here so the browser never has to do
   // the cumulative arithmetic — and so the ledger screen and the arrears list
@@ -338,7 +348,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
 
   return res.json({
     success: true,
-    data: { charges, payments, totals, plan, planStatus },
+    data: { student, charges, payments, totals, plan, planStatus },
   });
 }));
 

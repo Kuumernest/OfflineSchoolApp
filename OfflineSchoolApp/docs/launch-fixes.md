@@ -38,7 +38,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 ## Phase C — UX fixes (after A and B)
 
-- [ ] **C1** Fee account page header: student's name and class.
+- [x] **C1** Fee account page header: student's name and class.
 - [ ] **C2** Loading states/skeletons instead of blank tables; report card speed (~3s each); batch class print (bulk query, no N+1).
 - [ ] **C3** Attendance "–" instead of 0% when nobody was marked; 7-day chart counts school days only.
 - [ ] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
