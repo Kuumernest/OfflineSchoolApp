@@ -56,6 +56,7 @@ const bad = (res, message, code) =>
  * a phone. Behind a proxy, x-forwarded-* is the only honest source.
  */
 // The first value of each forwarded header, as the report cards read them.
+const { getStore } = require("../storage/fileStore");
 const { originOf } = require("../print/imageSource");
 
 /**
@@ -65,12 +66,26 @@ const { originOf } = require("../print/imageSource");
  * puts this string in an iframe, the phone hands it to expo-print. Keeping the
  * template here rather than in each client is what stops the two drifting.
  */
-const respond = (req, res, { data, html }) => {
+const respond = async (req, res, { data, html }) => {
   if (String(req.query.format || "").toLowerCase() === "html") {
+    // The sheet embeds its logo and photos; with a bucket they are fetched
+    // first (print/imageSource.js).
+    await getStore().warmImages(imagesIn(data));
     res.type("html");
     return res.send(html());
   }
   return res.json({ success: true, data });
+};
+
+/** The logos and photos a document's data names. */
+const imagesIn = (value, depth = 0, out = []) => {
+  if (!value || typeof value !== "object" || depth > 3) return out;
+  if (Array.isArray(value)) { value.forEach((v) => imagesIn(v, depth + 1, out)); return out; }
+  for (const [k, v] of Object.entries(value)) {
+    if ((k === "logo" || k === "photoUrl") && typeof v === "string") out.push(v);
+    else if (v && typeof v === "object") imagesIn(v, depth + 1, out);
+  }
+  return out;
 };
 
 /** The heading every printed document carries. */
@@ -496,7 +511,7 @@ router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res
 
   let saved;
   try {
-    saved = photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64);
+    saved = await photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64);
   } catch (err) {
     return bad(res, err.message, "BAD_PHOTO");
   }
@@ -506,7 +521,7 @@ router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res
   // Old file removed only after the new path is stored, so a failure cannot
   // leave the student with neither.
   if (student.photoUrl && student.photoUrl !== saved.publicPath) {
-    photoStorage.deletePhotoFile(student.photoUrl);
+    await photoStorage.deletePhotoFile(student.photoUrl);
   }
 
   return res.json({ success: true, photoUrl: saved.publicPath, bytes: saved.bytes });
@@ -523,7 +538,7 @@ router.delete("/student-photo/:studentId", officeOnly, asyncHandler(async (req, 
     return res.status(404).json({ success: false, message: "Student not found" });
   }
 
-  if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+  if (student.photoUrl) await photoStorage.deletePhotoFile(student.photoUrl);
   await Student.updateOne({ _id: req.params.studentId }, { photoUrl: null });
 
   return res.json({ success: true, photoUrl: null });

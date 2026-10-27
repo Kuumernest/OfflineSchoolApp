@@ -54,6 +54,7 @@ const Exam          = require("../db/models/Exam");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
+const { getStore } = require("../storage/fileStore");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const { displayName } = require("../utils/studentName");
@@ -789,6 +790,8 @@ router.get("/receipt/:paymentId", asyncHandler(async (req, res) => {
   };
 
   const lang = req.query.lang;
+  // The receipt embeds the school logo; with a bucket it is fetched first.
+  await getStore().warmImages([data.school?.logo]);
   const html = buildReceiptHtml({
     data,
     labels:    labelsFor(lang),

@@ -41,6 +41,7 @@ const { signAttachmentUrls } = require("../utils/mediaSignature");
 
 // Optional, exactly as the content routes treat it: a deployment without
 // multer should lose file attachments, not the whole messaging module.
+const { getStore } = require("../storage/fileStore");
 let multer;
 try {
   multer = require("multer");
@@ -299,7 +300,7 @@ router.post("/conversations/:id/attachments", (req, res, next) => {
   if (!me) return;
 
   const discard = () => {
-    if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
+    if (req.file?.path) getStore().removeLocalPath(req.file.path).catch(() => {});
   };
 
   if (!req.file) {
@@ -320,6 +321,16 @@ router.post("/conversations/:id/attachments", (req, res, next) => {
     // Do not keep a file uploaded into a conversation they cannot post to.
     discard();
     return res.status(403).json({ success: false, error: verdict.reason });
+  }
+
+  // Into the file store (storage/fileStore.js) — the server's disk does not
+  // survive a deploy.
+  try {
+    await getStore().adoptLocal(req.file.path, { contentType: req.file.mimetype });
+  } catch (err) {
+    console.error("[messages] could not store the attachment:", err.message);
+    discard();
+    return res.status(503).json({ success: false, error: "The file could not be stored. Try again." });
   }
 
   const attachment = {

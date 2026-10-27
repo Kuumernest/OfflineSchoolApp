@@ -19,6 +19,7 @@ const path   = require("path");
 const crypto = require("crypto");
 
 const { sniffImage, stripDataUri } = require("./logoStorage");
+const { getStore } = require("../storage/fileStore");
 
 const UPLOADS_ROOT  = path.resolve(__dirname, "..", "uploads");
 const PHOTO_DIR     = path.join(UPLOADS_ROOT, "photos");
@@ -45,7 +46,7 @@ const isPhotoReference = (value) =>
   typeof value === "string" && value.startsWith(PUBLIC_PREFIX);
 
 /**
- * Writes a base64 photo to disk and returns its public path.
+ * Writes a base64 photo to the file store and returns its public path.
  *
  * Content-addressed like logos: re-uploading identical bytes is a no-op, and a
  * changed photo gets a new URL, so clients and caches can treat the URL as
@@ -54,9 +55,9 @@ const isPhotoReference = (value) =>
  *
  * @param {string} studentId
  * @param {string} base64  raw base64, with or without a data: prefix
- * @returns {{ publicPath: string, bytes: number, mime: string, filename: string }}
+ * @returns {Promise<{ publicPath: string, bytes: number, mime: string, filename: string }>}
  */
-const savePhotoFromBase64 = (studentId, base64) => {
+const savePhotoFromBase64 = async (studentId, base64) => {
   const clean = stripDataUri(base64);
   if (!clean) throw new Error("Photo payload is empty");
 
@@ -81,14 +82,14 @@ const savePhotoFromBase64 = (studentId, base64) => {
   const kind = sniffImage(buf);
   if (!kind) throw new Error("Photo is not a JPEG, PNG, GIF or WebP image");
 
-  ensurePhotoDir();
-
   const hash     = crypto.createHash("md5").update(buf).digest("hex").slice(0, 12);
   const safeId   = String(studentId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "student";
   const filename = `${safeId}-${hash}.${kind.ext}`;
-  const abs      = path.join(PHOTO_DIR, filename);
+  const store    = getStore();
 
-  if (!fs.existsSync(abs)) fs.writeFileSync(abs, buf);
+  if (!(await store.stat(`photos/${filename}`))) {
+    await store.put(`photos/${filename}`, buf, { contentType: kind.mime });
+  }
 
   return {
     publicPath: `${PUBLIC_PREFIX}/${filename}`,
@@ -105,22 +106,11 @@ const savePhotoFromBase64 = (studentId, base64) => {
  * field, and a value that is not one of ours must not become an arbitrary file
  * delete.
  */
-const deletePhotoFile = (publicPath) => {
-  try {
-    if (!isPhotoReference(publicPath)) return false;
-
-    const filename = path.basename(publicPath);
-    const abs      = path.join(PHOTO_DIR, filename);
-
-    // Confirms the resolved path is still inside PHOTO_DIR, so a crafted
-    // "../../.." in the stored value cannot escape it.
-    if (path.dirname(path.resolve(abs)) !== path.resolve(PHOTO_DIR)) return false;
-
-    if (fs.existsSync(abs)) { fs.unlinkSync(abs); return true; }
-    return false;
-  } catch {
-    return false;
-  }
+const deletePhotoFile = async (publicPath) => {
+  if (!isPhotoReference(publicPath)) return false;
+  const name = path.basename(publicPath.split("?")[0]);
+  if (!name || name === "." || name === "..") return false;
+  return getStore().removeUrl(`${PUBLIC_PREFIX}/${name}`);
 };
 
 module.exports = {

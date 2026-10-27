@@ -16,6 +16,7 @@ const TeacherAssignment = require("../db/models/TeacherAssignment");
 // MULTER SETUP
 // ═════════════════════════════════════════════════════════════════════════════
 
+const { getStore } = require("../storage/fileStore");
 let multer;
 try {
   multer = require("multer");
@@ -223,17 +224,28 @@ const multerForContent = (req, res, next) => {
           error:   `File too large for type "${type}". Maximum: ${mb} MB`,
         });
       }
+
+      // Into the file store before the route sees it: on Render the local
+      // disk is rebuilt on every deploy (storage/fileStore.js).
+      return getStore().adoptLocal(req.file.path, { contentType: req.file.mimetype })
+        .then(() => next())
+        .catch((e) => {
+          console.error("[content] could not store the upload:", e.message);
+          deleteUploadedFile(req.file.path);
+          res.status(503).json({ success: false, error: "The file could not be stored. Try again." });
+        });
     }
 
     next();
   });
 };
 
+// The file, wherever it now lives: the local copy multer wrote and, once
+// adopted, the stored one. Fire and forget, as before.
 const deleteUploadedFile = (filePath) => {
   if (!filePath) return;
-  fs.unlink(filePath, (e) => {
-    if (e && e.code !== "ENOENT") console.warn("[deleteUploadedFile]", e.message);
-  });
+  getStore().removeLocalPath(filePath)
+    .catch((e) => console.warn("[deleteUploadedFile]", e.message));
 };
 
 const buildFileUrl = (req, absolutePath) => {

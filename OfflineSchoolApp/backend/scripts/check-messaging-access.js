@@ -194,7 +194,8 @@ const check = (label, actual, expected) => {
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- attachments: protection is judged on the resolved path ---");
-  const serverSrc = fs.readFileSync(path.join(SRC, "server.js"), "utf8");
+  // The /uploads handler, which server.js mounts from storage/serveUploads.js.
+  const serverSrc = fs.readFileSync(path.join(SRC, "storage", "serveUploads.js"), "utf8");
   check("the upload gate checks the canonical path, so ./messages/x is protected too",
     /isProtectedPath\(canonicalPath\)/.test(serverSrc) && /verifyMediaSignature\(canonicalPath/.test(serverSrc), true);
 

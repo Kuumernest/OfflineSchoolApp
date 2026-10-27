@@ -927,7 +927,9 @@ router.get("/applications/:applicationId/documents/:key", asyncHandler(async (re
   const doc = (record.documents || []).find((d) => applicationDocuments.documentKey(d) === key);
   if (!doc) return sendError(res, 404, "Document not found");
 
-  const file = applicationDocuments.resolveDocumentFile(key);
+  // From the file store — a bucket in production — and through here rather
+  // than a link to it, so the authorisation above stays the only way in.
+  const file = await applicationDocuments.readDocument(key);
   if (!file) return sendError(res, 404, "Document not found");
 
   res.set({
@@ -936,9 +938,7 @@ router.get("/applications/:applicationId/documents/:key", asyncHandler(async (re
     "Cache-Control":          "private, no-store",
     "X-Content-Type-Options": "nosniff",
   });
-  const stream = fs.createReadStream(file.filePath);
-  stream.on("error", () => { if (!res.headersSent) sendError(res, 404, "Document not found"); else res.end(); });
-  stream.pipe(res);
+  return res.send(file.body);
 }));
 
 router.get("/teacher/students",    authenticate, teacherOrAdmin, handleTeacherStudents);
@@ -974,7 +974,7 @@ router.put(
 
     let saved;
     try {
-      saved = photoStorage.savePhotoFromBase64(student._id, photoBase64);
+      saved = await photoStorage.savePhotoFromBase64(student._id, photoBase64);
     } catch (err) {
       // These messages name the actual problem — too large, not an image — so
       // they are worth passing through rather than replacing with "bad request".
@@ -989,7 +989,7 @@ router.put(
     // order risks deleting the only copy and then failing to save the new one,
     // which loses the photo entirely.
     if (previous && previous !== saved.publicPath) {
-      photoStorage.deletePhotoFile(previous);
+      await photoStorage.deletePhotoFile(previous);
     }
 
     return sendSuccess(res, {
@@ -1010,7 +1010,7 @@ router.delete(
 
     if (!student) return sendError(res, 404, "Student record not found");
 
-    if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+    if (student.photoUrl) await photoStorage.deletePhotoFile(student.photoUrl);
     await Student.updateOne({ _id: student._id }, { photoUrl: null });
 
     return sendSuccess(res, { photoUrl: null });
