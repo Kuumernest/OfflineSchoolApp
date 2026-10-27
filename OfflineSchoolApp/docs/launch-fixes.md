@@ -54,7 +54,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student. — the column header read "Never opened"; `GET /documents/guardian-access` now returns `guardianNames` (from the children's records, shown when no label) and `linkedToNoStudent` (badge + count banner); `check:portalcodes`
 - [x] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20". — Settings fetched school-info without `includeLogo`, so an inline-stored logo came back null; a logo file that 404s now falls back (Settings, portal); types `college_general|college_technical|lycee_general|lycee_technical` (+ primary, comprehensive, other), printed header follows; old JHS/SHS values still validate; `check:schooltypes`
 - [x] **C10** Student profile: results, attendance, fee balance, guardian contact. — `GET /admin/students/:id/overview` (studentOverview.service: published results on /20 with class position, last 30 days' attendance, current-year balance — fees only with `fees.view`); `StudentOverviewCard` on the profile; `check:studentoverview`
-- [ ] **C11** Notifications: action items (marks awaiting approval, unpublished exams, overdue fees). *(may go to follow-up PR)*
+- [x] **C11** Notifications: action items (marks awaiting approval, unpublished exams, overdue fees). — `GET /admin/action-items` (actionItems.service), counted live and per permission (`exams.manage`, `results.publish`, `fees.view`); a "To do" block at the top of the bell panel, counted in the badge; `check:actionitems`
 - [ ] **C12** Report templates: 3 ready-made layouts + toggles; raw HTML as advanced. *(may go to follow-up PR)*
 
 ## Phase D — test data (prepare only, do NOT run)
@@ -78,3 +78,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - C7: `web/src/pages/students/applications/index.tsx` (and `components/applications/*`) is no longer routed — the old address redirects to Admissions. Left in place; delete in a follow-up.
 - C7: icons and button colour were done on web; the mobile app already uses Ionicons line icons (its emoji were in strings, now removed) — its button colours were not audited.
 - C9: schools that saved JHS / SHS / vocational / university keep that value (shown as a selected chip) until someone picks a Cameroon type — not rewritten automatically.
+- C11: action items are recounted on the panel's 60 s poll; the overdue-fees count reads the whole school's fee ledger each time. Fine at this size — cache it if a large school's database feels it.

@@ -279,3 +279,24 @@ export async function markAllAsRead(schoolId: string): Promise<number> {
     return -1;
   }
 }
+// ─── Action items (C11) ──────────────────────────────────────────────────────
+// Counted live by the server from the records, so an item goes away when the
+// work is done. Only items this reader can act on are returned.
+
+export interface ActionItem {
+  key:     "marksAwaitingApproval" | "resultsUnpublished" | "overdueFees";
+  count:   number;
+  link:    string;
+  /** Overdue fees: the total owed. */
+  amount?: number;
+}
+
+export async function fetchActionItems(schoolId: string): Promise<ActionItem[]> {
+  try {
+    const { data } = await api.get("/admin/action-items", { params: { schoolId } });
+    return data?.items ?? data?.data?.items ?? [];
+  } catch {
+    // A failed count must not break the bell; the stored notifications still show.
+    return [];
+  }
+}

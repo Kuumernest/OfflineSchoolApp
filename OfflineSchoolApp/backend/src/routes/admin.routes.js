@@ -2869,6 +2869,22 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
   return sendSuccess(res, { enrollmentNo });
 }));
 
+// GET /admin/action-items — what is waiting on this reader (C11): marks to
+// approve, results to publish, overdue fees. Each only for a role that can act.
+router.get("/action-items", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendSuccess(res, { items: [] });
+  const permissions = require("../services/permissions.service");
+  const [marks, publish, fees] = await Promise.all([
+    permissions.can(req.user, "exams.manage"),
+    permissions.can(req.user, "results.publish"),
+    permissions.can(req.user, "fees.view"),
+  ]);
+  const items = await require("../services/actionItems.service")
+    .actionItemsFor({ schoolId: String(schoolId), can: { marks, publish, fees } });
+  return sendSuccess(res, { items });
+}));
+
 // GET /admin/students/:id/overview — the profile's results, attendance, fee
 // balance and guardian contact in one read (C10). Fees only for a caller who
 // may see fees; the rest is what students.viewFull already shows.

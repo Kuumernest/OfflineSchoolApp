@@ -1402,6 +1402,15 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "todo": "À faire",
+    "action": {
+      "marksAwaitingApproval": "Les notes de {{count}} matière attendent l'approbation",
+      "marksAwaitingApproval_other": "Les notes de {{count}} matières attendent l'approbation",
+      "resultsUnpublished": "Les résultats de {{count}} examen sont prêts à publier",
+      "resultsUnpublished_other": "Les résultats de {{count}} examens sont prêts à publier",
+      "overdueFees": "{{count}} famille a des frais en retard ({{amount}})",
+      "overdueFees_other": "{{count}} familles ont des frais en retard ({{amount}})"
+    },
     "justNow": "À l'instant",
     "title": "Notifications",
     "readAll": "Tout marquer comme lu",

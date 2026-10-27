@@ -1402,6 +1402,15 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "todo": "To do",
+    "action": {
+      "marksAwaitingApproval": "{{count}} subject's marks await approval",
+      "marksAwaitingApproval_other": "{{count}} subjects' marks await approval",
+      "resultsUnpublished": "{{count}} exam's results are ready to publish",
+      "resultsUnpublished_other": "{{count}} exams' results are ready to publish",
+      "overdueFees": "{{count}} family has overdue fees ({{amount}})",
+      "overdueFees_other": "{{count}} families have overdue fees ({{amount}})"
+    },
     "justNow": "Just now",
     "title": "Notifications",
     "readAll": "Read all",
