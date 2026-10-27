@@ -272,8 +272,21 @@ module.exports = [
       const filter = { examId, schoolId, deletedAt: null };
       if (query.teacherId) filter.teacherId = String(query.teacherId);
 
+      // Enrolled pupils per class — the "entered / total" denominator (A7):
+      // the register's roster, approved, active, not deleted.
+      const enrolled = new Map();
+      const enrolledIn = (classId) => {
+        const key = String(classId);
+        if (!enrolled.has(key)) {
+          enrolled.set(key, docs.find("student", { schoolId, classId: key, status: "approved", deletedAt: null })
+            .filter((st) => st.isActive !== false).length);
+        }
+        return enrolled.get(key);
+      };
+
       const submissions = docs.find("examSubject", filter).map((es) => ({
         ...es,
+        totalStudents: enrolledIn(es.classId),
         totalScoresEntered: docs
           .find("studentScore", {
             examId, subjectId: es.subjectId, classId: es.classId, schoolId, deletedAt: null,

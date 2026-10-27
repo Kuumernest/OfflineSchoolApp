@@ -570,6 +570,24 @@ const enteredCountsFor = async (match) => {
   return (es) => counts.get(`${es.examId}|${es.classId}|${es.subjectId}`) ?? 0;
 };
 
+/**
+ * Pupils enrolled per class — the denominator of "entered / total" (A7,
+ * decided 2026-10-27). Nothing wrote ExamSubject.totalStudents, so every
+ * subject read "2/0 entered". Enrolled is the register's roster: approved,
+ * active, not deleted — the pupils whose marks the teacher has to enter.
+ */
+const enrolledCountsFor = async (schoolId, classIds) => {
+  const ids = [...new Set(classIds.filter(Boolean).map(String))];
+  if (!ids.length) return () => 0;
+  const Student = require("../db/models/Student");
+  const rows = await Student.aggregate([
+    { $match: { schoolId: String(schoolId), classId: { $in: ids }, status: "approved", isActive: { $ne: false }, deletedAt: null } },
+    { $group: { _id: "$classId", n: { $sum: 1 } } },
+  ]);
+  const counts = new Map(rows.map((r) => [String(r._id), r.n]));
+  return (es) => counts.get(String(es.classId)) ?? 0;
+};
+
 router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
@@ -580,7 +598,8 @@ router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) 
 
   const subjects = await ExamSubject.find(query).lean();
   const entered  = await enteredCountsFor({ schoolId, ...(examId ? { examId } : {}), ...(classId ? { classId } : {}) });
-  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
+  const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));
   return res.json({
     success:     true,
     submissions: enriched,
@@ -1570,7 +1589,8 @@ router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
 
   const subjects = await ExamSubject.find(query).lean();
   const entered  = await enteredCountsFor({ examId: req.params.examId, schoolId });
-  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
+  const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));
 
   return res.json({ success: true, submissions: enriched });
 }));

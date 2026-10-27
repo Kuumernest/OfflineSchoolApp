@@ -164,7 +164,13 @@ const check = (label, actual, expected) => {
   const sub = await counted(() => get("/exams/ex-1/submissions", TEACHER));
   check("twelve subjects, a constant number of queries (no count per subject)", [sub.r.status, sub.r.body.submissions.length, sub.n <= 6], [200, 12, true]);
   check("and every subject counts its marks", sub.r.body.submissions.map((x) => x.totalScoresEntered).sort((a, b) => a - b), [5, 5, 5, 5, 5, 5, 40, 40, 40, 40, 40, 40]);
+  // A7: "2/0 entered" — the denominator is the class's enrolled pupils.
+  check("and each counts its class's enrolled pupils, out of which marks are entered",
+    sub.r.body.submissions.map((x) => [x.totalScoresEntered, x.totalStudents]).sort((a, b) => a[0] - b[0])
+      .every(([entered, total]) => total === entered), true);
   const sub2 = await counted(() => get("/exams/submissions/submissions?examId=ex-1", TEACHER));
+  check("the school-wide view carries the same denominators",
+    sub2.r.body.submissions.map((x) => x.totalStudents).sort((a, b) => a - b), [5, 5, 5, 5, 5, 5, 40, 40, 40, 40, 40, 40]);
   check("the school-wide view too", [sub2.r.body.total, sub2.n <= 6], [12, true]);
 
   // ── 4. rankings: the limit in the query ──
