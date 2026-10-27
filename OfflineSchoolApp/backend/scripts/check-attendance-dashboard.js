@@ -165,7 +165,8 @@ const main = async () => {
   const e = empty.body?.data ?? empty.body;
 
   check("present is zero", e.todayPresent, 0);
-  check("rate is zero",    e.rate, 0);
+  // C3: no rate — shown "–" — rather than 0%, which reads as everyone absent.
+  check("rate is null, not 0%", e.rate, null);
   // The pair that tells "nobody came" apart from "nobody marked the register".
   check("but the roster is still known", e.total, ROSTER);
   check("and every pupil reads as unmarked", e.unmarked, ROSTER);

@@ -3485,13 +3485,21 @@ const main = async () => {
       method: "GET", path: "/api/attendance/report/weekly",
       query: { schoolId: SCHOOL },
     }, teachCtx).data;
-    check("seven days, oldest first", weekly.days.length, 7);
-    check("ending today", weekly.days[6], week[6]);
-    check("with a row per day", weekly.trend.length, 7);
-    check("today's present count", weekly.trend[6].students.present, 1);
-    check("and a day in the middle", weekly.trend[4].students.late, 1);
-    check("a day with nothing shows zeroes, not gaps",
-      weekly.trend[0].students.present, 0);
+    // C3: the last seven days, the school's open days only (Monday to
+    // Friday by default) — so which days are listed depends on today.
+    const { schoolDaysOnly } = require("../../shared/attendance");
+    const open = schoolDaysOnly(week, null);
+    const on = (day) => weekly.trend.find((r) => r.date === day);
+    check("the week's school days, oldest first", weekly.days, open);
+    check("no Saturday or Sunday", weekly.days.every((d) => ![0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay())), true);
+    check("with a row per day", weekly.trend.length, open.length);
+    if (open.includes(week[6])) check("today's present count", on(week[6]).students.present, 1);
+    if (open.includes(week[4])) check("and a day in the middle", on(week[4]).students.late, 1);
+    const quiet = open.find((d) => d !== week[6] && d !== week[4]);
+    if (quiet) {
+      check("a day with nothing shows zeroes, not gaps", on(quiet).students.present, 0);
+      check("and no rate — the register was not taken", on(quiet).students.rate, null);
+    }
   }
 
   // ── One class, pupil by pupil ──────────────────────────────────────────

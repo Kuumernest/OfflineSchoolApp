@@ -36,7 +36,8 @@ export interface ExamStats {
 export interface AttendanceStats {
   todayPresent: number;
   todayAbsent:  number;
-  rate:         number;
+  /** Null when nobody was marked today (C3) — shown "–", not 0%. */
+  rate:         number | null;
   /** Register rows written today — includes late and excused. */
   marked:       number;
   /** The roster this rate is a percentage of. */
@@ -286,7 +287,8 @@ export async function fetchAttendanceStats(
 
       const present = n(r.todayPresent ?? r.present    ?? r.totalPresent);
       const absent  = n(r.todayAbsent  ?? r.absent     ?? r.totalAbsent);
-      const rate    = n(r.rate         ?? r.percentage  ?? r.attendanceRate);
+      const rawRate = r.rate ?? r.percentage ?? r.attendanceRate;
+      const rate    = rawRate === null ? null : n(rawRate);
 
       // `marked` counts every register row, late and excused included.
       // The widget used to derive it as present + absent, which reads a

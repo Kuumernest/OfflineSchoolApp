@@ -13,6 +13,7 @@ const TeacherAssignment = require("../db/models/TeacherAssignment");
 const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
 const { currentAcademicYearOf } = require("../../../shared/academicYear");
 const { checkAgeRanges } = require("../../../shared/studentValidation");
+const { dayRate } = require("../../../shared/attendance");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -1121,12 +1122,9 @@ router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandle
     const todayLate    = countOf("late");
     const todayExcused = countOf("excused");
 
-    // The roster is the denominator, so a day nobody marked reads as 0% of a
-    // known number of pupils rather than 0% of nothing — and `unmarked` is
-    // what tells the two apart.
-    const rate = totalStudents > 0
-      ? Math.round((todayPresent / totalStudents) * 100)
-      : 0;
+    // The roster is the denominator. A day nobody marked has no rate (C3):
+    // null, shown "–", rather than 0%, which reads as everyone absent.
+    const rate = dayRate(todayPresent, records.length, totalStudents);
 
     return sendSuccess(res, {
       todayPresent,

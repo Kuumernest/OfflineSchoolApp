@@ -98,7 +98,8 @@ const normaliseSummary = (raw: unknown): AttendanceSummary => {
     excused:  s.excused  !== undefined ? Number(s.excused)  : undefined,
     on_leave: s.on_leave !== undefined ? Number(s.on_leave) : undefined,
     unmarked: s.unmarked !== undefined ? Number(s.unmarked) : undefined,
-    rate:     s.rate     !== undefined ? Number(s.rate)     : undefined,
+    // null stays null: nobody marked is "–", not 0% (C3).
+    rate:     s.rate === null ? null : s.rate !== undefined ? Number(s.rate) : undefined,
   };
 };
 

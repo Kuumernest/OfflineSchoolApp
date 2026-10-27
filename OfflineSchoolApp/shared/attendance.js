@@ -163,7 +163,31 @@ const teacherAttendanceId = ({ schoolId, teacherId, date }) => {
   ].join("-");
 };
 
+/**
+ * The days of a window the school is open (C3, decided 2026-10-27). The
+ * weekly chart counted Saturday and Sunday as days nobody came. The school's
+ * own `schoolDays` ("Monday" … "Sunday"), Monday to Friday when it has set
+ * none. The weekday is the calendar date's, read in UTC as the date is stored.
+ */
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const schoolDaysOnly = (days, schoolDays) => {
+  const open = new Set((Array.isArray(schoolDays) && schoolDays.length
+    ? schoolDays : DAY_NAMES.slice(1, 6)).map((d) => String(d).trim().toLowerCase()));
+  return (days || []).filter((day) =>
+    open.has(DAY_NAMES[new Date(`${day}T00:00:00Z`).getUTCDay()].toLowerCase()));
+};
+
+/**
+ * A day's attendance rate: present over the roster — or null when nobody was
+ * marked (C3). 0% claims every pupil was away; "–" says the register was not
+ * taken.
+ */
+const dayRate = (present, marked, roster) =>
+  marked > 0 && roster > 0 ? Math.round((present / roster) * 100) : null;
+
 module.exports = {
+  schoolDaysOnly,
+  dayRate,
   STUDENT_STATUSES,
   TEACHER_STATUSES,
   todayStr,

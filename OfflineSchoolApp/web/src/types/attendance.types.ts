@@ -91,7 +91,8 @@ export interface AttendanceSummary {
   excused?: number;
   on_leave?: number;
   unmarked?: number;
-  rate?:    number;
+  /** Null when nobody was marked (C3) — shown "–", not 0%. */
+  rate?:    number | null;
 }
 
 export interface TodayAttendance {
@@ -151,6 +152,6 @@ export interface WeeklyAttendancePoint {
   label?:   string;
   students?: AttendanceSummary;
   teachers?: AttendanceSummary;
-  /** Present-rate for the day, 0–100. */
-  rate?:    number;
+  /** Present-rate for the day, 0–100; null when nobody was marked (C3). */
+  rate?:    number | null;
 }
