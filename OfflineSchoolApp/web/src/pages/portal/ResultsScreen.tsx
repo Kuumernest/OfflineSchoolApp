@@ -17,7 +17,7 @@ import { cn } from "@/utils/cn";
 import { printHtml } from "@/print/document";
 import { fetchResults, fetchReportCard, type PortalResult } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState } from "./ui";
-import { ordinal, on20 } from "./format";
+import { ordinal, on20, mark } from "./format";
 import { TrendChart } from "./TrendChart";
 
 export function ResultsScreen({ studentId }: { studentId: string | null }) {
@@ -114,7 +114,7 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
           </p>
         </div>
         <div className="w-full sm:w-auto sm:text-right">
-          <p className="text-2xl font-semibold tabular-nums text-ink">{on20(r.average)}<span className="text-sm font-medium text-ink-faint">/20</span></p>
+          <p className="text-2xl font-semibold tabular-nums text-ink">{on20(r.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span></p>
           {r.classPosition != null && r.totalInClass != null && (
             <p className="text-sm text-ink-body">{t("portal.resultsScreen.rank", { position: ordinal(r.classPosition, i18n.resolvedLanguage), outOf: r.totalInClass })}</p>
           )}
@@ -148,7 +148,7 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
               <td className="py-3 pl-2 pr-4 text-right align-top sm:pr-2">
                 {s.isAbsent ? <span className="text-ink-muted">{t("portal.resultsScreen.absent")}</span> : (
                   <span className={cn("font-semibold tabular-nums", s.isPassing ? "text-ink" : "text-danger")}>
-                    {s.normalizedMark ?? "–"}
+                    {mark(s.normalizedMark, i18n.resolvedLanguage)}
                     {!s.isPassing && <span className="sr-only"> ({t("portal.resultsScreen.belowPass")})</span>}
                   </span>
                 )}

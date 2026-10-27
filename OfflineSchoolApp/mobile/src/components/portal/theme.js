@@ -45,5 +45,13 @@ export function ordinal(n, lang) {
   }
 }
 
-/** A mark on twenty, always two decimals: 14.24. */
-export const on20 = (v) => (v == null || Number.isNaN(Number(v)) ? "–" : Number(v).toFixed(2));
+/** The decimal sign as people write it: a comma in French (14,24), a point in English. */
+const decimalSign = (s, lang) => (lang?.startsWith("fr") ? s.replace(".", ",") : s);
+
+/** An average on twenty, always two decimals: 14.24 / 14,24. */
+export const on20 = (v, lang) =>
+  (v == null || Number.isNaN(Number(v)) ? "–" : decimalSign(Number(v).toFixed(2), lang));
+
+/** A subject's mark as the school sent it, at its own precision: 12.5 / 12,5. */
+export const mark = (v, lang) =>
+  (v == null || Number.isNaN(Number(v)) ? "–" : decimalSign(String(Number(v)), lang));

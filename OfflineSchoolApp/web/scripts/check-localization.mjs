@@ -335,6 +335,22 @@ check("no hand-rolled English plural remains", handRolled, []);
 // label, and date-fns left on its default locale. None was a missing key, so
 // the parity check could not see them.
 // ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the parent portal's marks: a comma in French ---");
+{
+  // Lifted out of format.ts (types dropped) and run, so the check is the rule.
+  const src = read("src/pages/portal/format.ts").replace(/: string \| undefined/g, "").replace(/: number \| null \| undefined/g, "").replace(/: string/g, "");
+  const grab = (name) => new RegExp(`const ${name} = ([\\s\\S]*?);\\n`).exec(src)?.[1];
+  const decimalSign = new Function(`return ${grab("decimalSign")}`)();
+  const on20 = new Function("decimalSign", `return ${grab("on20")}`)(decimalSign);
+  const mark = new Function("decimalSign", `return ${grab("mark")}`)(decimalSign);
+  check("averages and marks: 14,24 and 12,5 in French; 14.24 and 12.5 in English",
+    [on20(14.24, "fr"), mark(12.5, "fr"), on20(14.24, "en"), mark(12.5, "en"), on20(null, "fr")],
+    ["14,24", "12,5", "14.24", "12.5", "–"]);
+  const screens = ["HomeScreen", "ResultsScreen", "TrendChart"].map((f) => read(`src/pages/portal/${f}.tsx`)).join("\n");
+  check("no portal screen writes a mark with toFixed(2) or prints normalizedMark bare",
+    [/\.toFixed\(2\)/.test(screens), /\{s\.normalizedMark \?\?/.test(screens), /on20\([^,()]+\)/.test(screens)], [false, false, false]);
+}
+
 console.log("--- announcements, badges and relative dates, in French ---");
 {
   check("fr: audience options",

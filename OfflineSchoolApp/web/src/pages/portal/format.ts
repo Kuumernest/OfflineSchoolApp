@@ -9,5 +9,13 @@ export function ordinal(n: number, lang: string | undefined): string {
   return `${n}${({ one: "st", two: "nd", few: "rd" } as Record<string, string>)[rule] ?? "th"}`;
 }
 
-/** A mark on twenty, always two decimals: 14.24/20. */
-export const on20 = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(2));
+/** The decimal sign as people write it: a comma in French (14,24), a point in English. */
+const decimalSign = (s: string, lang: string | undefined) => (lang?.startsWith("fr") ? s.replace(".", ",") : s);
+
+/** An average on twenty, always two decimals: 14.24 / 14,24. */
+export const on20 = (v: number | null | undefined, lang: string | undefined) =>
+  (v == null ? "–" : decimalSign(v.toFixed(2), lang));
+
+/** A subject's mark as the school sent it, at its own precision: 12.5 / 12,5. */
+export const mark = (v: number | null | undefined, lang: string | undefined) =>
+  (v == null ? "–" : decimalSign(String(v), lang));

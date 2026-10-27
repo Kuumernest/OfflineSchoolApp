@@ -16,7 +16,7 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { formatDate } from "../../i18n/format";
 import { Card, CardTitle, Skeleton, EmptyState } from "./ui";
 import TrendChart from "./TrendChart";
-import { C, TAP, ordinal, on20 } from "./theme";
+import { C, TAP, ordinal, on20, mark } from "./theme";
 
 export default function ResultsScreen({ data, loading, childId, printing, onOpenReportCard }) {
   const { t } = useTranslation();
@@ -112,7 +112,7 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
           </Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={s.avg}>{on20(r.average)}<Text style={s.outOf}>/20</Text></Text>
+          <Text style={s.avg}>{on20(r.average, language)}<Text style={s.outOf}>/20</Text></Text>
           {r.classPosition != null && r.totalInClass != null ? (
             <Text style={s.rank}>
               {t("portal.resultsScreen.rank", { position: ordinal(Number(r.classPosition), language), outOf: r.totalInClass })}
@@ -138,7 +138,7 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
             accessible
             accessibilityLabel={[
               sub.subjectName,
-              sub.isAbsent ? t("portal.resultsScreen.absent") : `${sub.normalizedMark ?? "–"}/20`,
+              sub.isAbsent ? t("portal.resultsScreen.absent") : `${mark(sub.normalizedMark, language)}/20`,
               !sub.isAbsent && !sub.isPassing ? t("portal.resultsScreen.belowPass") : null,
               detail,
             ].filter(Boolean).join(", ")}
@@ -150,7 +150,7 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
             {sub.isAbsent ? (
               <Text style={s.absent}>{t("portal.resultsScreen.absent")}</Text>
             ) : (
-              <Text style={[s.mark, !sub.isPassing && { color: C.danger }]}>{sub.normalizedMark ?? "–"}</Text>
+              <Text style={[s.mark, !sub.isPassing && { color: C.danger }]}>{mark(sub.normalizedMark, language)}</Text>
             )}
           </View>
         );

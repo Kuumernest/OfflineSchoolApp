@@ -95,7 +95,7 @@ function ChildCard({ child, index, onOpen }: {
           {latest?.average != null ? (
             <>
               <p className="text-2xl font-semibold tabular-nums text-ink">
-                {on20(latest.average)}<span className="text-sm font-medium text-ink-faint">/20</span>
+                {on20(latest.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span>
               </p>
               {latest.position != null && latest.outOf != null && (
                 <p className="text-sm text-ink-body">{t("portal.home.rank", { position: ordinal(latest.position, i18n.resolvedLanguage), outOf: latest.outOf })}</p>
@@ -173,8 +173,8 @@ function Tile({ icon, label, children, onClick }: {
 }
 
 function Change({ delta, exam }: { delta: number; exam: string }) {
-  const { t } = useTranslation();
-  const abs = Math.abs(delta).toFixed(2);
+  const { t, i18n } = useTranslation();
+  const abs = on20(Math.abs(delta), i18n.resolvedLanguage);
   if (delta > 0) return (
     <p className="mt-1 flex items-center gap-1 text-xs font-medium text-success">
       <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />{t("portal.home.up", { delta: abs, exam })}

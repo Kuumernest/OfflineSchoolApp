@@ -9,13 +9,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { on20 } from "./format";
+
 export interface TrendPoint { key: string; label: string; value: number }
 
 const H = 200, PAD = { top: 16, right: 52, bottom: 30, left: 30 };
 const GRID = [0, 5, 10, 15, 20];
 
 export function TrendChart({ points }: { points: TrendPoint[] }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.resolvedLanguage;
   const [active, setActive] = useState<number | null>(null);
   // Drawn at the width it is shown at, so 11px labels stay 11px on a phone
   // rather than shrinking with a scaled-down drawing.
@@ -56,21 +59,21 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
               <circle cx={x(i)} cy={y(p.value)} r={5} fill="var(--color-primary-600)" stroke="var(--color-surface)" strokeWidth={2} />
               {/* A hit area larger than the mark, reachable by keyboard. */}
               <circle cx={x(i)} cy={y(p.value)} r={18} fill="transparent" tabIndex={0}
-                aria-label={`${p.label}: ${p.value.toFixed(2)}/20`}
+                aria-label={`${p.label}: ${on20(p.value, lang)}/20`}
                 onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
                 onFocus={() => setActive(i)} onBlur={() => setActive(null)}
                 className="cursor-pointer outline-none focus-visible:stroke-primary-600" strokeWidth={2} />
             </g>
           ))}
           <text x={x(points.length - 1) + 10} y={y(last.value)} dy="0.32em" className="fill-ink text-[12px] font-semibold">
-            {last.value.toFixed(2)}
+            {on20(last.value, lang)}
           </text>
         </svg>
         {tip && active != null && (
           <div role="status" className="pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-control border border-line bg-surface px-2.5 py-1.5 text-xs shadow-card"
             style={{ left: `${(x(active) / W) * 100}%`, top: `${(y(tip.value) / H) * 100}%`, marginTop: -10 }}>
             <p className="font-medium text-ink">{tip.label}</p>
-            <p className="tabular-nums text-ink-body">{tip.value.toFixed(2)}/20</p>
+            <p className="tabular-nums text-ink-body">{on20(tip.value, lang)}/20</p>
           </div>
         )}
       </div>
@@ -80,7 +83,7 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
           <thead><tr className="text-xs text-ink-muted"><th className="py-1 font-medium">{t("portal.resultsScreen.exam")}</th><th className="py-1 text-right font-medium">{t("portal.resultsScreen.average")}</th></tr></thead>
           <tbody>
             {points.map((p) => (
-              <tr key={p.key} className="border-t border-line"><td className="py-1.5 text-ink-body">{p.label}</td><td className="py-1.5 text-right tabular-nums text-ink">{p.value.toFixed(2)}/20</td></tr>
+              <tr key={p.key} className="border-t border-line"><td className="py-1.5 text-ink-body">{p.label}</td><td className="py-1.5 text-right tabular-nums text-ink">{on20(p.value, lang)}/20</td></tr>
             ))}
           </tbody>
         </table>

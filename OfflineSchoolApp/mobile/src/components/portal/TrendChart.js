@@ -20,7 +20,7 @@ const GRID = [0, 5, 10, 15, 20];
 const OUT_OF = "/20";
 
 export default function TrendChart({ points }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [W, setW] = useState(0);
   const [table, setTable] = useState(false);
   if ((points?.length ?? 0) < 2) return null;
@@ -29,7 +29,7 @@ export default function TrendChart({ points }) {
   const y = (v) => PAD.top + ((20 - v) / 20) * (H - PAD.top - PAD.bottom);
   const last = points[points.length - 1];
   // What a screen reader says for the drawing: the title, then every point.
-  const spoken = [t("portal.resultsScreen.trendLabel"), ...points.map((p) => [p.label, on20(p.value), OUT_OF].join(" "))].join(", ");
+  const spoken = [t("portal.resultsScreen.trendLabel"), ...points.map((p) => [p.label, on20(p.value, language), OUT_OF].join(" "))].join(", ");
 
   return (
     <View>
@@ -69,7 +69,7 @@ export default function TrendChart({ points }) {
             ))}
 
             <Text style={[s.lastValue, { left: x(points.length - 1) + 10, top: y(last.value) - 9 }]}>
-              {on20(last.value)}
+              {on20(last.value, language)}
             </Text>
 
             {/* First and last exam named under the axis; the table has the rest. */}
@@ -98,7 +98,7 @@ export default function TrendChart({ points }) {
           {points.map((p) => (
             <View key={p.key} style={s.row}>
               <Text style={[s.td, { flex: 1 }]}>{p.label}</Text>
-              <Text style={[s.td, s.num]}>{on20(p.value)}{OUT_OF}</Text>
+              <Text style={[s.td, s.num]}>{on20(p.value, language)}{OUT_OF}</Text>
             </View>
           ))}
         </View>

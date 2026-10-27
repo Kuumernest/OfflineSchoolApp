@@ -81,7 +81,7 @@ function ChildCard({ child, index, onOpen }) {
         <Tile icon="school-outline" label={t("portal.home.latestResult")} onPress={() => onOpen(child._id, "results")} testID={`portal-home-results-${index}`}>
           {latest?.average != null ? (
             <>
-              <Text style={s.big}>{on20(latest.average)}<Text style={s.outOf}>/20</Text></Text>
+              <Text style={s.big}>{on20(latest.average, language)}<Text style={s.outOf}>/20</Text></Text>
               {latest.position != null && latest.outOf != null ? (
                 <Text style={s.body}>{t("portal.home.rank", { position: ordinal(latest.position, language), outOf: latest.outOf })}</Text>
               ) : null}
@@ -149,8 +149,8 @@ function Tile({ icon, label, children, onPress, testID }) {
 }
 
 function Change({ delta, exam }) {
-  const { t } = useTranslation();
-  const abs = Math.abs(delta).toFixed(2);
+  const { t, language } = useTranslation();
+  const abs = on20(Math.abs(delta), language);
   const [icon, color, text] =
     delta > 0 ? ["trending-up-outline",   C.success,  t("portal.home.up",   { delta: abs, exam })]
     : delta < 0 ? ["trending-down-outline", C.danger,   t("portal.home.down", { delta: abs, exam })]

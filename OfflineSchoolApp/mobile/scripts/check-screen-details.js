@@ -75,6 +75,22 @@ check("a report card names the child, so a second child's card is found (404 \"R
      /fetchHome\(\)/.test(portal0)], [true, false, true]);
 }
 
+{
+  // The portal's marks: a comma in French, on the phone as on the web. The
+  // helpers are lifted out of theme.js and run, so the check is the rule.
+  const theme = read("src/components/portal/theme.js");
+  const grab = (name) => new RegExp(`const ${name} = ([\\s\\S]*?);\\n`).exec(theme)?.[1];
+  const decimalSign = new Function(`return ${grab("decimalSign")}`)();
+  const on20 = new Function("decimalSign", `return ${grab("on20")}`)(decimalSign);
+  const mark = new Function("decimalSign", `return ${grab("mark")}`)(decimalSign);
+  check("averages and marks: 14,24 and 12,5 in French; 14.24 and 12.5 in English",
+    [on20(14.24, "fr"), mark(12.5, "fr"), on20(14.24, "en"), mark(12.5, "en"), on20(null, "fr")],
+    ["14,24", "12,5", "14.24", "12.5", "–"]);
+  const screens = ["HomeScreen", "ResultsScreen", "TrendChart"].map((f) => read(`src/components/portal/${f}.js`)).join("\n");
+  check("no portal screen writes a mark with toFixed(2) or prints normalizedMark bare",
+    [/\.toFixed\(2\)/.test(screens), /\{sub\.normalizedMark \?\?/.test(screens), /on20\([^,()]+\)/.test(screens)], [false, false, false]);
+}
+
 console.log("--- portal navigation ---");
 // Six tabs in a sideways scroll across the top became five sections in a bar
 // along the bottom (the redesign). What the old check guarded still holds: a
