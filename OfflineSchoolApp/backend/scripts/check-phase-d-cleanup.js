@@ -5,8 +5,11 @@
  * D1 — scripts/phase-d-cleanup.js finds the QA test data, writes nothing on a
  * dry run, and on --apply touches only what it listed.
  *
- *   school s1 "Good School"   bin laden (pupil, with login), ama + bih sharing
- *                             test@x.cm, kofi (own email), grading "Faire"
+ *   school s1 "Good School"   bin laden (pupil, with login); ama, bih, cho —
+ *                             three children of Mrs Tem, sharing her email
+ *                             (siblings: reported, never cleared); dan with
+ *                             test@test.com, kofi with a guardian email at
+ *                             example.com (fake: cleared); grading "Faire"
  *                             a "Testing testing" announcement and a real one
  *                             exams: one undated, one dated
  *                             timetable: a lesson in a break, one by an
@@ -47,9 +50,12 @@ const { stopQuietly } = require("./stopQuietly");
   ]);
   await C("Student").insertMany([
     pupil("p-001", "s1", "Bin Laden", { userId: "u-bl" }),
-    pupil("p-002", "s1", "Ama Ndi",   { email: "test@x.cm" }),
-    pupil("p-003", "s1", "Bih Fon",   { email: "Test@x.cm " }),
-    pupil("p-004", "s1", "Kofi Tah",  { email: "kofi@x.cm", admissionNo: "GVA00/2026/001" }),
+    ...["p-002", "p-003", "p-007"].map((id, i) => pupil(id, "s1", ["Ama Tem", "Bih Tem", "Cho Tem"][i], {
+      email: i === 1 ? "Tem.Family@Gmail.com " : "tem.family@gmail.com",
+      guardianName: "Mrs Tem", guardianEmail: "tem.family@gmail.com", guardianPhone: "+237670000000",
+    })),
+    pupil("p-004", "s1", "Kofi Tah",  { email: "kofi@x.cm", guardianEmail: "parent@example.com", admissionNo: "GVA00/2026/001" }),
+    pupil("p-008", "s1", "Dan Fru",   { email: "test@test.com" }),
     pupil("p-005", "s2", "Kena One"),
     pupil("p-006", "s2", "Kena Two"),
   ]);
@@ -80,8 +86,12 @@ const { stopQuietly } = require("./stopQuietly");
   const r = await run();
   check("finds the test student",          r.testStudents.map((s) => s._id), ["p-001"]);
   check("finds the test announcement",     r.testAnnouncements.map((a) => a._id), ["a1"]);
-  check("finds one shared email (case and spaces ignored)",
-    r.sharedEmails.map((g) => [g.email, g.students.map((s) => s._id).sort()]), [["test@x.cm", ["p-002", "p-003"]]]);
+  check("finds only the fake addresses",
+    r.fakeEmails.map((f) => [f._id, f.field, f.email]).sort(),
+    [["p-004", "guardianEmail", "parent@example.com"], ["p-008", "email", "test@test.com"]]);
+  check("reports the siblings' shared address once, grouped by guardian (case and spaces ignored)",
+    r.sharedEmails.map((g) => [g.email, g.guardians, g.students.map((s) => s._id).sort()]),
+    [["tem.family@gmail.com", ["Mrs Tem"], ["p-002", "p-003", "p-007"]]]);
   check("finds the 'Faire' remark",        r.faireRemarks.map((g) => g.grades), [["C"]]);
   check("reports Kena Academy",            r.kena, [{ school: "Kena Academy", students: 2, teachers: 0 }]);
   check("reports the undated exam only",   r.examsWithoutDates.map((e) => e._id), ["e1"]);
@@ -92,9 +102,9 @@ const { stopQuietly } = require("./stopQuietly");
 
   const st = async (id) => C("Student").findOne({ _id: id });
   check("dry run writes nothing",
-    [(await st("p-001")).deletedAt, (await st("p-002")).email, (await C("Announcement").findOne({ _id: "a1" })).isActive,
+    [(await st("p-001")).deletedAt, (await st("p-008")).email, (await C("Announcement").findOne({ _id: "a1" })).isActive,
      (await C("GradingConfig").findOne({ schoolId: "s1" })).grades[1].remark],
-    [null, "test@x.cm", true, "Faire"]);
+    [null, "test@test.com", true, "Faire"]);
 
   console.log("\n--- --apply ---");
   await run({ apply: true });
@@ -104,9 +114,13 @@ const { stopQuietly } = require("./stopQuietly");
   check("teacher untouched",                (await C("User").findOne({ _id: "t1" })).isActive, true);
   check("test announcement removed, real one kept",
     [(await C("Announcement").findOne({ _id: "a1" })).isActive, (await C("Announcement").findOne({ _id: "a2" })).isActive], [false, true]);
-  check("shared email cleared, pupils kept",
-    [(await st("p-002")).email, (await st("p-003")).email, (await st("p-002")).deletedAt], [null, null, null]);
-  check("own email kept",                   (await st("p-004")).email, "kofi@x.cm");
+  check("fake addresses cleared, pupils kept",
+    [(await st("p-008")).email, (await st("p-008")).deletedAt, (await st("p-004")).guardianEmail], [null, null, null]);
+  check("a real address beside a fake one kept", (await st("p-004")).email, "kofi@x.cm");
+  const tems = await Promise.all(["p-002", "p-003", "p-007"].map(st));
+  check("three siblings keep their guardian's shared email, phone and record",
+    tems.map((s) => [s.guardianEmail, s.guardianPhone, s.deletedAt]),
+    [0, 1, 2].map(() => ["tem.family@gmail.com", "+237670000000", null]));
   check("'Faire' → 'Fair', other remarks kept",
     (await C("GradingConfig").findOne({ schoolId: "s1" })).grades.map((b) => b.remark), ["Excellent", "Fair"]);
   check("admission number not rewritten",   (await st("p-004")).admissionNo, "GVA00/2026/001");
@@ -115,7 +129,8 @@ const { stopQuietly } = require("./stopQuietly");
 
   const again = await run();
   check("a second run finds nothing left to change",
-    [again.testStudents.length, again.testAnnouncements.length, again.sharedEmails.length, again.faireRemarks.length], [0, 0, 0, 0]);
+    [again.testStudents.length, again.testAnnouncements.length, again.fakeEmails.length, again.faireRemarks.length], [0, 0, 0, 0]);
+  check("the siblings are still reported for review", again.sharedEmails.length, 1);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await stopQuietly(mongo);

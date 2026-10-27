@@ -16,7 +16,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - B2: school hours and periods are each school's own setting — no fixed defaults; warn when they disagree.
 - B3: age range warning: Form 1 = 9–14; each level up the minimum rises 1 year and the maximum 2 (Upper Sixth 15–26). Option (b), confirmed 2026-10-27.
 
-- D1: pupils sharing one test email — clear the shared email, keep the pupils (owner, 2026-10-27).
+- D1: superseded the same day — a shared email is NOT test data (siblings share a guardian). Only clearly fake addresses listed in the script are cleared; other shared addresses are reported, grouped by guardian (owner, 2026-10-27).
 
 ## Phase A — wrong numbers (fix first)
 
@@ -61,7 +61,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 ## Phase D — test data (prepare only, do NOT run)
 
-- [x] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting. — `scripts/phase-d-cleanup.js` (`npm run cleanup:phased`, dry run by default, `-- --apply` to write). On apply: soft-deletes the test pupil (and deactivates their login) and the test announcement, clears an email shared by several pupils of one school (the pupils stay), "Faire" → "Fair" (A9). Report only: Kena Academy counts, undated exams, B1 timetable breaches, B3 old-shape admission numbers. `check:phased`. **Not yet run against the real database** — no `MONGODB_URI` in this shell; the owner runs the dry run and gives the go-ahead
+- [x] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting. — `scripts/phase-d-cleanup.js` (`npm run cleanup:phased`, dry run by default, `-- --apply` to write). On apply: soft-deletes the test pupil (and deactivates their login) and the test announcement, clears only clearly fake addresses (`FAKE_EMAILS` / `FAKE_DOMAINS` / `test@…` in the script) from a pupil's email or guardian email (the pupils stay), "Faire" → "Fair" (A9). Report only: other addresses shared by several pupils, grouped by guardian (siblings — review, never cleared), Kena Academy counts, undated exams, B1 timetable breaches, B3 old-shape admission numbers. `check:phased`. **Not yet run against the real database** — no `MONGODB_URI` in this shell; the owner runs the dry run and gives the go-ahead
 
 ## Final
 
