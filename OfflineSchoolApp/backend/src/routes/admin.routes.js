@@ -11,6 +11,7 @@ const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
+const { currentAcademicYearOf } = require("../../../shared/academicYear");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -3859,13 +3860,16 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "postalCode schoolType termSystem registrationNumber foundedYear " +
     "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
-    "schoolDays schoolStartTime schoolEndTime defaultLanguage";
+    "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear";
 
   if (includeLogo) {
     const school = await School.findById(schoolId)
       .select(`${LIGHT_FIELDS} logo`)
       .lean();
     if (!school) return sendError(res, 404, "School not found");
+    // The school's current year, by the one rule (B5): its own setting, else
+    // the calendar's — what every year picker opens on.
+    school.currentAcademicYear = currentAcademicYearOf(school);
     return sendSuccess(res, {
       school: { ...school, logoLen: logoFingerprint(school.logo) },
     });
@@ -3885,6 +3889,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
   ]);
 
   if (!school) return sendError(res, 404, "School not found");
+  school.currentAcademicYear = currentAcademicYearOf(school);
 
   // A migrated school stores a short URL, so the probe already carries the
   // whole value and there is nothing to withhold. A legacy inline logo stays

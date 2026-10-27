@@ -34,7 +34,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **B2** School hours: one source of truth between Settings and Periods; warn on conflict; header counts teaching periods only. — both stay school-set (owner); warning on Settings + Periods; dashboard counts teaching periods only
 - [ ] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite).
 - [x] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects. — `classSubjectCoverage`; `GET /admin/class-subjects/unassigned`
-- [ ] **B5** Year pickers on Progression and Academic structure default to the school's current academic year.
+- [x] **B5** Year pickers on Progression and Academic structure default to the school's current academic year. — `useSchoolYear` reads `currentAcademicYear` from school-info
 
 ## Phase C — UX fixes (after A and B)
 
