@@ -1014,7 +1014,7 @@
     "gradeBands": "Grade bands",
     "gpaSystem": "GPA system",
     "gpaEnable": "Enable Grade Point Average tracking",
-    "passMarkPct": "Pass mark (%)",
+    "passMarkPct": "Pass mark (/20)",
     "minPct": "Min %",
     "maxPct": "Max %",
     "saveGrading": "Save grading system",

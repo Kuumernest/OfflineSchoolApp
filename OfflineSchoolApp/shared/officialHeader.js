@@ -35,6 +35,12 @@
 /** Ministry a school's type reports to. */
 const MINISTRIES = {
   primary:    "basic",
+  // Cameroon's own types (C9). The older values below stay for schools that
+  // saved one before these existed.
+  college_general:   "secondary",
+  college_technical: "secondary",
+  lycee_general:     "secondary",
+  lycee_technical:   "secondary",
   jhs:        "secondary",
   shs:        "secondary",
   combined:   "secondary",
@@ -68,9 +74,13 @@ const OFFICIAL = {
     divisional: "Divisional Delegation of",
     types: {
       primary:    "Primary Education",
+      college_general:   "General Secondary Education",
+      college_technical: "Technical Secondary Education",
+      lycee_general:     "General Secondary Education",
+      lycee_technical:   "Technical Secondary Education",
       jhs:        "General Secondary Education",
       shs:        "General Secondary Education",
-      combined:   "General Secondary Education",
+      combined:   "General and Technical Secondary Education",
       vocational: "Technical and Vocational Education",
       university: "Higher Education",
       other:      null,
@@ -90,9 +100,13 @@ const OFFICIAL = {
     divisional: "Délégation Départementale de",
     types: {
       primary:    "Enseignement Primaire",
+      college_general:   "Enseignement Secondaire Général",
+      college_technical: "Enseignement Secondaire Technique",
+      lycee_general:     "Enseignement Secondaire Général",
+      lycee_technical:   "Enseignement Secondaire Technique",
       jhs:        "Enseignement Secondaire Général",
       shs:        "Enseignement Secondaire Général",
-      combined:   "Enseignement Secondaire Général",
+      combined:   "Enseignement Secondaire Général et Technique",
       vocational: "Enseignement Technique et Professionnel",
       university: "Enseignement Supérieur",
       other:      null,

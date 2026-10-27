@@ -396,8 +396,12 @@ const schoolSchema = new mongoose.Schema(
     division: { type: String, default: null, trim: true, maxlength: 120 },
 
     schoolType:         { type: String,  default: "primary",
-                          enum: ["primary", "jhs", "shs", "combined",
-                                 "vocational", "university", "other"] },
+                          // Cameroon's types first (C9); jhs / shs / vocational /
+                          // university are kept so schools that saved one still
+                          // validate — the settings screen no longer offers them.
+                          enum: ["primary", "college_general", "college_technical",
+                                 "lycee_general", "lycee_technical", "combined", "other",
+                                 "jhs", "shs", "vocational", "university"] },
     termSystem:         { type: String,  default: "trimester",
                           enum: ["trimester", "semester", "quarter"] },
     registrationNumber: { type: String,  default: null,  trim: true },

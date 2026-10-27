@@ -137,14 +137,24 @@ const SECTIONS = [
 
 type SectionId = typeof SECTIONS[number]["id"];
 
+// Cameroon's school types (C9): Collège and Lycée, each general or technical.
 const SCHOOL_TYPES = [
-  { value: "primary",    labelKey: "settings.typePrimary"    },
+  { value: "primary",           labelKey: "settings.typePrimary"          },
+  { value: "college_general",   labelKey: "settings.typeCollegeGeneral"   },
+  { value: "college_technical", labelKey: "settings.typeCollegeTechnical" },
+  { value: "lycee_general",     labelKey: "settings.typeLyceeGeneral"     },
+  { value: "lycee_technical",   labelKey: "settings.typeLyceeTechnical"   },
+  { value: "combined",          labelKey: "settings.typeCombined"         },
+  { value: "other",             labelKey: "settings.typeOther"            },
+];
+
+// Types a school may have saved before C9. Not offered, but shown (selected)
+// when it is the school's current value, so the screen never hides it.
+const LEGACY_SCHOOL_TYPES = [
   { value: "jhs",        labelKey: "settings.typeJhs"        },
   { value: "shs",        labelKey: "settings.typeShs"        },
-  { value: "combined",   labelKey: "settings.typeCombined"   },
   { value: "vocational", labelKey: "settings.typeVocational" },
   { value: "university", labelKey: "settings.typeUniversity" },
-  { value: "other",      labelKey: "settings.typeOther"      },
 ];
 
 const TERM_SYSTEMS = [
@@ -352,6 +362,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo]   = useState(false);
+  // The saved logo's address did not load (file missing on the server).
+  const [logoBroken, setLogoBroken]   = useState(false);
 
   const set = <K extends keyof SchoolSettings>(key: K, val: SchoolSettings[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
@@ -365,7 +377,9 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/admin/school-info", { params: { schoolId } });
+        // includeLogo: without it a logo still stored inline comes back null
+        // and this screen said "No logo" for a school that has one (C9).
+        const { data } = await api.get("/admin/school-info", { params: { schoolId, includeLogo: 1 } });
         const s = data?.school || data;
         if (s) {
           setForm({
@@ -417,7 +431,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     setLogoFile(file);
     setRemoveLogo(false);
     const reader = new FileReader();
-    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.onload = () => { setLogoPreview(reader.result as string); setLogoBroken(false); };
     reader.readAsDataURL(file);
   };
 
@@ -495,11 +509,14 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
             {logoPreview
-              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover" />
+              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover"
+                  onError={() => { setLogoPreview(null); setLogoBroken(true); }} />
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
                   <Building2 className="h-8 w-8 text-gray-300" />
-                  <span className="text-[10px] text-gray-400">{t("settings.noLogo")}</span>
+                  <span className="text-[10px] text-gray-400">
+                    {logoBroken ? t("settings.logoBroken") : t("settings.noLogo")}
+                  </span>
                 </div>
               )
             }
@@ -561,7 +578,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <FieldLabel>{t("settings.schoolType")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {/* Named `opt`, not `t` — `t` here is the translator. */}
-              {SCHOOL_TYPES.map((opt) => (
+              {[...SCHOOL_TYPES,
+                ...LEGACY_SCHOOL_TYPES.filter((o) => o.value === form.schoolType)].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => set("schoolType", opt.value)}
@@ -1231,7 +1249,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
           {/* Pass mark */}
           <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-            <FieldLabel>{t("settings.passMarkPct")}</FieldLabel>
+            <FieldLabel>{t("settings.passMarkOn20")}</FieldLabel>
             <input
               type="number"
               min={0}

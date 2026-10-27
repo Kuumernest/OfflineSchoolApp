@@ -75,6 +75,10 @@ const QK = {
 // student record and the settings form name a school's type the same way.
 const SCHOOL_TYPE_LABELS: Record<string, string> = {
   primary:    "settings.typePrimary",
+  college_general:   "settings.typeCollegeGeneral",
+  college_technical: "settings.typeCollegeTechnical",
+  lycee_general:     "settings.typeLyceeGeneral",
+  lycee_technical:   "settings.typeLyceeTechnical",
   jhs:        "settings.typeJhs",
   shs:        "settings.typeShs",
   combined:   "settings.typeCombined",

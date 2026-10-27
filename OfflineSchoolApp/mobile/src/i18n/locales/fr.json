@@ -1014,7 +1014,7 @@
     "gradeBands": "Barèmes de notation",
     "gpaSystem": "Système de moyenne pondérée",
     "gpaEnable": "Activer le suivi de la moyenne pondérée",
-    "passMarkPct": "Note de passage (%)",
+    "passMarkPct": "Note de passage (/20)",
     "minPct": "Min %",
     "maxPct": "Max %",
     "saveGrading": "Enregistrer le barème",
