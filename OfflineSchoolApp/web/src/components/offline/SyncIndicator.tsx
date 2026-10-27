@@ -35,6 +35,7 @@ import { useToast }       from "@/components/ui/Toast";
 
 import { desktop, type SyncStatus, type OutboxSummary } from "@/lib/offline/bridge";
 import { cn } from "@/utils/cn";
+import { formatTime } from "../../../../shared/dateFormat.js";
 
 export default function SyncIndicator() {
   const { t } = useTranslation();
@@ -182,7 +183,7 @@ export default function SyncIndicator() {
               {status?.lastCycleAt && (
                 <p className="mt-1 text-gray-400">
                   {t("sync.lastChecked", {
-                    time: new Date(status.lastCycleAt).toLocaleTimeString(),
+                    time: formatTime(status.lastCycleAt),
                   })}
                 </p>
               )}

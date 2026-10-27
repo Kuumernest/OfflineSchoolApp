@@ -8,6 +8,7 @@ const FeeStructure = require("../db/models/FeeStructure");
 const School       = require("../db/models/School");
 const Student      = require("../db/models/Student");
 const { yearKey, yearForms } = require("./rankingScope.service");
+const { currentAcademicYearOf } = require("../../../shared/academicYear");
 
 /** What a late fee is raised as (feeReminders.service PENALTY_CODE). */
 const LATE_CODE = "LATE";
@@ -203,6 +204,125 @@ const applyStructure = async ({ structure, students, raisedBy }) => {
     throw err;
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// OUTSTANDING — the one figure for Fees > Outstanding, Financial reports and
+// the platform dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Who a school's outstanding fees are owed by: its current students —
+ * approved, active, not deleted. A withdrawn, suspended, graduated or deleted
+ * student's charges are not "outstanding" (decided 2026-10-27).
+ */
+const CURRENT_STUDENT = { deletedAt: null, status: "approved", isActive: { $ne: false } };
+
+/**
+ * What each school is owed, for its current students in one academic year.
+ *
+ * - charges: not voided, not deleted; minus what was waived;
+ * - payments: not deleted; a reversal is a negative row and nets off;
+ * - the year: `academicYear` when given, else each school's current year
+ *   (School.settings.academicYear, the calendar's when unset);
+ * - outstanding: the sum of each student's POSITIVE balance — one family's
+ *   credit does not hide another's debt (decided 2026-10-27).
+ *
+ * Fees > Outstanding and Financial reports showed 1,900,000 and 9,820,000 for
+ * the same school: the second counted every charge ever raised, departed and
+ * deleted students included, and netted credits against debts.
+ *
+ * One query for the students, one aggregation each for charges and payments,
+ * whatever the number of schools.
+ *
+ * @param {object} p
+ * @param {string[]} p.schoolIds
+ * @param {string|null} [p.academicYear]  one year for every school
+ * @param {string|null} [p.classId]
+ * @param {boolean} [p.withRows]  include each owing student's row
+ * @returns {Promise<Map<string, {academicYear, charged, waived, billed, paid,
+ *   outstanding, owing, rows?}>>}  keyed by schoolId
+ */
+const outstandingBySchool = async ({ schoolIds, academicYear = null, classId = null, withRows = false }) => {
+  const ids = [...new Set((schoolIds || []).map(String))];
+  const out = new Map();
+  if (!ids.length) return out;
+
+  const schools = await School.find({ _id: { $in: ids } }).select("_id settings.academicYear").lean();
+  const yearOf = new Map(ids.map((id) => {
+    const school = schools.find((s) => String(s._id) === id);
+    return [id, academicYear ? yearKey(academicYear) : currentAcademicYearOf(school)];
+  }));
+
+  const students = await Student.find({
+    schoolId: { $in: ids }, ...CURRENT_STUDENT, ...(classId ? { classId } : {}),
+  }).select("_id schoolId studentName name firstName lastName enrollmentNo classId").lean();
+
+  const studentIds = students.map((s) => String(s._id));
+  const years = [...new Set([...yearOf.values()].flatMap(yearForms))];
+  const scope = { schoolId: { $in: ids }, studentId: { $in: studentIds }, academicYear: { $in: years } };
+
+  const [charges, payments] = studentIds.length ? await Promise.all([
+    FeeCharge.aggregate([
+      { $match: { ...scope, ...NOT_VOID } },
+      { $group: {
+        _id: { student: "$studentId", year: "$academicYear" },
+        charged: { $sum: "$amount" },
+        waived:  { $sum: { $ifNull: ["$waivedAmount", 0] } },
+      } },
+    ]),
+    FeePayment.aggregate([
+      { $match: { ...scope, ...NOT_DELETED } },
+      { $group: { _id: { student: "$studentId", year: "$academicYear" }, paid: { $sum: "$amount" } } },
+    ]),
+  ]) : [[], []];
+
+  const schoolOf = new Map(students.map((s) => [String(s._id), String(s.schoolId)]));
+  // Only the rows in each student's own school's year.
+  const inYear = (row) => yearKey(row._id.year) === yearOf.get(schoolOf.get(String(row._id.student)));
+  const balances = new Map();
+  const ensure = (sid) =>
+    balances.get(sid) ?? balances.set(sid, { charged: 0, waived: 0, paid: 0 }).get(sid);
+  for (const c of charges.filter(inYear)) {
+    const b = ensure(String(c._id.student));
+    b.charged += c.charged ?? 0;
+    b.waived  += c.waived  ?? 0;
+  }
+  for (const p of payments.filter(inYear)) ensure(String(p._id.student)).paid += p.paid ?? 0;
+
+  for (const id of ids) {
+    out.set(id, { academicYear: yearOf.get(id), charged: 0, waived: 0, billed: 0, paid: 0,
+      outstanding: 0, owing: 0, ...(withRows ? { rows: [] } : {}) });
+  }
+  for (const s of students) {
+    const sid = String(s._id);
+    const b = balances.get(sid);
+    if (!b) continue;
+    const total = out.get(String(s.schoolId));
+    const balance = b.charged - b.waived - b.paid;
+    total.charged += b.charged;
+    total.waived  += b.waived;
+    total.paid    += b.paid;
+    if (balance > 0) {
+      total.outstanding += balance;
+      total.owing += 1;
+      if (withRows) {
+        total.rows.push({
+          studentId: sid, student: s, enrollmentNo: s.enrollmentNo ?? null, classId: s.classId ?? null,
+          charged: b.charged, waived: b.waived, paid: b.paid, balance,
+        });
+      }
+    }
+  }
+  for (const total of out.values()) {
+    total.billed = total.charged - total.waived;
+    if (withRows) total.rows.sort((a, b) => b.balance - a.balance);
+  }
+  return out;
+};
+
+/** One school's outstanding fees (outstandingBySchool). */
+const outstandingFor = async ({ schoolId, academicYear = null, classId = null, withRows = false }) =>
+  (await outstandingBySchool({ schoolIds: [schoolId], academicYear, classId, withRows })).get(String(schoolId));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BILLING A NEWCOMER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -430,5 +550,8 @@ module.exports = {
   applyActiveStructuresForStudent,
   voidReplacedCharges,
   currentYearOf,
+  outstandingBySchool,
+  outstandingFor,
+  CURRENT_STUDENT,
 };
 

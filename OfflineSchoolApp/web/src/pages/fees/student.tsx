@@ -160,8 +160,12 @@ export default function StudentFeeAccountPage() {
 
   return (
     <div className="space-y-5">
+      {/* C1: the pupil's name and class, not just "Fee account". */}
       <PageHeader
-        title={t("fees.account")}
+        title={account?.student?.name ?? t("fees.account")}
+        description={account?.student
+          ? [t("fees.account"), account.student.className, account.student.admissionNo].filter(Boolean).join(" · ")
+          : undefined}
         meta={year ? <span>{year}</span> : undefined}
         actions={
           <>

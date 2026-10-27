@@ -364,7 +364,9 @@ export default function TimetablePage() {
             {/* Wide grids scroll inside the card; the page never scrolls
                 sideways. */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[52rem]">
+              {/* table-fixed: every day the same width, whatever its lessons say
+                  (Wednesday was narrower than the rest). */}
+              <table className="w-full table-fixed border-collapse min-w-[52rem]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">

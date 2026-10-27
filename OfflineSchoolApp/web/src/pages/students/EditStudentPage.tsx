@@ -14,6 +14,8 @@
 // numbers come from a gapless per-school counter. A correction form that
 // quietly did any of that would be the more dangerous kind of convenience.
 
+import { dobError, normalisePhone, ageWarning } from "@/utils/studentValidation";
+import { useStudentAgeRanges } from "@/hooks/useSchoolYear";
 import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -32,6 +34,7 @@ import {
   getStudentHistory,
   type StudentEditPayload,
 } from "@/services/student.service";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 /*
  * The editable fields, in the order the form shows them.
@@ -205,6 +208,18 @@ export default function EditStudentPage() {
       toast({ title: t("studentEdit.errSave"), message: getErrorMessage(err), kind: "error" }),
   });
 
+  // B3: the same checks as the add form, before the round trip.
+  const ageRanges = useStudentAgeRanges();
+  const fieldError = (field: FieldName): string | undefined => {
+    const v = form[field] ?? "";
+    if (field === "dateOfBirth" && dobError(v.trim())) return t("students.dobFuture");
+    if ((field === "phone" || field === "alternatePhone" || field === "guardianPhone") && normalisePhone(v).error) {
+      return t("students.phoneInvalid");
+    }
+    return undefined;
+  };
+  const hasFieldErrors = dirty.some((f) => fieldError(f));
+
   const handleSave = useCallback(() => {
     if (dirty.length === 0) {
       toast({ title: t("studentEdit.noChanges"), message: t("studentEdit.noChangesBody"), kind: "info" });
@@ -264,12 +279,22 @@ export default function EditStudentPage() {
         </FormField>
       );
     }
+    const error = fieldError(field);
+    const age   = field === "dateOfBirth" ? ageWarning(form.dateOfBirth.trim(), student.className, ageRanges) : null;
     return (
-      <FormField key={field} label={t(LABEL_KEY[field])}>
+      <FormField
+        key={field}
+        label={t(LABEL_KEY[field])}
+        error={error}
+        hint={age
+          ? t("students.ageUnusual", { age: age.age, min: age.min, max: age.max, className: student.className ?? "" })
+          : field.toLowerCase().includes("phone") ? t("students.phoneHint") : undefined}
+      >
         <Input
           type={field === "email" || field === "guardianEmail" ? "email" : "text"}
           value={form[field]}
           onChange={set(field)}
+          invalid={!!error}
           placeholder={field === "dateOfBirth" ? t("academic.dateOfBirthPh") : undefined}
         />
       </FormField>
@@ -318,7 +343,7 @@ export default function EditStudentPage() {
             <History className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {t("studentEdit.history")}
           </Button>
-          <Button onClick={handleSave} disabled={mutation.isPending || dirty.length === 0}>
+          <Button onClick={handleSave} disabled={mutation.isPending || dirty.length === 0 || hasFieldErrors}>
             {mutation.isPending
               ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
               : <Save    className="mr-1.5 h-4 w-4"              aria-hidden="true" />}
@@ -376,7 +401,7 @@ export default function EditStudentPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-ink-faint">
-                      {new Date(h.changedAt).toLocaleString()}
+                      {formatDayTime(h.changedAt)}
                       {h.changedByName ? " · " + t("studentEdit.historyBy", { name: h.changedByName }) : ""}
                       {h.reason ? " · " + h.reason : ""}
                     </p>

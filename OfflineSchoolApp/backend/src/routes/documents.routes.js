@@ -636,8 +636,14 @@ router.get("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
 
   const ids = [...new Set(rows.flatMap((r) => r.studentIds ?? []))];
   const students = await Student.find({ _id: { $in: ids }, schoolId, deletedAt: null })
-    .select("studentName name firstName lastName enrollmentNo").lean();
+    .select("studentName name firstName lastName enrollmentNo guardianName").lean();
   const byId = new Map(students.map((s) => [String(s._id), s]));
+
+  // C8: a code whose children have all left the roster (or that never had any)
+  // opens nothing — the office should see that, not a row with an empty cell.
+  const childrenOf = (r) => (r.studentIds ?? [])
+    .map((id) => byId.get(String(id)))
+    .filter(Boolean);
 
   return res.json({
     success: true,
@@ -650,14 +656,17 @@ router.get("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
       issuedAt:  r.codeSetAt ?? null,
       revokedAt: r.revokedAt ?? null,
       lastSeenAt: r.lastSeenAt ?? null,
-      children: (r.studentIds ?? [])
-        .map((id) => byId.get(String(id)))
-        .filter(Boolean)
-        .map((s) => ({
-          _id: String(s._id),
-          name: displayName(s) || null,
-          enrollmentNo: s.enrollmentNo ?? null,
-        })),
+      children: childrenOf(r).map((s) => ({
+        _id: String(s._id),
+        name: displayName(s) || null,
+        enrollmentNo: s.enrollmentNo ?? null,
+      })),
+      // The guardian as the children's records name them — distinct, in the
+      // children's order — for the many codes issued with no label.
+      guardianNames: [...new Set(childrenOf(r)
+        .map((s) => (s.guardianName ?? "").trim())
+        .filter(Boolean))],
+      linkedToNoStudent: childrenOf(r).length === 0,
     })),
   });
 }));

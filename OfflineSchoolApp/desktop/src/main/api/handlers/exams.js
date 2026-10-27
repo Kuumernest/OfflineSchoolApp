@@ -1,6 +1,22 @@
 // desktop/src/main/api/handlers/exams.js
 "use strict";
 
+const { summaryPassRate, DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
+const { examAnalytics, rowsOn20 } = require("../../../../../shared/examAnalytics");
+const { currentAcademicYearOf } = require("../../../../../shared/academicYear");
+const { CA_TYPE } = require("../../../../../shared/caAssessment");
+const { assignedTeachers, pairKey } = require("../../../../../shared/classSubjectTeachers");
+
+/** Exam-subject rows with the class-subject assignment's teacher (A8), as the server's withAssignedTeachers. */
+const withAssignedTeachers = (docs, schoolId, rows) => {
+  const byPair = assignedTeachers(docs.find("teacherAssignment", { schoolId }),
+    (id) => docs.get("user", id) ?? null);
+  return rows.map((es) => {
+    const t = byPair.get(pairKey(es.classId, es.subjectId)) ?? null;
+    return { ...es, teacherId: t?.teacherIds[0] ?? null, teacherIds: t?.teacherIds ?? [], teacherName: t?.teacherName ?? null };
+  });
+};
+
 /**
  * Exams.
  *
@@ -72,6 +88,22 @@ module.exports = [
 
       const base = { schoolId, deletedAt: null };
 
+      // The one pass rate (shared/passRate.js), over the server's scope:
+      // this school year's published sequence papers (no CA rows), each
+      // average /20 against the school's pass mark.
+      const passScope = (() => {
+        const year  = currentAcademicYearOf(docs.get("school", schoolId));
+        const forms = new Set([year, year.replace("/", "-")]);
+        const papers = new Set(docs.find("exam", { schoolId, deletedAt: null })
+          .filter((e) => forms.has(String(e.academicYear)) && e.type !== CA_TYPE)
+          .map((e) => String(e._id)));
+        const rows = docs.find("resultSummary", { schoolId, isPublished: true })
+          .filter((r) => !r.deletedAt && papers.has(String(r.examId)));
+        const passMark = docs.find("gradingConfig", { schoolId })[0]?.passMark ?? DEFAULT_PASS_MARK;
+        return { academicYear: year, passMark, average: examAnalytics(rows, { passMark }).average,
+                 ...summaryPassRate(rows, passMark) };
+      })();
+
       const results = {
         exams: {
           total:     docs.count("exam", base),
@@ -88,19 +120,14 @@ module.exports = [
           missingGrades:   docs.count("studentScore", {
             schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
           }),
-          averagePerformance: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const valid = rows.map((r) => r.percentage).filter((p) => p != null);
-            if (!valid.length) return 0;
-            return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
-          })(),
-          passRate: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const passed = rows.filter((r) => r.isPassing).length;
-            return Math.round((passed / rows.length) * 100);
-          })(),
+          // On /20 over the same pupils as the pass rate — it was a mean percentage.
+          averagePerformance: passScope.average,
+          // The one pass rate (shared/passRate.js), over the server's scope:
+          // this school year's published sequence papers (no CA rows), each
+          // average /20 against the school's pass mark.
+          passRate:      passScope.rate ?? 0,
+          passRateScope: { academicYear: passScope.academicYear, withResults: passScope.withResults,
+                           passed: passScope.passed, passMark: passScope.passMark },
 
           // WHICH exams the two actionable counts are about, capped at twenty
           // as the server caps them. The results strip turns each count into a
@@ -254,10 +281,26 @@ module.exports = [
 
       const examId = String(params.examId);
       const filter = { examId, schoolId, deletedAt: null };
-      if (query.teacherId) filter.teacherId = String(query.teacherId);
 
-      const submissions = docs.find("examSubject", filter).map((es) => ({
+      // Enrolled pupils per class — the "entered / total" denominator (A7):
+      // the register's roster, approved, active, not deleted.
+      const enrolled = new Map();
+      const enrolledIn = (classId) => {
+        const key = String(classId);
+        if (!enrolled.has(key)) {
+          enrolled.set(key, docs.find("student", { schoolId, classId: key, status: "approved", deletedAt: null })
+            .filter((st) => st.isActive !== false).length);
+        }
+        return enrolled.get(key);
+      };
+
+      // The teacher is the assignment's, so "a teacher's subjects" is filtered
+      // after it is read, not on the copy the exam carries.
+      const assigned = withAssignedTeachers(docs, schoolId, docs.find("examSubject", filter))
+        .filter((es) => !query.teacherId || es.teacherIds.includes(String(query.teacherId)));
+      const submissions = assigned.map((es) => ({
         ...es,
+        totalStudents: enrolledIn(es.classId),
         totalScoresEntered: docs
           .find("studentScore", {
             examId, subjectId: es.subjectId, classId: es.classId, schoolId, deletedAt: null,
@@ -383,8 +426,13 @@ module.exports = [
       if (query.classId) filter.classId = String(query.classId);
 
       const rows = docs.find("resultSummary", filter, { order: "classPosition", dir: "ASC" });
+      const cfg  = docs.find("gradingConfig", { schoolId })[0] ?? null;
 
-      return ok({ results: rows });
+      // Each pupil's average on /20, the school's remark and pass/fail, as
+      // the server's withAverage20 adds them.
+      return ok({ results: rowsOn20(rows, {
+        passMark: cfg?.passMark ?? DEFAULT_PASS_MARK, bands: cfg?.grades ?? null,
+      }) });
     },
   },
 

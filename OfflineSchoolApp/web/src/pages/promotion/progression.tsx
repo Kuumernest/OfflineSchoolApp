@@ -17,6 +17,7 @@
 // The old 0–100 "promotion average" is shown beside the new bar until a bar is
 // confirmed for that class; no run reads it, and nothing converts it.
 
+import { useSchoolYear, yearOptionsAround } from "@/hooks/useSchoolYear";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -38,12 +39,6 @@ import { fetchProgression, saveProgression } from "@/services/promotion.service"
 import { saveBars, type BarsWrite } from "@/services/academicRules.service";
 import type { ProgressionClass } from "@/types/promotion.types";
 
-const CURRENT_YEAR = new Date().getFullYear();
-const ACADEMIC_YEARS = [
-  `${CURRENT_YEAR - 1}/${CURRENT_YEAR}`,
-  `${CURRENT_YEAR}/${CURRENT_YEAR + 1}`,
-  `${CURRENT_YEAR + 1}/${CURRENT_YEAR + 2}`,
-];
 
 interface Entry {
   classId:     string;
@@ -65,7 +60,11 @@ export default function ProgressionPage() {
   const { toast } = useToast();
   const schoolId = useUser()?.schoolId ?? "";
 
-  const [year, setYear] = useState(ACADEMIC_YEARS[0]);
+  // Opens on the school's current year (B5); null until someone picks one.
+  const schoolYear = useSchoolYear();
+  const [pickedYear, setYear] = useState<string | null>(null);
+  const year = pickedYear ?? schoolYear.year;
+  const yearOptions = yearOptionsAround(schoolYear.year);
 
   // Only what the user has CHANGED is held in state; everything else is read
   // straight from the query. Copying the server's version into state on arrival
@@ -178,7 +177,7 @@ export default function ProgressionPage() {
               <SelectField
                 value={year}
                 onChange={(e) => { setYear(e.target.value); setBarEdits({}); setSchoolBarEdit(null); }}
-                options={ACADEMIC_YEARS.map((y) => ({ value: y, label: y }))}
+                options={yearOptions.map((y) => ({ value: y, label: y }))}
               />
             </FormField>
           </div>

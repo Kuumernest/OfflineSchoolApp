@@ -61,7 +61,7 @@ import {
   ENGINE_KEYS, ATTESTATION_KEYS,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
   type RecordedReview, type ReviewStatus, type ReviewStatusBlock,
-  type Pilot, type LeanPilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence, type PilotFinding, type PilotReport, type Preflight,
+  type Pilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence, type PilotFinding, type PilotReport, type Preflight,
   type EngineVersions, type Attestations, type AttestationKey, type ReadinessStatus,
   type ConcernGroup, type FindingCategory, type FindingSeverity, type FindingStatus, type FindingSource,
 } from "@/services/insights.service";
@@ -126,7 +126,9 @@ export default function IntelligenceReviewPage() {
   const pilotQ = useQuery({
     queryKey: ["pilot", schoolId ?? "own"],
     queryFn:  () => fetchPilot(schoolId),
-    enabled:  !blocked,
+    // C4: the pilot is the platform's tuning exercise, not a school's tool —
+    // only a Super Admin sees it, so nobody else asks for it.
+    enabled:  !blocked && isOperator,
     staleTime: 30_000,
   });
 
@@ -213,9 +215,8 @@ export default function IntelligenceReviewPage() {
       {/* The briefing comes before the queue, every time — what the system is,
           what it is not, and that disagreement is the point. */}
       <Briefing />
-      {!isAdmin && pilotQ.data?.open && pilotQ.data.pilot && <PilotBanner pilot={pilotQ.data.pilot} />}
-
-      {isAdmin && (
+      {/* C4: Super Admin only. */}
+      {isOperator && (
         <PilotPanel
           pilot={(pilotQ.data?.pilot as Pilot | null) ?? null}
           open={Boolean(pilotQ.data?.open)}
@@ -740,21 +741,6 @@ function Briefing() {
           {(["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as const).map((k) => <li key={k}>{t(`intelReview.instructions.${k}`)}</li>)}
         </ol>
       )}
-    </Card>
-  );
-}
-
-/** What a teacher sees of the pilot: that it is on, its kind, its state. */
-function PilotBanner({ pilot }: { pilot: Pilot | LeanPilot }) {
-  const { t } = useTranslation();
-  return (
-    <Card className="flex items-center gap-2 text-sm text-ink">
-      <FlaskConical className="h-4 w-4 text-ink-faint" />
-      {t("intelReview.pilot.teacherBanner", {
-        kind: t(`intelReview.pilot.kind.${pilot.kind}`).toLowerCase(),
-        status: t(`intelReview.pilot.status.${pilot.status}`).toLowerCase(),
-        v: pilot.engineVersion,
-      })}
     </Card>
   );
 }

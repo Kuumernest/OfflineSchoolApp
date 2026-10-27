@@ -1,4 +1,5 @@
 // web/src/pages/settings/AcademicStructureSection.tsx
+import { useSchoolYear, yearOptionsAround } from "@/hooks/useSchoolYear";
 import { useState, useEffect, useCallback } from "react";
 import {
   Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp, Plus, Trash2,
@@ -40,12 +41,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
-const CURRENT_YEAR = new Date().getFullYear();
-const ACADEMIC_YEARS = [
-  `${CURRENT_YEAR - 1}/${CURRENT_YEAR}`,
-  `${CURRENT_YEAR}/${CURRENT_YEAR + 1}`,
-  `${CURRENT_YEAR + 1}/${CURRENT_YEAR + 2}`,
-];
 
 const DEFAULT_TERMS: TermConfig[] = [
   {
@@ -151,7 +146,11 @@ export default function AcademicStructureSection({ schoolId }: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
 
-  const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[1]);
+  // Opens on the school's current year (B5); null until someone picks one.
+  const schoolYear = useSchoolYear();
+  const [pickedYear, setAcademicYear] = useState<string | null>(null);
+  const academicYear = pickedYear ?? schoolYear.year;
+  const yearOptions = yearOptionsAround(schoolYear.year);
   const [structure, setStructure] = useState<AcademicStructure | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -297,7 +296,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
             onChange={(e) => setAcademicYear(e.target.value)}
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
-            {ACADEMIC_YEARS.map((y) => (
+            {yearOptions.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -555,7 +554,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
             "flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition",
             saving || !weightsValid
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800"
+              : "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800"
           )}
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

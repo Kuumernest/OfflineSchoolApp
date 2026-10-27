@@ -43,7 +43,7 @@ const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
  * a queued register against one day and apply it against another — and the two
  * would disagree about who was in the room with nothing to show why.
  */
-const { dateStr, lastSevenDays } = require("../../../../../shared/attendance");
+const { dateStr, lastSevenDays, schoolDaysOnly, dayRate } = require("../../../../../shared/attendance");
 const { dayCodeFor }             = require("../../../../../shared/timetable");
 
 /**
@@ -180,8 +180,8 @@ const countOf = (rows, status) => rows.filter((r) => r.status === status).length
  * here", and a rate over marks taken would answer "of the ones somebody
  * remembered to mark", which flatters an unmarked register.
  */
-const rateOf = (rows, total) =>
-  total > 0 ? Math.round((countOf(rows, "present") / total) * 100) : 0;
+// C3: null — shown "–" — when nobody was marked, as the server answers.
+const rateOf = (rows, total) => dayRate(countOf(rows, "present"), rows.length, total);
 
 module.exports = [
   {
@@ -291,7 +291,9 @@ module.exports = [
 
       if (docs.count("user", { schoolId, role: "teacher" }) === 0) return null;
 
-      const days  = lastSevenDays();
+      // C3: the school's open days only, as the server filters them.
+      const days  = schoolDaysOnly(lastSevenDays(), docs.get("school", schoolId)?.schoolDays);
+      if (!days.length) return ok({ trend: [], days });
       const from  = days[0];
       const to    = days[days.length - 1];
       const total = population(docs, schoolId);

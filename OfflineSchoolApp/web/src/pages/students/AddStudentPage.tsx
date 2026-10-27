@@ -13,6 +13,8 @@
 // account, so it is shown prominently and copyably rather than in a toast that
 // vanishes after four seconds.
 
+import { dobError, normalisePhone, ageWarning } from "@/utils/studentValidation";
+import { useStudentAgeRanges } from "@/hooks/useSchoolYear";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -113,7 +115,17 @@ export default function AddStudentPage() {
   const emailValid =
     form.email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
 
+  // B3: phones as +237 and nine digits, no future birth date, and a word when
+  // the age is unusual for the class (a warning only — the server saves it).
+  const ageRanges     = useStudentAgeRanges();
+  const birthError    = dobError(form.dateOfBirth);
+  const phoneError    = normalisePhone(form.phone).error ? t("students.phoneInvalid") : undefined;
+  const guardianError = normalisePhone(form.guardianPhone).error ? t("students.phoneInvalid") : undefined;
+  const chosenClass   = classes.find((c) => c._id === form.classId);
+  const ageHint       = ageWarning(form.dateOfBirth, chosenClass?.name, ageRanges);
+
   const canSubmit =
+    !birthError && !phoneError && !guardianError &&
     form.firstName.trim().length > 0 &&
     form.lastName.trim().length > 0 &&
     !!form.classId &&
@@ -130,12 +142,12 @@ export default function AddStudentPage() {
         // stored as "" and then collide with the next student who also has no
         // email, since the server dedupes on that field.
         ...(form.email.trim()         ? { email:         form.email.trim() }         : {}),
-        ...(form.phone.trim()         ? { phone:         form.phone.trim() }         : {}),
+        ...(form.phone.trim()         ? { phone:         normalisePhone(form.phone).value ?? form.phone.trim() } : {}),
         ...(form.gender               ? { gender:        form.gender }               : {}),
         ...(form.dateOfBirth          ? { dateOfBirth:   form.dateOfBirth }          : {}),
         ...(form.address.trim()       ? { address:       form.address.trim() }       : {}),
         ...(form.guardianName.trim()  ? { guardianName:  form.guardianName.trim() }  : {}),
-        ...(form.guardianPhone.trim() ? { guardianPhone: form.guardianPhone.trim() } : {}),
+        ...(form.guardianPhone.trim() ? { guardianPhone: normalisePhone(form.guardianPhone).value ?? form.guardianPhone.trim() } : {}),
       }),
     onSuccess: (data) => {
       setResult({
@@ -300,8 +312,13 @@ export default function AddStudentPage() {
               />
             </FormField>
 
-            <FormField label={t("common.dateOfBirth")}>
-              <Input type="date" value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+            <FormField
+              label={t("common.dateOfBirth")}
+              error={birthError ? t("students.dobFuture") : undefined}
+              hint={ageHint ? t("students.ageUnusual", { age: ageHint.age, min: ageHint.min, max: ageHint.max, className: chosenClass?.name ?? "" }) : undefined}
+            >
+              <Input type="date" value={form.dateOfBirth} onChange={set("dateOfBirth")} invalid={!!birthError}
+                     max={new Date().toISOString().slice(0, 10)} />
             </FormField>
             <FormField
               label={t("common.email")}
@@ -317,8 +334,8 @@ export default function AddStudentPage() {
               />
             </FormField>
 
-            <FormField label={t("common.phone")}>
-              <Input value={form.phone} onChange={set("phone")} />
+            <FormField label={t("common.phone")} error={phoneError} hint={t("students.phoneHint")}>
+              <Input value={form.phone} onChange={set("phone")} invalid={!!phoneError} placeholder="677 12 34 56" />
             </FormField>
             <FormField label={t("common.address")} className="sm:col-span-1">
               <Input value={form.address} onChange={set("address")} />
@@ -335,8 +352,8 @@ export default function AddStudentPage() {
             <FormField label={t("common.name")}>
               <Input value={form.guardianName} onChange={set("guardianName")} />
             </FormField>
-            <FormField label={t("common.phone")}>
-              <Input value={form.guardianPhone} onChange={set("guardianPhone")} />
+            <FormField label={t("common.phone")} error={guardianError} hint={t("students.phoneHint")}>
+              <Input value={form.guardianPhone} onChange={set("guardianPhone")} invalid={!!guardianError} placeholder="677 12 34 56" />
             </FormField>
           </div>
         </Card>

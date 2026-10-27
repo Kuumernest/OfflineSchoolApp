@@ -74,6 +74,14 @@ const isValidTimezone = (tz) => {
  */
 const settingsSchema = new mongoose.Schema(
   {
+    /**
+     * The school's own age range per class level, { "1": { min, max }, … }
+     * (B3, shared/studentValidation.js). Null: the decided default — Form 1
+     * 9–14, each level up the minimum +1 and the maximum +2. Only ever a
+     * warning on the student form, never a refusal.
+     */
+    studentAgeRanges: { type: mongoose.Schema.Types.Mixed, default: null },
+
     academicYear: {
       type:    String,
       default: null,
@@ -388,8 +396,12 @@ const schoolSchema = new mongoose.Schema(
     division: { type: String, default: null, trim: true, maxlength: 120 },
 
     schoolType:         { type: String,  default: "primary",
-                          enum: ["primary", "jhs", "shs", "combined",
-                                 "vocational", "university", "other"] },
+                          // Cameroon's types first (C9); jhs / shs / vocational /
+                          // university are kept so schools that saved one still
+                          // validate — the settings screen no longer offers them.
+                          enum: ["primary", "college_general", "college_technical",
+                                 "lycee_general", "lycee_technical", "combined", "other",
+                                 "jhs", "shs", "vocational", "university"] },
     termSystem:         { type: String,  default: "trimester",
                           enum: ["trimester", "semester", "quarter"] },
     registrationNumber: { type: String,  default: null,  trim: true },

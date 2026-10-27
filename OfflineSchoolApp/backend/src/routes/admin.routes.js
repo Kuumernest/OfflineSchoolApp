@@ -10,6 +10,10 @@ const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
+const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
+const { currentAcademicYearOf } = require("../../../shared/academicYear");
+const { checkAgeRanges } = require("../../../shared/studentValidation");
+const { dayRate } = require("../../../shared/attendance");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -676,8 +680,10 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
         // deletedAt and leaves isActive untouched — so without the clause every
         // retired period stayed in this count. The mobile local calculation
         // already excludes deleted rows, which made the two dashboards disagree.
+        // Teaching periods only (B2): a Break is a row on the grid, not a
+        // period a lesson can go in. Counting breaks said 9 where there were 8.
         return Period.countDocuments(
-          addNotDeleted({ ...baseQuery, isActive: true })
+          addNotDeleted({ ...baseQuery, isActive: true, isBreak: { $ne: true } })
         );
       } catch { return 0; }
     })(),
@@ -694,6 +700,12 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     Math.max(0, totalTeachers - assignedTeacherIds.length);
   const classesWithoutSubjects =
     Math.max(0, totalClasses - allClassesWithSubjects.length);
+
+  // Class-subject coverage (B4): "Subjects" was the class-subject pairs, and
+  // nothing said how many had no teacher.
+  const coverage = schoolId
+    ? await coverageFor(schoolId).catch(() => null)
+    : null;
 
   const assignedSubjects =
     allClassesWithSubjects.length > 0
@@ -742,7 +754,9 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     totalTeachers,
     unassignedTeachers,
     totalClasses,
-    totalSubjects,
+    totalSubjects:           coverage ? coverage.classSubjects : totalSubjects,
+    distinctSubjects:        coverage ? coverage.distinctSubjects : null,
+    unassignedClassSubjects: coverage ? coverage.unassigned.length : 0,
     assignedSubjects,
     totalAssignments,
     incompleteTimetableSlots,
@@ -1108,12 +1122,9 @@ router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandle
     const todayLate    = countOf("late");
     const todayExcused = countOf("excused");
 
-    // The roster is the denominator, so a day nobody marked reads as 0% of a
-    // known number of pupils rather than 0% of nothing — and `unmarked` is
-    // what tells the two apart.
-    const rate = totalStudents > 0
-      ? Math.round((todayPresent / totalStudents) * 100)
-      : 0;
+    // The roster is the denominator. A day nobody marked has no rate (C3):
+    // null, shown "–", rather than 0%, which reads as everyone absent.
+    const rate = dayRate(todayPresent, records.length, totalStudents);
 
     return sendSuccess(res, {
       todayPresent,
@@ -1607,6 +1618,17 @@ router.get("/classes/:classId/subjects", requirePermission("subjects.view"), asy
 // SECTION 7 — SUBJECTS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// The class-subjects no active assignment covers, for the Teachers page (B4).
+router.get("/class-subjects/unassigned", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+  const cov = await coverageFor(schoolId);
+  return sendSuccess(res, {
+    classSubjects: cov.classSubjects, distinctSubjects: cov.distinctSubjects,
+    unassigned: cov.unassigned, total: cov.unassigned.length,
+  });
+}));
+
 router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
   const schoolId    = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
@@ -1631,39 +1653,28 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
   ];
   const allSubjectIds = rawSubjects.map((s) => String(s._id));
 
-  const [classRecords, assignments] = await Promise.all([
+  // The teacher is the class-subject assignment's, read the one way every
+  // screen reads it (services/classSubjectTeacher.service.js, A8): the active
+  // assignments of this subject in this class. It took the first assignment
+  // found for the subject — active or not — and fell back to a stored name.
+  const [classRecords, teacherOf] = await Promise.all([
     allClassIds.length > 0
       ? Class.find({ _id: { $in: allClassIds } })
           .select("name section level")
           .lean()
       : [],
-    TeacherAssignment.find({ subject: { $in: allSubjectIds } })
-      .populate("teacher", "name email")
-      .lean(),
+    teachersFor({ schoolId: schoolId || rawSubjects[0]?.schoolId, subjectIds: allSubjectIds }),
   ]);
 
   const classMap = new Map(classRecords.map((c) => [String(c._id), c]));
-
-  const subjectTeacherMap = new Map();
-  for (const a of assignments) {
-    const sid = String(a.subject?._id || a.subject || "");
-    if (!sid || subjectTeacherMap.has(sid)) continue;
-    const t = a.teacher;
-    if (t) {
-      subjectTeacherMap.set(sid, {
-        _id:   String(t._id || t),
-        name:  t.name  || "",
-        email: t.email || "",
-      });
-    }
-  }
 
   const subjects = rawSubjects.map((s) => {
     const canonicalClassId = s.class || s.classId || null;
     const classRecord      = canonicalClassId
       ? classMap.get(String(canonicalClassId)) || null
       : null;
-    const teacher = subjectTeacherMap.get(String(s._id)) || null;
+    const assigned = teacherOf(canonicalClassId, s._id);
+    const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
     return {
       // normaliseSubject, so a subject from before the coefficient field lists
@@ -1674,9 +1685,10 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
       classObj: classRecord
         ? { _id: String(classRecord._id), ...classRecord }
         : null,
-      teacherId:   teacher?._id  || s.teacherId  || s.teacher_id || null,
-      teacher_id:  teacher?._id  || s.teacher_id || s.teacherId  || null,
-      teacherName: teacher?.name || s.teacherName || null,
+      teacherId:   teacher?._id  || null,
+      teacher_id:  teacher?._id  || null,
+      teacherIds:  assigned?.teacherIds ?? [],
+      teacherName: teacher?.name || null,
       teacher:     teacher       || null,
     };
   });
@@ -1890,17 +1902,10 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
     to:        coefficientOf(subject),
   });
 
-  const assignment = await TeacherAssignment.findOne({
-    subject: String(subject._id),
-  }).populate("teacher", "name email").lean();
-
-  const teacher = assignment?.teacher
-    ? {
-        _id:   String(assignment.teacher._id),
-        name:  assignment.teacher.name  || "",
-        email: assignment.teacher.email || "",
-      }
-    : null;
+  // The class-subject assignment, as the Subjects list reads it (A8).
+  const subjectClassId = subject.classId || subject.class || null;
+  const assigned = (await teachersFor({ schoolId: subject.schoolId, subjectIds: [String(subject._id)] }))(subjectClassId, subject._id);
+  const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
   console.log(`✅ Subject updated: ${subject.name}`);
   return sendSuccess(res, {
@@ -2862,6 +2867,42 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
   );
 
   return sendSuccess(res, { enrollmentNo });
+}));
+
+// GET /admin/action-items — what is waiting on this reader (C11): marks to
+// approve, results to publish, overdue fees. Each only for a role that can act.
+// Gated on fees.view: every holder of any item's capability holds it (admins
+// hold all three, frozen; exams.manage and results.publish cannot be
+// delegated; a bursar has fees.view), and a teacher does not — no admin route
+// is reachable by a teacher (check:admin). Each item still checks its own.
+router.get("/action-items", requirePermission("fees.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendSuccess(res, { items: [] });
+  const permissions = require("../services/permissions.service");
+  const [marks, publish, fees] = await Promise.all([
+    permissions.can(req.user, "exams.manage"),
+    permissions.can(req.user, "results.publish"),
+    permissions.can(req.user, "fees.view"),
+  ]);
+  const items = await require("../services/actionItems.service")
+    .actionItemsFor({ schoolId: String(schoolId), can: { marks, publish, fees } });
+  return sendSuccess(res, { items });
+}));
+
+// GET /admin/students/:id/overview — the profile's results, attendance, fee
+// balance and guardian contact in one read (C10). Fees only for a caller who
+// may see fees; the rest is what students.viewFull already shows.
+router.get("/students/:id/overview", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
+  const S = getStudent();
+  const student = S && await S.findOne(getTenantQuery(req, req.params.id))
+    .select("schoolId guardianName guardianPhone guardianEmail").lean();
+  if (!student) return sendError(res, 404, "Student not found");
+
+  const withFees = await require("../services/permissions.service").can(req.user, "fees.view");
+  const data = await require("../services/studentOverview.service").overviewFor({
+    schoolId: String(student.schoolId), student, withFees,
+  });
+  return sendSuccess(res, { overview: data });
 }));
 
 router.get("/students/:id", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
@@ -3854,13 +3895,16 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "postalCode schoolType termSystem registrationNumber foundedYear " +
     "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
-    "schoolDays schoolStartTime schoolEndTime defaultLanguage";
+    "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear settings.studentAgeRanges";
 
   if (includeLogo) {
     const school = await School.findById(schoolId)
       .select(`${LIGHT_FIELDS} logo`)
       .lean();
     if (!school) return sendError(res, 404, "School not found");
+    // The school's current year, by the one rule (B5): its own setting, else
+    // the calendar's — what every year picker opens on.
+    school.currentAcademicYear = currentAcademicYearOf(school);
     return sendSuccess(res, {
       school: { ...school, logoLen: logoFingerprint(school.logo) },
     });
@@ -3880,6 +3924,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
   ]);
 
   if (!school) return sendError(res, 404, "School not found");
+  school.currentAcademicYear = currentAcademicYearOf(school);
 
   // A migrated school stores a short URL, so the probe already carries the
   // whole value and there is nothing to withhold. A legacy inline logo stays
@@ -3913,7 +3958,16 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     region, division,
     academicYearStart, academicYearEnd, nextTermResumption, schoolDays,
     schoolStartTime, schoolEndTime, removeLogo, defaultLanguage,
+    studentAgeRanges,
   } = req.body;
+
+  // B3: the school's own age range per class level, or null for the defaults.
+  let ageRanges;
+  if (studentAgeRanges !== undefined) {
+    const r = checkAgeRanges(studentAgeRanges);
+    if (r.error) return sendError(res, 400, r.error);
+    ageRanges = r.value;
+  }
 
   // The language every report card of the school prints in (docs/41 §7).
   if (defaultLanguage !== undefined && !["en", "fr"].includes(defaultLanguage)) {
@@ -3956,6 +4010,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(schoolDays       !== undefined && { schoolDays                            }),
     ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
     ...(schoolEndTime    !== undefined && { schoolEndTime                         }),
+    ...(ageRanges        !== undefined && { "settings.studentAgeRanges": ageRanges }),
     ...(applicationsOpen !== undefined && { applicationsOpen                      }),
     ...(defaultLanguage  !== undefined && { defaultLanguage                       }),
   };

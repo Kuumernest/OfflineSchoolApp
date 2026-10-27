@@ -35,6 +35,7 @@ import { roleLabel } from "@/utils/roleLabel";
 
 import { cn } from "@/utils/cn";
 import { summariseParticipants, participantName } from "./participants";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,9 +45,7 @@ const errorText = (err: unknown, t: (key: string) => string): string => {
 };
 
 const stamp = (iso?: string | null): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return formatDayTime(iso);
 };
 
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
@@ -114,10 +113,12 @@ export default function MessageAuditPage() {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-bold text-gray-900">
-              {opened.title || `${opened.kind} conversation`}
+              {opened.title || t("messages.audit.kinds.conversationOf", {
+                kind: t(`messages.audit.kinds.${opened.kind}`, { defaultValue: opened.kind }),
+              })}
             </h1>
             <p className="text-xs text-gray-500">
-              {opened.participants?.length ?? 0} participants · opened as an audit
+              {t("messages.audit.openedAsAudit", { count: opened.participants?.length ?? 0 })}
             </p>
           </div>
         </div>
@@ -260,8 +261,8 @@ export default function MessageAuditPage() {
           </div>
           <button
             onClick={submit}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold
-                       text-white transition-colors hover:bg-blue-700"
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold
+                       text-white transition-colors hover:bg-primary-700"
           >
             {t("common.search")}
           </button>
@@ -316,7 +317,9 @@ export default function MessageAuditPage() {
                       {summariseParticipants(c.participants ?? [], t)}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600">{c.kind}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-600">
+                    {t(`messages.audit.kinds.${c.kind}`, { defaultValue: c.kind })}
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-gray-600">
                     {c.participants?.length ?? 0}
                   </td>

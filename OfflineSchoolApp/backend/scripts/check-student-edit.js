@@ -642,6 +642,30 @@ const bad = (label, detail) => {
     );
   }
 
+  // ── B3: phones and dates of birth (shared/studentValidation.js) ────────────
+  console.log("\n--- B3: phone and date of birth ---");
+  {
+    const r = await edit("adminA", { guardianPhone: "677 12 34 56" });
+    const after = await Student.findById("st-1").lean();
+    if (r.status < 400 && after.guardianPhone === "+237677123456") ok("a Cameroon phone is stored as +237 and nine digits");
+    else bad("phone normalised", `${r.status} ${after.guardianPhone}`);
+
+    const short = await edit("adminA", { phone: "677123" });
+    if (short.status === 400) ok("a phone that is not nine digits is refused");
+    else bad("short phone refused", `${short.status}`);
+
+    const future = await edit("adminA", { dateOfBirth: "2099-01-01" });
+    if (future.status === 400) ok("a date of birth in the future is refused");
+    else bad("future DOB refused", `${future.status}`);
+
+    // cls-a is "Form 1": 9–14. A four-year-old is saved, with a warning.
+    const young = await edit("adminA", { dateOfBirth: `${new Date().getUTCFullYear() - 4}-01-01` });
+    const w = young.body?.warnings?.[0];
+    if (young.status < 400 && w?.code === "age_out_of_range" && w.min === 9 && w.max === 14) {
+      ok("an age outside Form 1's 9–14 is saved, with a warning");
+    } else bad("age warning on edit", `${young.status} ${JSON.stringify(young.body?.warnings)}`);
+  }
+
   await server.close();
   await mongoose.disconnect();
   await stopQuietly(mongo);

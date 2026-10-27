@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Square,
   X,
+  CheckCircle, XCircle,
 } from "lucide-react";
 
 import { useUser }       from "@/store/auth.store";
@@ -172,7 +173,7 @@ function ResultsSummary({
       {succeeded.length > 0 && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="mb-2 text-sm font-bold text-emerald-800">
-            ✅ Created in {succeeded.length}{" "}
+            <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Created in {succeeded.length}{" "}
             {succeeded.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">
@@ -188,7 +189,7 @@ function ResultsSummary({
       {failed.length > 0 && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
           <p className="mb-2 text-sm font-bold text-red-800">
-            ❌ Failed in {failed.length}{" "}
+            <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Failed in {failed.length}{" "}
             {failed.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">
@@ -215,7 +216,7 @@ function ResultsSummary({
         <button
           type="button"
           onClick={onDone}
-          className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
+          className="w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
         >
           {t("common.done")}
         </button>
@@ -742,7 +743,7 @@ export default function AddSubjectPage() {
                 "text-sm font-bold text-white transition-colors",
                 isBusy
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {isBusy ? (

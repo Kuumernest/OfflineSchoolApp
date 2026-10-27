@@ -34,6 +34,10 @@
 
 const ResultSummary = require("../db/models/ResultSummary");
 const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
+const { summaryPassRate } = require("../../../shared/passRate");
+const { examAnalytics, rowsOn20, classesOf, classTopBottom } = require("../../../shared/examAnalytics");
+const GradingConfig = require("../db/models/GradingConfig");
+const { passMarkOf } = require("./passMark.service");
 const TermResult    = require("../db/models/TermResult");
 const AnnualResult  = require("../db/models/AnnualResult");
 
@@ -85,95 +89,81 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
 
   const results = await ResultSummary.find(filter).lean();
 
-  const totalStudents = results.length;
-  const passed = results.filter((r) => r.isPassing).length;
-  const failed = totalStudents - passed;
+  /*
+   * On /20, with the school's own remarks (shared/examAnalytics.js, decided
+   * 2026-10-27): average, highest and lowest of the pupils' averages /20; a
+   * distribution over the school's remark bands; subjects on /20 with their
+   * pass rate against the school's pass mark. No percentages, no GPA, no
+   * letter grades — and the pass rate is shared/passRate.js: pupils with
+   * results, against the school's pass mark.
+   */
+  const sid = schoolId ?? results[0]?.schoolId;
+  const cfg = sid
+    ? await GradingConfig.findOne({ schoolId: String(sid) }).select("grades passMark").lean().catch(() => null)
+    : null;
+  const opts = { passMark: cfg?.passMark ?? undefined, bands: cfg?.grades ?? null };
+  const analytics = examAnalytics(results, opts);
 
-  // Average / highest / lowest use each student's overall percentage (0-100),
-  // not the /20 average stored on the summary. r.average mixes scales when
-  // subjects have different maxScore, so a 12/20 average must not render as 12%.
-  const percentages = results
-    .map((r) => r.percentage)
-    .filter((p) => p != null && Number.isFinite(Number(p)))
-    .map(Number);
-  const average = percentages.length
-    ? round2(percentages.reduce((s, v) => s + v, 0) / percentages.length)
-    : 0;
-  const highest = percentages.length ? Math.max(...percentages) : 0;
-  const lowest  = percentages.length ? Math.min(...percentages) : 0;
-  const passRate = totalStudents > 0
-    ? Math.round((passed / totalStudents) * 10000) / 100
-    : 0;
-
-  const gpas = results
-    .map((r) => r.gpa)
-    .filter((g) => g != null && Number.isFinite(Number(g)))
-    .map(Number);
-  const averageGpa = gpas.length
-    ? round2(gpas.reduce((s, v) => s + v, 0) / gpas.length)
-    : 0;
-
-  const gradeDistribution = {};
-  for (const r of results) {
-    const g = r.overallGrade || "N/A";
-    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
+  // Rankings are per class (A6, decided 2026-10-27): the classes this exam has
+  // results in, for the page's class filter, and — once one class is chosen —
+  // that class's best and weakest pupils, numbered by their class position.
+  // Without a class there is no top 5: Form 1 and Upper Sixth are not one list.
+  const { backfillRankingNames } = require("./results.service");
+  await backfillRankingNames(results);
+  let classRows = results;
+  if (classId) {
+    const { classId: _chosen, ...allClasses } = filter;
+    classRows = await ResultSummary.find(allClasses).select("studentId classId className").lean();
+    await backfillRankingNames(classRows);
   }
+  const classes = classesOf(classRows);
+  const topBottom = classId ? classTopBottom(results, opts) : null;
+  return { ...analytics, classes, topBottom };
+}
 
-  // Subject analysis — aggregate per-subject numbers from every student's
-  // subjectBreakdown. Averages / highs / lows are percentages so the UI can
-  // render them alongside the pass rate without mixing scales.
-  const subjectAgg = new Map();
-  for (const r of results) {
-    for (const s of r.subjectBreakdown || []) {
-      if (s.isAbsent || s.isExempt || s.score == null) continue;
-      const key = String(s.subjectId || s.subjectName || "");
-      if (!key) continue;
-      if (!subjectAgg.has(key)) {
-        subjectAgg.set(key, {
-          subjectId:   s.subjectId || key,
-          subjectName: s.subjectName || key,
-          total:       0,
-          sum:         0,
-          highest:     -Infinity,
-          lowest:      Infinity,
-          passed:      0,
-        });
-      }
-      const agg = subjectAgg.get(key);
-      agg.total += 1;
-      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
-        ? Number(s.percentage)
-        : s.maxScore > 0
-          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
-          : 0;
-      agg.sum += pct;
-      if (pct > agg.highest) agg.highest = pct;
-      if (pct < agg.lowest)  agg.lowest  = pct;
-      if (s.isPassing) agg.passed += 1;
-    }
-  }
-  const subjectStats = [...subjectAgg.values()].map((a) => ({
-    subjectId:   a.subjectId,
-    subjectName: a.subjectName,
-    average:     a.total > 0 ? round2(a.sum / a.total) : 0,
-    highest:     a.total > 0 ? a.highest : 0,
-    lowest:      a.total > 0 ? a.lowest  : 0,
-    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
-    total:       a.total,
-  }));
+/**
+ * Result rows as the analytics tables print them: each pupil's average on
+ * /20, the school's remark for it, and whether it passes the school's pass
+ * mark — no percentage, letter or GPA (shared/examAnalytics.js).
+ */
+async function withAverage20(rows, schoolId) {
+  if (!rows?.length) return rows || [];
+  const cfg = await GradingConfig.findOne({ schoolId: String(schoolId ?? rows[0].schoolId) })
+    .select("grades passMark").lean().catch(() => null);
+  return rowsOn20(rows, { passMark: cfg?.passMark ?? undefined, bands: cfg?.grades ?? null });
+}
 
-  return {
-    totalStudents,
-    passed,
-    failed,
-    average,
-    highest,
-    lowest,
-    passRate,
-    averageGpa,
-    gradeDistribution,
-    subjectStats,
-  };
+/**
+ * The pass rate over a stated scope of sequences — a year, optionally a term
+ * and a class — for the exams overview (shared/passRate.js).
+ *
+ * Scoped through the exams, not the summaries: a summary written before the
+ * server stored academicYear on it has none, and its `term` is a string.
+ * Sequence papers only — a CA's own summary is already inside its paper's,
+ * and counting it would count the pupil twice.
+ *
+ * @returns {Promise<{ academicYear, term, passMark, average, withResults, passed, failed, rate }>}
+ */
+async function scopedPassRate({ schoolId, academicYear, term = null, classId = null, onlyPublished = true }) {
+  const Exam = require("../db/models/Exam");
+  const { CA_TYPE } = require("../../../shared/caAssessment");
+  const forms = [...new Set([String(academicYear), String(academicYear).replace("/", "-"), String(academicYear).replace("-", "/")])];
+  const exams = await Exam.find({
+    schoolId: String(schoolId), academicYear: { $in: forms }, deletedAt: null, type: { $ne: CA_TYPE },
+    ...(term ? { term: Number(term) } : {}),
+  }).select("_id").lean();
+  const filter = { schoolId: String(schoolId), examId: { $in: exams.map((e) => String(e._id)) }, deletedAt: null };
+  if (onlyPublished) filter.isPublished = true;
+  if (classId) filter.classId = String(classId);
+  const [rows, passMark] = await Promise.all([
+    exams.length
+      ? ResultSummary.find(filter).select("average percentage calcVersion subjectBreakdown.isAbsent subjectBreakdown.isExempt").lean()
+      : [],
+    passMarkOf(schoolId),
+  ]);
+  // The average beside the pass rate, on /20 over the same pupils.
+  const { average } = examAnalytics(rows, { passMark });
+  return { academicYear, term: term ? Number(term) : null, passMark, average, ...summaryPassRate(rows, passMark) };
 }
 
 /**
@@ -252,6 +242,8 @@ async function annualClassStats({ schoolId, academicYear, classId }) {
 }
 
 module.exports = {
+  scopedPassRate,
+  withAverage20,
   cohortFigures,
   examStatistics,
   sequenceClassStats,

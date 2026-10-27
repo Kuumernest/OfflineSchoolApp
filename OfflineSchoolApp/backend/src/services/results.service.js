@@ -24,6 +24,8 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+const { summaryPassRate } = require("../../../shared/passRate");
+const { passMarkOf } = require("./passMark.service");
 const Exam          = require("../db/models/Exam");
 const ExamSubject   = require("../db/models/ExamSubject");
 const StudentScore  = require("../db/models/StudentScore");
@@ -408,7 +410,7 @@ async function processResults(examId, classId = null, processedBy = null) {
   }
 
   // ── Step 10: Generate stats ────────────────────────────────────────────
-  const stats = generateStats(allResults);
+  const stats = generateStats(allResults, await passMarkOf(exam.schoolId));
 
   return {
     processed: allResults.length,
@@ -613,12 +615,12 @@ async function getExamStats(examId, classId = null) {
   if (classId) filter.classId = classId;
 
   const results = await ResultSummary.find(filter).lean();
-  return generateStats(results);
+  return generateStats(results, await passMarkOf(results[0]?.schoolId));
 }
 
 // ─── Stats Generator ──────────────────────────────────────────────────────
 
-function generateStats(results) {
+function generateStats(results, passMark) {
   if (!results.length) {
     return {
       totalStudents:     0,
@@ -641,8 +643,9 @@ function generateStats(results) {
 
   const present = results.filter((r) => !isFullyAbsent(r));
   const absent  = results.filter((r) =>  isFullyAbsent(r));
-  const passed  = present.filter((r) => r.isPassing);
-  const failed  = present.filter((r) => !r.isPassing);
+  // The one pass rate (shared/passRate.js): average /20 against the school's
+  // pass mark, over the pupils with results.
+  const pr = summaryPassRate(results, passMark);
 
   const averages     = present.map((r) => r.average).filter((a) => a != null);
   const classAverage = averages.length
@@ -697,11 +700,9 @@ function generateStats(results) {
     totalStudents: results.length,
     present:       present.length,
     absent:        absent.length,
-    passed:        passed.length,
-    failed:        failed.length,
-    passRate:      present.length
-      ? Math.round((passed.length / present.length) * 10000) / 100
-      : 0,
+    passed:        pr.passed,
+    failed:        pr.failed,
+    passRate:      pr.rate ?? 0,
     classAverage,
     highest,
     lowest,
@@ -720,4 +721,5 @@ module.exports = {
   getRankings,
   getStudentResult,
   getExamStats,
+  backfillRankingNames,
 };

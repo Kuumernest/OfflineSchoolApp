@@ -16,8 +16,10 @@
  * same store a real desk uses. Every row is checked for the behaviour the
  * server's own code specifies:
  *
- *   stats      fully-absent children are excluded from present/passed and the
- *              averages, and an empty exam is the zeroed shape, not an error.
+ *   stats      on /20, the server's shape (shared/examAnalytics.js, A5): a
+ *              fully-absent child has no result, so is left out of the count,
+ *              the pass rate and the averages; no GPA, no letter grades; an
+ *              empty exam is the zeroed shape, not an error.
  *   rankings   the position field decides the scope's column, an absent
  *              position is the server's $ne:null exclusion, and the limit is
  *              applied by slicing AFTER fetch — a NaN or negative limit
@@ -73,7 +75,10 @@ ctx.docs.putMany("resultSummary", [
     studentName: "Cam", admissionNo: "A3", className: "P4",
     classPosition: null, gradePosition: null, schoolPosition: null,
     isPassing: false, average: 0, percentage: 0, overallGrade: null,
-    subjectScores: [{ subjectId: "x3", isAbsent: true }] },
+    subjectScores: [{ subjectId: "x3", isAbsent: true }],
+    // Absence as a stored summary carries it: every subject in the breakdown
+    // marked absent (shared/passRate.js fullyAbsent, as the server reads it).
+    subjectBreakdown: [{ subjectId: "x3", subjectName: "Science", isAbsent: true }] },
   { _id: "r4", examId: "e1", studentId: "s99", classId: "c9", schoolId: "S2",
     studentName: "Zed", admissionNo: "Z1", className: "Other",
     classPosition: 1, gradePosition: 1, schoolPosition: 1,
@@ -101,17 +106,17 @@ const call = (method, path, query = {}) =>
 const stats = call("GET", "/api/results/e1/stats");
 check("stats envelope", [stats.status, stats.data.success, stats.data.data && typeof stats.data.data.passRate], [200, true, "number"]);
 const s = stats.data.data;
-check("stats counts", [s.totalStudents, s.present, s.absent, s.passed, s.failed], [3, 2, 1, 2, 0]);
-// average/highest/lowest are percentages now, not the /20 average:
-// (82.5 + 75) / 2 = 78.75 — a 16.5/20 student must not read as 16.5%.
-check("stats averages", [s.passRate, s.average, s.highest, s.lowest], [100, 78.75, 82.5, 75]);
-check("stats classAverage alias matches average", s.classAverage, s.average);
-check("stats gpa", s.averageGpa, 3.25);
-check("stats distribution", s.gradeDistribution, { A: 1, B: 1 });
+// The absent child (s3) has no result: two pupils with results, both passing.
+check("stats counts", [s.totalStudents, s.passed, s.failed], [2, 2, 0]);
+// On /20 (A5): (16.5 + 15) / 2 = 15.75, and the absent child's 0 is no mark.
+check("stats averages", [s.scale, s.passRate, s.average, s.highest, s.lowest], ["20", 100, 15.75, 16.5, 15]);
+check("stats: no GPA, no letter grades", [s.averageGpa, s.gradeDistribution], [undefined, undefined]);
+check("stats remark distribution counts the two with results",
+  (s.remarkDistribution ?? []).reduce((n, b) => n + b.count, 0), 2);
 check("stats subjectStats shape", s.subjectStats.map((x) => x.subjectName), ["Mathematics", "English"]);
 check("stats subjectStats numbers",
   s.subjectStats.map((x) => [x.average, x.highest, x.lowest, x.passRate, x.total]),
-  [[90, 90, 90, 100, 1], [75, 75, 75, 100, 1]]);
+  [[18, 18, 18, 100, 1], [15, 15, 15, 100, 1]]);
 const stats2 = call("GET", "/api/results/e1/stats", { classId: "c9" });
 check("stats scoped to a class with no rows is the empty shape", stats2.data.data.totalStudents, 0);
 

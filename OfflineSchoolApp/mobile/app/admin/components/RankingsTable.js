@@ -82,6 +82,10 @@ function resolveClassName(item) {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────
 
+/** The school's remark for the pupil's average, in the reader's language. */
+const remarkIn = (item, language) =>
+  (String(language || "").startsWith("fr") ? item.remarkFr : item.remark) ?? item.remark ?? null;
+
 export default function RankingsTable({
   rankings       = [],
   scope          = "class",
@@ -89,7 +93,7 @@ export default function RankingsTable({
   refreshing     = false,
   onRefresh,
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [expandedId, setExpandedId] = useState(null);
   const positionField = getPositionField(scope);
 
@@ -162,34 +166,24 @@ export default function RankingsTable({
             </View>
           </View>
 
-          {/* Score + grade */}
+          {/* Average /20 and the school's remark — no percentage, letter or
+              GPA. The server reads the average on /20 and judges it against
+              the school's pass mark (shared/examAnalytics, shared/passRate). */}
           <View style={styles.scoreSection}>
             <Text style={styles.averageScore}>
-              {item.average != null
-                ? `${item.average.toFixed(1)}%`
-                : item.percentage != null
-                ? `${item.percentage.toFixed(1)}%`
-                : "—"}
+              {item.average20 != null ? `${item.average20.toFixed(2)}/20` : "—"}
             </Text>
             <View style={[
               styles.gradeBadge,
-              { backgroundColor: item.isPassing ? "#D1FAE5" : "#FEE2E2" },
+              { backgroundColor: (item.passes ?? item.isPassing) ? "#D1FAE5" : "#FEE2E2" },
             ]}>
               <Text style={[
                 styles.gradeText,
-                item.isPassing ? styles.passingGrade : styles.failingGrade,
-              ]}>
-                {item.overallGrade || "—"}
+                (item.passes ?? item.isPassing) ? styles.passingGrade : styles.failingGrade,
+              ]} numberOfLines={1}>
+                {remarkIn(item, language) || "—"}
               </Text>
             </View>
-          </View>
-
-          {/* GPA */}
-          <View style={styles.gpaSection}>
-            <Text style={styles.gpaValue}>
-              {item.gpa != null ? item.gpa.toFixed(1) : "—"}
-            </Text>
-            <Text style={styles.gpaLabel}>{t("rankTable.gpa")}</Text>
           </View>
 
           <Ionicons
@@ -254,10 +248,8 @@ function ExpandedDetail({ item, resolvedClass }) {
           value={`${item.totalScore ?? "—"}/${item.maxTotalScore ?? "—"}`}
         />
         <DetailStat
-          label={t("rankTable.percentage")}
-          value={item.percentage != null
-            ? `${item.percentage.toFixed(1)}%`
-            : "—"}
+          label={t("rankTable.average20")}
+          value={item.average20 != null ? `${item.average20.toFixed(2)}/20` : "—"}
         />
         <DetailStat
           label={t("rankTable.passFail")}

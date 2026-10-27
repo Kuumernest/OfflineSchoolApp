@@ -1,7 +1,7 @@
 // web/src/pages/reports/cards.tsx
 import { useState, useEffect, useRef } from "react";
 import { Link }                from "react-router-dom";
-import { ArrowRight }          from "lucide-react";
+import { ArrowRight, BarChart3, AlertTriangle, CheckCircle, Printer, RefreshCw } from "lucide-react";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
@@ -486,7 +486,41 @@ export default function ReportCardsPage() {
       return true;
     };
 
-    for (let i = 0; i < targetStudents.length; i++) {
+    /*
+     * C2: a class is fetched four cards at a time. One at a time, a class of
+     * forty waited out forty renders back to back; the server answers several
+     * at once without trouble. Each card lands in its pupil's slot, so the
+     * preview and the print keep the roster's order whatever finishes first.
+     */
+    if (!singleInTab) {
+      const slots: (PreviewCard | null)[] = targetStudents.map(() => null);
+      let next = 0;
+      let done = 0;
+      const worker = async () => {
+        while (next < targetStudents.length && isCurrent()) {
+          const i       = next++;
+          const student = targetStudents[i];
+          const name    = student.studentName || student.name || String(student._id);
+          const sid     = String(student._id);
+          try {
+            const body = (await cardRequest(sid))?.data;
+            const html = typeof body === "string" ? body : body?.data?.html || body?.html || "";
+            if (html) slots[i] = { id: sid, name, html, issue: issueCard(sid) };
+            else error++;
+          } catch {
+            error++;
+          }
+          done++;
+          if (isCurrent()) setProgress({ done, total: targetStudents.length, current: name });
+        }
+      };
+      setProgress({ done: 0, total: targetStudents.length, current: "" });
+      await Promise.all(Array.from({ length: Math.min(4, targetStudents.length) }, worker));
+      if (stale()) return;
+      for (const card of slots) if (card) collected.push(card);
+    }
+
+    for (let i = 0; singleInTab && i < targetStudents.length; i++) {
       if (stale()) return;
       const student = targetStudents[i];
       const name    = student.studentName || student.name || String(student._id);
@@ -642,7 +676,7 @@ export default function ReportCardsPage() {
                      border-indigo-200 rounded-xl text-sm font-semibold
                      hover:bg-indigo-100 transition-colors"
         >
-          📊 {t("reportCards.viewResults")}
+          <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.viewResults")}
         </Link>
       </div>
 
@@ -983,7 +1017,7 @@ export default function ReportCardsPage() {
                   ? "bg-amber-50 text-amber-700"
                   : "bg-green-50 text-green-700"
                 }`}>
-                {result.error > 0 ? "⚠️" : "✅"} {result.message}
+                {result.error > 0 ? <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden /> : <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />}{result.message}
               </div>
             )}
 
@@ -1000,7 +1034,7 @@ export default function ReportCardsPage() {
                * screen to say what was missing.
                */
               disabled={!periodChosen || !selectedClass || generating}
-              className="w-full py-3 bg-green-600 hover:bg-green-700
+              className="w-full py-3 bg-primary-600 hover:bg-primary-700
                          text-white rounded-xl font-semibold text-sm
                          transition-colors disabled:opacity-50
                          flex items-center justify-center gap-2"
@@ -1013,7 +1047,7 @@ export default function ReportCardsPage() {
                 </>
               ) : (
                 <>
-                  🖨️{" "}
+                  <Printer className="w-4 h-4" aria-hidden />
                   {selectedStudent
                     ? t("reportCards.printOne")
                     : t("reportCards.printAll", { count: students.length })}
@@ -1034,7 +1068,7 @@ export default function ReportCardsPage() {
                            disabled:opacity-50 flex items-center
                            justify-center gap-2"
               >
-                {reissuing ? t("reportCards.reissuing") : `♻️ ${t("reportCards.reissue")}`}
+                {reissuing ? t("reportCards.reissuing") : <><RefreshCw className="w-4 h-4" aria-hidden />{t("reportCards.reissue")}</>}
               </button>
             )}
 
@@ -1114,7 +1148,7 @@ export default function ReportCardsPage() {
               type="button"
               onClick={handlePrintPreview}
               disabled={!previewCard}
-              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700
+              className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"
             >

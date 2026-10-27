@@ -670,9 +670,19 @@ export async function assembleReportData({
         await resolveColumnOptional("teacher_assignments", COL.DELETED_AT), "ta"
       )}`;
 
+      // Read as the server reads it (shared/classSubjectTeachers.js, A8): the
+      // ACTIVE assignments of this class and subject, each teacher once, names
+      // sorted and joined — it kept whichever row came last.
       const asns = await DB.query(asnSql, asnPrms);
+      const namesBySubject = {};
       for (const a of asns) {
-        teacherBySubject[a[asnCols.subjectCol]] = a.teacher_name || "";
+        if (a.isActive === 0 || a.isActive === false || a.is_active === 0) continue;
+        if (!a.teacher_name) continue;
+        const key = a[asnCols.subjectCol];
+        (namesBySubject[key] = namesBySubject[key] || new Set()).add(a.teacher_name);
+      }
+      for (const [key, names] of Object.entries(namesBySubject)) {
+        teacherBySubject[key] = [...names].sort((x, y) => x.localeCompare(y)).join(", ");
       }
       console.log("[ReportData] Teacher assignments:", asns.length);
     } catch (err) {
@@ -766,6 +776,10 @@ export async function assembleReportData({
       percentage:  apiSub.percentage ?? null,
       gpaPoints:   apiSub.gpaPoints  ?? null,
       isPassing:   apiSub.isPassing  ?? null,
+      // For the offline average below: the mark on /20 and its coefficient.
+      markOn20:    total !== "-"
+        ? normalizeTo20(total, apiSub.maxScore || localMark.maxScore || 20) : null,
+      coefficient: Number(apiSub.coefficient ?? sub.coefficient ?? 1) || 1,
     };
   });
 
@@ -778,7 +792,7 @@ export async function assembleReportData({
     const s       = apiResult.summary;
     overallTotal    = s.totalScore    ?? 0;
     overallAverage  = s.average       != null
-      ? Number(s.average).toFixed(1)  : "-";
+      ? Number(s.average).toFixed(2)  : "-";
     overallGrade    = s.overallGrade  != null ? s.overallGrade  : "-";
     overallRemark   = s.overallRemark != null ? s.overallRemark : "-";
     promotionStatus = s.promotionStatus || "-";
@@ -788,14 +802,15 @@ export async function assembleReportData({
       "grade:", overallGrade
     );
   } else {
-    const numericTotals = subjectRows
-      .map((r) => r.total)
-      .filter((t) => t !== "-" && !isNaN(Number(t)))
-      .map(Number);
-
-    overallTotal    = numericTotals.reduce((a, b) => a + b, 0);
-    overallAverage  = numericTotals.length
-      ? (overallTotal / numericTotals.length).toFixed(1)
+    // The school's one average (shared/averages.js on the server, which Metro
+    // cannot load from here): sum(mark /20 x coefficient) / sum(coefficients
+    // of the subjects with a mark). An absent or exempt subject is left out
+    // with its coefficient. This was a plain mean of the raw totals.
+    const counted = subjectRows.filter((r) => r.markOn20 != null);
+    const coefTotal = counted.reduce((a, r) => a + r.coefficient, 0);
+    overallTotal    = Math.round(counted.reduce((a, r) => a + r.markOn20 * r.coefficient, 0) * 100) / 100;
+    overallAverage  = coefTotal > 0
+      ? (overallTotal / coefTotal).toFixed(2)
       : "-";
     overallGrade    = overallAverage !== "-"
       ? computeGrade(Number(overallAverage))  : "-";

@@ -21,9 +21,9 @@ const Class        = require("../db/models/Class");
 const {
   nextReceiptNo,
   balanceFor,
-  balancesFor,
   applyStructure,
   voidReplacedCharges,
+  outstandingFor,
 } = require("../services/fees.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
@@ -315,7 +315,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
   const scope = { schoolId, studentId, deletedAt: null };
   if (academicYear) scope.academicYear = academicYear;
 
-  const [charges, payments, totals, plan] = await Promise.all([
+  const [charges, payments, totals, plan, pupil] = await Promise.all([
     FeeCharge.find(scope).sort({ createdAt: 1 }).lean(),
     FeePayment.find(scope).sort({ receivedAt: 1 }).lean(),
     balanceFor({ schoolId, studentId, academicYear }),
@@ -327,7 +327,17 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
       schoolId, studentId, status: "active", deletedAt: null,
       ...(academicYear ? { academicYear } : {}),
     }).lean(),
+    // C1: whose account this is, for the page header.
+    Student.findOne({ _id: studentId, schoolId })
+      .select("firstName lastName studentName name enrollmentNo admissionNo classId className").lean(),
   ]);
+  const cls = pupil?.classId ? await Class.findOne({ _id: pupil.classId }).select("name").lean() : null;
+  const student = pupil ? {
+    _id:         String(pupil._id),
+    name:        displayName(pupil) || null,
+    admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+    className:   cls?.name || pupil.className || null,
+  } : null;
 
   // Where they stand against it, computed here so the browser never has to do
   // the cumulative arithmetic — and so the ledger screen and the arrears list
@@ -338,7 +348,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
 
   return res.json({
     success: true,
-    data: { charges, payments, totals, plan, planStatus },
+    data: { student, charges, payments, totals, plan, planStatus },
   });
 }));
 
@@ -1101,37 +1111,20 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
 
   const { academicYear, classId } = req.query;
 
-  const filter = { schoolId, deletedAt: null, status: "approved" };
-  if (classId) filter.classId = classId;
-
-  const students = await Student.find(filter)
-    .select("_id studentName name firstName lastName enrollmentNo classId")
-    .lean();
-
-  const balances = await balancesFor({
-    schoolId,
-    studentIds: students.map((s) => String(s._id)),
-    academicYear,
+  // The one outstanding figure (fees.service outstandingFor): the school's
+  // current students, one year — the one asked for, else the school's
+  // current year — and only positive balances.
+  const result = await outstandingFor({
+    schoolId, academicYear: academicYear || null, classId: classId || null, withRows: true,
   });
-
-  const rows = students
-    .map((s) => ({
-      studentId:    String(s._id),
-      name:         displayName(s) || null,
-      enrollmentNo: s.enrollmentNo ?? null,
-      classId:      s.classId ?? null,
-      ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),
-    }))
-    // Only those who actually owe; a zero balance is not an arrears row.
-    .filter((r) => r.balance > 0)
-    .sort((a, b) => b.balance - a.balance);
-
-  const totalOutstanding = rows.reduce((sum, r) => sum + r.balance, 0);
+  const rows = result.rows.map(({ student, ...r }) => ({ ...r, name: displayName(student) || null }));
+  const totalOutstanding = result.outstanding;
 
   return res.json({
     success: true,
     count:   rows.length,
     totalOutstanding,
+    academicYear: result.academicYear,
     data:    rows,
   });
 }));

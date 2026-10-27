@@ -126,8 +126,8 @@ export default function TemplatePreviewPage() {
           <p className="text-sm text-red-600 text-center max-w-sm">{error}</p>
           <button
             onClick={() => navigate(-1)}
-            className="bg-blue-600 text-white text-sm font-semibold
-                       px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-primary-600 text-white text-sm font-semibold
+                       px-5 py-2.5 rounded-lg hover:bg-primary-700 transition-colors"
           >
             {t("templates.goBack")}
           </button>

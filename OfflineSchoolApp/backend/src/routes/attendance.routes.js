@@ -95,6 +95,8 @@ const {
   todayStr,
   dateStr,
   lastSevenDays,
+  schoolDaysOnly,
+  dayRate,
   attendanceId,
   teacherAttendanceId,
 } = require("../../../shared/attendance");
@@ -1287,12 +1289,9 @@ router.get("/report/overview", staffRead, async (req, res) => {
       late:     studentRecords.filter((r) => r.status === "late").length,
       excused:  studentRecords.filter((r) => r.status === "excused").length,
       unmarked: totalStudents - studentRecords.length,
-      rate: totalStudents > 0
-        ? Math.round(
-            (studentRecords.filter((r) => r.status === "present").length /
-              totalStudents) * 100
-          )
-        : 0,
+      // C3: null — shown "–" — when nobody was marked, not 0%.
+      rate: dayRate(studentRecords.filter((r) => r.status === "present").length,
+                    studentRecords.length, totalStudents),
     };
 
     const teacherSummary = {
@@ -1303,12 +1302,8 @@ router.get("/report/overview", staffRead, async (req, res) => {
       late:     teacherRecords.filter((r) => r.status === "late").length,
       on_leave: teacherRecords.filter((r) => r.status === "on_leave").length,
       unmarked: totalTeachers - teacherRecords.length,
-      rate: totalTeachers > 0
-        ? Math.round(
-            (teacherRecords.filter((r) => r.status === "present").length /
-              totalTeachers) * 100
-          )
-        : 0,
+      rate: dayRate(teacherRecords.filter((r) => r.status === "present").length,
+                    teacherRecords.length, totalTeachers),
     };
 
     return res.json({
@@ -1330,7 +1325,11 @@ router.get("/report/weekly", staffRead, async (req, res) => {
 
     // Shared with the desktop — see the note in shared/attendance.js on why the
     // local/UTC mix in this arithmetic is not worth writing twice.
-    const days = lastSevenDays();
+    // C3: the school's open days only — no Saturday or Sunday bars at 0%.
+    const SchoolModel = require("../db/models/School");
+    const schoolDoc = schoolId ? await SchoolModel.findById(schoolId).select("schoolDays").lean().catch(() => null) : null;
+    const days = schoolDaysOnly(lastSevenDays(), schoolDoc?.schoolDays);
+    if (!days.length) return res.json({ success: true, trend: [], days });
 
     const startDate = days[0];
     const endDate   = days[days.length - 1];
@@ -1361,12 +1360,8 @@ router.get("/report/weekly", staffRead, async (req, res) => {
           late:    dayStudents.filter((r) => r.status === "late").length,
           excused: dayStudents.filter((r) => r.status === "excused").length,
           total:   totalStudents,
-          rate: totalStudents > 0
-            ? Math.round(
-                (dayStudents.filter((r) => r.status === "present").length /
-                  totalStudents) * 100
-              )
-            : 0,
+          rate:    dayRate(dayStudents.filter((r) => r.status === "present").length,
+                           dayStudents.length, totalStudents),
         },
         teachers: {
           present:  dayTeachers.filter((r) => r.status === "present").length,
@@ -1374,12 +1369,8 @@ router.get("/report/weekly", staffRead, async (req, res) => {
           late:     dayTeachers.filter((r) => r.status === "late").length,
           on_leave: dayTeachers.filter((r) => r.status === "on_leave").length,
           total:    totalTeachers,
-          rate: totalTeachers > 0
-            ? Math.round(
-                (dayTeachers.filter((r) => r.status === "present").length /
-                  totalTeachers) * 100
-              )
-            : 0,
+          rate:     dayRate(dayTeachers.filter((r) => r.status === "present").length,
+                            dayTeachers.length, totalTeachers),
         },
       };
     });

@@ -322,12 +322,16 @@ const main = async () => {
     const t = (term, studentId) => TermResult.findOne({ schoolId: SCHOOL, academicYear: YEAR, term, studentId }).lean();
     const ama = await t(1, "stu-ama");
     /*
-     * [docs/39 §4.1] the term average is the 50/50 mean of the two GPA-point
-     * sequence averages, then graded and passed as though it were /20.
+     * [docs/39 §4.1, fixed for terms 2026-10-27, term/4] the term average is
+     * read from the term's marks on /20 — sum(subject term mark x coef) /
+     * sum(coef) — not from the GPA-point sequence averages, so this path and
+     * the live route below now agree. It was (2.87 + 3.3)/2 = 3.09, F.
+     *   Ama T1: Maths (15.4 + 16.6)/2 = 16 (coef 2), English (10.2 + 11.4)/2
+     *   = 10.8 (coef 1): (2·16 + 10.8)/3 = 42.8/3 = 14.27 → B+, passing.
+     * The sequence averages stay as stored (GPA points), for the card.
      */
     check("Ama T1", pick(ama, ["termAverage", "overallGrade", "overallRemark", "isPassing", "classPosition", "totalInClass"]),
-      // (2.87 + 3.3) / 2 = 3.085 → 3.09, graded on /20 → F, below 10 → failing.
-      { termAverage: 3.09, overallGrade: "F", overallRemark: "Fail", isPassing: false, classPosition: 2, totalInClass: 4 });
+      { termAverage: 14.27, overallGrade: "B+", overallRemark: "Good", isPassing: true, classPosition: 1, totalInClass: 4 });
     check("Ama T1 sequenceAverages", (ama?.sequenceAverages || []).map((s) => pick(s, ["sequence", "average", "overallGrade", "isComplete"])),
       [{ sequence: 1, average: 2.87, overallGrade: "F", isComplete: true },
        { sequence: 2, average: 3.3, overallGrade: "F", isComplete: true }]);
@@ -338,13 +342,14 @@ const main = async () => {
         all[`T${term} ${id}`] = r ? [r.termAverage, r.overallGrade, r.isPassing, r.classPosition] : null;
       }
     }
+    // The same marks as the live route, so the same terms (worked there).
     check("every term row [average, grade, passing, position]", all, {
-      "T1 stu-ama": [3.09, "F", false, 2], "T1 stu-bih": [3.1, "F", false, 1], "T1 stu-cho": [2.75, "F", false, 4],
-      "T1 stu-dan": [3.09, "F", false, 2], "T1 stu-eve": null,
-      "T2 stu-ama": [2.83, "F", false, 2], "T2 stu-bih": [2.89, "F", false, 1], "T2 stu-cho": [2.5, "F", false, 4],
-      "T2 stu-dan": [2.83, "F", false, 2], "T2 stu-eve": null,
-      "T3 stu-ama": [2.27, "F", false, 2], "T3 stu-bih": [2.72, "F", false, 1], "T3 stu-cho": [1.75, "F", false, 4],
-      "T3 stu-dan": [2.27, "F", false, 2], "T3 stu-eve": null,
+      "T1 stu-ama": [14.27, "B+", true, 1], "T1 stu-bih": [13, "B", true, 3], "T1 stu-cho": [11.6, "C+", true, 4],
+      "T1 stu-dan": [14.27, "B+", true, 1], "T1 stu-eve": null,
+      "T2 stu-ama": [13, "B", true, 1], "T2 stu-bih": [12.67, "B", true, 3], "T2 stu-cho": [11, "C+", true, 4],
+      "T2 stu-dan": [13, "B", true, 1], "T2 stu-eve": null,
+      "T3 stu-ama": [12, "B", true, 1], "T3 stu-bih": [11.67, "C+", true, 3], "T3 stu-cho": [10, "C", true, 4],
+      "T3 stu-dan": [12, "B", true, 1], "T3 stu-eve": null,
     });
   }
 
@@ -363,11 +368,16 @@ const main = async () => {
       all[id] = r ? pick(r, ["annualAverage", "overallGrade", "isPassing", "promotionStatus", "promotionThreshold", "classPosition", "totalInClass"]) : null;
     }
     /*
-     * [docs/39 §4.1] every term average is on the GPA-point scale, below the
-     * pass mark of 10, so every complete year is "repeated".
-     */
-    /*
-     * Ama: (3.09·33.33 + 2.83·33.33 + 2.27·33.34) / 100 = 2.7299 → 2.73.
+     * [docs/39 §4.1, fixed 2026-10-27, annual/4] the annual average is read
+     * from the year's marks on /20: each subject's term marks combined by the
+     * term weights (33.33/33.33/33.34), then sum(mark x coef) / sum(coef).
+     * It was the mean of the GPA-point term averages (Ama 2.73, all repeated).
+     *   Ama: Maths 16, 15, 14 → 15.00; English 10.8, 9, 8 → 9.2665;
+     *        (2·15.0002 + 9.2665)/3 = 13.089 → 13.09 B.
+     *   Bih: Maths 13, 12, 11 → 12.00; English 13, 14, 13 → 13.3333;
+     *        (2·12 + 13.3333)/3 = 12.444 → 12.44 B.
+     *   Cho: English only, 11.6, 11, 10 → 10.87 C.
+     *   Every complete year at or above the pass mark of 10: promoted.
      *
      * [docs/39 §4.6k, fixed] Eve has no term result at all and gets no
      * annual row, as the term layer gives her none ("not a zero",
@@ -380,17 +390,17 @@ const main = async () => {
      * rows; nothing read it. Every figure is unchanged.
      */
     check("annual rows", all, {
-      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
-      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 1, totalInClass: 4 },
-      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 4, totalInClass: 4 },
-      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: null, classPosition: 2, totalInClass: 4 },
+      "stu-ama": { annualAverage: 13.09, overallGrade: "B", isPassing: true, promotionStatus: "promoted", promotionThreshold: null, classPosition: 1, totalInClass: 4 },
+      "stu-bih": { annualAverage: 12.44, overallGrade: "B", isPassing: true, promotionStatus: "promoted", promotionThreshold: null, classPosition: 3, totalInClass: 4 },
+      "stu-cho": { annualAverage: 10.87, overallGrade: "C", isPassing: true, promotionStatus: "promoted", promotionThreshold: null, classPosition: 4, totalInClass: 4 },
+      "stu-dan": { annualAverage: 13.09, overallGrade: "B", isPassing: true, promotionStatus: "promoted", promotionThreshold: null, classPosition: 1, totalInClass: 4 },
       "stu-eve": null,
     });
     const ama = await AnnualResult.findOne({ schoolId: SCHOOL, academicYear: YEAR, studentId: "stu-ama" }).lean();
     check("Ama termAverages", (ama?.termAverages || []).map((x) => pick(x, ["term", "average", "overallGrade", "isComplete"])),
-      [{ term: 1, average: 3.09, overallGrade: "F", isComplete: true },
-       { term: 2, average: 2.83, overallGrade: "F", isComplete: true },
-       { term: 3, average: 2.27, overallGrade: "F", isComplete: true }]);
+      [{ term: 1, average: 14.27, overallGrade: "B+", isComplete: true },
+       { term: 2, average: 13, overallGrade: "B", isComplete: true },
+       { term: 3, average: 12, overallGrade: "B", isComplete: true }]);
   }
 
   // ── Layer 4: cards (built before publication; the payload, not the HTML) ─
@@ -424,22 +434,22 @@ const main = async () => {
        { subjectId: "sub-math", score: 15.4, maxScore: 20, normalizedMark: 15.4, coefficient: 2, grade: "B+", isPassing: true }]);
 
     const termCard = await cards.buildTermCard({ schoolId: SCHOOL, academicYear: YEAR, term: 1, classId: FORM3, studentId: "stu-ama" });
-    // [docs/39 §4.1] headline from the stored TermResult; rows rebuilt from marks on /20.
+    // Headline from the stored TermResult, which is now the table's own figure.
     check("term card headline", pick(termCard?.summary, ["average", "overallGrade", "isPassing", "classPosition", "totalInClass", "promotionStatus"]),
-      { average: 3.09, overallGrade: "F", isPassing: false, classPosition: 2, totalInClass: 4, promotionStatus: null });
+      { average: 14.27, overallGrade: "B+", isPassing: true, classPosition: 1, totalInClass: 4, promotionStatus: null });
     check("term card subject rows", (termCard?.subjects || []).map((r) =>
       pick(r, ["subjectId", "score", "coefficient", "grade", "isPassing", "subjectPosition", "sequenceMarks"])),
-      // English (10.2 + 11.4)/2 = 10.8 → C; Maths (15.4 + 16.6)/2 = 16 → A. On /20, beside a 3.09 headline.
+      // English (10.2 + 11.4)/2 = 10.8 → C; Maths (15.4 + 16.6)/2 = 16 → A.
       [{ subjectId: "sub-eng", score: 10.8, coefficient: 1, grade: "C", isPassing: true, subjectPosition: 3,
          sequenceMarks: [{ number: 1, mark: 10.2 }, { number: 2, mark: 11.4 }] },
        { subjectId: "sub-math", score: 16, coefficient: 2, grade: "A", isPassing: true, subjectPosition: 1,
          sequenceMarks: [{ number: 1, mark: 15.4 }, { number: 2, mark: 16.6 }] }]);
-    // 16·2 + 10.8 = 42.8 over 3 coefficients (= 14.27 /20, which the card does not headline).
+    // 16·2 + 10.8 = 42.8 over 3 coefficients = 14.27, the headline above.
     check("term card computed totals", termCard?.computed ?? null, { outOf: 20, totalCoefficients: 3, totalWeighted: 42.8 });
 
     const annualCard = await cards.buildAnnualCard({ schoolId: SCHOOL, academicYear: YEAR, classId: FORM3, studentId: "stu-ama" });
     check("annual card headline", pick(annualCard?.summary, ["average", "overallGrade", "isPassing", "classPosition", "promotionStatus"]),
-      { average: 2.73, overallGrade: "F", isPassing: false, classPosition: 2, promotionStatus: "REPEATED" });
+      { average: 13.09, overallGrade: "B", isPassing: true, classPosition: 1, promotionStatus: "PROMOTED TO THE NEXT CLASS" });
     check("annual card subject rows", (annualCard?.subjects || []).map((r) =>
       pick(r, ["subjectId", "score", "coefficient", "grade", "isPassing"])),
       // English terms 10.8, 9, 8 → 9.27 D; Maths 16, 15, 14 → 15 B+.
@@ -607,13 +617,15 @@ const main = async () => {
     }
     /*
      * Ama (14.27·33.33 + 13·33.33 + 12·33.34)/100 = 13.0899 → 13.09 B
-     * Bih (13·33.33 + 12.67·33.33 + 11.67·33.34)/100 = 12.4466 → 12.45 B
+     * Bih Maths 13, 12, 11 → 12; English 13, 14, 13 → 13.3333:
+     *     (2·12 + 13.3333)/3 = 12.444 → 12.44 B (annual/4, from the marks;
+     *     the mean of the rounded term averages gave 12.45)
      * Cho (11.6·33.33 + 11·33.33 + 10·33.34)/100 = 10.8666 → 10.87 C
      * Promotion against the bar: no bar set, so the pass mark 10; all three
      * terms complete; each at or above 10 → promoted. Eve: no row (§4.6k).
      */
     check("live: annual rows [average, grade, passing, promotion, position]", annual, {
-      "stu-ama": [13.09, "B", true, "promoted", 1], "stu-bih": [12.45, "B", true, "promoted", 3],
+      "stu-ama": [13.09, "B", true, "promoted", 1], "stu-bih": [12.44, "B", true, "promoted", 3],
       "stu-cho": [10.87, "C", true, "promoted", 4], "stu-dan": [13.09, "B", true, "promoted", 1],
       "stu-eve": null,
     });
@@ -670,12 +682,12 @@ const main = async () => {
       await stamps(ResultSummary, { examId: paperIds("") }), [`${snapUnrouted._id}|results-service/1`]);
     check("live route: every summary stamped exam-process/3",
       await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/3`]);
-    check("term rows stamped term/3, per school",
+    check("term rows stamped term/4, per school",
       [await stamps(TermResult, { schoolId: SCHOOL }), await stamps(TermResult, { schoolId: LIVE })],
-      [[`${snapUnrouted._id}|term/3`], [`${snapLive._id}|term/3`]]);
-    check("annual rows stamped annual/3, per school",
+      [[`${snapUnrouted._id}|term/4`], [`${snapLive._id}|term/4`]]);
+    check("annual rows stamped annual/4, per school",
       [await stamps(AnnualResult, { schoolId: SCHOOL }), await stamps(AnnualResult, { schoolId: LIVE })],
-      [[`${snapUnrouted._id}|annual/3`], [`${snapLive._id}|annual/3`]]);
+      [[`${snapUnrouted._id}|annual/4`], [`${snapLive._id}|annual/4`]]);
 
     /*
      * A configuration edit touches no result. A recompute after it (once the

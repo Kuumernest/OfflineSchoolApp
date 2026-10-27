@@ -44,157 +44,16 @@
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
+const { DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
+const { examAnalytics, rowsOn20, classesOf, classTopBottom } = require("../../../../../shared/examAnalytics");
 
-/**
- * True when the student sat none of the subjects — used to keep a fully-absent
- * child out of the averages, exactly as the server's service helper decides.
- * A child who never sat the exam is not a child who scored zero.
- */
-const isFullyAbsent = (result) => {
-  if (!result.subjectScores || result.subjectScores.length === 0) return false;
-  return result.subjectScores.every((s) => s.isAbsent);
+/** The school's pass mark and remark bands from the local copy. */
+const gradingOf = (docs, schoolId) => {
+  const cfg = docs.find("gradingConfig", { schoolId })[0] ?? null;
+  return { passMark: cfg?.passMark ?? DEFAULT_PASS_MARK, bands: cfg?.grades ?? null };
 };
 
-/**
- * Aggregate stats over mirrored result rows — a faithful copy of the server's
- * getExamStats controller, which is pure arithmetic over rows the mirror
- * already holds. Nothing here can disagree with the server except about how
- * much has synced.
- *
- * ── Scales ────────────────────────────────────────────────────────────────
- * average / highest / lowest are PERCENTAGES (0-100), taken from each row's
- * `percentage` field — not the /20 `average` the row also carries. The server
- * was fixed for exactly this: a 12/20 average must not render as 12%. Rows
- * mirrored before the server denormalized `percentage` get it derived from
- * average and maxTotalScore, and rows with neither are skipped, as the
- * server's filter does.
- *
- * subjectStats aggregates each student's subjectBreakdown the way the
- * controller does, so a subject analysis rendered offline reads the same
- * shape (and the same percentage scale) as one rendered online.
- */
-const generateStats = (results) => {
-  if (!results.length) {
-    return {
-      totalStudents:     0,
-      present:           0,
-      absent:            0,
-      passed:            0,
-      failed:            0,
-      passRate:          0,
-      average:           0,
-      classAverage:      0,
-      highest:           0,
-      lowest:            0,
-      averageGpa:        0,
-      gradeDistribution: {},
-      subjectStats:      [],
-    };
-  }
 
-  const present = results.filter((r) => !isFullyAbsent(r));
-  const absent  = results.filter((r) =>  isFullyAbsent(r));
-  const passed  = present.filter((r) => r.isPassing);
-  const failed  = present.filter((r) => !r.isPassing);
-
-  // Percentage per row: the denormalized field when the mirror has it, else
-  // derived from the /20-style average against the row's max total, else the
-  // row does not count — matching the server's `p != null` filter.
-  const pctOf = (r) => {
-    if (r.percentage != null && Number.isFinite(Number(r.percentage)))
-      return Number(r.percentage);
-    const avg = Number(r.average);
-    const max = Number(r.maxTotalScore);
-    if (Number.isFinite(avg) && Number.isFinite(max) && max > 0)
-      return Math.round((avg / max) * 10000) / 100;
-    return null;
-  };
-
-  const percentages = present.map(pctOf).filter((p) => p != null);
-  const average = percentages.length
-    ? Math.round((percentages.reduce((s, v) => s + v, 0) / percentages.length) * 100) / 100
-    : 0;
-  const highest = percentages.length ? Math.max(...percentages) : 0;
-  const lowest  = percentages.length ? Math.min(...percentages) : 0;
-
-  const gpas = results
-    .map((r) => r.gpa)
-    .filter((g) => g != null && Number.isFinite(Number(g)))
-    .map(Number);
-  const averageGpa = gpas.length
-    ? Math.round((gpas.reduce((s, v) => s + v, 0) / gpas.length) * 100) / 100
-    : 0;
-
-  const gradeDistribution = {};
-  for (const r of present) {
-    const g = r.overallGrade || "N/A";
-    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
-  }
-
-  // Per-subject aggregation over subjectBreakdown — percentages throughout,
-  // absent/exempt/scoreless entries skipped, exactly as the controller does.
-  const subjectAgg = new Map();
-  for (const r of results) {
-    for (const s of r.subjectBreakdown || []) {
-      if (s.isAbsent || s.isExempt || s.score == null) continue;
-      const key = String(s.subjectId || s.subjectName || "");
-      if (!key) continue;
-      if (!subjectAgg.has(key)) {
-        subjectAgg.set(key, {
-          subjectId:   s.subjectId || key,
-          subjectName: s.subjectName || key,
-          total:       0,
-          sum:         0,
-          highest:     -Infinity,
-          lowest:      Infinity,
-          passed:      0,
-        });
-      }
-      const agg = subjectAgg.get(key);
-      agg.total += 1;
-      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
-        ? Number(s.percentage)
-        : Number(s.maxScore) > 0
-          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
-          : 0;
-      agg.sum += pct;
-      if (pct > agg.highest) agg.highest = pct;
-      if (pct < agg.lowest)  agg.lowest  = pct;
-      if (s.isPassing) agg.passed += 1;
-    }
-  }
-  const subjectStats = [...subjectAgg.values()].map((a) => ({
-    subjectId:   a.subjectId,
-    subjectName: a.subjectName,
-    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
-    highest:     a.total > 0 ? a.highest : 0,
-    lowest:      a.total > 0 ? a.lowest  : 0,
-    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
-    total:       a.total,
-  }));
-
-  const passRate = present.length
-    ? Math.round((passed.length / present.length) * 10000) / 100
-    : 0;
-
-  // `classAverage` is kept as an alias of `average` for any screen still
-  // reading the old key; the server's controller speaks `average`.
-  return {
-    totalStudents: results.length,
-    present:       present.length,
-    absent:        absent.length,
-    passed:        passed.length,
-    failed:        failed.length,
-    passRate,
-    average,
-    classAverage:  average,
-    highest,
-    lowest,
-    averageGpa,
-    gradeDistribution,
-    subjectStats,
-  };
-};
 
 module.exports = [
   {
@@ -287,7 +146,16 @@ module.exports = [
       const filter = { examId: String(params.examId), schoolId, deletedAt: null };
       if (query.classId) filter.classId = String(query.classId).trim();
 
-      return ok({ data: generateStats(docs.find("resultSummary", filter)) });
+      // The server's examStatistics: shared/examAnalytics on /20, the school's
+      // pass mark and remark bands; the classes for the page's filter and, once
+      // one is chosen, that class's top and bottom pupils (A6).
+      const rows = docs.find("resultSummary", filter);
+      const grading = gradingOf(docs, schoolId);
+      return ok({ data: {
+        ...examAnalytics(rows, grading),
+        classes:   classesOf(docs.find("resultSummary", { examId: filter.examId, schoolId, deletedAt: null })),
+        topBottom: filter.classId ? classTopBottom(rows, grading) : null,
+      } });
     },
   },
 
@@ -339,7 +207,7 @@ module.exports = [
 
       // Sliced in JS, not LIMIT in SQL: the server fetches then slices, and a
       // NaN or negative limit has to behave the same way here as there.
-      const data = ordered.slice(0, Number(query.limit ?? 100));
+      const data = rowsOn20(ordered.slice(0, Number(query.limit ?? 100)), gradingOf(docs, schoolId));
 
       return ok({ rankBy: scope, count: data.length, data });
     },

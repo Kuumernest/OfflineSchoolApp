@@ -277,7 +277,7 @@ export default function DashboardPage() {
 
           <PendingApplications
             count={pendingCount}
-            onClick={() => navigate("/students/applications")}
+            onClick={() => navigate("/students/admissions")}
           />
 
           {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
@@ -328,7 +328,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title={t("nav.attendance")}
-          value={`${fmt.number(ad?.rate ?? 0)}%`}
+          value={ad?.rate == null ? "–" : `${fmt.number(ad.rate)}%`}
           subtitle={t("dashboard.presentToday", { count: ad?.todayPresent ?? 0 })}
           icon={CheckSquare}
           href="/attendance"
@@ -369,7 +369,7 @@ export default function DashboardPage() {
         <AttendanceWidget
           present={ad?.todayPresent ?? 0}
           absent={ad?.todayAbsent   ?? 0}
-          rate={ad?.rate            ?? 0}
+          rate={ad?.rate            ?? null}
           marked={ad?.marked        ?? 0}
           loading={attendanceQ.isLoading}
         />

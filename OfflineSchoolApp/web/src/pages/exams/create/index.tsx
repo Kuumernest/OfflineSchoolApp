@@ -15,6 +15,7 @@ import {
   examTypeLabel,
 } from "@/constants/exam.constants";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
+import { AlertTriangle } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -869,7 +870,7 @@ return (
     {Object.keys(assignments).length === 0 ? (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4
                       text-amber-700 text-sm text-center">
-        {t("examCreate.noSubjectsWarning")}
+        <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("examCreate.noSubjectsWarning")}
       </div>
     ) : (
       <div className="space-y-3">
@@ -1143,7 +1144,7 @@ return (
       <button
         onClick={handleSubmit}
         disabled={submitting}
-        className="px-8 py-2.5 bg-green-600 hover:bg-green-700
+        className="px-8 py-2.5 bg-primary-600 hover:bg-primary-700
                    text-white rounded-xl text-sm font-semibold
                    transition-colors disabled:opacity-60
                    flex items-center gap-2"

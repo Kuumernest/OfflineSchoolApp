@@ -16,6 +16,7 @@ import type {
   ApprovalResult,
   RejectionResult,
 } from "../../types/applications";
+import { AlertTriangle } from "lucide-react";
 
 // ─── Icon helper ─────────────────────────────────────────────────────────────
 
@@ -361,7 +362,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
             {classes.length === 0 ? (
               <div className="flex items-start gap-2 bg-amber-50 rounded-xl p-3">
-                <span className="text-amber-600 mt-0.5">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" aria-hidden />
                 <p className="text-sm text-amber-700 font-medium">
                   {t("applications.noActiveClasses")}
                 </p>

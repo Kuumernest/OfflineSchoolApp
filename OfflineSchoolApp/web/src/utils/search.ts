@@ -32,7 +32,6 @@ const PAGE_ITEMS: SearchResult[] = [
   { id: "exam-results",       label: "Exam Results", labelKey: "nav.results",       path: "/exams/results",      type: "page" },
   { id: "report-cards",       label: "Report Cards", labelKey: "reportCards.title",       path: "/reports/cards",      type: "page" },
   { id: "admissions",         label: "Admissions", labelKey: "nav.admissions",         path: "/students/admissions",   type: "page" },
-  { id: "applications",       label: "Applications", labelKey: "nav.applications",       path: "/students/applications", type: "page" },
   { id: "assignments",        label: "Teacher Assignments", labelKey: "nav.assignments", path: "/teachers/assignments", type: "page" },
   { id: "announcements",      label: "Announcements", labelKey: "nav.announcements",      path: "/announcements",      type: "page" },
   { id: "reports",            label: "Reports", labelKey: "nav.reports",            path: "/reports",            type: "page" },

@@ -31,6 +31,7 @@ import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useToast }       from "@/components/ui/Toast";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -65,15 +66,7 @@ const isStaleApplication = (createdAt?: string | null): boolean => {
 };
 
 const formatDate = (value?: string | null): string => {
-  if (!value) return i18n.t("common.unknownDate");
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? i18n.t("common.unknownDate")
-    : d.toLocaleDateString(undefined, {
-        year:  "numeric",
-        month: "short",
-        day:   "numeric",
-      });
+  return formatDay(value, i18n.t("common.unknownDate"));
 };
 
 const resolveDocumentUrl = (uri?: string | null): string | null => {
@@ -901,7 +894,7 @@ export default function AdmissionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.applications")}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.title")}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {t("admissions.pendingCount", { count: applications.length })}
           </p>

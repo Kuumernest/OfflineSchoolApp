@@ -210,8 +210,15 @@ const main = async () => {
   // Sequence 2 of school A was processed before the decision and published:
   // an exam-process/1 summary for ama on papers /100, average 65 (the raw
   // mean of 60 and 70), percentage 65. Read as its percentage ÷ 5: 13.
-  // Term 1 (sequences 50/50) = (13.67 + 13)/2 = 13.335 → 13.34.
-  // (Read as stored it would have been (13.67 + 65)/2 = 39.34.)
+  // Its sequence average is still read as 13 for the card's sequence column
+  // (read as stored it would have been 65).
+  //
+  // The term average itself is sum(subject term mark x coefficient) /
+  // sum(coefficients) over the term's MARKS (term/4, decided 2026-10-27), and
+  // this hand-made summary has no marks behind it: ama's term subjects are
+  // sequence 1's — Maths 15.4 (coef 2), English 10.2 (coef 1) — so
+  // (2·15.4 + 10.2)/3 = 41/3 = 13.67. Under term/3 it was the mean of the
+  // sequence averages, (13.67 + 13)/2 = 13.34.
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- C. a term mixing an old and a new sequence ---");
   await M("Exam").create({ _id: "A-p2", schoolId: S.A, name: "A-p2", type: "test", academicYear: YEAR, term: 1,
@@ -222,8 +229,8 @@ const main = async () => {
   const oldRow = JSON.stringify(await M("ResultSummary").findById("old-ama-2").lean());
   r = await call("A", "POST", "/term-results/compute", { academicYear: YEAR, term: 1, classId: "A-f1" });
   const t1 = await M("TermResult").findOne({ schoolId: S.A, term: 1, studentId: "A-ama" }).lean();
-  check("term 1 for ama: (13.67 + 13)/2 = 13.34, stamped term/3",
-    [r.status, t1?.termAverage, t1?.sequenceAverages?.map((x) => x.average), t1?.calcVersion], [200, 13.34, [13.67, 13], "term/3"]);
+  check("term 1 for ama: from her subject marks, 13.67, sequences still [13.67, 13], stamped term/4",
+    [r.status, t1?.termAverage, t1?.sequenceAverages?.map((x) => x.average), t1?.calcVersion], [200, 13.67, [13.67, 13], "term/4"]);
   check("  the old summary is untouched", JSON.stringify(await M("ResultSummary").findById("old-ama-2").lean()), oldRow);
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -306,12 +313,12 @@ const main = async () => {
   const annuals = {};
   for (const [, , id] of PROMO) annuals[id] = await annual(id);
   check("annual rows [average, status, version]", annuals, {
-    at: [12, "promoted", "annual/3"], above: [12.01, "promoted", "annual/3"], below: [11.99, "repeated", "annual/3"],
-    none: null, part: [12.5, "pending", "annual/3"],
+    at: [12, "promoted", "annual/4"], above: [12.01, "promoted", "annual/4"], below: [11.99, "repeated", "annual/4"],
+    none: null, part: [12.5, "pending", "annual/4"],
     // grad: a final-year class graduates, on the row as in the run, whatever
     // the average (8 < the school bar 11); decided 2026-10-16, follow-up pass.
-    ok: [11, "promoted", "annual/3"], low: [10.99, "repeated", "annual/3"], grad: [8, "graduated", "annual/3"],
-    pass: [10.5, "promoted", "annual/3"], fail: [10.49, "repeated", "annual/3"],
+    ok: [11, "promoted", "annual/4"], low: [10.99, "repeated", "annual/4"], grad: [8, "graduated", "annual/4"],
+    pass: [10.5, "promoted", "annual/4"], fail: [10.49, "repeated", "annual/4"],
   });
 
   const run = async (k) => {

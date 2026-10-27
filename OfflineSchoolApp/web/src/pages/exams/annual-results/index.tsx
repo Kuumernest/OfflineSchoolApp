@@ -154,7 +154,7 @@ export default function AnnualResultsPage() {
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
             computeMutation.isPending || needsClass
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-indigo-600 text-white hover:bg-indigo-700"
+              : "bg-primary-600 text-white hover:bg-primary-700"
           )}
         >
           {computeMutation.isPending ? (
@@ -242,7 +242,7 @@ export default function AnnualResultsPage() {
                 <th key={tm.number} className="px-4 py-3 text-center">{tm.label}</th>
               ))}
               <th className="px-4 py-3 text-center">{t("annualResults.annualAverage")}</th>
-              <th className="px-4 py-3 text-center">{t("annualResults.grade")}</th>
+              <th className="px-4 py-3 text-center">{t("results.remark")}</th>
               <th className="px-4 py-3 text-center">{t("annualResults.position")}</th>
               <th className="px-4 py-3 text-center">{t("annualResults.promotion")}</th>
             </tr>
@@ -294,7 +294,7 @@ export default function AnnualResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                        {r.overallGrade ?? "—"}
+                        {r.overallRemark ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700">

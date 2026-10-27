@@ -448,7 +448,7 @@ export default function TemplateBuilderPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700
+          className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
                      disabled:opacity-60 text-white text-sm font-semibold
                      px-4 py-2 rounded-lg transition-colors"
         >

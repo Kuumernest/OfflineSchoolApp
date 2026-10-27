@@ -16,7 +16,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { KeyRound, Copy, Check, Ban, Plus, Users } from "lucide-react";
+import { KeyRound, Copy, Check, Ban, Plus, Users, AlertTriangle } from "lucide-react";
 
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
@@ -142,6 +142,9 @@ export default function GuardianCodesPage() {
   };
 
   const portalUrl = `${window.location.origin}/portal`;
+  // Codes that open nobody: issued for children who have since left, or for
+  // none at all. Still live if they have a code, so the office should know.
+  const orphanCount = rows.filter((a) => a.linkedToNoStudent).length;
 
   return (
     <div className="space-y-5">
@@ -159,6 +162,13 @@ export default function GuardianCodesPage() {
         {t("codes.portalAddress", { url: portalUrl })}
       </p>
 
+      {orphanCount > 0 && (
+        <p className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          {t("codes.noStudentCount", { count: orphanCount })}
+        </p>
+      )}
+
       <Card padding={false}>
         {rows.length === 0 ? (
           <EmptyTable title={t("codes.noAccess2")} subtitle={t("codes.noAccessHint")} />
@@ -169,20 +179,37 @@ export default function GuardianCodesPage() {
                 <Th>{t("codes.guardian")}</Th>
                 <Th>{t("codes.covers")}</Th>
                 <Th>{t("common.status")}</Th>
-                <Th>{t("codes.never")}</Th>
+                <Th>{t("codes.lastOpened")}</Th>
                 <Th />
               </Tr>
             </THead>
             <TBody>
               {rows.map((a) => (
                 <Tr key={a._id}>
-                  <Td className="font-medium text-ink">{a.label || "—"}</Td>
                   <Td>
-                    <span className="flex flex-wrap gap-1">
-                      {a.children.map((c) => (
-                        <Badge key={c._id} variant="info">{c.name || c.enrollmentNo}</Badge>
-                      ))}
+                    <span className="font-medium text-ink">
+                      {a.label || a.guardianNames?.join(", ") || "—"}
                     </span>
+                    {/* The office's label, then whom the records name, if different. */}
+                    {a.label && (a.guardianNames ?? []).some((g) => g !== a.label) && (
+                      <span className="block text-xs text-ink-muted">
+                        {a.guardianNames!.join(", ")}
+                      </span>
+                    )}
+                  </Td>
+                  <Td>
+                    {a.linkedToNoStudent ? (
+                      <Badge variant="warning">
+                        <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" aria-hidden />
+                        {t("codes.noStudent")}
+                      </Badge>
+                    ) : (
+                      <span className="flex flex-wrap gap-1">
+                        {a.children.map((c) => (
+                          <Badge key={c._id} variant="info">{c.name || c.enrollmentNo}</Badge>
+                        ))}
+                      </span>
+                    )}
                   </Td>
                   <Td>
                     {a.hasCode ? (
@@ -201,7 +228,7 @@ export default function GuardianCodesPage() {
                     )}
                   </Td>
                   <Td className="text-xs text-ink-muted">
-                    {a.lastSeenAt ? fmt.dateShort(a.lastSeenAt) : t("codes.never")}
+                    {a.lastSeenAt ? fmt.dateTime(a.lastSeenAt) : t("codes.neverShort")}
                   </Td>
                   <Td numeric>
                     <span className="flex justify-end gap-1">

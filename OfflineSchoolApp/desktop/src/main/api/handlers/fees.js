@@ -33,8 +33,98 @@
  */
 
 const { displayName } = require("../../../../../shared/studentName");
+const { currentAcademicYearOf, yearKey } = require("../../../../../shared/academicYear");
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
+
+/**
+ * What a school is owed — the server's fees.service outstandingBySchool, on
+ * the local copy, for Fees > Outstanding and Financial reports alike:
+ *
+ * - current students only: approved, active, not deleted;
+ * - one year: the one asked for, else the school's current year
+ *   (settings.academicYear; the calendar's when unset);
+ * - charges not voided, payments not deleted (a reversal is a negative row
+ *   and nets off);
+ * - outstanding = the sum of POSITIVE balances — a credit does not hide
+ *   another family's debt.
+ *
+ * One SQL statement per collection, not one per pupil.
+ */
+function outstandingOf(docs, { schoolId, academicYear = null, classId = null }) {
+  const school = docs.get("school", schoolId);
+  const year   = academicYear ? yearKey(academicYear) : currentAcademicYearOf(school);
+  const forms  = [...new Set([year, year.replace("/", "-")])];
+
+  const students = docs.find("student", {
+    schoolId, deletedAt: null, status: "approved",
+    ...(classId ? { classId } : {}),
+  }).filter((s) => s.isActive !== false);
+  const empty = { academicYear: year, charged: 0, waived: 0, billed: 0, paid: 0, outstanding: 0, owing: 0, rows: [] };
+  if (!students.length) return empty;
+
+  const yearClause = `AND json_extract(json,'$.academicYear') IN (${forms.map(() => "?").join(",")})`;
+  const charged = docs.sql(`
+    SELECT json_extract(json,'$.studentId') AS studentId,
+           COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
+           COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
+    FROM docs
+    WHERE collection = 'feeCharge'
+      AND school_id = ?
+      AND deleted_at IS NULL
+      AND json_extract(json,'$.voidedAt') IS NULL
+      ${yearClause}
+    GROUP BY studentId
+  `, schoolId, ...forms);
+  const paid = docs.sql(`
+    SELECT json_extract(json,'$.studentId') AS studentId,
+           COALESCE(SUM(json_extract(json,'$.amount')), 0) AS paid
+    FROM docs
+    WHERE collection = 'feePayment'
+      AND school_id = ?
+      AND deleted_at IS NULL
+      ${yearClause}
+    GROUP BY studentId
+  `, schoolId, ...forms);
+
+  const balances = new Map();
+  const ensure = (id) => {
+    if (!balances.has(id)) balances.set(id, { charged: 0, waived: 0, paid: 0 });
+    return balances.get(id);
+  };
+  for (const row of charged) {
+    const b = ensure(String(row.studentId));
+    b.charged = row.charged ?? 0;
+    b.waived  = row.waived  ?? 0;
+  }
+  for (const row of paid) ensure(String(row.studentId)).paid = row.paid ?? 0;
+
+  const out = { ...empty, rows: [] };
+  for (const s of students) {
+    const b = balances.get(String(s._id));
+    if (!b) continue;
+    const balance = b.charged - b.waived - b.paid;
+    out.charged += b.charged;
+    out.waived  += b.waived;
+    out.paid    += b.paid;
+    if (balance > 0) {
+      out.outstanding += balance;
+      out.rows.push({
+        studentId:    String(s._id),
+        // The shared resolver, not a field read: a pupil's name lives in one
+        // of three fields and reading the wrong one blanks them.
+        name:         displayName(s) || null,
+        enrollmentNo: s.enrollmentNo ?? null,
+        classId:      s.classId ?? null,
+        ...b, balance,
+      });
+    }
+  }
+  out.billed = out.charged - out.waived;
+  out.owing  = out.rows.length;
+  out.rows.sort((a, b) => b.balance - a.balance);
+  return out;
+}
 
 /**
  * The totals for one pupil, as backend/src/services/fees.service.js computes them.
@@ -174,77 +264,14 @@ module.exports = [
       const schoolId = query.schoolId ? String(query.schoolId).trim() : null;
       if (!schoolId) return null;
 
-      const academicYear = query.academicYear || null;
-      const classId      = query.classId || null;
-
-      // status: "approved" — an applicant who has not been admitted is not
-      // somebody the school chases for fees.
-      const students = docs.find("student", {
-        schoolId, deletedAt: null, status: "approved",
-        ...(classId ? { classId } : {}),
+      const o = outstandingOf(docs, {
+        schoolId, academicYear: query.academicYear || null, classId: query.classId || null,
       });
-      if (!students.length) {
-        return ok({ count: 0, totalOutstanding: 0, data: [] });
-      }
-
-      const yearClause = academicYear ? "AND json_extract(json,'$.academicYear') = ?" : "";
-      const yearParam  = academicYear ? [academicYear] : [];
-
-      const charged = docs.sql(`
-        SELECT json_extract(json,'$.studentId') AS studentId,
-               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
-               COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
-        FROM docs
-        WHERE collection = 'feeCharge'
-          AND school_id = ?
-          AND deleted_at IS NULL
-          AND json_extract(json,'$.voidedAt') IS NULL
-          ${yearClause}
-        GROUP BY studentId
-      `, schoolId, ...yearParam);
-
-      const paid = docs.sql(`
-        SELECT json_extract(json,'$.studentId') AS studentId,
-               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS paid
-        FROM docs
-        WHERE collection = 'feePayment'
-          AND school_id = ?
-          AND deleted_at IS NULL
-          ${yearClause}
-        GROUP BY studentId
-      `, schoolId, ...yearParam);
-
-      const balances = new Map();
-      const ensure = (id) => {
-        if (!balances.has(id)) balances.set(id, { charged: 0, waived: 0, paid: 0, balance: 0 });
-        return balances.get(id);
-      };
-      for (const row of charged) {
-        const b = ensure(String(row.studentId));
-        b.charged = row.charged ?? 0;
-        b.waived  = row.waived  ?? 0;
-      }
-      for (const row of paid) ensure(String(row.studentId)).paid = row.paid ?? 0;
-      for (const b of balances.values()) b.balance = b.charged - b.waived - b.paid;
-
-      const rows = students
-        .map((s) => ({
-          studentId:    String(s._id),
-          // The shared resolver, not a field read: a pupil's name lives in one
-          // of three fields and reading the wrong one blanks them.
-          name:         displayName(s) || null,
-          enrollmentNo: s.enrollmentNo ?? null,
-          classId:      s.classId ?? null,
-          ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),
-        }))
-        // A zero balance is not an arrears row, and a credit is not either.
-        .filter((r) => r.balance > 0)
-        .sort((a, b) => b.balance - a.balance);
-
       return ok({
-        count: rows.length,
-        totalOutstanding: rows.reduce((sum, r) => sum + r.balance, 0),
-        data: rows,
+        count: o.rows.length,
+        totalOutstanding: o.outstanding,
+        academicYear: o.academicYear,
+        data: o.rows,
       });
     },
   },
@@ -289,7 +316,16 @@ module.exports = [
         ? planStatusLocal(plan, totals.paid, Date.now())
         : null;
 
-      return ok({ data: { charges, payments, totals, plan, planStatus } });
+      // C1: whose account this is, as the server answers it.
+      const pupil = docs.get("student", studentId);
+      const student = pupil && String(pupil.schoolId) === String(schoolId) ? {
+        _id:         String(pupil._id),
+        name:        displayName(pupil) || null,
+        admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+        className:   (pupil.classId && docs.get("class", pupil.classId)?.name) || pupil.className || null,
+      } : null;
+
+      return ok({ data: { student, charges, payments, totals, plan, planStatus } });
     },
   },
 ];
@@ -300,6 +336,7 @@ module.exports = [
  * of "what does this family owe" is the last thing this codebase needs.
  */
 module.exports.totalsFor = totalsFor;
+module.exports.outstandingOf = outstandingOf;
 
 /**
  * Balance computation for many students at once — the same SQL as outstanding

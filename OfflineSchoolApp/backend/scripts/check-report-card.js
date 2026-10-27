@@ -651,9 +651,10 @@ for (const lang of ["en", "fr"]) {
   check(`${lang}: and the French margin`,
     h.includes("République du Cameroun") &&
     h.includes("Ministère des Enseignements Secondaires"), true);
-  check(`${lang}: the regional delegation is named`,
+  // A9: the French column names the region in French, with its article.
+  check(`${lang}: the regional delegation is named, in each column's language`,
     h.includes("Regional Delegation of South West") &&
-    h.includes("Délégation Régionale de South West"), true);
+    h.includes("Délégation Régionale du Sud-Ouest"), true);
   check(`${lang}: and the divisional one`,
     h.includes("Divisional Delegation of Fako") &&
     h.includes("Délégation Départementale de Fako"), true);

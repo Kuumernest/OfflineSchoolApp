@@ -40,7 +40,7 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
 import { conversationMatches, participantName } from "./participants";
-import { currentLocale } from "@/i18n";
+import { formatDay, formatTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,10 +58,7 @@ const timeLabel = (iso?: string | null): string => {
   if (Number.isNaN(d.getTime())) return "";
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  // In the console's language, not the browser's.
-  return sameDay
-    ? d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short" });
+  return sameDay ? formatTime(d) : formatDay(d);
 };
 
 /**
@@ -323,9 +320,9 @@ export default function MessagesPage() {
         </div>
         <button
           onClick={() => setComposing(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2
+          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2
                      text-sm font-semibold text-white transition-colors
-                     hover:bg-blue-700"
+                     hover:bg-primary-700"
         >
           <Plus size={16} />
           {t("messages.newConversation")}
@@ -636,9 +633,9 @@ export default function MessagesPage() {
                         (!draft.trim() && pending.length === 0) ||
                         sendMutation.isPending
                       }
-                      className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5
+                      className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5
                                  text-sm font-semibold text-white transition-colors
-                                 hover:bg-blue-700 disabled:opacity-50"
+                                 hover:bg-primary-700 disabled:opacity-50"
                     >
                       {sendMutation.isPending
                         ? <Loader2 size={15} className="animate-spin" />

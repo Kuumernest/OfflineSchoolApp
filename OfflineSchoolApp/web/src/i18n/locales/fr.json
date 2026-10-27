@@ -266,6 +266,8 @@
     "none": "Aucun résultat",
     "searchPh": "Rechercher par nom, numéro d'admission ou classe…",
     "gradeDistribution": "Répartition des notes",
+    "remarkDistribution": "Appréciations",
+    "remark": "Appréciation",
     "noGradeData": "Aucune donnée de notes",
     "scoreDistribution": "Répartition des scores",
     "passFailSplit": "Répartition réussite / échec",
@@ -310,7 +312,10 @@
     "toastCalculated": "Résultats calculés",
     "refusedPublished": "Non recalculée, résultats publiés : {{classes}}",
     "refusedPublished_other": "Non recalculées, résultats publiés dans {{count}} classes : {{classes}}",
-    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes"
+    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes",
+    "allClasses": "Toutes les classes",
+    "chooseClassForTop": "Choisissez une classe pour voir ses meilleurs et ses plus faibles élèves.",
+    "allInTop": "Tous les élèves de cette classe figurent déjà ci-dessus."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -363,15 +368,18 @@
     "totalTeachers": "Enseignants",
     "unassignedTeachers": "Non affectés",
     "totalClasses": "Classes",
-    "totalSubjects": "Matières",
+    "totalSubjects": "Matières par classe",
     "assignedSubjects": "Affectées",
     "activeAnnouncements": "Communiqués",
-    "totalPeriods": "Créneaux",
+    "totalPeriods": "Périodes de cours",
     "incompleteTimetableSlots": "Sans emploi du temps",
     "timetableConflicts": "Conflits",
     "classesWithoutSubjects": "Sans matières",
     "totalReportTemplates": "Modèles",
-    "defaultTemplateSet": "Modèle par défaut"
+    "defaultTemplateSet": "Modèle par défaut",
+    "unassignedClassSubjects": "Sans enseignant",
+    "distinctSubjects": "{{count}} matière",
+    "distinctSubjects_other": "{{count}} matières distinctes"
   },
   "examStatus": {
     "draft": "Brouillon",
@@ -563,7 +571,11 @@
     "writeDown": "Notez ces informations avant de quitter la page : elles ne seront plus affichées, et les retrouver impose de réinitialiser le compte.",
     "noActiveClassesEnroll": "Aucune classe active dans laquelle inscrire l'élève.",
     "firstOne": "Ajoutez votre premier élève pour commencer",
-    "unassignedClass": "Sans classe"
+    "unassignedClass": "Sans classe",
+    "phoneInvalid": "Un numéro camerounais a 9 chiffres commençant par 6 ou 2 (ex. 677 12 34 56).",
+    "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
+    "dobFuture": "La date de naissance ne peut pas être dans le futur.",
+    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée."
   },
   "teachers": {
     "title": "Enseignants",
@@ -603,7 +615,12 @@
     "none": "Aucun enseignant",
     "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières.",
     "noneMatch": "Aucun résultat pour cette recherche",
-    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre."
+    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre.",
+    "unassignedTitle": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "unassignedTitle_other": "{{count}} matières-classes sur {{total}} sans enseignant",
+    "unassignedHint": "Aucun enseignant ne peut y saisir de notes, et le bulletin n'affiche aucun enseignant pour ces lignes.",
+    "unassignedShow": "Afficher",
+    "unassignedHide": "Masquer"
   },
   "subjects": {
     "title": "Matières",
@@ -955,6 +972,7 @@
     "moreCount": "+{{count}} de plus",
     "timelineRange": "Chronologie du {{from}} au {{to}}",
     "schoolAvg": "moyenne école",
+    "passRateScope": "{{year}} · moyenne de passage {{mark}}/20",
     "missingGrades": "Mentions manquantes",
     "avgScore": "Note moyenne",
     "adjustFilters": "Essayez d'ajuster ou d'effacer vos filtres",
@@ -1090,7 +1108,7 @@
     "promoSequenceHint": "* indique les examens de passage de l’année, fixés dans la structure académique. Ils ne décident pas du passage.",
     "createFailed": "Impossible de créer l’examen.",
     "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite",
-    "noSubjectsWarning": "⚠️ Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
+    "noSubjectsWarning": "Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
   },
   "reportCards": {
     "allStudents": "Les {{count}} élève",
@@ -1295,7 +1313,7 @@
     "assignTeacher": "Affecter un enseignant",
     "loadFailed": "Impossible de charger les affectations",
     "byTeacher": "Par enseignant",
-    "brokenLinks": "Liens rompus",
+    "brokenLinks": "Attributions à corriger",
     "teachersAssigned": "Enseignants affectés",
     "classesCovered": "Classes couvertes",
     "totalLessons": "Total des cours",
@@ -1362,6 +1380,30 @@
     "blurb": "La situation de l'établissement aujourd'hui, et les outils pour produire les documents"
   },
   "templates": {
+    "readyMade": "Mises en page prêtes",
+    "readyMadeHint": "Choisissez une mise en page pour vos bulletins. Toutes impriment les mêmes informations.",
+    "chooseSections": "Choisir ce qui s’imprime",
+    "customInUse": "Le modèle propre à l’école « {{name}} » est utilisé. Choisissez une mise en page ci-dessous pour changer.",
+    "inUse": "Utilisée",
+    "printingWithThis": "Les bulletins s’impriment avec cette mise en page",
+    "useLayout": "Utiliser cette mise en page",
+    "layoutChosen": "Mise en page choisie — les nouveaux bulletins l’utiliseront.",
+    "advanced": "Avancé — HTML personnalisé",
+    "advancedHint": "Écrivez votre propre modèle en HTML. Utile seulement pour un rendu que les mises en page ci-dessus n’offrent pas.",
+    "preset": {
+      "classic": {
+        "name": "Classique",
+        "description": "Le bulletin standard : en-tête officiel, bandeau de titre bleu et tableau complet des matières."
+      },
+      "compact": {
+        "name": "Compacte",
+        "description": "Le même bulletin en plus petit et plus serré, pour qu’une longue liste de matières tienne sur une page."
+      },
+      "clear": {
+        "name": "Lisible",
+        "description": "Gros caractères et bandes noir et blanc — la plus facile à lire et à photocopier."
+      }
+    },
     "title": "Modèles de bulletins",
     "blurb": "Gérer les maquettes HTML de vos bulletins",
     "create": "Créer un modèle",
@@ -1384,6 +1426,15 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "todo": "À faire",
+    "action": {
+      "marksAwaitingApproval": "Les notes de {{count}} matière attendent l'approbation",
+      "marksAwaitingApproval_other": "Les notes de {{count}} matières attendent l'approbation",
+      "resultsUnpublished": "Les résultats de {{count}} examen sont prêts à publier",
+      "resultsUnpublished_other": "Les résultats de {{count}} examens sont prêts à publier",
+      "overdueFees": "{{count}} famille a des frais en retard ({{amount}})",
+      "overdueFees_other": "{{count}} familles ont des frais en retard ({{amount}})"
+    },
     "justNow": "À l'instant",
     "title": "Notifications",
     "readAll": "Tout marquer comme lu",
@@ -1628,6 +1679,7 @@
     "schoolSummary": "Résumé de l'établissement",
     "schoolLogo": "Logo de l'établissement",
     "noLogo": "Aucun logo",
+    "logoBroken": "Logo introuvable — téléversez-le à nouveau",
     "removeLogo": "Supprimer le logo",
     "schoolCode": "Code de l'établissement",
     "schoolType": "Type d'établissement",
@@ -1710,10 +1762,15 @@
     "secAdmins": "Comptes du bureau",
     "secIdCards": "Cartes scolaires",
     "secAnalytics": "Statistiques",
+    "typeCollegeGeneral": "Collège – enseignement général",
+    "typeCollegeTechnical": "Collège – enseignement technique",
+    "typeLyceeGeneral": "Lycée – enseignement général",
+    "typeLyceeTechnical": "Lycée – enseignement technique",
+    "passMarkOn20": "Note de passage (/20)",
     "typePrimary": "Primaire",
     "typeJhs": "Premier cycle",
     "typeShs": "Second cycle / Lycée",
-    "typeCombined": "Mixte",
+    "typeCombined": "Polyvalent (général et technique)",
     "typeVocational": "Technique",
     "typeUniversity": "Université",
     "typeOther": "Autre",
@@ -2900,6 +2957,11 @@
     "general": "Général"
   },
   "codes": {
+    "lastOpened": "Dernière consultation",
+    "neverShort": "Jamais",
+    "noStudent": "Lié à aucun élève",
+    "noStudentCount": "{{count}} code n'est lié à aucun élève actuel — révoquez-le ou liez-le à un enfant.",
+    "noStudentCount_other": "{{count}} codes ne sont liés à aucun élève actuel — révoquez-les ou liez-les à un enfant.",
     "title": "Accès parents",
     "blurb": "Donnez à un tuteur un code pour consulter les frais, résultats et présences de son enfant. Le code n'est affiché qu'une fois — notez-le avant de fermer.",
     "issue": "Générer un code",
@@ -2973,15 +3035,15 @@
     "empty": "Aucun élève signalé",
     "emptyHint": "Aucun élève ne déclenche de signal pour l'instant. Les signalements apparaissent au fil des présences, résultats, devoirs et paiements.",
     "noMatch": "Aucun élève signalé ne correspond à ces filtres",
-    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire. Les seuils se trouvent dans le service early-warning du serveur.",
+    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire.",
     "sig": {
       "absence": "Absent {{absent}} jours sur {{marked}} pointés",
       "late": "{{late}} retards",
-      "failed_exam": "Échec au dernier examen ({{percentage}} %)",
-      "grade_drop": "Moyenne passée de {{from}} % à {{to}} %",
+      "failed_exam": "Échec au dernier examen ({{average}}/20, moyenne de passage {{passMark}})",
+      "grade_drop": "Moyenne passée de {{from}} à {{to}} /20",
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
-      "fees_outstanding": "Doit {{balance}}"
+      "fees_outstanding": "Doit {{balance}} (en retard)"
     }
   },
   "verif": {
@@ -3076,7 +3138,16 @@
       "lastActivity": "Dernière activité",
       "directConversation": "Conversation directe",
       "read": "Lire",
-      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève"
+      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève",
+      "kinds": {
+        "direct": "Directe",
+        "class": "Classe",
+        "subject": "Matière",
+        "group": "Groupe",
+        "conversationOf": "Conversation {{kind}}"
+      },
+      "openedAsAudit": "{{count}} participant · consultation d'audit",
+      "openedAsAudit_other": "{{count}} participants · consultation d'audit"
     },
     "auditNotice": "Cette consultation est enregistrée. Les messages supprimés sont affichés ici en entier — c’est l’objet d’un audit — et ne sont pas visibles par les participants.",
     "noneMatching": "Aucune conversation ne correspond à « {{query}} ».",
@@ -3145,7 +3216,9 @@
     "titleConflicts": "Conflits d’emploi du temps",
     "titleNoTimetable": "Emplois du temps incomplets",
     "titleNoAssignments": "Aucune attribution",
-    "titleGeneric": "Alerte système"
+    "titleGeneric": "Alerte système",
+    "classSubjectsUnassigned": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "classSubjectsUnassigned_other": "{{count}} matières-classes sur {{total}} sans enseignant"
   },
   "modules": {
     "classes": "Classes",
@@ -3154,7 +3227,7 @@
     "subjectsDesc": "Créer et rattacher les matières",
     "teachers": "Enseignants",
     "teachersDesc": "Gérer les profils des enseignants",
-    "applications": "Demandes",
+    "applications": "Admissions",
     "applicationsDesc": "Examiner les demandes d’inscription",
     "students": "Élèves",
     "studentsDesc": "Liste des élèves admis",
@@ -3360,7 +3433,7 @@
     "RECENT_DECLINE": "Les résultats scolaires récents ont diminué.",
     "SUDDEN_PERFORMANCE_CHANGE": "Un changement récent de résultats a été observé.",
     "PERSISTENT_UNDERPERFORMANCE": "Les résultats restent inférieurs au seuil de réussite de l'école.",
-    "SUBJECT_STRENGTH": "Une force dans une matière se dégage.",
+    "SUBJECT_STRENGTH": "De bons résultats récents dans cette matière.",
     "SUSTAINED_IMPROVEMENT": "Une amélioration durable a été observée.",
     "CONSISTENT_STRENGTH": "Des résultats constamment solides ont été observés.",
     "INSUFFICIENT_ACADEMIC_EVIDENCE": "Les éléments scolaires sont encore insuffisants.",
@@ -3668,7 +3741,7 @@
       "heading": "Pilote de validation",
       "none": "Aucun pilote ouvert pour cet établissement.",
       "kind": {
-        "synthetic": "Synthétique (jeux de données)",
+        "synthetic": "Données d'essai",
         "development": "Développement (test du flux)",
         "real": "Réel (établissement autorisé, ses propres enseignants)"
       },
@@ -3702,7 +3775,7 @@
       "openKind": "Type d'exercice",
       "openLabel": "Libellé (facultatif)",
       "openScope": "Classes (vide = tout l'établissement)",
-      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — produit des preuves de calibration.",
+      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — sert à ajuster les suggestions.",
       "advance": "Passer à {{state}}",
       "note": "Note pour le dossier (facultatif)",
       "decisionHeading": "Décision",
@@ -5364,7 +5437,7 @@
   },
   "academicRules": {
     "title": "Comment les résultats sont calculés",
-    "intro": "Identique pour toutes les écoles, décidé par le responsable du projet. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
+    "intro": "Identique pour toutes les écoles. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
     "year": "Année scolaire",
     "statement": {
       "sequence": "Moyenne de séquence : la note de chaque matière sur 20 (CC intégré selon la répartition CC/épreuve de l'école quand le CC est activé ; l'épreuve seule sinon), pondérée par le coefficient de la matière.",
@@ -5471,5 +5544,33 @@
     "failed": "Impossible de vérifier l'adresse. Réessayez.",
     "current": "Serveur : {{url}}",
     "change": "Changer de serveur"
+  },
+  "schoolHours": {
+    "conflictTitle": "Les horaires et les périodes ne concordent pas",
+    "conflictBody": "Les paramètres indiquent une journée de {{open}} à {{close}}, mais les périodes vont de {{from}} à {{to}}. Corrigez celui qui est faux.",
+    "editInSettings": "Modifier les horaires dans les paramètres",
+    "editPeriods": "Modifier les périodes"
+  },
+  "ageRanges": {
+    "title": "Âges habituels par classe",
+    "hint": "Un élève hors de ces âges est tout de même enregistré — le formulaire demande seulement de vérifier la date de naissance. Laissez vide pour la valeur par défaut (Form 1 : 9–14, chaque niveau : minimum +1, maximum +2).",
+    "save": "Enregistrer les âges",
+    "saved": "Tranches d'âge enregistrées",
+    "errSave": "Impossible d'enregistrer les tranches d'âge"
+  },
+  "studentOverview": {
+    "results": "Derniers résultats",
+    "noResults": "Aucun résultat publié pour l'instant.",
+    "position": "{{position}} sur {{outOf}}",
+    "attendance": "Assiduité — {{days}} derniers jours",
+    "attendanceBreakdown": "{{present}} présent(s), {{late}} retard(s), {{absent}} absence(s), {{excused}} excusée(s)",
+    "notMarked": "Pointé sur aucun registre pendant cette période.",
+    "fees": "Frais {{year}}",
+    "openAccount": "Ouvrir le compte",
+    "settled": "Soldé",
+    "feesBreakdown": "Facturé {{charged}} · payé {{paid}}",
+    "guardian": "Tuteur",
+    "noGuardian": "Aucun contact de tuteur enregistré.",
+    "unavailable": "Le résumé n'a pas pu être chargé."
   }
 }

@@ -248,7 +248,9 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   check("REVIEWING → ANALYSIS_READY takes the evidence snapshot from the persisted reviews",
     [r.status, pilot.evidence.casesReviewed, pilot.evidence.casesWithMultipleReviews, pilot.evidence.reviewers, pilot.evidence.studentsReviewed,
      pilot.evidence.reviewsRecorded, pilot.evidence.categories, pilot.evidence.subjects, pilot.evidence.temporalPatterns],
-    [200, 1, 1, 2, 1, 2, ["declining"], ["Mathematics"], ["academic_decline", "sudden_performance_change"]]);
+    // Maths 16, 15, 9 is one fall, said once (C5, 2026-10-27): a decline, not
+    // also a sudden change.
+    [200, 1, 1, 2, 1, 2, ["declining"], ["Mathematics"], ["academic_decline"]]);
   check("it counts cases selected and awaiting, and the data problems cited",
     [pilot.evidence.casesSelected > 1, pilot.evidence.casesAwaitingReview, pilot.evidence.dataQualityCitations],
     [true, pilot.evidence.casesSelected - 1, { assessment_unusually_difficult: 1 }]);

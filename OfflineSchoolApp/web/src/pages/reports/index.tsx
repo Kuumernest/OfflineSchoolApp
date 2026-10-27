@@ -187,7 +187,8 @@ function StatCard({
 }: {
   icon:     React.ComponentType<{ className?: string }>;
   label:    string;
-  value?:   number;
+  /** null: nothing to report — "—" (C3: a day nobody marked). */
+  value?:   number | null;
   suffix?:  string;
   detail?:  string;
   loading:  boolean;
@@ -213,8 +214,8 @@ function StatCard({
             "text-2xl font-semibold leading-none tabular-nums",
             failed ? "text-gray-300" : "text-gray-900",
           )}>
-            {failed || value === undefined ? "—" : value.toLocaleString()}
-            {!failed && value !== undefined && suffix}
+            {failed || value == null ? "—" : value.toLocaleString()}
+            {!failed && value != null && suffix}
           </p>
         )}
         <p className="mt-1.5 text-xs text-gray-500">{label}</p>

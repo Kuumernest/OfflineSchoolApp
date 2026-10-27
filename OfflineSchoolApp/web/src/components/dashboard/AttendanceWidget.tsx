@@ -7,7 +7,7 @@ import { cn }               from "@/utils/cn";
 interface Props {
   present:  number;
   absent:   number;
-  rate:     number;   // 0–100
+  rate:     number | null;   // 0–100; null when nobody was marked (C3)
   /** Register rows written today — late and excused included. */
   marked?:  number;
   loading?: boolean;
@@ -33,8 +33,8 @@ export default function AttendanceWidget({
   // particular states: a morning where every child arrived late is a
   // register that exists, and present + absent calls it an empty day.
   const total = marked ?? present + absent;
-  const healthy = rate >= 75;
-  const pct = Math.max(0, Math.min(rate, 100));
+  const healthy = (rate ?? 0) >= 75;
+  const pct = Math.max(0, Math.min(rate ?? 0, 100));
 
   return (
     <Card>
@@ -49,7 +49,7 @@ export default function AttendanceWidget({
         <>
           <div className="flex items-baseline gap-2">
             <span className="font-display text-[30px] leading-none text-ink tabular">
-              {fmt.number(rate)}%
+              {rate == null ? "–" : `${fmt.number(rate)}%`}
             </span>
             <span className="text-xs text-ink-muted">{t("dashboard.presentShort")}</span>
           </div>

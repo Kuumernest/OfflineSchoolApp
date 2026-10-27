@@ -6,6 +6,25 @@ const router        = express.Router();
 const TimetableSlot = require("../db/models/TimetableSlot");
 const User          = require("../db/models/User");
 const Subject       = require("../db/models/Subject");
+const Period        = require("../db/models/Period");
+const { teachersFor } = require("../services/classSubjectTeacher.service");
+const { timetableSlotProblem } = require("../../../shared/timetableRules");
+
+/**
+ * A lesson in a break, or taught by a teacher the class-subject assignment
+ * does not name, is refused (B1, shared/timetableRules.js). 422, with a code
+ * the grid can show beside the cell.
+ */
+const slotRuleRefusal = async ({ schoolId, classId, subjectId, teacherId, periodId }) => {
+  const [period, lookup] = await Promise.all([
+    Period.findOne({ _id: String(periodId), schoolId: String(schoolId) }).lean(),
+    teachersFor({ schoolId, classIds: [classId], subjectIds: [subjectId] }),
+  ]);
+  const problem = timetableSlotProblem({
+    period, teacherId, assignedIds: lookup(classId, subjectId)?.teacherIds ?? [],
+  });
+  return problem ? { success: false, error: problem.message, code: problem.code } : null;
+};
 
 let Class = null;
 try {
@@ -341,6 +360,9 @@ router.post(
     // ✅ strict=true — rejects anything not in the Mongoose enum
     const day = canonicalDay(dayOfWeek, { strict: true });
 
+    const refusal = await slotRuleRefusal({ schoolId, classId, subjectId, teacherId, periodId });
+    if (refusal) return res.status(422).json(refusal);
+
     const classConflict = await TimetableSlot.findOne({
       classId, dayOfWeek: day, periodId, ...NOT_DELETED,
     }).lean();
@@ -430,6 +452,12 @@ router.put(
     const newPeriod  = periodId  || slot.periodId;
     const newClass   = classId   || slot.classId;
     const newTeacher = teacherId || slot.teacherId;
+    const newSubject = subjectId || slot.subjectId;
+
+    const refusal = await slotRuleRefusal({
+      schoolId: slot.schoolId, classId: newClass, subjectId: newSubject, teacherId: newTeacher, periodId: newPeriod,
+    });
+    if (refusal) return res.status(422).json(refusal);
 
     const classConflict = await TimetableSlot.findOne({
       _id:       { $ne: id },

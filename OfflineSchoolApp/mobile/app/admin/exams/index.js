@@ -442,7 +442,7 @@ export default function ExamsDashboardScreen() {
                 { id: "published", label: t("results.published"), val: dashboard.results.published, color: "#7C3AED" },
                 { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       color: "#D97706" },
                 { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, color: "#DC2626" },
-                { id: "avg",      label: t("examsDash.avgScore"),      val: `${dashboard.results.averagePerformance ?? 0}%`, color: "#059669" },
+                { id: "avg",      label: t("examsDash.avgScore"),      val: `${Number(dashboard.results.averagePerformance ?? 0).toFixed(2)}/20`, color: "#059669" },
                 { id: "passRate", label: t("examsDash.passRate"),      val: `${dashboard.results.passRate ?? 0}%`,           color: "#4F46E5" },
               ].map((p) => (
                 <View

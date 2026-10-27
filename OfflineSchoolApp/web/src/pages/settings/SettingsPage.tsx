@@ -19,6 +19,11 @@ import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
 import { roleLabel }             from "@/utils/roleLabel";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useStudentAgeRanges }   from "@/hooks/useSchoolYear";
+import { defaultAgeRange }       from "@/utils/studentValidation";
+import { fetchPeriods }          from "@/services/period.service";
+import { SchoolHoursWarning }    from "@/components/settings/SchoolHoursWarning";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -132,14 +137,24 @@ const SECTIONS = [
 
 type SectionId = typeof SECTIONS[number]["id"];
 
+// Cameroon's school types (C9): Collège and Lycée, each general or technical.
 const SCHOOL_TYPES = [
-  { value: "primary",    labelKey: "settings.typePrimary"    },
+  { value: "primary",           labelKey: "settings.typePrimary"          },
+  { value: "college_general",   labelKey: "settings.typeCollegeGeneral"   },
+  { value: "college_technical", labelKey: "settings.typeCollegeTechnical" },
+  { value: "lycee_general",     labelKey: "settings.typeLyceeGeneral"     },
+  { value: "lycee_technical",   labelKey: "settings.typeLyceeTechnical"   },
+  { value: "combined",          labelKey: "settings.typeCombined"         },
+  { value: "other",             labelKey: "settings.typeOther"            },
+];
+
+// Types a school may have saved before C9. Not offered, but shown (selected)
+// when it is the school's current value, so the screen never hides it.
+const LEGACY_SCHOOL_TYPES = [
   { value: "jhs",        labelKey: "settings.typeJhs"        },
   { value: "shs",        labelKey: "settings.typeShs"        },
-  { value: "combined",   labelKey: "settings.typeCombined"   },
   { value: "vocational", labelKey: "settings.typeVocational" },
   { value: "university", labelKey: "settings.typeUniversity" },
-  { value: "other",      labelKey: "settings.typeOther"      },
 ];
 
 const TERM_SYSTEMS = [
@@ -305,9 +320,9 @@ function SaveButton({
       onClick={onClick}
       disabled={loading}
       className="
-        mt-6 flex items-center gap-2 rounded-xl bg-indigo-600
+        mt-6 flex items-center gap-2 rounded-xl bg-primary-600
         px-6 py-3 text-sm font-semibold text-white
-        hover:bg-indigo-700 disabled:opacity-50 transition
+        hover:bg-primary-700 disabled:opacity-50 transition
       "
     >
       {loading
@@ -347,14 +362,24 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo]   = useState(false);
+  // The saved logo's address did not load (file missing on the server).
+  const [logoBroken, setLogoBroken]   = useState(false);
 
   const set = <K extends keyof SchoolSettings>(key: K, val: SchoolSettings[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
 
+  const periodsQ = useQuery({
+    queryKey: ["periods", schoolId, false],
+    queryFn:  () => fetchPeriods(schoolId),
+    enabled:  !!schoolId,
+  });
+
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/admin/school-info", { params: { schoolId } });
+        // includeLogo: without it a logo still stored inline comes back null
+        // and this screen said "No logo" for a school that has one (C9).
+        const { data } = await api.get("/admin/school-info", { params: { schoolId, includeLogo: 1 } });
         const s = data?.school || data;
         if (s) {
           setForm({
@@ -406,7 +431,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     setLogoFile(file);
     setRemoveLogo(false);
     const reader = new FileReader();
-    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.onload = () => { setLogoPreview(reader.result as string); setLogoBroken(false); };
     reader.readAsDataURL(file);
   };
 
@@ -484,11 +509,14 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
             {logoPreview
-              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover" />
+              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover"
+                  onError={() => { setLogoPreview(null); setLogoBroken(true); }} />
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
                   <Building2 className="h-8 w-8 text-gray-300" />
-                  <span className="text-[10px] text-gray-400">{t("settings.noLogo")}</span>
+                  <span className="text-[10px] text-gray-400">
+                    {logoBroken ? t("settings.logoBroken") : t("settings.noLogo")}
+                  </span>
                 </div>
               )
             }
@@ -550,7 +578,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <FieldLabel>{t("settings.schoolType")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {/* Named `opt`, not `t` — `t` here is the translator. */}
-              {SCHOOL_TYPES.map((opt) => (
+              {[...SCHOOL_TYPES,
+                ...LEGACY_SCHOOL_TYPES.filter((o) => o.value === form.schoolType)].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => set("schoolType", opt.value)}
@@ -734,7 +763,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             </div>
           </div>
 
-          {/* Hours */}
+          {/* Hours — and where the period grid disagrees with them (B2) */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>{t("settings.startTime")}</FieldLabel>
@@ -745,11 +774,84 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <Input value={form.schoolEndTime} onChange={(v) => set("schoolEndTime", v)} type="time" />
             </div>
           </div>
+          <SchoolHoursWarning
+            schoolStart={form.schoolStartTime}
+            schoolEnd={form.schoolEndTime}
+            periods={periodsQ.data ?? []}
+            fixLink={{ to: "/periods", label: t("schoolHours.editPeriods") }}
+          />
         </div>
       </Card>
 
       <SaveButton onClick={handleSave} loading={saving} label={t("settings.saveSchool")} />
+
+      <StudentAgeRangesCard schoolId={schoolId} />
     </div>
+  );
+}
+
+/**
+ * The usual age per class level (B3): only ever a warning on the student
+ * form. Blank keeps the default — Form 1 9–14, each level up the minimum +1
+ * and the maximum +2. Saved on its own, apart from the school form above.
+ */
+const LEVEL_NAMES = ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5", "Lower Sixth", "Upper Sixth"];
+
+function StudentAgeRangesCard({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const saved = useStudentAgeRanges();
+  const [edits, setEdits] = useState<Record<string, { min: string; max: string }>>({});
+  const [saving, setSaving] = useState(false);
+
+  const valueOf = (level: number, key: "min" | "max") =>
+    edits[level]?.[key] ?? String(saved?.[String(level)]?.[key] ?? "");
+  const setValue = (level: number, key: "min" | "max", v: string) =>
+    setEdits((e) => ({ ...e, [level]: { min: valueOf(level, "min"), max: valueOf(level, "max"), [key]: v } }));
+
+  const save = async () => {
+    const ranges: Record<string, { min: number; max: number }> = {};
+    for (let level = 1; level <= 7; level += 1) {
+      const min = valueOf(level, "min"), max = valueOf(level, "max");
+      if (min === "" && max === "") continue;
+      const def = defaultAgeRange(level);
+      ranges[level] = { min: min === "" ? def.min : Number(min), max: max === "" ? def.max : Number(max) };
+    }
+    setSaving(true);
+    try {
+      await api.put("/admin/school-info", { schoolId, studentAgeRanges: Object.keys(ranges).length ? ranges : null });
+      await qc.invalidateQueries({ queryKey: ["school-basics"] });
+      setEdits({});
+      toast({ title: t("ageRanges.saved"), kind: "success" });
+    } catch (err) {
+      toast({ title: t("ageRanges.errSave"), message: extractMessage(err, t), kind: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardTitle>{t("ageRanges.title")}</CardTitle>
+      <p className="-mt-3 mb-4 text-sm text-gray-500">{t("ageRanges.hint")}</p>
+      <div className="grid gap-2">
+        {LEVEL_NAMES.map((name, i) => {
+          const level = i + 1;
+          const def = defaultAgeRange(level);
+          return (
+            <div key={level} className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2">
+              <span className="text-sm text-gray-700">{name}</span>
+              <Input type="number" value={valueOf(level, "min")} placeholder={String(def.min)}
+                     onChange={(v) => setValue(level, "min", v)} />
+              <Input type="number" value={valueOf(level, "max")} placeholder={String(def.max)}
+                     onChange={(v) => setValue(level, "max", v)} />
+            </div>
+          );
+        })}
+      </div>
+      <SaveButton onClick={save} loading={saving} label={t("ageRanges.save")} />
+    </Card>
   );
 }
 
@@ -943,8 +1045,8 @@ function ProfileSection() {
               onClick={handleChangePassword}
               disabled={savingPw}
               className="
-                flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5
-                text-sm font-semibold text-white hover:bg-indigo-700
+                flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5
+                text-sm font-semibold text-white hover:bg-primary-700
                 disabled:opacity-50 transition
               "
             >
@@ -1147,7 +1249,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
           {/* Pass mark */}
           <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-            <FieldLabel>{t("settings.passMarkPct")}</FieldLabel>
+            <FieldLabel>{t("settings.passMarkOn20")}</FieldLabel>
             <input
               type="number"
               min={0}
@@ -1697,7 +1799,7 @@ function AdminsSection({
                   </button>
                   <button
                     onClick={closeModal}
-                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                    className="flex-1 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
                   >
                     {t("common.done")}
                   </button>
@@ -1755,7 +1857,7 @@ function AdminsSection({
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 transition"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 {creating ? t("settings.creating") : t("settings.createAdmin")}
@@ -2044,7 +2146,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save")}
@@ -2057,7 +2159,11 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const user = useUser();
-  const [activeSection, setActiveSection] = useState<SectionId>("school");
+  // ?section= opens a section directly (C12: "Choose what prints" links here).
+  const [activeSection, setActiveSection] = useState<SectionId>(() => {
+    const asked = new URLSearchParams(window.location.search).get("section");
+    return (SECTIONS.find((s) => s.id === asked)?.id ?? "school") as SectionId;
+  });
 
   const schoolId     = user?.schoolId     ?? "";
   const currentUserId = user?._id ?? (user as unknown as Record<string, string>)?.id ?? "";

@@ -24,6 +24,7 @@ const EMPTY_STATS = {
   timetableConflicts:       0,
   stalePendingApps:         0,
   totalPeriods:             0,
+  unassignedClassSubjects:  0,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -208,6 +209,8 @@ const fetchAdminStatsFromServer = async () => {
           timetableConflicts:       raw.timetableConflicts       ?? 0,
           stalePendingApps:         raw.stalePendingApps         ?? 0,
           totalPeriods:             raw.totalPeriods             ?? 0,
+          // B4: the server's count of class-subjects with no teacher.
+          unassignedClassSubjects:  raw.unassignedClassSubjects  ?? 0,
         };
 
         // ── Consistency guard: server vs local teacher counts ──
@@ -645,6 +648,9 @@ if (assign.table) {
       const p = [...sfPeriod.params];
       q += sfPeriod.clause;
       if (isActiveCol) q += ` AND ${isActiveCol} = 1`;
+      // Teaching periods only (B2), as the server counts them.
+      const breakCol = pickColumn(periodCols, ["isbreak", "is_break", "isBreak"]);
+      if (breakCol) q += ` AND COALESCE(${breakCol}, 0) = 0`;
       q += notDeletedClause(deletedCol);
       queries.push(safeCount(db, q, p));
     } else {

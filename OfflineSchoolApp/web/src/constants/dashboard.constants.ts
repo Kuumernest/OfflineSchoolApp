@@ -103,7 +103,7 @@ export const ALL_MODULES: Module[] = [
   },
   {
     id:          "applications",
-    title:       "Applications",
+    title:       "Admissions",
     description: "Review student applications",
     titleKey:    "modules.applications",
     descKey:     "modules.applicationsDesc",    icon:        GraduationCap,
@@ -196,12 +196,12 @@ export const HEALTH_METRIC_ROWS: HealthMetric[][] = [
   ],
   [
     { key: "totalClasses",        label: "Classes",       icon: School                       },
-    { key: "totalSubjects",       label: "Subjects",      icon: BookOpen                       },
-    { key: "assignedSubjects",    label: "Assigned",      icon: GitBranch                       },
+    { key: "totalSubjects",       label: "Class-subjects", icon: BookOpen                       },
+    { key: "unassignedClassSubjects", label: "No teacher", icon: GitBranch, alertOnNonZero: true },
     { key: "activeAnnouncements", label: "Notices",       icon: Megaphone                       },
   ],
   [
-    { key: "totalPeriods",             label: "Periods",      icon: Clock                       },
+    { key: "totalPeriods",             label: "Teaching periods", icon: Clock                       },
     { key: "incompleteTimetableSlots", label: "No Timetable", icon: Calendar, alertOnNonZero: true },
     { key: "timetableConflicts",       label: "Conflicts",    icon: FileText, alertOnNonZero: true },
     { key: "classesWithoutSubjects",   label: "No Subjects",  icon: School, alertOnNonZero: true },

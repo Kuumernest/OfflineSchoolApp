@@ -279,7 +279,10 @@ export default function ParentPortalPage() {
           {/* resolveLogoSrc returns null for anything it cannot resolve, so the
               guard is on the RESOLVED value — checking school.logo alone would
               still render an <img src={null}> and show a broken-image icon. */}
-          {logo && <img src={logo} alt="" className="h-9 w-9 object-contain" />}
+          {logo && (
+            <img src={logo} alt="" className="h-9 w-9 object-contain"
+              onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-ink">{school?.name ?? ""}</p>
             <p className="truncate text-xs text-ink-muted">

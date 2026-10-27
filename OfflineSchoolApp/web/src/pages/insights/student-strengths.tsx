@@ -45,6 +45,7 @@ import {
   type ExplainResponse, type ExplainClaim, type CitationItem,
   type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine, type DevGuidanceItem, type DevelopmentIntervention, type InterventionTrigger, type DevelopmentPlan,
 } from "@/services/insights.service";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
 const OBS_CODES  = ["PROBLEM_SOLVING", "PERSISTENCE", "COMMUNICATION", "TECHNICAL_EXECUTION", "CREATIVE_APPROACH", "COLLABORATION", "EXPLANATION", "ITERATION"];
@@ -205,7 +206,7 @@ export default function StudentStrengthsPage() {
                 <span className="text-ink">{s.activity}</span>
                 <span className="text-xs text-ink-muted">
                   {s.dimension ? t(`strengths.dimension.${s.dimension}`, { defaultValue: s.dimension }) : s.area ? t(`strengths.area.${s.area}`, { defaultValue: s.area }) : ""}
-                  {s.date ? ` · ${new Date(s.date).toLocaleDateString()}` : ""}
+                  {s.date ? ` · ${formatDay(s.date)}` : ""}
                   {s.participation ? ` · ${t(`strengths.participation.${s.participation}`)}` : ""}
                   {s.reflection ? ` · ${t(`strengths.reflection.${s.reflection}`)}` : ""}
                 </span>
@@ -240,7 +241,7 @@ export default function StudentStrengthsPage() {
             {profileQ.data!.history.map((h) => (
               <li key={h.snapshotId} className="flex flex-wrap items-center gap-2">
                 <Badge variant="default" label={`v${h.profileVersion}`} />
-                <span className="text-ink">{h.periodLabel ?? new Date(h.generatedAt).toLocaleDateString()}</span>
+                <span className="text-ink">{h.periodLabel ?? formatDay(h.generatedAt)}</span>
                 <span className="text-xs text-ink-muted">
                   {t("strengths.historyLine", { s: h.profile.strengths.map((d) => t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })).join(", ") || "—",
                     e: h.profile.emergingAreas.map((d) => t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })).join(", ") || "—", v: h.strengthEngineVersion })}
@@ -397,7 +398,7 @@ function EventList({ label, events, warn }: { label: string; events: LearningEve
       <p className={warn ? "text-warning" : "text-ink"}>{label} ({events.length})</p>
       <ul className="list-disc pl-5 text-ink-muted">
         {events.map((e) => <li key={e.eventId}>{t("strengths.integration.event", { family: t(`strengths.integration.family.${e.sourceKind}`, { defaultValue: e.sourceKind }), subject: e.subjectName ?? e.subjectId ?? "—",
-          when: e.observedAt ? new Date(e.observedAt).toLocaleDateString() : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
+          when: e.observedAt ? formatDay(e.observedAt) : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
       </ul>
     </div>
   );
@@ -576,7 +577,7 @@ function Development({ studentId, schoolId, isStaff }: { studentId: string; scho
   const q = useQuery({ queryKey: ["development", studentId, schoolId], queryFn: () => fetchDevelopment(studentId, schoolId) });
   const h = q.data;
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   const explainLine = (l: ExplanationLine) => t(`development.explain.${l.code}`, {
     defaultValue: l.code, state: l.state ? t(`strengths.state.${l.state}`) : "", n: l.n ?? "", from: l.from ? t(`strengths.state.${l.from}`) : "", to: l.to ? t(`strengths.state.${l.to}`) : "",
     at: day(l.at), family: l.family ? t(`strengths.integration.family.${l.family}`, { defaultValue: l.family }) : "", kind: l.kind ? t(`strengths.integration.conflict.${l.kind}`, { defaultValue: t(`strengths.fusion.conflict.${l.kind}`, { defaultValue: l.kind }) }) : "",
@@ -684,7 +685,7 @@ function GuidanceAndSupport({ studentId, schoolId, isStaff, toast }: { studentId
     onSuccess: async () => { toast({ kind: "success", title: t("devPlan.created") }); await qc.invalidateQueries({ queryKey: ["dev-plans", studentId, schoolId] }); },
     onError: (err: unknown) => { const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code; toast({ kind: "error", title: t(`devPlan.error.${code ?? "generic"}`, { defaultValue: t("devPlan.error.generic") }) }); } });
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   const items = g.data?.items ?? [];
   const triggers = iv.data?.triggers ?? [];
   const interventions = iv.data?.interventions ?? [];
@@ -812,7 +813,7 @@ function DevelopmentPlans({ studentId, schoolId, isStaff, toast }: { studentId: 
   const review = useMutation({ mutationFn: (b: { id: string; code: string; note: string; decision: string; actionType: string | null }) => reviewDevelopmentPlan(studentId, b.id, { teacherReview: b.code ? { code: b.code, note: b.note || null } : null, decision: b.decision, actionType: b.actionType, ...(schoolId ? { schoolId } : {}) }), onSuccess: refresh, onError });
   const plans = q.data?.plans ?? [];
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   return (
     <Section icon={<ClipboardList className="h-3.5 w-3.5" />} heading={t("devPlan.heading")} hint={t("devPlan.hint", { p: q.data?.engineVersions.planning ?? "—", a: q.data?.engineVersions.adaptive ?? "—" })}>
       {plans.length === 0 && <p className="text-sm text-ink-muted">{t("devPlan.none")}</p>}
@@ -934,7 +935,7 @@ function WhatChanged({ studentId, schoolId }: { studentId: string; schoolId?: st
   const any = moved.some(([, l]) => l.length) || (c.newEvidence?.rows ?? 0) > 0;
   return (
     <Section icon={<GitCompare className="h-3.5 w-3.5" />} heading={t("strengths.fusion.changesHeading")}
-      hint={c.previous ? t("strengths.fusion.changesSince", { v: c.previous.profileVersion, when: new Date(c.previous.generatedAt).toLocaleDateString() }) : t("strengths.fusion.noSnapshotYet")}>
+      hint={c.previous ? t("strengths.fusion.changesSince", { v: c.previous.profileVersion, when: formatDay(c.previous.generatedAt) }) : t("strengths.fusion.noSnapshotYet")}>
       {!any && <p className="text-sm text-ink-muted">{t("strengths.fusion.nothingChanged")}</p>}
       {c.newEvidence && c.newEvidence.rows > 0 && (
         <p className="text-sm text-ink">{t("strengths.fusion.newEvidence")}: {Object.entries(c.newEvidence.byKind).map(([k, v]) => `${v} × ${t(`strengths.kind.${k}`, { defaultValue: k })}`).join(", ")} · {t("strengths.fusion.explorations", { n: c.newEvidence.explorations })}</p>
@@ -983,7 +984,7 @@ function Timeline({ dimension }: { dimension: string }) {
       <ul className="mt-1 space-y-0.5 text-ink-muted">
         {rows.map((r, i) => (
           <li key={i}>
-            {r.when ? (r.when.length > 10 ? new Date(r.when).toLocaleDateString() : r.when) : "—"} · {t(`strengths.fusion.src.${r.source.toLowerCase()}`, { defaultValue: r.source })} · {r.subjectName ?? ""}{r.area ? t(`strengths.area.${r.area}`, { defaultValue: r.area }) : ""} {r.reading}{r.observers ? ` ×${r.observers}` : ""}
+            {r.when ? (r.when.length > 10 ? formatDay(r.when) : r.when) : "—"} · {t(`strengths.fusion.src.${r.source.toLowerCase()}`, { defaultValue: r.source })} · {r.subjectName ?? ""}{r.area ? t(`strengths.area.${r.area}`, { defaultValue: r.area }) : ""} {r.reading}{r.observers ? ` ×${r.observers}` : ""}
           </li>
         ))}
       </ul>
@@ -1084,7 +1085,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
         <summary className="cursor-pointer text-ink-muted">{t("learning.timeline", { n: d.timeline.length })}</summary>
         <ul className="mt-1 max-h-64 space-y-0.5 overflow-y-auto text-ink-muted">
           {d.timeline.slice().reverse().map((e) => (
-            <li key={e.learningEventId}>{e.when ? new Date(e.when).toLocaleDateString() : "—"} · {t(`learning.source.${e.sourceType}`)}{e.subjectId ? ` · ${e.subjectId}` : ""} · {e.observations.map((o) => `${o.kind}: ${o.state}${o.normalizedValue !== undefined && o.normalizedValue !== null ? ` (${Math.round(o.normalizedValue * 100)}%)` : ""}`).join(", ")} · {e.recency}</li>
+            <li key={e.learningEventId}>{e.when ? formatDay(e.when) : "—"} · {t(`learning.source.${e.sourceType}`)}{e.subjectId ? ` · ${e.subjectId}` : ""} · {e.observations.map((o) => `${o.kind}: ${o.state}${o.normalizedValue !== undefined && o.normalizedValue !== null ? ` (${Math.round(o.normalizedValue * 100)}%)` : ""}`).join(", ")} · {e.recency}</li>
           ))}
         </ul>
       </details>
@@ -1092,7 +1093,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
       <p className="text-xs text-ink-muted">{t("learning.notInferred")}</p>
       {isStaff && cq.data && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-          <span>{cq.data.previous ? t("learning.lastSnapshot", { n: cq.data.previous.snapshotNumber, when: new Date(cq.data.previous.generatedAt).toLocaleDateString() }) : t("learning.noSnapshot")}{cq.data.pendingSnapshot ? ` · ${t("learning.pending2")}` : ""}</span>
+          <span>{cq.data.previous ? t("learning.lastSnapshot", { n: cq.data.previous.snapshotNumber, when: formatDay(cq.data.previous.generatedAt) }) : t("learning.noSnapshot")}{cq.data.pendingSnapshot ? ` · ${t("learning.pending2")}` : ""}</span>
           <Button size="sm" variant="secondary" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>{t("learning.rebuild")}</Button>
         </div>
       )}
@@ -1112,7 +1113,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
 
 const EXPLAIN_PROMPTS = ["profile", "changed", "evidence", "guidance", "plan", "explore"] as const;
 const humanCode = (s: unknown) => String(s ?? "").toLowerCase().replace(/_/g, " ");
-const dayOf = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+const dayOf = (d?: string | null) => (d ? formatDay(d) : "—");
 type Tr = ReturnType<typeof useTranslation>["t"];
 const pickText = (...vals: unknown[]) => vals.find((v) => typeof v === "string" && v.length > 0) as string | undefined;
 

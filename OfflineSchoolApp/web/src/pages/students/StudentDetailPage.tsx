@@ -46,6 +46,8 @@ import {
   type DocumentVerificationRow,
 } from "@/services/document.service";
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
+import { formatDay } from "../../../../shared/dateFormat.js";
+import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -74,6 +76,10 @@ const QK = {
 // student record and the settings form name a school's type the same way.
 const SCHOOL_TYPE_LABELS: Record<string, string> = {
   primary:    "settings.typePrimary",
+  college_general:   "settings.typeCollegeGeneral",
+  college_technical: "settings.typeCollegeTechnical",
+  lycee_general:     "settings.typeLyceeGeneral",
+  lycee_technical:   "settings.typeLyceeTechnical",
   jhs:        "settings.typeJhs",
   shs:        "settings.typeShs",
   combined:   "settings.typeCombined",
@@ -126,14 +132,7 @@ const getStatusConfig = (status: string) => {
 
 const formatDate = (value?: string | null): string | null => {
   if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString(undefined, {
-        year:  "numeric",
-        month: "long",
-        day:   "numeric",
-      });
+  return formatDay(value, value);
 };
 
 /**
@@ -986,7 +985,7 @@ export default function StudentDetailPage() {
         </p>
         <button
           onClick={() => navigate("/students")}
-          className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+          className="mt-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           {t("studentDetail.back")}
         </button>
@@ -1279,6 +1278,11 @@ export default function StudentDetailPage() {
             iconColor="text-gray-400"
           />
         </Section>
+
+        {/* ── Results, attendance, fees, guardian (C10) ── */}
+        <div className="lg:col-span-2">
+          <StudentOverviewCard studentId={student._id} />
+        </div>
 
         {/* ── ID card photo ── */}
         <div className="lg:col-span-2">

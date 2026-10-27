@@ -510,7 +510,7 @@ const main = async () => {
   //
   //   sub-1  a subject under `classId`, with a teacher who exists
   //   sub-2  a subject under `class` instead — both spellings are in the data
-  //   sub-3  two assignments; the FIRST one read wins and the second is ignored
+  //   sub-3  two assignments; both are named, sorted (A8)
   //   sub-4  an assignment recorded under teacherId, which the endpoint does
   //          not read, so no teacher is attached
   //   sub-5  a teacher id resolving to no user at all — populate leaves the id
@@ -583,8 +583,10 @@ const main = async () => {
   check("the joined class is projected, not sent whole",
     Object.keys(bySub.get("sub-1").classObj).sort(),
     ["_id", "level", "name", "section"]);
-  check("two assignments on one subject shows the first",
-    bySub.get("sub-3").teacher._id, "t1");
+  // A8: the class-subject assignment is read one way on every screen — both
+  // active teachers, sorted by name, the first of them as the row's teacher.
+  check("two assignments on one subject shows both, sorted by name",
+    [bySub.get("sub-3").teacher._id, bySub.get("sub-3").teacherName], ["t2", "M. Etoa, Mme Fomba"]);
   check("an assignment under teacherId attaches no teacher",
     bySub.get("sub-4").teacher, null);
   // populate sets the field to null when it finds nothing, so the subject comes
@@ -3483,13 +3485,21 @@ const main = async () => {
       method: "GET", path: "/api/attendance/report/weekly",
       query: { schoolId: SCHOOL },
     }, teachCtx).data;
-    check("seven days, oldest first", weekly.days.length, 7);
-    check("ending today", weekly.days[6], week[6]);
-    check("with a row per day", weekly.trend.length, 7);
-    check("today's present count", weekly.trend[6].students.present, 1);
-    check("and a day in the middle", weekly.trend[4].students.late, 1);
-    check("a day with nothing shows zeroes, not gaps",
-      weekly.trend[0].students.present, 0);
+    // C3: the last seven days, the school's open days only (Monday to
+    // Friday by default) — so which days are listed depends on today.
+    const { schoolDaysOnly } = require("../../shared/attendance");
+    const open = schoolDaysOnly(week, null);
+    const on = (day) => weekly.trend.find((r) => r.date === day);
+    check("the week's school days, oldest first", weekly.days, open);
+    check("no Saturday or Sunday", weekly.days.every((d) => ![0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay())), true);
+    check("with a row per day", weekly.trend.length, open.length);
+    if (open.includes(week[6])) check("today's present count", on(week[6]).students.present, 1);
+    if (open.includes(week[4])) check("and a day in the middle", on(week[4]).students.late, 1);
+    const quiet = open.find((d) => d !== week[6] && d !== week[4]);
+    if (quiet) {
+      check("a day with nothing shows zeroes, not gaps", on(quiet).students.present, 0);
+      check("and no rate — the register was not taken", on(quiet).students.rate, null);
+    }
   }
 
   // ── One class, pupil by pupil ──────────────────────────────────────────
@@ -6618,8 +6628,17 @@ const main = async () => {
     false);
   check("and leaves the position exactly where it was",
     finArrears("from=2026-09-01&to=2026-09-30"), finArrears());
-  check("the academic year DOES narrow it",
-    finArrears(`academicYear=${YEAR}`).charged < finArrears().charged, true);
+  // No year asked for is the school's current year (its setting, else the
+  // calendar's) — the one Fees > Outstanding and the platform dashboard use —
+  // not every year at once.
+  {
+    const { currentAcademicYearOf } = require("../../shared/academicYear");
+    const current = currentAcademicYearOf(docs.get("school", SCHOOL));
+    check("no academic year is the school's current year",
+      finArrears(), { ...finArrears(`academicYear=${current}`), academicYear: current });
+    check("another academic year DOES narrow it",
+      finArrears("academicYear=1999-2000").charged < finArrears(`academicYear=${YEAR}`).charged, true);
+  }
   check("outstanding is billed less paid, with waivers already off the bill",
     (() => {
       const a = finArrears();

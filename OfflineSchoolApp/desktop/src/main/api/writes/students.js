@@ -26,6 +26,7 @@
  */
 
 const { normaliseStudentDoc } = require("../../../../../shared/students");
+const { normalisePhone, PHONE_FIELDS } = require("../../../../../shared/studentValidation");
 
 const nowISO = () => new Date().toISOString();
 
@@ -539,6 +540,13 @@ module.exports = [
           const v = String(raw).trim().toLowerCase();
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return null;
           updates[field] = v;
+          continue;
+        }
+        // B3: as the server stores it — +237 and nine digits — or declined.
+        if (PHONE_FIELDS.includes(field)) {
+          const r = normalisePhone(raw, field);
+          if (r.error) return null;
+          updates[field] = r.value;
           continue;
         }
         if (field === "dateOfBirth") {

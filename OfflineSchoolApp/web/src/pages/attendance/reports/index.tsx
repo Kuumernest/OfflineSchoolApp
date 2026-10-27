@@ -204,7 +204,7 @@ export default function AttendanceReportsPage() {
           <TrendChart
             points={trend.map((t) => ({
               date: t.date,
-              rate: t.students?.rate ?? 0,
+              rate: t.students?.rate ?? null,
             }))}
           />
         )}
@@ -231,7 +231,7 @@ function SummaryPanel({
   const { t } = useTranslation();
   const total   = summary?.total ?? 0;
   const marked  = summary?.marked ?? 0;
-  const rate    = summary?.rate ?? 0;
+  const rate    = summary?.rate ?? null;
   const unmarked = summary?.unmarked ?? Math.max(0, total - marked);
 
   return (
@@ -249,7 +249,7 @@ function SummaryPanel({
 
         <div className="text-right">
           <p className="text-2xl font-semibold text-gray-900 leading-none tabular-nums">
-            {rate}%
+            {rate == null ? "–" : `${rate}%`}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">present</p>
         </div>
@@ -299,7 +299,7 @@ function SummaryPanel({
 // TREND CHART
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
+function TrendChart({ points }: { points: { date: string; rate: number | null }[] }) {
   const { t } = useTranslation();
   const W = 100;   // viewBox units — the SVG scales to its container
   const H = 40;
@@ -313,11 +313,12 @@ function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
     // auto-scaled axis makes a drop from 98% to 95% look like a collapse.
     const toY = (rate: number) => H - PAD - (Math.max(0, Math.min(100, rate)) / 100) * (H - PAD * 2);
 
-    const coords = points.map((p, i) => ({
-      x: PAD + i * stepX,
-      y: toY(p.rate),
-      ...p,
-    }));
+    // A day nobody marked has no point (C3): the line joins the days that
+    // were, and the day's label says "–" rather than drawing a fall to 0%.
+    const coords = points
+      .map((p, i) => ({ x: PAD + i * stepX, y: toY(p.rate ?? 0), ...p }))
+      .filter((c) => c.rate != null);
+    if (coords.length === 0) return { line: "", area: "", dots: [] };
 
     return {
       line: coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" "),
@@ -379,7 +380,7 @@ function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
           <div key={p.date} className="text-center flex-1 min-w-0">
             <p className="text-[11px] text-gray-400">{weekdayOf(p.date)}</p>
             <p className="text-xs font-medium text-gray-700 tabular-nums">
-              {p.rate}%
+              {p.rate == null ? "–" : `${p.rate}%`}
             </p>
           </div>
         ))}

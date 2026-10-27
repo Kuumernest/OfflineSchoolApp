@@ -28,12 +28,8 @@
  * sequences a term, or grades on its own scale, gets its own arithmetic.
  */
 
-const Exam              = require("../db/models/Exam");
 const classStats        = require("./classStats.service");
-const TeacherAssignment = require("../db/models/TeacherAssignment");
-const User              = require("../db/models/User");
-const StudentScore      = require("../db/models/StudentScore");
-const ExamSubject       = require("../db/models/ExamSubject");
+const { teachersFor }   = require("./classSubjectTeacher.service");
 const TermResult        = require("../db/models/TermResult");
 const AnnualResult      = require("../db/models/AnnualResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
@@ -45,150 +41,23 @@ const docVerify         = require("./documentVerify.service");
 
 const { subjectRanking, periodName, averageOutOf20 } =
   require("../../../shared/reportCard");
-const { coefficientFromWeight } =
-  require("./subjectCoefficient.service");
-const sequenceAssessment = require("./sequenceAssessment.service");
 // The terms and sequences, from the period tree (docs/39 Phase 3).
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
 
-/** A score as a mark out of 20, or null when the pupil did not sit it. */
-const outOf20 = (score, maxScore) => {
-  if (!score || score.isAbsent || score.isExempt || score.score == null) return null;
-  const max = Number(maxScore ?? score.maxScore ?? 20);
-  const raw = Number(score.score);
-  if (!Number.isFinite(raw) || !Number.isFinite(max) || max <= 0) return null;
-  return (raw / max) * 20;
-};
+// The marks and the average: one loader and one rule, shared with the stored
+// term and annual averages (periodMarks.service, shared/averages.js), so the
+// card's TOTAL row and its average cannot disagree.
+const periodMarks = require("./periodMarks.service");
+const { round2, combineMarks, coefficientAverage } = require("../../../shared/averages");
 
-const round2 = (n) => (n == null ? null : Math.round(Number(n) * 100) / 100);
-
-/**
- * Combine a pupil's marks for one subject into a single /20, by weight.
- *
- * Missing parts are dropped and the weights renormalised over what is there —
- * a pupil who missed the second sequence is graded on the first rather than on
- * half of it. Falls back to a plain mean when the school has set no weights.
- */
-const weightedMark = (parts) => {
-  const present = parts.filter((p) => p.mark != null);
-  if (present.length === 0) return null;
-  const totalWeight = present.reduce((s, p) => s + (Number(p.weight) || 0), 0);
-  if (totalWeight <= 0) {
-    return present.reduce((s, p) => s + p.mark, 0) / present.length;
-  }
-  return present.reduce((s, p) => s + p.mark * (Number(p.weight) || 0), 0) / totalWeight;
-};
-
-/**
- * Per-subject marks for every pupil in a class, over a set of exams.
- *
- * @returns {Map<studentId, Map<subjectKey, {subjectName, mark, coefficient}>>}
- */
-async function subjectMarksAcross(exams, weightOf) {
-  const examIds = exams.map((e) => String(e._id));
-  if (examIds.length === 0) return { byStudent: new Map(), subjects: new Map() };
-
-  const [scores, examSubjects] = await Promise.all([
-    StudentScore.find({ examId: { $in: examIds }, deletedAt: null })
-      .select("studentId examId examSubjectId subjectId score maxScore isAbsent isExempt")
-      .lean(),
-    ExamSubject.find({ examId: { $in: examIds }, deletedAt: null })
-      // weight, not coefficient: ExamSubject stores the percentage-style
-      // weight and has no `coefficient` field at all, so reading one gave
-      // undefined and every subject on a term or annual card printed ×1.
-      .select("_id examId subjectId subjectName weight maxScore")
-      .lean(),
-  ]);
-
-  // examSubjectId → the subject it belongs to. The subject, not the paper, is
-  // what a mark is aggregated under: the same subject is a different
-  // ExamSubject row in each sequence.
-  const esById = new Map(examSubjects.map((es) => [String(es._id), es]));
-
-  /** subjectId → { name, coefficient } */
-  const subjects = new Map();
-  for (const es of examSubjects) {
-    const key = String(es.subjectId);
-    if (!subjects.has(key)) {
-      subjects.set(key, {
-        subjectName: es.subjectName || key,
-        coefficient: coefficientFromWeight(es.weight),
-      });
-    }
-  }
-
-  /** studentId → subjectId → [{ mark, weight }] */
-  const parts = new Map();
-  for (const sc of scores) {
-    const es      = sc.examSubjectId ? esById.get(String(sc.examSubjectId)) : null;
-    const subject = String(es?.subjectId ?? sc.subjectId ?? "");
-    if (!subject) continue;
-    const mark = outOf20(sc, es?.maxScore);
-    if (mark == null) continue;
-
-    const sid = String(sc.studentId);
-    if (!parts.has(sid)) parts.set(sid, new Map());
-    const bySubject = parts.get(sid);
-    if (!bySubject.has(subject)) bySubject.set(subject, []);
-    bySubject.get(subject).push({
-      mark, weight: weightOf(String(sc.examId)), examId: String(sc.examId),
-    });
-  }
-
-  const byStudent = new Map();
-  for (const [sid, bySubject] of parts) {
-    const combined = new Map();
-    for (const [subject, list] of bySubject) {
-      const mark = weightedMark(list);
-      if (mark == null) continue;
-      combined.set(subject, {
-        subjectName: subjects.get(subject)?.subjectName || subject,
-        coefficient: subjects.get(subject)?.coefficient ?? 1,
-        mark:        round2(mark),
-        // The marks this one was combined from, each with the weight it
-        // carried and the exam it came from. A term card prints its two
-        // sequences from these rather than recombining anything: the
-        // hierarchy is CA and paper into a sequence, sequences into a term,
-        // and a card must show the level it is for without re-deriving the
-        // level below it by a different route.
-        parts:       list.map((part) => ({ ...part })),
-      });
-    }
-    byStudent.set(sid, combined);
-  }
-
-  return { byStudent, subjects };
-}
-
-/**
- * Turn the whole class's per-subject marks into this pupil's subject rows,
- * each with its place among the pupils who have a mark in that subject.
- */
 /**
  * What the table's last row states: the coefficients it carries and the marks
- * weighted by them.
- *
- * The same definition the sequence card has always used for its average —
- * sum of (mark x coefficient) over the subjects a pupil actually sat, and the
- * sum of those coefficients. It is not a second average: the average on each
- * card stays whatever that card's own record says it is.
- *
- * A subject with no mark counts for neither, which is the existing rule: an
- * absence is not a zero, and its coefficient must not dilute the average of
- * the papers the pupil did sit.
+ * weighted by them — sum(mark x coefficient) / sum(coefficients) over the
+ * subjects the pupil has a mark in. The same figure as the stored average.
  */
 function rowTotals(rows) {
-  const counted = (rows || []).filter(
-    (r) => !r.isAbsent && !r.isExempt && r.score != null && Number.isFinite(Number(r.score))
-  );
-  const totalCoefficients = counted.reduce((s, r) => s + Number(r.coefficient ?? 0), 0);
-  const totalWeighted = counted.reduce(
-    (s, r) => s + Number(r.score) * Number(r.coefficient ?? 0), 0
-  );
-  return {
-    totalCoefficients,
-    totalWeighted: Math.round(totalWeighted * 100) / 100,
-  };
+  const { totalCoefficients, totalWeighted } = coefficientAverage(rows);
+  return { totalCoefficients, totalWeighted };
 }
 
 function subjectRowsFor(studentId, byStudent, bands, showGrades, passMark = 10) {
@@ -286,38 +155,16 @@ async function gradingFor(schoolId) {
  *   joined by a comma where a school really has assigned more than one.
  */
 async function subjectTeachers({ schoolId, classId, subjectIds }) {
+  // The class-subject assignment, read the one way every screen reads it
+  // (services/classSubjectTeacher.service.js, A8): active assignments of this
+  // class and subject, names sorted, two teachers joined with ", ".
   const out = new Map();
   const ids = [...new Set((subjectIds || []).map(String).filter(Boolean))];
   if (!schoolId || !classId || !ids.length) return out;
-
-  const rows = await TeacherAssignment.find({
-    schoolId: String(schoolId),
-    class:    String(classId),
-    subject:  { $in: ids },
-    isActive: true,
-  }).select("teacher subject").lean().catch(() => []);
-  if (!rows.length) return out;
-
-  const teachers = await User.find({
-    _id: { $in: [...new Set(rows.map((r) => String(r.teacher)))] },
-  }).select("name").lean().catch(() => []);
-  const nameOf = new Map(teachers.map((t) => [String(t._id), t.name]));
-
-  // Several teachers on one subject is allowed by the model (the unique
-  // index is on teacher+class+subject), and both names belong on the row
-  // rather than on two rows for the same subject. Sorted, because two
-  // printings of the same card must not disagree about the order of names —
-  // the database returns them in whatever order it finds them.
-  const namesBySubject = new Map();
-  for (const r of rows) {
-    const name = nameOf.get(String(r.teacher));
-    if (!name) continue;
-    const key = String(r.subject);
-    if (!namesBySubject.has(key)) namesBySubject.set(key, []);
-    namesBySubject.get(key).push(name);
-  }
-  for (const [subject, names] of namesBySubject) {
-    out.set(subject, [...new Set(names)].sort((a, b) => a.localeCompare(b)).join(", "));
+  const lookup = await teachersFor({ schoolId, classIds: [classId], subjectIds: ids });
+  for (const id of ids) {
+    const t = lookup(classId, id);
+    if (t?.teacherName) out.set(id, t.teacherName);
   }
   return out;
 }
@@ -366,40 +213,12 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
   if (!record) return null;
 
   const termConfig = legacyTermsOf(structure).find((t) => t.number === Number(term)) || null;
-  const seqNumbers = termConfig?.sequences?.map((s) => s.number) || [];
-
-  const exams = await Exam.find({
-    schoolId: String(schoolId), academicYear, term: Number(term),
-    ...(seqNumbers.length ? { sequenceNumber: { $in: seqNumbers } } : {}),
-    deletedAt: null,
-  // startDate/endDate: the term's days, for the register. They are the only
-  // dates a period has — AcademicStructure defines the terms but carries no
-  // calendar — so the term is the span of the exams that make it up.
-  }).select("_id sequenceNumber term type parentExamId startDate endDate").lean();
-
-  const weightBySeq = new Map(
-    (termConfig?.sequences || []).map((s) => [s.number, s.weight ?? 50])
-  );
-
-  /*
-   * A sequence's share, split between its two assessments.
-   *
-   * The exams above now include the continuous assessments, and a term card
-   * combines per-subject marks across exams by weight. Giving a CA the
-   * sequence's whole share would count it as a third sequence; splitting the
-   * share by the school's CA/Test percentages gives the same subject mark the
-   * sequence card prints, one level up. weightedMark() below already drops the
-   * parts a pupil has no mark for and renormalises over the rest, so a pupil
-   * with no CA is graded on the paper rather than on 60 % of it.
-   */
-  const caSettings   = await sequenceAssessment.loadCaSettings(schoolId);
-  const weightByExam = sequenceAssessment.weightsWithCa(
-    exams, (e) => weightBySeq.get(e.sequenceNumber) ?? 50, caSettings
-  );
-
-  const { byStudent } = await subjectMarksAcross(
-    exams, (examId) => weightByExam.get(examId) ?? 50
-  );
+  // The term's exams (their dates make the register's span) and every pupil's
+  // subject marks across them, by the same loader the stored term average
+  // reads — a sequence's share split between its paper and its CA.
+  const { exams, byStudent } = await periodMarks.termMarks({
+    schoolId, academicYear, term, classId, termConfig,
+  });
 
   const classInfo = await classInfoFor(classId, record.className);
 
@@ -432,7 +251,7 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
       const mine = (r.parts || []).filter(
         (part) => sequenceOfExam.get(String(part.examId)) === col.number
       );
-      const mark = mine.length ? weightedMark(mine) : null;
+      const mark = mine.length ? combineMarks(mine) : null;
       return { number: col.number, mark: mark == null ? null : round2(mark) };
     });
     delete r.parts;
@@ -523,29 +342,11 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
   if (!record) return null;
 
   // Every exam of the year, weighted by its term's share of the annual average
-  // and its sequence's share of the term — so a subject mark on this card is
-  // the same arithmetic as on the three term cards, carried one level up.
-  const exams = await Exam.find({
-    schoolId: String(schoolId), academicYear, deletedAt: null,
-  // startDate/endDate: the year's days, for the register — see buildTermCard.
-  }).select("_id term sequenceNumber type parentExamId startDate endDate").lean();
-
-  // The same split the term card makes, applied to the annual share: a
-  // sequence's slice of the year, divided between its CA and its paper.
-  const caSettings = await sequenceAssessment.loadCaSettings(schoolId);
-  const terms = legacyTermsOf(structure);
-  const shareOf = (e) => {
-    const termConfig = terms.find((t) => t.number === e.term);
-    const seqConfig  = termConfig?.sequences?.find((s) => s.number === e.sequenceNumber);
-    const termShare  = (termConfig?.weight ?? 100 / 3) / 100;
-    const seqShare   = (seqConfig?.weight ?? 50) / 100;
-    return termShare * seqShare * 100;
-  };
-  const weightByExam = sequenceAssessment.weightsWithCa(exams, shareOf, caSettings);
-
-  const { byStudent } = await subjectMarksAcross(
-    exams, (examId) => weightByExam.get(examId) ?? 1
-  );
+  // and its sequence's share of the term — the loader the stored annual
+  // average reads too.
+  const { byStudent } = await periodMarks.annualMarks({
+    schoolId, academicYear, classId, terms: legacyTermsOf(structure),
+  });
 
   const classInfo = await classInfoFor(classId, record.className);
 

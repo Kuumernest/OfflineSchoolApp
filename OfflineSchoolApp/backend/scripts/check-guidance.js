@@ -338,16 +338,14 @@ const breakdown = (rows) => rows.map(([subjectId, subjectName, normalizedMark]) 
   let r = await teacher("/insights/student/st-a1/guidance");
   const items = r.body?.data?.guidance ?? [];
   check("a teacher reads guidance for a pupil they teach → 200", r.status, 200);
-  // Maths falls 16 → 12 → 8: a slide AND a four-mark step in the latest
-  // sequence, so the engine says both and guidance projects both. Two rationales
-  // for one subject is the intended behaviour — they are different things for a
-  // teacher to look at, and collapsing them would lose the more urgent one.
+  // Maths falls 16 → 12 → 8: a slide whose latest step is also a four-mark
+  // fall. C5: one fall is said once — as the decline — not repeated as a
+  // sudden change beside it.
   check("Mathematics falling produces support, ICT holding produces development",
     items.map((g) => [g.subjectName, g.type, g.rationaleCode]),
     [["ICT", "strength_development", "SUBJECT_STRENGTH"],
      ["ICT", "strength_development", "CONSISTENT_STRENGTH"],
-     ["Mathematics", "academic_support", "RECENT_DECLINE"],
-     ["Mathematics", "academic_support", "SUDDEN_PERFORMANCE_CHANGE"]]);
+     ["Mathematics", "academic_support", "RECENT_DECLINE"]]);
   check("and the support item carries the two averages a teacher would ask for",
     (items.find((g) => g.type === "academic_support")?.evidence ?? [])
       .filter((e) => ["recent_average", "previous_average"].includes(e.metric))

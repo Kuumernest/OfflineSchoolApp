@@ -143,6 +143,8 @@ export interface PlanStatus {
 }
 
 export interface StudentFeeAccount {
+  /** Whose account this is (C1). Null when the pupil is no longer on record. */
+  student?: { _id: string; name: string | null; admissionNo: string | null; className: string | null } | null;
   charges:  FeeCharge[];
   payments: FeePayment[];
   totals:   FeeTotals;
