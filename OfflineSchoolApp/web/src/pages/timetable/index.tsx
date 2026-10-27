@@ -18,8 +18,8 @@
 //   3. Days are canonical three-letter codes ("MON"). Sending "Monday" is a
 //      400, so DayCode is used throughout rather than a display string.
 
-import { useCallback, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -32,6 +32,7 @@ import {
   Users,
   Printer,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -54,6 +55,7 @@ import {
   isTeacherBusy,
   teacherWorkload,
   findGaps,
+  checkSlot,
 } from "@/services/timetable.service";
 import { fetchPeriods } from "@/services/period.service";
 import { fetchClasses, fetchSubjects } from "@/services/class.service";
@@ -65,7 +67,7 @@ import {
   DAY_SHORT_KEYS,
   TimetableConflictError,
 } from "@/types/timetable.types";
-import type { DayCode, TimetableSlot } from "@/types/timetable.types";
+import type { DayCode, TimetableConflict, TimetableSlot } from "@/types/timetable.types";
 import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
@@ -102,8 +104,16 @@ export default function TimetablePage() {
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
 
-  const [classId, setClassId] = useState("");
+  // ?classId=…&highlight=<slotId> — where "Open in timetable" on the
+  // conflicts page lands: that class's week, with the lesson in question
+  // outlined.
+  const [searchParams] = useSearchParams();
+  const highlightId    = searchParams.get("highlight") ?? "";
+
+  const [classId, setClassId] = useState(searchParams.get("classId") ?? "");
   const [cell, setCell]       = useState<CellTarget | null>(null);
+  /** Conflicts the server answered a save with — shown in the editor. */
+  const [saveConflicts, setSaveConflicts] = useState<{ list: TimetableConflict[]; canForce: boolean } | null>(null);
   const [dragging, setDragging] = useState<DragPayload | null>(null);
   const [hoverCell, setHoverCell] = useState<string | null>(null);
 
@@ -166,6 +176,20 @@ export default function TimetablePage() {
 
   const workload = useMemo(() => teacherWorkload(allSlots), [allSlots]);
 
+  // The cell holding the highlighted lesson. A class booked twice has two
+  // lessons in one cell and the grid shows one of them, so the cell is what
+  // gets outlined, not a particular card.
+  const highlightCell = useMemo(() => {
+    const s = slots.find((x) => x._id === highlightId);
+    return s?.dayOfWeek && s.periodId ? `${s.dayOfWeek}:${s.periodId}` : null;
+  }, [slots, highlightId]);
+
+  useEffect(() => {
+    if (!highlightCell) return;
+    document.getElementById(`tt-cell-${highlightCell}`)
+      ?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+  }, [highlightCell]);
+
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["timetable"] });
     qc.invalidateQueries({ queryKey: ["timetable-all"] });
@@ -175,6 +199,11 @@ export default function TimetablePage() {
   // A 409 is not a failure to save so much as a rule being enforced; saying
   // which rule is the whole point of surfacing it.
   const reportError = useCallback((err: unknown, fallback: string) => {
+    if (err instanceof TimetableConflictError && err.conflict.details?.length) {
+      setSaveConflicts({ list: err.conflict.details, canForce: Boolean(err.conflict.canForce) });
+      qc.invalidateQueries({ queryKey: ["timetable-check"] });
+      return;
+    }
     if (err instanceof TimetableConflictError) {
       const { kind, message } = err.conflict;
       toast({
@@ -188,7 +217,7 @@ export default function TimetablePage() {
       return;
     }
     toast({ title: fallback, message: getErrorMessage(err), kind: "error" });
-  }, [toast, invalidate, t]);
+  }, [toast, invalidate, t, qc]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -199,6 +228,7 @@ export default function TimetablePage() {
       teacherId: string;
       room:      string;
       existing?: TimetableSlot;
+      force?:    boolean;
     }) =>
       input.existing
         ? updateSlot(input.existing._id, {
@@ -206,6 +236,7 @@ export default function TimetablePage() {
             teacherId: input.teacherId,
             room:      input.room || null,
             version:   input.existing.version,
+            ...(input.force ? { force: true } : {}),
           })
         : createSlot({
             schoolId,
@@ -215,11 +246,16 @@ export default function TimetablePage() {
             dayOfWeek: input.day,
             periodId:  input.periodId,
             room:      input.room || null,
+            ...(input.force ? { force: true } : {}),
           }),
     onSuccess: () => {
       toast({ title: t("timetable.updated"), kind: "success" });
       setCell(null);
+      setSaveConflicts(null);
       invalidate();
+      // A save can create or clear a conflict (an admin's "Save anyway").
+      qc.invalidateQueries({ queryKey: ["timetable-conflicts"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err) => reportError(err, t("timetable.errSaveLesson")),
   });
@@ -230,6 +266,8 @@ export default function TimetablePage() {
       toast({ title: t("timetable.lessonRemoved"), kind: "success" });
       setCell(null);
       invalidate();
+      qc.invalidateQueries({ queryKey: ["timetable-conflicts"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (err) => reportError(err, "Could not remove the lesson"),
   });
@@ -237,8 +275,16 @@ export default function TimetablePage() {
   const moveMutation = useMutation({
     mutationFn: (input: { slot: TimetableSlot; day: DayCode; periodId: string }) =>
       moveSlot(input.slot, input.day, input.periodId),
-    onSuccess: invalidate,
-    onError: (err) => reportError(err, "Could not move the lesson"),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["timetable-conflicts"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    // A drag has no editor to show detail in, so a conflict is a toast.
+    onError: (err) =>
+      err instanceof TimetableConflictError
+        ? toast({ title: t("timetable.clashes"), message: err.message, kind: "warning" })
+        : reportError(err, "Could not move the lesson"),
   });
 
   // ── Drag & drop ────────────────────────────────────────────────────────────
@@ -407,6 +453,7 @@ export default function TimetablePage() {
                         const slot    = slotAt(grid, day, period._id);
                         const key     = `${day}:${period._id}`;
                         const isHover = hoverCell === key;
+                        const isFlagged = highlightCell === key;
 
                         // A break row is rendered but not editable — scheduling
                         // a lesson through morning break is a mistake, not a
@@ -424,7 +471,11 @@ export default function TimetablePage() {
                         return (
                           <td
                             key={day}
-                            className="px-2 py-2 align-top"
+                            id={`tt-cell-${key}`}
+                            className={cn(
+                              "px-2 py-2 align-top",
+                              isFlagged && "bg-red-50 ring-2 ring-inset ring-red-500",
+                            )}
                             onDragOver={(e) => {
                               if (!dragging) return;
                               e.preventDefault();
@@ -541,11 +592,11 @@ export default function TimetablePage() {
             label: s.code ? `${s.name} (${s.code})` : s.name,
           }))}
           teachers={teachers.map((t) => ({
-            value:    t._id,
-            label:    t.name,
-            // The server would reject a double-booked teacher with a 409.
-            // Disabling them here means the clash is visible before saving.
-            disabled: isTeacherBusy(
+            value: t._id,
+            label: t.name,
+            // Marked rather than disabled: the pre-save check below names the
+            // clash, and an admin may still decide to save it anyway.
+            busy:  isTeacherBusy(
               allSlots,
               t._id,
               cell.day,
@@ -557,8 +608,9 @@ export default function TimetablePage() {
           schoolId={schoolId}
           saving={saveMutation.isPending}
           removing={removeMutation.isPending}
-          onClose={() => setCell(null)}
-          onSave={(v) => saveMutation.mutate({ ...v, day: cell.day, periodId: cell.periodId, existing: cell.existing })}
+          serverConflicts={saveConflicts}
+          onClose={() => { setCell(null); setSaveConflicts(null); }}
+          onSave={(v, force) => saveMutation.mutate({ ...v, force, day: cell.day, periodId: cell.periodId, existing: cell.existing })}
           onRemove={async () => {
             if (!cell.existing) return;
             const ok = await confirm({
@@ -640,6 +692,18 @@ interface EditorOption {
   value:     string;
   label:     string;
   disabled?: boolean;
+  /** Teaching elsewhere in this period. */
+  busy?:     boolean;
+}
+
+/** `value`, once it has stopped changing for `ms`. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return settled;
 }
 
 function SlotEditor({
@@ -651,6 +715,7 @@ function SlotEditor({
   schoolId,
   saving,
   removing,
+  serverConflicts,
   onClose,
   onSave,
   onRemove,
@@ -664,11 +729,13 @@ function SlotEditor({
   schoolId:   string;
   saving:     boolean;
   removing:   boolean;
+  /** What the server answered the last Save with, when it was a conflict. */
+  serverConflicts: { list: TimetableConflict[]; canForce: boolean } | null;
   onClose:    () => void;
-  onSave:     (v: { subjectId: string; teacherId: string; room: string }) => void;
+  onSave:     (v: { subjectId: string; teacherId: string; room: string }, force?: boolean) => void;
   onRemove:   () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const existing = target.existing;
 
   const [subjectId, setSubjectId] = useState(existing?.subjectId ?? "");
@@ -708,10 +775,44 @@ function SlotEditor({
   const effectiveTeacherId =
     teacherId && options.some((o) => o.value === teacherId) ? teacherId : "";
 
-  const busyTeachers = options.filter((o) => o.disabled).length;
+  const busyTeachers = options.filter((o) => o.busy).length;
   const noneAssigned =
     Boolean(subjectId) && !assignedQ.isFetching && options.length === 0;
   const canSave = !!subjectId && !!effectiveTeacherId;
+
+  /**
+   * The server's own pre-save check, run as the fields change — the same
+   * detector that fills the dashboard count, so what it says here is exactly
+   * what Save would be refused for. Debounced so typing a room is one request.
+   */
+  const candidate = useDebounced(
+    canSave
+      ? {
+          ...(existing ? { _id: existing._id } : {}),
+          classId,
+          subjectId,
+          teacherId: effectiveTeacherId,
+          dayOfWeek: target.day,
+          periodId:  target.periodId,
+          room:      room.trim() || null,
+        }
+      : null,
+    350,
+  );
+  const lang = i18n.language?.startsWith("fr") ? "fr" : "en";
+  const checkQ = useQuery({
+    queryKey: ["timetable-check", candidate, lang],
+    queryFn:  () => checkSlot(candidate!, lang),
+    enabled:  Boolean(candidate),
+  });
+
+  // The live check is what is shown once it has answered for these fields;
+  // the server's refusal of the last Save fills in until then. Both come from
+  // the same detector, so they only differ while a check is in flight.
+  const live     = canSave ? checkQ.data : undefined;
+  const found    = live?.conflicts ?? (canSave ? serverConflicts?.list ?? [] : []);
+  const canForce = live?.canForce ?? serverConflicts?.canForce ?? false;
+  const blocked  = found.length > 0;
 
   return (
     <Modal
@@ -722,7 +823,7 @@ function SlotEditor({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSave) onSave({ subjectId, teacherId: effectiveTeacherId, room });
+          if (canSave && !blocked) onSave({ subjectId, teacherId: effectiveTeacherId, room });
         }}
         className="space-y-4"
       >
@@ -746,7 +847,7 @@ function SlotEditor({
           }
         >
           <SelectField
-            options={options}
+            options={options.map((o) => (o.busy ? { ...o, label: `${o.label} — ${t("timetable.busyThen")}` } : o))}
             placeholder={
               !subjectId              ? t("timetable.chooseSubjectFirst") :
               assignedQ.isFetching    ? t("common.loading") :
@@ -778,6 +879,38 @@ function SlotEditor({
           </div>
         )}
 
+        {blocked && (
+          <div className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 space-y-2" role="alert">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-red-800">{t("ttConflicts.wouldConflict")}</p>
+                {found.map((c) => (
+                  <p key={c.id} className="text-xs text-red-800">{c.message}</p>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-red-700">
+              {t("ttConflicts.inlineFixHint")}{" "}
+              <Link to="/timetable/conflicts" className="underline font-medium">{t("ttConflicts.title")}</Link>
+            </p>
+            {canForce && (
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-red-200">
+                <p className="text-[11px] text-red-700">{t("ttConflicts.saveAnywayWarning")}</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  loading={saving}
+                  onClick={() => onSave({ subjectId, teacherId: effectiveTeacherId, room }, true)}
+                >
+                  {t("ttConflicts.saveAnyway")}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-2 pt-1">
           {existing ? (
             <Button
@@ -796,7 +929,7 @@ function SlotEditor({
             <Button type="button" variant="ghost" onClick={onClose}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!canSave} loading={saving}>
+            <Button type="submit" disabled={!canSave || blocked || checkQ.isFetching} loading={saving}>
               {existing ? t("common.saveChanges") : t("timetable.addLesson")}
             </Button>
           </div>

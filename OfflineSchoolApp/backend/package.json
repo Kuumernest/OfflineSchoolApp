@@ -33,6 +33,7 @@
     "check:names": "node scripts/check-name-uniqueness.js",
     "check:feedtombstones": "node scripts/check-feed-tombstones.js",
     "check:retryrefusal": "node scripts/check-retry-after-refusal.js",
+    "check:ttconflicts": "node scripts/check-timetable-conflicts.js",
     "indexes:plan": "node scripts/provision-indexes.js",
     "check:homework": "node scripts/check-homework-submission.js",
     "check:hwscope": "node scripts/check-homework-scope.js",

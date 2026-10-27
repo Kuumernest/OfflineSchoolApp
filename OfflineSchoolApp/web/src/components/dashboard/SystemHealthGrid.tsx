@@ -1,5 +1,6 @@
 // web/src/components/dashboard/SystemHealthGrid.tsx
 import { useTranslation }         from "react-i18next";
+import { Link }                   from "react-router-dom";
 import { type SystemHealthStats } from "@/services/dashboard.service";
 import { Card, CardHeader }       from "@/components/ui/Card";
 import {
@@ -79,16 +80,15 @@ export default function SystemHealthGrid({
           const value   = s[metric.key] ?? 0;
           const isAlert = Boolean(metric.alertOnNonZero) && value > 0;
 
-          return (
-            <div
-              key={metric.key}
-              className={cn(
-                "rounded-control border p-3.5 transition-colors",
-                isAlert
-                  ? "border-danger-line bg-danger-soft"
-                  : "border-line bg-gradient-to-b from-surface to-[#fcfcfe]"
-              )}
-            >
+          const tileClass = cn(
+            "block rounded-control border p-3.5 transition-colors",
+            isAlert
+              ? "border-danger-line bg-danger-soft"
+              : "border-line bg-gradient-to-b from-surface to-[#fcfcfe]"
+          );
+
+          const body = (
+            <>
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
@@ -113,14 +113,31 @@ export default function SystemHealthGrid({
 
               <p
                 className={cn(
-                  "mt-2.5 text-sm leading-snug",
+                  // One line: a label wrapping mid-word ("Unassigne / d") in a
+                  // narrow tile reads as a typo. Long labels truncate, and the
+                  // title attribute still carries the whole text.
+                  "mt-2.5 truncate whitespace-nowrap text-[13px] leading-snug",
                   isAlert ? "font-medium text-danger" : "text-ink-muted"
                 )}
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
-            </div>
+            </>
+          );
+
+          // A problem tile with somewhere to fix it is a link; the rest stay
+          // plain readings.
+          return isAlert && metric.href ? (
+            <Link
+              key={metric.key}
+              to={metric.href}
+              className={cn(tileClass, "hover:brightness-[0.98] focus:outline-none focus:ring-2 focus:ring-danger")}
+            >
+              {body}
+            </Link>
+          ) : (
+            <div key={metric.key} className={tileClass}>{body}</div>
           );
         })}
       </div>

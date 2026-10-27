@@ -170,6 +170,55 @@ const adminOnly = requirePermission("timetable.manage");
 const isAdminRole = (user) => isAdmin(user?.role);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFLICTS
+//
+// One detector (shared/timetableConflicts.js) answers the dashboard count, the
+// conflicts screen and the check before every save, so a slot this endpoint
+// accepts is never one the dashboard then reports.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TT = require("../services/timetableConflicts.service");
+
+const langOf = (req) =>
+  String(req.query.lang || req.headers["accept-language"] || "").toLowerCase().startsWith("fr")
+    ? "fr" : "en";
+
+/**
+ * The 409 a conflicting save gets. `conflict` and `error` keep the one-word
+ * kind and sentence the clients already read (the outbox parks on them);
+ * `conflicts` carries the full detail and `canForce` tells the screen whether
+ * to offer "Save anyway".
+ */
+const conflictResponse = (req, res, found) => {
+  const list  = TT.localise(found, langOf(req));
+  const first = list[0];
+  return res.status(409).json({
+    success:   false,
+    error:     first.message,
+    conflict:  TT.LEGACY_KIND[first.conflict_type],
+    conflicts: list,
+    canForce:  isAdminRole(req.user),
+  });
+};
+
+/**
+ * "Save anyway" is an admin's decision, never a default. A forced save that
+ * the database's own unique index still refuses (where that index has been
+ * built) is reported as the conflict it is rather than a 500.
+ */
+const wantsForce = (req) => req.body?.force === true && isAdminRole(req.user);
+
+const isDuplicateKey = (err) => err?.code === 11000 || /E11000/.test(String(err?.message));
+
+const duplicateKeyResponse = (res) =>
+  res.status(409).json({
+    success:  false,
+    error:    "This database enforces one lesson per class and per teacher in a period, " +
+              "so this conflict cannot be saved even by an administrator.",
+    conflict: "index",
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/timetable
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -284,6 +333,63 @@ router.get(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/timetable/conflicts
+//
+// Every conflict in the caller's school, in full: type, day, period and time,
+// each entry involved, and a plain-language message (?lang=fr for French).
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get(
+  "/conflicts",
+  authenticate,
+  adminOnly,
+  asyncHandler(async (req, res) => {
+    const conflicts = await TT.listConflicts(resolveSchoolId(req), langOf(req));
+    res.json({ success: true, conflicts, count: conflicts.length });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/timetable/conflicts/options/:id
+//
+// The fixes on offer for one entry: free periods (class AND teacher free),
+// free teachers of the subject, and swaps that leave nothing in conflict.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get(
+  "/conflicts/options/:id",
+  authenticate,
+  adminOnly,
+  asyncHandler(async (req, res) => {
+    const ctx = await TT.loadContext(resolveSchoolId(req));
+    if (!ctx.slots.some((s) => s._id === String(req.params.id))) {
+      return res.status(404).json({ success: false, error: "Timetable slot not found" });
+    }
+    res.json({ success: true, ...TT.resolutionOptions(ctx, req.params.id) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/timetable/check
+//
+// The pre-save check on its own, for the editor to show inline before the
+// user presses Save. Body: the slot as it would be saved (with _id when
+// editing). Answers 200 either way; `conflicts` is empty when it is clean.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post(
+  "/check",
+  authenticate,
+  adminOnly,
+  asyncHandler(async (req, res) => {
+    const ctx = await TT.loadContext(resolveSchoolId(req));
+    const candidate = { ...req.body, dayOfWeek: canonicalDay(req.body?.dayOfWeek) };
+    const conflicts = TT.localise(TT.checkSlot(ctx, candidate), langOf(req));
+    res.json({ success: true, conflicts, canForce: isAdminRole(req.user) });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/admin/timetable
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -341,30 +447,10 @@ router.post(
     // ✅ strict=true — rejects anything not in the Mongoose enum
     const day = canonicalDay(dayOfWeek, { strict: true });
 
-    const classConflict = await TimetableSlot.findOne({
-      classId, dayOfWeek: day, periodId, ...NOT_DELETED,
-    }).lean();
-
-    if (classConflict) {
-      return res.status(409).json({
-        success:  false,
-        error:    "Class already has a lesson in this period",
-        conflict: "class",
-        slot:     normalizeSlot(classConflict),
-      });
-    }
-
-    const teacherConflict = await TimetableSlot.findOne({
-      teacherId, dayOfWeek: day, periodId, ...NOT_DELETED,
-    }).lean();
-
-    if (teacherConflict) {
-      return res.status(409).json({
-        success:  false,
-        error:    "Teacher is already assigned in this period",
-        conflict: "teacher",
-        slot:     normalizeSlot(teacherConflict),
-      });
+    if (!wantsForce(req)) {
+      const ctx   = await TT.loadContext(schoolId);
+      const found = TT.checkSlot(ctx, { classId, subjectId, teacherId, dayOfWeek: day, periodId, room });
+      if (found.length) return conflictResponse(req, res, found);
     }
 
     const slotData = {
@@ -375,7 +461,13 @@ router.post(
     };
     if (_id) slotData._id = String(_id).trim();
 
-    const created = await TimetableSlot.create(slotData);
+    let created;
+    try {
+      created = await TimetableSlot.create(slotData);
+    } catch (err) {
+      if (isDuplicateKey(err)) return duplicateKeyResponse(res);
+      throw err;
+    }
 
     res.status(201).json({
       success: true,
@@ -431,36 +523,18 @@ router.put(
     const newClass   = classId   || slot.classId;
     const newTeacher = teacherId || slot.teacherId;
 
-    const classConflict = await TimetableSlot.findOne({
-      _id:       { $ne: id },
-      classId:   newClass,
-      dayOfWeek: newDay,
-      periodId:  newPeriod,
-      ...NOT_DELETED,
-    }).lean();
-
-    if (classConflict) {
-      return res.status(409).json({
-        success:  false,
-        error:    "Class already has a lesson in this period",
-        conflict: "class",
+    if (!wantsForce(req)) {
+      const ctx   = await TT.loadContext(slot.schoolId);
+      const found = TT.checkSlot(ctx, {
+        _id:       id,
+        classId:   newClass,
+        subjectId: subjectId || slot.subjectId,
+        teacherId: newTeacher,
+        dayOfWeek: newDay,
+        periodId:  newPeriod,
+        room:      room !== undefined ? room : slot.room,
       });
-    }
-
-    const teacherConflict = await TimetableSlot.findOne({
-      _id:       { $ne: id },
-      teacherId: newTeacher,
-      dayOfWeek: newDay,
-      periodId:  newPeriod,
-      ...NOT_DELETED,
-    }).lean();
-
-    if (teacherConflict) {
-      return res.status(409).json({
-        success:  false,
-        error:    "Teacher is already assigned in this period",
-        conflict: "teacher",
-      });
+      if (found.length) return conflictResponse(req, res, found);
     }
 
     if (subjectId !== undefined) slot.subjectId = subjectId;
@@ -473,7 +547,12 @@ router.put(
     slot.version  += 1;
     slot.updatedAt = new Date();
 
-    await slot.save();
+    try {
+      await slot.save();
+    } catch (err) {
+      if (isDuplicateKey(err)) return duplicateKeyResponse(res);
+      throw err;
+    }
 
     res.json({ success: true, slot: normalizeSlot(slot.toObject()) });
   })

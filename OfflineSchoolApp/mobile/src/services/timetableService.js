@@ -28,6 +28,13 @@ import {
   VALID_DAYS,
 }                          from "../utils/timetableMappers";
 import { appError }        from "../utils/appError";
+import { getAllAssignments } from "./assignment.service";
+import { PeriodsService }  from "./periods.service";
+
+// The conflict detector the server and desktop run. Pure CommonJS from the
+// repo's shared/ folder (metro.config.js watches it), so the list a phone
+// shows offline is built by the same rules as the one it shows online.
+const TTConflicts = require("../../../shared/timetableConflicts");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONSTANTS
@@ -550,6 +557,182 @@ const assertNoConflict = async (db, slot, excludeId = null) => {
     teacherParams
   );
   if (teacherConflict) throw appError("svcErr.teacherSlotConflict", "This teacher is already teaching in this period");
+
+  // A room, when one is given, holds one class at a time. Case and spacing
+  // are ignored, as the server's detector ignores them.
+  const room = String(slot.room ?? "").trim().toLowerCase();
+  if (!room) return;
+  const roomParams = [room, dayOfWeek, periodId, classId];
+  if (excludeId) roomParams.push(excludeId);
+  const roomConflict = await db.getFirstAsync(
+    `SELECT _id FROM ${TABLE}
+     WHERE LOWER(TRIM(room))           = ?
+       AND LOWER(TRIM(day_of_week))    = LOWER(TRIM(?))
+       AND period_id                   = ?
+       AND class_id                   != ?
+       AND ${NOT_DELETED}
+       ${excludeClause}
+     LIMIT 1`,
+    roomParams
+  );
+  if (roomConflict) throw appError("svcErr.roomSlotConflict", "This room is already booked in this period");
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 10b — CONFLICT DETAIL, CHECKS AND FIXES
+//
+// Online these come from the server, which sees every device's lessons.
+// Offline (or when the request fails) the same shared detector runs against
+// the rows on this phone, so the screen still says which lessons clash and
+// how to fix them — possibly a sync behind, which `source` reports.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const isAdminSession = () => hasRole(["super_admin", "school_admin"]);
+
+const isOnline = async () => {
+  try { return Boolean((await NetInfo.fetch()).isConnected); } catch { return false; }
+};
+
+const safeRows = async (db, table) =>
+  (await tableExists(db, table))
+    ? (await db.getAllAsync(`SELECT * FROM ${table}`).catch(() => [])) ?? []
+    : [];
+
+const notDeletedRow = (r) => !(r.deleted_at || r.deletedAt || r.deletedat);
+
+/** The detector's context, built from this phone's own tables. */
+const loadLocalConflictContext = async () => {
+  const db = await getDatabase();
+  await ensureSchema(db);
+
+  const [slots, periods, assignments, classRows, subjectRows, userRows] = await Promise.all([
+    timetableService.getAll(),
+    PeriodsService.getAllFromSQLite(false).catch(() => []),
+    getAllAssignments().catch(() => []),
+    safeRows(db, "classes"),
+    safeRows(db, "subjects"),
+    safeRows(db, "users"),
+  ]);
+
+  const rowId = (r) => r._id ?? r.id;
+  const teachers = new Map();
+  for (const u of userRows.filter(notDeletedRow)) teachers.set(String(rowId(u)), { _id: rowId(u), name: u.name });
+  for (const a of assignments) {
+    if (a.teacher?._id && a.teacher?.name && !teachers.has(String(a.teacher._id))) {
+      teachers.set(String(a.teacher._id), { _id: a.teacher._id, name: a.teacher.name });
+    }
+  }
+
+  return TTConflicts.buildContext({
+    slots,
+    periods: periods.map((p) => ({ ...p, _id: p.id })),
+    classes: classRows.filter(notDeletedRow).map((c) => ({ _id: rowId(c), name: c.name, section: c.section })),
+    subjects: subjectRows.filter(notDeletedRow).map((x) => ({ _id: rowId(x), name: x.name })),
+    teachers: [...teachers.values()],
+    assignments: assignments.map((a) => ({
+      teacher: a.teacher?._id, class: a.class?._id, subject: a.subject?._id,
+      isActive: a.isActive === 0 || a.isActive === false ? false : true,
+    })),
+  });
+};
+
+const localise = (list, lang) =>
+  lang === "fr"
+    ? list.map((c) => ({ ...c, message: TTConflicts.conflictMessage(c, "fr") }))
+    : list;
+
+/** The local conflict count — what the dashboard shows when it is offline. */
+export const countLocalConflicts = async () =>
+  TTConflicts.detectConflicts(await loadLocalConflictContext()).length;
+
+/**
+ * Every conflict in the school. `{ conflicts, source: "server" | "local" }`.
+ */
+export const getConflicts = async (lang = "en") => {
+  if (await isOnline()) {
+    try {
+      const res = await api.get(API.admin.timetable.conflicts, { params: { lang }, timeout: 20_000 });
+      if (Array.isArray(res.data?.conflicts)) {
+        return { conflicts: res.data.conflicts, source: "server" };
+      }
+    } catch (err) {
+      console.warn("[timetable] getConflicts server failed — using local:", err.message);
+    }
+  }
+  const ctx = await loadLocalConflictContext();
+  return { conflicts: localise(TTConflicts.detectConflicts(ctx), lang), source: "local" };
+};
+
+/**
+ * The fixes on offer for one entry: { freePeriods, freeTeachers, swaps }.
+ */
+export const getResolutionOptions = async (entryId) => {
+  if (await isOnline()) {
+    try {
+      const res = await api.get(API.admin.timetable.options(entryId), { timeout: 20_000 });
+      if (res.data?.success) {
+        const { freePeriods = [], freeTeachers = [], swaps = [] } = res.data;
+        return { freePeriods, freeTeachers, swaps };
+      }
+    } catch (err) {
+      console.warn("[timetable] getResolutionOptions server failed — using local:", err.message);
+    }
+  }
+  return TTConflicts.resolutionOptions(await loadLocalConflictContext(), entryId);
+};
+
+/**
+ * The conflicts a slot would be part of if saved as given (with `_id` when
+ * editing). `{ conflicts, canForce }` — canForce only for administrators.
+ */
+export const checkSlot = async (candidate, lang = "en") => {
+  const body = { ...candidate, dayOfWeek: canonicalDay(candidate?.dayOfWeek) };
+  if (await isOnline()) {
+    try {
+      const res = await api.post(API.admin.timetable.check, body, { params: { lang }, timeout: 15_000 });
+      if (Array.isArray(res.data?.conflicts)) {
+        return { conflicts: res.data.conflicts, canForce: Boolean(res.data.canForce) };
+      }
+    } catch (err) {
+      console.warn("[timetable] checkSlot server failed — using local:", err.message);
+    }
+  }
+  const ctx = await loadLocalConflictContext();
+  return {
+    conflicts: localise(TTConflicts.checkSlot(ctx, body), lang),
+    canForce:  isAdminSession(),
+  };
+};
+
+/**
+ * Quick fixes for a lesson that is not saved yet (or is being edited): the
+ * free periods for its class and teacher, and the free teachers of its
+ * subject. Worked out on this phone's rows — the editor's suggestions — and
+ * the save itself is still checked in full before it is accepted.
+ */
+export const suggestFixes = async (candidate) => {
+  const ctx  = await loadLocalConflictContext();
+  const cand = TTConflicts.buildContext({ slots: [candidate] }).slots[0];
+  if (!cand) return { freePeriods: [], freeTeachers: [] };
+  const candId = cand._id || "__candidate__";
+  const next = { ...ctx, slots: [...ctx.slots.filter((x) => x._id !== candId), { ...cand, _id: candId }] };
+  return {
+    freePeriods:  TTConflicts.freePeriods(next, candId),
+    freeTeachers: TTConflicts.freeTeachers(next, candId),
+  };
+};
+
+/**
+ * The error a save throws when the server refuses it with a conflict. Carries
+ * the server's full list so the editor can show it inline.
+ */
+const conflictError = (err) => {
+  const data = err?.response?.data;
+  const e = new Error(data?.error || "This lesson conflicts with another one");
+  e.conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+  e.canForce  = Boolean(data?.canForce);
+  e.isConflict = true;
+  return e;
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -610,8 +793,12 @@ export const timetableService = {
     }
   },
 
+  /**
+   * `force` ("Save anyway") skips the conflict check — honoured for
+   * administrators only, here and on the server.
+   */
   async createSlot({
-    classId, subjectId, teacherId, dayOfWeek, periodId, room, schoolId,
+    classId, subjectId, teacherId, dayOfWeek, periodId, room, schoolId, force = false,
   }) {
     if (!classId || !subjectId || !teacherId || !dayOfWeek || !periodId) {
       throw new Error(
@@ -634,7 +821,10 @@ export const timetableService = {
       );
     }
 
-    await assertNoConflict(db, { classId, teacherId, dayOfWeek: normalisedDay, periodId });
+    const forced = force === true && isAdminSession();
+    if (!forced) {
+      await assertNoConflict(db, { classId, teacherId, dayOfWeek: normalisedDay, periodId, room });
+    }
 
     const localId = generateLocalId();
 
@@ -668,6 +858,7 @@ export const timetableService = {
         dayOfWeek: normalisedDay,    // ✅ Title-case
         periodId,
         room:      room?.trim() || null,
+        ...(forced ? { force: true } : {}),
       });
 
       const serverSlot = response.data?.slot || response.data?.data;
@@ -702,7 +893,12 @@ export const timetableService = {
       );
       return localId;
     } catch (err) {
-      if (err?.response?.status === 409) {
+      if (err?.response?.status === 409 && err.response.data?.conflicts) {
+        // The server sees lessons this phone has not synced yet. The slot
+        // was refused, so it must not stay behind locally as if it existed.
+        await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [localId]);
+        throw conflictError(err);
+      } else if (err?.response?.status === 409) {
         await db.runAsync(
           `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE _id = ?`,
           [ts, localId]
@@ -715,7 +911,7 @@ export const timetableService = {
     }
   },
 
-  async updateSlot(id, { subjectId, teacherId, classId, dayOfWeek, periodId, room }) {
+  async updateSlot(id, { subjectId, teacherId, classId, dayOfWeek, periodId, room, force = false }) {
     if (!id) throw new Error("[timetable] Slot ID is required");
 
     const db = await getDatabase();
@@ -741,9 +937,11 @@ export const timetableService = {
       teacherId: teacherId || current.teacher_id,
       dayOfWeek: normalisedDay,
       periodId:  periodId  || current.period_id,
+      room:      room === undefined ? current.room : room,
     };
 
-    await assertNoConflict(db, resolved, id);
+    const forced = force === true && isAdminSession();
+    if (!forced) await assertNoConflict(db, resolved, id);
 
     const ts          = new Date().toISOString();
     const resolvedRoom = room === undefined
@@ -797,6 +995,7 @@ export const timetableService = {
         dayOfWeek: normalisedDay,    // ✅ Title-case
         periodId:  periodId  || current.period_id,
         room:      resolvedRoom,
+        ...(forced ? { force: true } : {}),
       });
 
       await db.runAsync(
@@ -812,6 +1011,20 @@ export const timetableService = {
           `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE _id = ?`,
           [ts, id]
         );
+      } else if (err?.response?.status === 409 && err.response.data?.conflicts) {
+        // Refused for a conflict this phone could not see: put the row back
+        // as the server still has it, so the local copy does not drift.
+        await db.runAsync(
+          `UPDATE ${TABLE}
+           SET subject_id = ?, teacher_id = ?, class_id = ?, day_of_week = ?,
+               period_id = ?, room = ?, version = ?, updated_at = ?, _synced = 1
+           WHERE _id = ?`,
+          [
+            current.subject_id, current.teacher_id, current.class_id, current.day_of_week,
+            current.period_id, current.room, current.version, current.updated_at, id,
+          ]
+        );
+        throw conflictError(err);
       } else {
         console.warn(`[timetable] Update push failed: ${err.message}`);
       }

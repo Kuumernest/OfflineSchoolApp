@@ -18,6 +18,11 @@ import type {
   SlotConflictKind,
   Period,
   TeacherWorkload,
+  TimetableConflict,
+  ResolutionOptions,
+  SlotCheckCandidate,
+  SlotCheckResult,
+  SwapUpdate,
 } from "@/types/timetable.types";
 
 const BASE = "/admin/timetable";
@@ -80,6 +85,9 @@ const normalise = (raw: Record<string, unknown>): TimetableSlot => {
 const CONFLICT_MESSAGES: Record<SlotConflictKind, string> = {
   class:   "That class already has a lesson in this period.",
   teacher: "That teacher is already teaching in this period.",
+  room:    "That room is already booked in this period.",
+  period:  "Two period definitions overlap in time.",
+  index:   "The database refuses a second lesson for this class or teacher in that period.",
   version: "Someone else changed this slot while you had it open.",
 };
 
@@ -96,6 +104,8 @@ const asConflict = (err: unknown): SlotConflict | null => {
     current: body.current
       ? normalise(body.current as Record<string, unknown>)
       : undefined,
+    details:  Array.isArray(body.conflicts) ? (body.conflicts as TimetableConflict[]) : undefined,
+    canForce: body.canForce === true,
   };
 };
 
@@ -187,6 +197,67 @@ export async function moveSlot(
   periodId:  string,
 ): Promise<TimetableSlot> {
   return updateSlot(slot._id, { dayOfWeek, periodId, version: slot.version });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFLICT DETAIL & RESOLUTION
+//
+// The server lists every conflict in full and, per entry, the fixes that are
+// safe to apply. The fixes themselves are ordinary PUT/DELETE calls, so they
+// queue offline on the desktop like any other edit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Every conflict in the school; messages in `lang` ("en" | "fr"). */
+export async function fetchConflicts(lang?: string): Promise<TimetableConflict[]> {
+  const { data } = await api.get(`${BASE}/conflicts`, {
+    params: lang ? { lang } : undefined,
+  });
+  return unwrapList<TimetableConflict>(data, "conflicts");
+}
+
+/** Free periods, free teachers and safe swaps for one entry. */
+export async function fetchResolutionOptions(entryId: string): Promise<ResolutionOptions> {
+  const { data } = await api.get(`${BASE}/conflicts/options/${entryId}`);
+  return {
+    freePeriods:  Array.isArray(data?.freePeriods)  ? data.freePeriods  : [],
+    freeTeachers: Array.isArray(data?.freeTeachers) ? data.freeTeachers : [],
+    swaps:        Array.isArray(data?.swaps)        ? data.swaps        : [],
+  };
+}
+
+/** The pre-save check: what this slot would clash with if it were saved. */
+export async function checkSlot(
+  candidate: SlotCheckCandidate,
+  lang?:     string,
+): Promise<SlotCheckResult> {
+  const { data } = await api.post(`${BASE}/check`, candidate, {
+    params: lang ? { lang } : undefined,
+  });
+  return {
+    conflicts: Array.isArray(data?.conflicts) ? data.conflicts : [],
+    canForce:  data?.canForce === true,
+  };
+}
+
+/**
+ * Performs a swap: the two content updates in the order given. Each one is a
+ * valid save on its own (the server built them so), but if the second fails
+ * the first is put back so the class is not left with one lesson twice.
+ */
+export async function applySwap(
+  updates:  SwapUpdate[],
+  original: SwapUpdate,
+): Promise<void> {
+  const [first, second] = updates;
+  const body = (u: SwapUpdate) => ({ subjectId: u.subjectId, teacherId: u.teacherId, room: u.room });
+  await updateSlot(first.entryId, body(first));
+  if (!second) return;
+  try {
+    await updateSlot(second.entryId, body(second));
+  } catch (err) {
+    await updateSlot(original.entryId, body(original)).catch(() => undefined);
+    throw err;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

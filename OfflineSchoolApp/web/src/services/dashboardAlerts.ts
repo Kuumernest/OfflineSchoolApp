@@ -71,7 +71,9 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
       id:      "conflicts",
       type:    "danger",
       messageKey: "alerts.timetableConflicts", params: { count: n },
-      route:   "/timetable",
+      // The list of conflicts with their fixes, not the bare grid — the grid
+      // could not say which lessons were in conflict.
+      route:   "/timetable/conflicts",
     });
   }
 

@@ -718,22 +718,16 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     incompleteTimetableSlots =
       Math.max(0, totalClasses - classesWithTimetable.length);
 
-    const conflicts = await TimetableSlot.aggregate([
-      { $match: addNotDeleted({ ...baseQuery }) },
-      {
-        $group: {
-          _id: {
-            teacherId: "$teacherId",
-            dayOfWeek: "$dayOfWeek",
-            periodId:  "$periodId",
-          },
-          count: { $sum: 1 },
-        },
-      },
-      { $match: { count: { $gt: 1 } } },
-      { $count: "total" },
-    ]);
-    timetableConflicts = conflicts[0]?.total || 0;
+    // The same detector the conflicts screen lists from, so the number on
+    // the dashboard is always the length of the list the alert opens. It
+    // used to count (teacher, day, period) groups only — blind to a class
+    // booked twice, and unable to say which lessons it meant.
+    const { listConflicts } = require("../services/timetableConflicts.service");
+    const schools = schoolId
+      ? [schoolId]
+      : await TimetableSlot.distinct("schoolId", addNotDeleted({}));
+    const lists = await Promise.all(schools.map((sid) => listConflicts(sid)));
+    timetableConflicts = lists.reduce((n, l) => n + l.length, 0);
   } catch { /* TimetableSlot optional */ }
 
   const stats = {
