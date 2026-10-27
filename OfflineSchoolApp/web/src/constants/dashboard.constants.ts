@@ -49,6 +49,8 @@ export interface HealthMetric {
   icon:            LucideIcon;
   /** Renders in the danger tone when the value is above zero. */
   alertOnNonZero?: boolean;
+  /** Where tapping the tile goes while it is in the danger tone. */
+  href?:           string;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -203,7 +205,7 @@ export const HEALTH_METRIC_ROWS: HealthMetric[][] = [
   [
     { key: "totalPeriods",             label: "Periods",      icon: Clock                       },
     { key: "incompleteTimetableSlots", label: "No Timetable", icon: Calendar, alertOnNonZero: true },
-    { key: "timetableConflicts",       label: "Conflicts",    icon: FileText, alertOnNonZero: true },
+    { key: "timetableConflicts",       label: "Conflicts",    icon: FileText, alertOnNonZero: true, href: "/timetable/conflicts" },
     { key: "classesWithoutSubjects",   label: "No Subjects",  icon: School, alertOnNonZero: true },
   ],
   [

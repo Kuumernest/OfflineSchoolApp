@@ -5873,7 +5873,8 @@
     "noOfflineAccountEnrollment": "Aucun compte hors ligne trouvé pour ce numéro de matricule",
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
-    "invalidCredentials": "Identifiants invalides"
+    "invalidCredentials": "Identifiants invalides",
+    "roomSlotConflict": "Cette salle est déjà réservée à cette période"
   },
   "syncStep": {
     "prepare": "Préparation",
@@ -7298,5 +7299,50 @@
     "pendingUploads": "Des modifications de ce téléphone n’ont pas encore été envoyées. Synchronisez-les avant de changer d’établissement, sinon elles seraient envoyées au mauvais établissement.",
     "openPending": "Voir les modifications en attente",
     "failed": "Impossible de changer d’établissement."
+  },
+  "ttConflicts": {
+    "title": "Conflits d'emploi du temps",
+    "count": {
+      "one": "{{count}} conflit à résoudre",
+      "other": "{{count}} conflits à résoudre"
+    },
+    "loadFailed": "Impossible de charger les conflits d'emploi du temps.",
+    "localSource": "Hors ligne — conflits calculés sur la copie de l'emploi du temps de cet appareil. Synchronisez pour voir les modifications faites ailleurs.",
+    "noneTitle": "Aucun conflit",
+    "noneBody": "Chaque enseignant, classe et salle n'est réservé qu'une fois par période.",
+    "groupPeriods": "Horaires des périodes",
+    "typeTeacher": "ENSEIGNANT EN DOUBLE",
+    "typeClass": "CLASSE EN DOUBLE",
+    "typeRoom": "SALLE EN DOUBLE",
+    "typePeriod": "PÉRIODES QUI SE CHEVAUCHENT",
+    "noRoom": "Pas de salle",
+    "actMove": "Déplacer vers une période libre",
+    "actTeacher": "Changer d'enseignant",
+    "actSwap": "Échanger les périodes",
+    "actRemove": "Supprimer",
+    "actOpen": "Ouvrir dans l'emploi du temps",
+    "actEditPeriods": "Modifier les horaires",
+    "sameDay": "Même jour",
+    "teachesClass": "Enseigne déjà dans cette classe",
+    "noFreePeriods": "Aucune période de la semaine où la classe et l'enseignant sont tous deux libres.",
+    "noFreeTeachers": "Aucun autre enseignant de cette matière n'est libre à ce moment.",
+    "noSwaps": "Aucun cours de cette classe ne peut être échangé avec celui-ci sans créer un nouveau conflit.",
+    "removeTitle": "Supprimer ce cours ?",
+    "removeBody": "{{subject}} pour {{cls}} sera retiré de l'emploi du temps.",
+    "fixedTitle": "Terminé",
+    "movedBody": "Le cours a été déplacé.",
+    "teacherChangedBody": "L'enseignant a été changé.",
+    "swappedBody": "Les deux cours ont été échangés.",
+    "removedBody": "Le cours a été supprimé.",
+    "fixFailedTitle": "Impossible d'appliquer la correction",
+    "fixFailedBody": "La modification n'a pas été enregistrée. Tirez pour actualiser et réessayez.",
+    "optionsFailed": "Impossible de déterminer les options pour ce cours.",
+    "checking": "Recherche de conflits…",
+    "wouldConflict": "Enregistrer ceci créerait un conflit",
+    "freeTeachersHere": "Enseignants de cette matière libres à ce moment",
+    "freePeriodsInstead": "Ou déplacez-le vers une période libre",
+    "saveAnyway": "Enregistrer quand même",
+    "saveAnywayTitle": "Enregistrer avec un conflit ?",
+    "saveAnywayBody": "Ce cours sera en conflit avec un autre, et le tableau de bord signalera le conflit jusqu'à sa résolution. Enregistrer quand même ?"
   }
 }

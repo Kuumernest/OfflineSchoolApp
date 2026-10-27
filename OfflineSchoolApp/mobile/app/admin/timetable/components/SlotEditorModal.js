@@ -28,6 +28,11 @@ import { TeacherService  } from "../../../../src/services/teacher.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { i18n } from "../../../../src/i18n";
 import { errorText } from "../../../../src/utils/appError";
+import {
+  checkSlot,
+  suggestFixes,
+} from "../../../../src/services/timetableService";
+import ConflictTypeBadge from "./ConflictTypeBadge";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -86,6 +91,8 @@ const DAY_LABEL_KEYS = {
   wed: "timetable.wednesday",
   thu: "timetable.thursday",
   fri: "timetable.friday",
+  sat: "timetable.saturday",
+  sun: "timetable.sunday",
 };
 
 const unwrapArray = (result, ...keys) => {
@@ -165,7 +172,7 @@ export default function SlotEditorModal({
   onSave,
   onDelete,
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const isMountedRef = useRef(true);
 
@@ -187,6 +194,20 @@ export default function SlotEditorModal({
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
   const [saving,          setSaving]          = useState(false);
+
+  // ── Where the lesson goes. Starts at the tapped cell; a "free period"
+  //    quick fix moves it before it is ever saved.
+  const [target, setTarget] = useState(() => ({
+    dayOfWeek: cell?.dayOfWeek ?? slot?.dayOfWeek ?? null,
+    periodId:  cell?.period?.id ?? slot?.periodId ?? null,
+    period:    cell?.period ?? null,
+  }));
+
+  // ── The pre-save check: what this lesson would clash with ──
+  const [conflicts, setConflicts] = useState([]);
+  const [canForce,  setCanForce]  = useState(false);
+  const [checking,  setChecking]  = useState(false);
+  const [fixes,     setFixes]     = useState({ freePeriods: [], freeTeachers: [] });
 
   // ─────────────────────────────────────────────────────────
   // MOUNT GUARD
@@ -315,6 +336,63 @@ export default function SlotEditorModal({
                                // it is read as a snapshot inside the async fn
 
   // ─────────────────────────────────────────────────────────
+  // CONFLICT CHECK — run on every change, before Save is pressed
+  // ─────────────────────────────────────────────────────────
+
+  const slotEntryId = slot ? firstId(slot._id, slot.id) : null;
+
+  useEffect(() => {
+    if (!subjectId || !teacherId || !classId || !target.dayOfWeek || !target.periodId) {
+      setConflicts([]);
+      setFixes({ freePeriods: [], freeTeachers: [] });
+      return undefined;
+    }
+    let cancelled = false;
+    const candidate = {
+      ...(slotEntryId ? { _id: slotEntryId } : {}),
+      classId,
+      subjectId,
+      teacherId,
+      dayOfWeek: target.dayOfWeek,
+      periodId:  target.periodId,
+      room:      room.trim() || null,
+    };
+    // Short pause so typing a room name does not fire a request per letter.
+    const timer = setTimeout(async () => {
+      try {
+        setChecking(true);
+        const res = await checkSlot(candidate, language);
+        if (cancelled || !isMountedRef.current) return;
+        setConflicts(res.conflicts);
+        setCanForce(res.canForce);
+        setFixes(res.conflicts.length
+          ? await suggestFixes(candidate).catch(() => ({ freePeriods: [], freeTeachers: [] }))
+          : { freePeriods: [], freeTeachers: [] });
+      } catch (err) {
+        console.warn("SlotEditorModal: conflict check failed:", err.message);
+      } finally {
+        if (!cancelled && isMountedRef.current) setChecking(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [subjectId, teacherId, room, classId, target.dayOfWeek, target.periodId, slotEntryId, language]);
+
+  const applyFreePeriod = useCallback((p) => {
+    setTarget({
+      dayOfWeek: p.dayOfWeek,
+      periodId:  p.periodId,
+      period:    { id: p.periodId, name: p.periodName, startTime: p.startTime, endTime: p.endTime },
+    });
+  }, []);
+
+  const applyFreeTeacher = useCallback((ft) => {
+    // A free teacher of this subject may not be in the class-filtered list.
+    setTeachers((list) =>
+      list.some((x) => x.id === ft.teacherId) ? list : [...list, { id: ft.teacherId, name: ft.teacherName }]);
+    setTeacherId(ft.teacherId);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
   // DERIVED
   // ─────────────────────────────────────────────────────────
 
@@ -328,7 +406,10 @@ export default function SlotEditorModal({
     [teachers, teacherId],
   );
 
-  const canSave = Boolean(subjectId) && Boolean(teacherId) && !saving;
+  const hasConflict = conflicts.length > 0;
+  // Never saved silently over a conflict: Save stays off while one stands,
+  // and only an administrator gets "Save anyway".
+  const canSave = Boolean(subjectId) && Boolean(teacherId) && !saving && !checking && !hasConflict;
 
   // ─────────────────────────────────────────────────────────
   // HANDLERS
@@ -355,7 +436,7 @@ export default function SlotEditorModal({
     [saving],
   );
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async ({ force = false } = {}) => {
     if (saving) return;
 
     if (!subjectId) {
@@ -373,14 +454,35 @@ export default function SlotEditorModal({
         subjectId: String(subjectId),
         teacherId: String(teacherId),
         room:      room.trim(),
+        dayOfWeek: target.dayOfWeek,
+        period:    target.period ?? cell?.period ?? null,
+        periodId:  target.periodId,
+        force,
       });
     } catch (err) {
-      console.error("SlotEditorModal: save failed:", err.message);
-      Alert.alert(t("ttAdmin.saveFailedTitle"), errorText(t, err, "ttAdmin.saveFailedBody"));
+      if (err?.isConflict && isMountedRef.current) {
+        // The server saw a clash this phone could not: show it inline.
+        setConflicts(err.conflicts);
+        setCanForce(err.canForce);
+      } else {
+        console.error("SlotEditorModal: save failed:", err.message);
+        Alert.alert(t("ttAdmin.saveFailedTitle"), errorText(t, err, "ttAdmin.saveFailedBody"));
+      }
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [saving, subjectId, teacherId, room, onSave, t]);
+  }, [saving, subjectId, teacherId, room, target, cell, onSave, t]);
+
+  const handleSaveAnyway = useCallback(() => {
+    Alert.alert(
+      t("ttConflicts.saveAnywayTitle"),
+      t("ttConflicts.saveAnywayBody"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("ttConflicts.saveAnyway"), style: "destructive", onPress: () => handleSave({ force: true }) },
+      ],
+    );
+  }, [handleSave, t]);
 
   /**
    * Wraps onDelete so that:
@@ -405,13 +507,14 @@ export default function SlotEditorModal({
   // ─────────────────────────────────────────────────────────
 
   // The canonical day value is display-only here — translate it, never store it
-  const rawDay      = cell?.dayOfWeek ?? slot?.dayOfWeek ?? "";
+  const rawDay      = target.dayOfWeek ?? cell?.dayOfWeek ?? slot?.dayOfWeek ?? "";
   const dayLabelKey = DAY_LABEL_KEYS[String(rawDay).slice(0, 3).toLowerCase()];
   const dayLabel    = dayLabelKey ? t(dayLabelKey) : capitalize(rawDay);
-  const periodLabel = cell?.period?.name ?? slot?.periodName ?? t("ttAdmin.selectedPeriod");
+  const shownPeriod = target.period ?? cell?.period;
+  const periodLabel = shownPeriod?.name ?? slot?.periodName ?? t("ttAdmin.selectedPeriod");
   const timeLabel   =
-    cell?.period?.startTime && cell?.period?.endTime
-      ? `${cell.period.startTime} – ${cell.period.endTime}`
+    shownPeriod?.startTime && shownPeriod?.endTime
+      ? `${shownPeriod.startTime} – ${shownPeriod.endTime}`
       : slot?.startTime && slot?.endTime
         ? `${slot.startTime} – ${slot.endTime}`
         : "";
@@ -576,6 +679,81 @@ export default function SlotEditorModal({
               returnKeyType="done"
             />
 
+            {/* ── Conflict check ── */}
+            {checking && (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#4F46E5" size="small" />
+                <Text style={styles.loadingText}>{t("ttConflicts.checking")}</Text>
+              </View>
+            )}
+
+            {hasConflict && (
+              <View style={styles.conflictBox}>
+                <View style={styles.optionRow}>
+                  <Ionicons name="warning" size={18} color="#DC2626" />
+                  <Text style={styles.conflictTitle}>{t("ttConflicts.wouldConflict")}</Text>
+                </View>
+                {conflicts.map((c) => (
+                  <View key={c.id} style={styles.conflictItem}>
+                    <ConflictTypeBadge type={c.conflict_type} />
+                    <Text style={styles.conflictMsg}>{c.message}</Text>
+                  </View>
+                ))}
+
+                {fixes.freeTeachers.length > 0 && (
+                  <>
+                    <Text style={styles.fixLabel}>{t("ttConflicts.freeTeachersHere")}</Text>
+                    <View style={styles.chips}>
+                      {fixes.freeTeachers.map((ft) => (
+                        <TouchableOpacity
+                          key={`ft-${ft.teacherId}`}
+                          style={styles.chip}
+                          onPress={() => applyFreeTeacher(ft)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.chipText}>{ft.teacherName}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {fixes.freePeriods.length > 0 && (
+                  <>
+                    <Text style={styles.fixLabel}>{t("ttConflicts.freePeriodsInstead")}</Text>
+                    <View style={styles.chips}>
+                      {fixes.freePeriods.slice(0, 12).map((p) => {
+                        const dk = DAY_LABEL_KEYS[p.dayOfWeek.slice(0, 3).toLowerCase()];
+                        return (
+                          <TouchableOpacity
+                            key={`fp-${p.dayOfWeek}-${p.periodId}`}
+                            style={styles.chip}
+                            onPress={() => applyFreePeriod(p)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.chipText}>
+                              {`${dk ? t(dk) : p.dayOfWeek} · ${p.periodName || t("timetable.periodN", { n: p.periodNumber })}`}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                {canForce && (
+                  <TouchableOpacity
+                    style={styles.forceBtn}
+                    onPress={handleSaveAnyway}
+                    disabled={saving}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.forceText}>{t("ttConflicts.saveAnyway")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             <View style={styles.spacer} />
           </ScrollView>
 
@@ -607,7 +785,7 @@ export default function SlotEditorModal({
 
             <TouchableOpacity
               style={[styles.btn, styles.btnSave, !canSave && styles.btnSaveDisabled]}
-              onPress={handleSave}
+              onPress={() => handleSave()}
               disabled={!canSave}
               activeOpacity={0.7}
             >
@@ -789,4 +967,38 @@ const styles = StyleSheet.create({
   btnCancelText: { color: "#374151", fontWeight: "700", fontSize: 14 },
   btnDeleteText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
   disabledOpacity: { opacity: 0.55 },
+
+  conflictBox: {
+    marginTop:       16,
+    padding:         12,
+    borderRadius:    10,
+    backgroundColor: "#FEF2F2",
+    borderWidth:     1,
+    borderColor:     "#FECACA",
+    gap:             8,
+  },
+  conflictTitle: { marginLeft: 6, fontSize: 14, fontWeight: "700", color: "#991B1B" },
+  conflictItem:  { gap: 4 },
+  conflictMsg:   { fontSize: 13, color: "#7F1D1D", lineHeight: 18 },
+  fixLabel:      { fontSize: 12, fontWeight: "700", color: "#374151", marginTop: 4 },
+  chips:         { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: {
+    paddingVertical:   6,
+    paddingHorizontal: 10,
+    borderRadius:      16,
+    backgroundColor:   "#FFFFFF",
+    borderWidth:       1,
+    borderColor:       "#D1D5DB",
+  },
+  chipText:  { fontSize: 12, fontWeight: "600", color: "#111827" },
+  forceBtn: {
+    marginTop:       4,
+    alignSelf:       "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius:    8,
+    borderWidth:     1,
+    borderColor:     "#DC2626",
+  },
+  forceText: { color: "#DC2626", fontWeight: "700", fontSize: 13 },
 });

@@ -22,18 +22,15 @@
  *                              bumps, and the row stays so the feed can
  *                              deliver the deletion to every other device.
  *
- * ── The two 409s ──────────────────────────────────────────────────────────
+ * ── The conflict 409s ─────────────────────────────────────────────────────
  *
- * Both endpoints check the same two constraints before writing:
- *   class conflict   no other non-deleted slot for the same class, day and
- *                    period
- *   teacher conflict no other non-deleted slot for the same teacher, day and
- *                    period
- * Either one is a 409 with a `conflict` kind, and both stop the outbox. So they
- * are checked here, against the mirror — the same rows the server would look at,
- * possibly a sync behind. A conflict the mirror cannot see is a conflict the
- * replayed request will hit on the server; the queue stops and a person clears
- * it, which is the same outcome the online screen gives.
+ * Both endpoints run shared/timetableConflicts.js checkSlot before writing:
+ * the class, the teacher and the room must each be free in that day and
+ * period. Any clash is a 409 carrying the full conflict, and stops the outbox.
+ * So the same check runs here, against the mirror — the same rows the server
+ * would look at, possibly a sync behind — and a clash falls through to the
+ * network so the server's 409 is what the screen shows. An admin's
+ * `force: true` ("Save anyway") skips it on both sides.
  *
  * ── The version check ─────────────────────────────────────────────────────
  *
@@ -44,6 +41,8 @@
  */
 
 const { randomUUID } = require("crypto");
+const TT                  = require("../../../../../shared/timetableConflicts");
+const { conflictContext } = require("../timetableConflicts");
 
 const DAYS = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
 
@@ -71,23 +70,16 @@ const slotOf = (docs, schoolId, id) => {
 };
 
 /**
- * Is there a non-deleted slot in the mirror for the same (class, day, period)
- * or the same (teacher, day, period)? Returns the kind of conflict, or null.
+ * Would this slot be part of a conflict? The same shared check the endpoint
+ * runs (class, teacher and room), against the mirror. Returns the first
+ * conflict, or null. An admin's `force: true` skips it, as the endpoint does.
  */
-const conflictFor = (docs, { classId, teacherId, dayOfWeek, periodId }, excludeId) => {
-  const peers = docs.find("timetableSlot", {
-    dayOfWeek,
-    periodId,
-    deletedAt: null,
-  });
+const conflictFor = (docs, schoolId, slot, excludeId) =>
+  TT.checkSlot(conflictContext(docs, schoolId), { ...slot, _id: excludeId || undefined })[0] ?? null;
 
-  for (const p of peers) {
-    if (excludeId && String(p._id) === String(excludeId)) continue;
-    if (String(p.classId) === String(classId)) return "class";
-    if (String(p.teacherId) === String(teacherId)) return "teacher";
-  }
-  return null;
-};
+const forced = (body, session) =>
+  body?.force === true &&
+  (session?.role === "school_admin" || session?.role === "super_admin");
 
 module.exports = [
   {
@@ -113,7 +105,9 @@ module.exports = [
 
       if (!classId || !subjectId || !teacherId || !dayOfWeek || !periodId) return null;
 
-      const clash = conflictFor(docs, { classId, teacherId, dayOfWeek, periodId }, null);
+      const room  = body?.room?.trim() || null;
+      const clash = !forced(body, session) &&
+        conflictFor(docs, schoolId, { classId, subjectId, teacherId, dayOfWeek, periodId, room }, null);
       if (clash) return null;
 
       const id  = body._id ? String(body._id) : randomUUID();
@@ -184,7 +178,7 @@ module.exports = [
         room:      body?.room      !== undefined ? (body.room?.trim() || null)    : slot.room,
       };
 
-      const clash = conflictFor(docs, next, slot._id);
+      const clash = !forced(body, session) && conflictFor(docs, schoolId, next, slot._id);
       if (clash) return null;
 
       const doc = {

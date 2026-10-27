@@ -123,6 +123,8 @@ export interface CreateSlotPayload {
   dayOfWeek: DayCode;
   periodId:  string;
   room?:     string | null;
+  /** Admins only: save even though the check found a conflict. */
+  force?:    boolean;
 }
 
 export interface UpdateSlotPayload {
@@ -134,6 +136,8 @@ export interface UpdateSlotPayload {
   room?:      string | null;
   /** Send the version you loaded so a concurrent edit is caught, not clobbered. */
   version?:   number;
+  /** Admins only: save even though the check found a conflict. */
+  force?:     boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,13 +148,120 @@ export interface UpdateSlotPayload {
 // and "Mr Bello already teaches period 3 on Tuesday".
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SlotConflictKind = "class" | "teacher" | "version";
+export type SlotConflictKind = "class" | "teacher" | "room" | "period" | "index" | "version";
 
 export interface SlotConflict {
   kind:    SlotConflictKind;
   message: string;
   /** Present on a version conflict: the server's copy of the slot. */
   current?: TimetableSlot;
+  /** Every conflict the save would create, in full (class/teacher/room). */
+  details?: TimetableConflict[];
+  /** Whether the caller may re-send with `force: true` ("Save anyway"). */
+  canForce?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFLICT DETAIL
+//
+// The shape GET /admin/timetable/conflicts returns, produced by
+// shared/timetableConflicts.js on the server (and the desktop mirror).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TimetableConflictType =
+  | "TEACHER_DOUBLE_BOOKED"
+  | "CLASS_DOUBLE_BOOKED"
+  | "ROOM_DOUBLE_BOOKED"
+  | "PERIOD_OVERLAP";
+
+export interface ConflictEntry {
+  entryId:     string;
+  classId:     string;
+  className:   string;
+  subjectId:   string;
+  subjectName: string;
+  teacherId:   string;
+  teacherName: string;
+  room:        string | null;
+  dayOfWeek:   DayCode;
+  periodId:    string;
+}
+
+export interface ConflictPeriod {
+  periodId:  string;
+  name:      string | null;
+  number:    number | null;
+  startTime: string | null;
+  endTime:   string | null;
+}
+
+export interface TimetableConflict {
+  id:            string;
+  conflict_type: TimetableConflictType;
+  /** null for PERIOD_OVERLAP: a period is the same every day. */
+  day:           DayCode | null;
+  periodId:      string;
+  periodName:    string | null;
+  periodNumber:  number | null;
+  startTime:     string | null;
+  endTime:       string | null;
+  message:       string;
+  entries:       ConflictEntry[];
+  room?:         string | null;
+  periods?:      ConflictPeriod[];
+}
+
+export interface FreePeriodOption {
+  dayOfWeek:    DayCode;
+  periodId:     string;
+  periodName:   string | null;
+  periodNumber: number | null;
+  startTime:    string | null;
+  endTime:      string | null;
+  sameDay:      boolean;
+}
+
+export interface FreeTeacherOption {
+  teacherId:        string;
+  teacherName:      string;
+  teachesThisClass: boolean;
+}
+
+export interface SwapUpdate {
+  entryId:   string;
+  subjectId: string;
+  teacherId: string;
+  room:      string | null;
+}
+
+export interface SwapOption extends ConflictEntry {
+  periodName:   string | null;
+  periodNumber: number | null;
+  startTime:    string | null;
+  endTime:      string | null;
+  /** The two saves that perform the swap, in order. */
+  updates:      SwapUpdate[];
+}
+
+export interface ResolutionOptions {
+  freePeriods:  FreePeriodOption[];
+  freeTeachers: FreeTeacherOption[];
+  swaps:        SwapOption[];
+}
+
+export interface SlotCheckCandidate {
+  _id?:      string;
+  classId:   string;
+  subjectId: string;
+  teacherId: string;
+  dayOfWeek: DayCode;
+  periodId:  string;
+  room?:     string | null;
+}
+
+export interface SlotCheckResult {
+  conflicts: TimetableConflict[];
+  canForce:  boolean;
 }
 
 /** Thrown by the timetable service so callers can branch on `conflict`. */

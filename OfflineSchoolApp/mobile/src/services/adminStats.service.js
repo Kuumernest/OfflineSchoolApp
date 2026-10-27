@@ -566,28 +566,15 @@ if (assign.table) {
     }
 
     // ── [10] Timetable conflicts ──────────────────────────
+    // The shared detector, the same one the conflicts screen lists from, so
+    // the number offline is the length of the list the alert opens. The old
+    // GROUP BY counted teacher clashes only.
     if (hasTimetable) {
-      const ttCols       = await getColumns(db, "timetable");
-      const teacherCol   = pickColumn(ttCols, ["teacher_id",  "teacherId"]);
-      const periodCol    = pickColumn(ttCols, ["period_id",   "periodId"]);
-      const dayCol       = pickColumn(ttCols, ["day_of_week", "dayOfWeek", "day"]);
-      const ttDeletedCol = pickColumn(ttCols, ["deleted_at",  "deletedAt"]);
-      const sfTT         = schoolFilter(ttCols, schoolId);
-      if (teacherCol && periodCol && dayCol) {
-        const q = `
-          SELECT COUNT(*) AS count FROM (
-            SELECT ${teacherCol}, ${dayCol}, ${periodCol}
-            FROM   timetable
-            WHERE  1=1
-            ${sfTT.clause}
-            ${notDeletedClause(ttDeletedCol)}
-            GROUP  BY ${teacherCol}, ${dayCol}, ${periodCol}
-            HAVING COUNT(*) > 1
-          )`;
-        queries.push(safeCount(db, q, sfTT.params));
-      } else {
-        queries.push(Promise.resolve(0));
-      }
+      const { countLocalConflicts } = require("./timetableService");
+      queries.push(countLocalConflicts().catch((err) => {
+        console.warn("[adminStats] local conflict count failed:", err.message);
+        return 0;
+      }));
     } else {
       queries.push(Promise.resolve(0));
     }

@@ -5873,7 +5873,8 @@
     "noOfflineAccountEnrollment": "No offline account found for that enrollment number",
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "roomSlotConflict": "This room is already booked in this period"
   },
   "syncStep": {
     "prepare": "Preparing",
@@ -7298,5 +7299,50 @@
     "pendingUploads": "Some changes on this phone have not been uploaded yet. Sync them before changing school, or they would be sent to the wrong school.",
     "openPending": "See pending changes",
     "failed": "Could not change school."
+  },
+  "ttConflicts": {
+    "title": "Timetable conflicts",
+    "count": {
+      "one": "{{count}} conflict to fix",
+      "other": "{{count}} conflicts to fix"
+    },
+    "loadFailed": "Could not load the timetable conflicts.",
+    "localSource": "Offline — showing conflicts from this device's copy of the timetable. Sync to see changes made elsewhere.",
+    "noneTitle": "No conflicts",
+    "noneBody": "Every teacher, class and room is booked once per period.",
+    "groupPeriods": "Period times",
+    "typeTeacher": "TEACHER DOUBLE-BOOKED",
+    "typeClass": "CLASS DOUBLE-BOOKED",
+    "typeRoom": "ROOM DOUBLE-BOOKED",
+    "typePeriod": "PERIODS OVERLAP",
+    "noRoom": "No room",
+    "actMove": "Move to free period",
+    "actTeacher": "Change teacher",
+    "actSwap": "Swap periods",
+    "actRemove": "Remove",
+    "actOpen": "Open in timetable",
+    "actEditPeriods": "Edit period times",
+    "sameDay": "Same day",
+    "teachesClass": "Already teaches this class",
+    "noFreePeriods": "No period this week has both the class and the teacher free.",
+    "noFreeTeachers": "No other teacher of this subject is free at this time.",
+    "noSwaps": "No lesson of this class can swap with this one without creating a new conflict.",
+    "removeTitle": "Remove this lesson?",
+    "removeBody": "{{subject}} for {{cls}} will be removed from the timetable.",
+    "fixedTitle": "Done",
+    "movedBody": "The lesson was moved.",
+    "teacherChangedBody": "The teacher was changed.",
+    "swappedBody": "The two lessons were swapped.",
+    "removedBody": "The lesson was removed.",
+    "fixFailedTitle": "Could not apply the fix",
+    "fixFailedBody": "The change was not saved. Pull to refresh and try again.",
+    "optionsFailed": "Could not work out the options for this lesson.",
+    "checking": "Checking for conflicts…",
+    "wouldConflict": "Saving this would create a conflict",
+    "freeTeachersHere": "Teachers of this subject free at this time",
+    "freePeriodsInstead": "Or move it to a free period",
+    "saveAnyway": "Save anyway",
+    "saveAnywayTitle": "Save with a conflict?",
+    "saveAnywayBody": "This lesson will clash with another one, and the dashboard will keep reporting the conflict until it is fixed. Save anyway?"
   }
 }
