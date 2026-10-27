@@ -639,8 +639,7 @@ const DetailsTab = ({
               <div key={group.classId ?? "no-class"} className="space-y-3">
                 {showClassHeads && (
                   <div className="flex items-center gap-2 pt-3 first:pt-0">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide
-                                   text-indigo-700 shrink-0">
+                    <h4 className="text-xs font-semibold text-indigo-700 shrink-0">
                       {group.className}
                     </h4>
                     <span className="text-[11px] font-medium text-gray-400 tabular-nums">
@@ -1335,8 +1334,7 @@ const MarksTab = ({
           <div key={group.classId ?? "no-class"} className="space-y-2">
             {showClassHeaders && (
               <div className="flex items-center gap-2 pt-3 first:pt-0">
-                <h3 className="text-xs font-semibold uppercase tracking-wide
-                               text-indigo-700 shrink-0">
+                <h3 className="text-xs font-semibold text-indigo-700 shrink-0">
                   {group.className}
                 </h3>
                 <span className="text-[11px] font-medium text-gray-400 tabular-nums">

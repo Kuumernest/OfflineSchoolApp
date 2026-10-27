@@ -103,7 +103,7 @@ export const ALL_MODULES: Module[] = [
   },
   {
     id:          "applications",
-    title:       "Applications",
+    title:       "Admissions",
     description: "Review student applications",
     titleKey:    "modules.applications",
     descKey:     "modules.applicationsDesc",    icon:        GraduationCap,

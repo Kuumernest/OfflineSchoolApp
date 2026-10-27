@@ -894,7 +894,7 @@ export default function AdmissionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.applications")}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.title")}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {t("admissions.pendingCount", { count: applications.length })}
           </p>

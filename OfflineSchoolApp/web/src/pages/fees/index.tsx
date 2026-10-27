@@ -242,12 +242,13 @@ export default function FeesPage() {
                   {showClassRows && (
                     <Tr className="bg-indigo-50/60">
                       <Td colSpan={5} className="py-2">
-                        <span className="text-xs font-semibold uppercase
-                                         tracking-wide text-indigo-700">
+                        {/* "Form 5 – 5 owing" (C7): the class as it is
+                            written, then the count, never run together. */}
+                        <span className="text-xs font-semibold text-indigo-700">
                           {group.className}
                         </span>
-                        <span className="ml-2 text-[11px] text-ink-faint tabular-nums">
-                          {t("fees.owingCount", { count: group.items.length })}
+                        <span className="text-[11px] text-ink-faint tabular-nums">
+                          {" – "}{t("fees.owingCount", { count: group.items.length })}
                         </span>
                       </Td>
                       <Td numeric className="py-2 font-semibold text-danger">

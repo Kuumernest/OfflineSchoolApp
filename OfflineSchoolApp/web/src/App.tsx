@@ -45,7 +45,6 @@ const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage")
 const AddStudentPage   = lazy(() => import("@/pages/students/AddStudentPage"));
 const EditStudentPage  = lazy(() => import("@/pages/students/EditStudentPage"));
 const AdmissionsPage   = lazy(() => import("@/pages/students/AdmissionsPage"));
-const ApplicationsPage = lazy(() => import("@/pages/students/applications/index"));
 
 const TeachersPage     = lazy(() => import("@/pages/teachers/TeachersPage"));
 const AddTeacherPage   = lazy(() => import("@/pages/teachers/AddTeacherPage"));
@@ -355,7 +354,9 @@ export default function App() {
                 capability on the server, and the navigation lists them for
                 administrators only; a teacher reaching them by URL met 403s. */}
             <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
-            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
+            {/* One screen, one name (C7): applications are reviewed under
+                Admissions. The old address still lands there. */}
+            <Route path="/students/applications" element={<Navigate to="/students/admissions" replace />} />
             <Route path="/teachers"                    element={page(<TeachersPage />)} />
             <Route path="/teachers/new"                element={page(<AddTeacherPage />)} />
             <Route path="/teachers/assignments"        element={page(<AssignmentsPage />)} />

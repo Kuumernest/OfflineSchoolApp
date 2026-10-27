@@ -277,7 +277,7 @@ export default function DashboardPage() {
 
           <PendingApplications
             count={pendingCount}
-            onClick={() => navigate("/students/applications")}
+            onClick={() => navigate("/students/admissions")}
           />
 
           {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
