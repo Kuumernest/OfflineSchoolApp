@@ -6618,8 +6618,17 @@ const main = async () => {
     false);
   check("and leaves the position exactly where it was",
     finArrears("from=2026-09-01&to=2026-09-30"), finArrears());
-  check("the academic year DOES narrow it",
-    finArrears(`academicYear=${YEAR}`).charged < finArrears().charged, true);
+  // No year asked for is the school's current year (its setting, else the
+  // calendar's) — the one Fees > Outstanding and the platform dashboard use —
+  // not every year at once.
+  {
+    const { currentAcademicYearOf } = require("../../shared/academicYear");
+    const current = currentAcademicYearOf(docs.get("school", SCHOOL));
+    check("no academic year is the school's current year",
+      finArrears(), { ...finArrears(`academicYear=${current}`), academicYear: current });
+    check("another academic year DOES narrow it",
+      finArrears("academicYear=1999-2000").charged < finArrears(`academicYear=${YEAR}`).charged, true);
+  }
   check("outstanding is billed less paid, with waivers already off the bill",
     (() => {
       const a = finArrears();

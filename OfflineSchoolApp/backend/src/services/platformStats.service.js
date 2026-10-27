@@ -7,7 +7,7 @@ const User         = require("../db/models/User");
 const TermResult   = require("../db/models/TermResult");
 const AnnualResult = require("../db/models/AnnualResult");
 const FeeCharge    = require("../db/models/FeeCharge");
-const FeePayment   = require("../db/models/FeePayment");
+const { outstandingBySchool } = require("./fees.service");
 const { StudentAttendance } = require("../db/models/Attendance");
 
 /**
@@ -31,9 +31,11 @@ const { StudentAttendance } = require("../db/models/Attendance");
  *   promotion    AnnualResult rows by promotionStatus. `rate` is
  *                (promoted + graduated) ÷ decided, where decided excludes
  *                "pending" — an undecided pupil is not a failed one.
- *   fees         FeeCharge (not void, not deleted): charged and waived;
- *                FeePayment (not deleted): paid — reversals are negative rows
- *                and net out, exactly as services/fees.service.js sums them.
+ *   fees         fees.service outstandingBySchool — the figure Fees >
+ *                Outstanding and Financial reports show: current students
+ *                (approved, active, not deleted), the chosen year or else each
+ *                school's current year. charged/waived/paid are theirs;
+ *                balance is the sum of positive balances (outstanding).
  *                billed = charged − waived; collectionRate = paid ÷ billed.
  *
  * ── Filters ──────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ const computePlatformStats = async (filters) => {
     ? allSchools.filter((s) => String(s._id) === schoolId)
     : allSchools;
 
-  const [students, teachers, attendance, results, annual, charges, payments] =
+  const [students, teachers, attendance, results, annual, owed] =
     await Promise.all([
       Student.aggregate([
         { $match: { ...sf, deletedAt: null, status: "approved" } },
@@ -138,36 +140,30 @@ const computePlatformStats = async (filters) => {
           pending:     countIf(statusIs("promotionStatus", "pending")),
         } },
       ]),
-      FeeCharge.aggregate([
-        { $match: { ...sf, ...yr, deletedAt: null, voidedAt: null } },
-        { $group: {
-          _id:     "$schoolId",
-          charged: { $sum: "$amount" },
-          waived:  { $sum: { $ifNull: ["$waivedAmount", 0] } },
-        } },
-      ]),
-      FeePayment.aggregate([
-        { $match: { ...sf, ...yr, deletedAt: null } },
-        { $group: { _id: "$schoolId", paid: { $sum: "$amount" } } },
-      ]),
+      // The one outstanding figure (fees.service outstandingBySchool), the
+      // same as Fees > Outstanding and Financial reports: current students,
+      // the chosen year or else each school's current year, positive
+      // balances only. This summed every charge in the school, in every
+      // year unless one was chosen, and netted credits against debts.
+      outstandingBySchool({ schoolIds: schools.map((s) => String(s._id)), academicYear: academicYear || null }),
     ]);
 
   const st = byId(students), te = byId(teachers), at = byId(attendance);
-  const re = byId(results),  an = byId(annual),   ch = byId(charges), pa = byId(payments);
+  const re = byId(results),  an = byId(annual);
 
   const rowFor = (s) => {
     const id = String(s._id);
-    const a = at.get(id), r = re.get(id), p = an.get(id), c = ch.get(id), m = pa.get(id);
+    const a = at.get(id), r = re.get(id), p = an.get(id), f = owed.get(id);
 
     const marked   = a?.marked ?? 0;
     const present  = a?.present ?? 0;
     const nResults = r?.n ?? 0;
     const decided  = (p?.n ?? 0) - (p?.pending ?? 0);
     const promotedOrGraduated = (p?.promoted ?? 0) + (p?.graduated ?? 0);
-    const charged  = c?.charged ?? 0;
-    const waived   = c?.waived ?? 0;
+    const charged  = f?.charged ?? 0;
+    const waived   = f?.waived ?? 0;
     const billed   = charged - waived;
-    const paid     = m?.paid ?? 0;
+    const paid     = f?.paid ?? 0;
 
     return {
       schoolId:     id,
@@ -201,8 +197,11 @@ const computePlatformStats = async (filters) => {
         rate:        pct(promotedOrGraduated, decided),
       },
       fees: {
+        academicYear: f?.academicYear ?? null,
         charged, waived, billed, paid,
-        balance:        billed - paid,
+        // Outstanding: what current students owe, positive balances only.
+        balance:        f?.outstanding ?? 0,
+        owing:          f?.owing ?? 0,
         collectionRate: pct(paid, billed),
       },
     };
@@ -251,7 +250,8 @@ const computePlatformStats = async (filters) => {
       charged: sumBy(rows, (r) => r.fees.charged),
       waived:  sumBy(rows, (r) => r.fees.waived),
       billed, paid,
-      balance:        billed - paid,
+      balance:        sumBy(rows, (r) => r.fees.balance),
+      owing:          sumBy(rows, (r) => r.fees.owing),
       collectionRate: pct(paid, billed),
     },
   };
