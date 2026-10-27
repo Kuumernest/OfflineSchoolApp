@@ -7,6 +7,9 @@ const Homework            = require("../db/models/Homework");
 const { StudentAttendance } = require("../db/models/Attendance");
 const { balancesFor }     = require("./fees.service");
 const academicHistory     = require("./intelligence/academicHistory.service");
+const { passMarkOf }      = require("./passMark.service");
+const { sequenceFigureOn20 } = require("../../../shared/academicRules");
+const { summaryPasses }   = require("../../../shared/passRate");
 const { displayName, byName } = require("../utils/studentName");
 
 /**
@@ -64,7 +67,7 @@ const THRESHOLDS = {
   minAttendanceMarks: 5,     // fewer marked days than this says nothing yet
   absenceRate:  [[0.30, 3], [0.15, 2], [0.08, 1]],
   lateCount:    5,
-  gradeDropPct: 10,          // percentage points between the last two exams
+  gradeDropPoints: 2,        // marks /20 between the last two exams (was 10 percentage points)
   subjectsFailed: 3,
   minHomework:  2,
   homeworkMissRate: [[0.5, 2], [0.25, 1]],
@@ -90,6 +93,8 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
   ]);
   const ids = students.map((s) => String(s._id));
   const classNames = new Map(classes.map((c) => [String(c._id), c.name]));
+
+  const passMark = await passMarkOf(schoolId);
 
   const [attendanceAgg, history, homework, balances] = await Promise.all([
     // One row per (student, status) in the window.
@@ -161,27 +166,31 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
     const results = lastTwoResults.get(id) ?? [];
     const latest = results[results.length - 1];
     if (latest) {
-      if (latest.isPassing === false) {
+      // On /20 (shared/academicRules sequenceFigureOn20) and judged against
+      // the school's pass mark (shared/passRate) — not a percentage, and not
+      // a stored flag one writer set against a fixed 10.
+      const latest20 = sequenceFigureOn20(latest);
+      if (summaryPasses(latest, passMark) === false) {
         signals.push({
           code: "failed_exam", points: 2,
           data: {
             term: latest.term ?? null, academicYear: latest.academicYear ?? null,
-            percentage: latest.percentage ?? null,
+            average: latest20 == null ? null : Math.round(latest20 * 100) / 100,
+            passMark,
           },
         });
       }
       const previous = results.length === 2 ? results[0] : null;
+      const previous20 = previous ? sequenceFigureOn20(previous) : null;
       if (
-        previous &&
-        typeof previous.percentage === "number" &&
-        typeof latest.percentage === "number" &&
-        previous.percentage - latest.percentage >= THRESHOLDS.gradeDropPct
+        previous20 != null && latest20 != null &&
+        previous20 - latest20 >= THRESHOLDS.gradeDropPoints
       ) {
         signals.push({
           code: "grade_drop", points: 2,
           data: {
-            from: Math.round(previous.percentage * 10) / 10,
-            to:   Math.round(latest.percentage * 10) / 10,
+            from: Math.round(previous20 * 100) / 100,
+            to:   Math.round(latest20 * 100) / 100,
           },
         });
       }

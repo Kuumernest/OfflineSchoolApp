@@ -338,8 +338,11 @@ function QuickStatCard({ icon, label, value, color }) {
   );
 }
 
+/** A mark out of twenty, as every analytics figure is printed. */
+const on20 = (v) => (v == null ? "—" : `${Number(v).toFixed(2)}/20`);
+
 function StatsView({ stats }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   if (!stats) {
     return (
@@ -370,35 +373,31 @@ function StatsView({ stats }) {
             value={`${stats.passRate?.toFixed(1) ?? 0}%`}
             color={(stats.passRate ?? 0) >= 50 ? COLORS.success : COLORS.error}
           />
-          <StatBox label={t("results.average")} value={`${stats.average?.toFixed(1) ?? 0}%`} />
-          <StatBox label={t("results.highest")} value={`${stats.highest?.toFixed(1) ?? 0}%`} color={COLORS.success} />
-          <StatBox label={t("results.lowest")}  value={`${stats.lowest?.toFixed(1)  ?? 0}%`} color={COLORS.error}   />
-          <StatBox label={t("examResults.avgGpa")} value={stats.averageGpa?.toFixed(2)  ?? "—"} />
+          {/* On /20 (shared/examAnalytics on the server) — no percentages, no GPA. */}
+          <StatBox label={t("results.average")} value={on20(stats.average)} />
+          <StatBox label={t("results.highest")} value={on20(stats.highest)} color={COLORS.success} />
+          <StatBox label={t("results.lowest")}  value={on20(stats.lowest)}  color={COLORS.error}   />
         </View>
       </View>
 
-      {/* Grade distribution */}
-      {stats.gradeDistribution &&
-        Object.keys(stats.gradeDistribution).length > 0 && (
+      {/* Pupils per band of the school's own remark scale, highest first */}
+      {(stats.remarkDistribution ?? []).some((b) => b.count > 0) && (
           <View style={styles.statsSection}>
             <Text style={styles.sectionTitle}>
-              {t("results.gradeDistribution")}
+              {t("results.remarkDistribution")}
             </Text>
             <View style={styles.gradeDistContainer}>
-              {Object.entries(stats.gradeDistribution)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([grade, count]) => {
-                  // ✅ FIX: removed `count as number` TypeScript cast —
-                  //    this is a plain JS file. `count` is already a number
-                  //    from Object.entries(); no cast needed.
-                  const countNum   = Number(count) || 0;
+              {stats.remarkDistribution
+                .map((band) => {
+                  const countNum   = Number(band.count) || 0;
                   const total      = stats.totalStudents || 1;
-                  const pct        = Math.max((countNum / total) * 100, 4);
+                  const pct        = countNum > 0 ? Math.max((countNum / total) * 100, 4) : 0;
                   const widthStyle = `${pct}%`;
+                  const label      = (String(language).startsWith("fr") ? band.remarkFr : band.remark) || band.remark || "—";
 
                   return (
-                    <View key={grade} style={styles.gradeDistRow}>
-                      <Text style={styles.gradeDistLabel}>{grade}</Text>
+                    <View key={`${band.minMark}-${band.maxMark}`} style={styles.gradeDistRow}>
+                      <Text style={[styles.gradeDistLabel, { width: 110 }]} numberOfLines={1}>{label}</Text>
                       <View style={styles.gradeDistBarBg}>
                         <View
                           style={[
@@ -428,7 +427,7 @@ function StatsView({ stats }) {
                 {sub.subjectName}
               </Text>
               <Text style={styles.subjectStatAvg}>
-                {sub.average?.toFixed(1)}%
+                {on20(sub.average)}
               </Text>
               <Text
                 style={[

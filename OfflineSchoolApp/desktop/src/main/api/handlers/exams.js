@@ -2,6 +2,7 @@
 "use strict";
 
 const { summaryPassRate, DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
+const { examAnalytics, rowsOn20 } = require("../../../../../shared/examAnalytics");
 const { currentAcademicYearOf } = require("../../../../../shared/academicYear");
 const { CA_TYPE } = require("../../../../../shared/caAssessment");
 
@@ -88,7 +89,8 @@ module.exports = [
         const rows = docs.find("resultSummary", { schoolId, isPublished: true })
           .filter((r) => !r.deletedAt && papers.has(String(r.examId)));
         const passMark = docs.find("gradingConfig", { schoolId })[0]?.passMark ?? DEFAULT_PASS_MARK;
-        return { academicYear: year, passMark, ...summaryPassRate(rows, passMark) };
+        return { academicYear: year, passMark, average: examAnalytics(rows, { passMark }).average,
+                 ...summaryPassRate(rows, passMark) };
       })();
 
       const results = {
@@ -107,13 +109,8 @@ module.exports = [
           missingGrades:   docs.count("studentScore", {
             schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
           }),
-          averagePerformance: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const valid = rows.map((r) => r.percentage).filter((p) => p != null);
-            if (!valid.length) return 0;
-            return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
-          })(),
+          // On /20 over the same pupils as the pass rate — it was a mean percentage.
+          averagePerformance: passScope.average,
           // The one pass rate (shared/passRate.js), over the server's scope:
           // this school year's published sequence papers (no CA rows), each
           // average /20 against the school's pass mark.
@@ -402,8 +399,13 @@ module.exports = [
       if (query.classId) filter.classId = String(query.classId);
 
       const rows = docs.find("resultSummary", filter, { order: "classPosition", dir: "ASC" });
+      const cfg  = docs.find("gradingConfig", { schoolId })[0] ?? null;
 
-      return ok({ results: rows });
+      // Each pupil's average on /20, the school's remark and pass/fail, as
+      // the server's withAverage20 adds them.
+      return ok({ results: rowsOn20(rows, {
+        passMark: cfg?.passMark ?? DEFAULT_PASS_MARK, bands: cfg?.grades ?? null,
+      }) });
     },
   },
 

@@ -266,6 +266,8 @@
     "none": "Aucun résultat",
     "searchPh": "Rechercher par nom, numéro d'admission ou classe…",
     "gradeDistribution": "Répartition des notes",
+    "remarkDistribution": "Appréciations",
+    "remark": "Appréciation",
     "noGradeData": "Aucune donnée de notes",
     "scoreDistribution": "Répartition des scores",
     "passFailSplit": "Répartition réussite / échec",
@@ -2978,8 +2980,8 @@
     "sig": {
       "absence": "Absent {{absent}} jours sur {{marked}} pointés",
       "late": "{{late}} retards",
-      "failed_exam": "Échec au dernier examen ({{percentage}} %)",
-      "grade_drop": "Moyenne passée de {{from}} % à {{to}} %",
+      "failed_exam": "Échec au dernier examen ({{average}}/20, moyenne de passage {{passMark}})",
+      "grade_drop": "Moyenne passée de {{from}} à {{to}} /20",
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
       "fees_outstanding": "Doit {{balance}}"

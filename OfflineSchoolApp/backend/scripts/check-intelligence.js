@@ -365,8 +365,10 @@ const breakdown = (rows) => rows.map(([subjectId, subjectName, normalizedMark, e
   const chWatch = await earlyWarning.watchlist({ schoolId: A, days: 30 });
   const chDrop = (chWatch.students.find((s) => s.studentId === "st-chrono")?.signals ?? [])
     .find((s) => s.code === "grade_drop");
+  // On /20 (decided 2026-10-27): these summaries carry only a percentage, so
+  // each reads as its percentage ÷ 5 — 70% is 14/20, 55% is 11/20.
   check("so the fall is seen, and in the right direction",
-    [chDrop?.data?.from, chDrop?.data?.to], [70, 55]);
+    [chDrop?.data?.from, chDrop?.data?.to], [14, 11]);
 
   check("an exam with no sequence number sorts after the numbered ones in its term",
     academicHistory.byOccurrence(

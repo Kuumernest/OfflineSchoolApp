@@ -266,6 +266,8 @@
     "none": "No results found",
     "searchPh": "Search by name, admission number or class…",
     "gradeDistribution": "Grade distribution",
+    "remarkDistribution": "Remarks",
+    "remark": "Remark",
     "noGradeData": "No grade data available",
     "scoreDistribution": "Score distribution",
     "passFailSplit": "Pass / fail split",
@@ -2978,8 +2980,8 @@
     "sig": {
       "absence": "Absent {{absent}} of {{marked}} marked days",
       "late": "Late {{late}} times",
-      "failed_exam": "Failed the last exam ({{percentage}}%)",
-      "grade_drop": "Average fell {{from}}% → {{to}}%",
+      "failed_exam": "Failed the last exam ({{average}}/20, pass mark {{passMark}})",
+      "grade_drop": "Average fell {{from}} → {{to}} /20",
       "subjects_failed": "{{count}} subjects failed",
       "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
       "fees_outstanding": "Owes {{balance}}"

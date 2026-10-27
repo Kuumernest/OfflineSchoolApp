@@ -1536,7 +1536,7 @@ const ResultsTab = ({
   examStatus:  ExamStatus;
   submissions: ExamSubjectWithTotals[];
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { confirm } = useToast();
   const { data: resultsData, isLoading } = useExamResults(examId);
   const { data: statsData }              = useExamStats(examId);
@@ -1795,7 +1795,7 @@ const ResultsTab = ({
                                 uppercase tracking-wide">
                 <tr>
                   {["results.pos", "academic.student", "academic.class",
-                    "academic.score", "academic.average", "academic.grade",
+                    "academic.average", "results.remark",
                     "reportCards.result"].map((labelKey) => (
                     <th key={labelKey}
                         className="px-4 py-3 text-left last:text-center">
@@ -1807,7 +1807,8 @@ const ResultsTab = ({
               <tbody className="divide-y divide-gray-100">
                 {results.map((r, idx) => {
                   const pos     = r.classPosition ?? idx + 1;
-                  const passing = r.isPassing;
+                  // On /20 against the school's pass mark, decided by the server.
+                  const passing = r.passes ?? r.isPassing;
                   const color   = passing ? "text-green-600" : "text-red-600";
                   return (
                     <tr key={r._id || r.studentId}
@@ -1834,14 +1835,11 @@ const ResultsTab = ({
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {r.className || "—"}
                       </td>
-                      <td className="px-4 py-3 font-semibold">
-                        {r.totalScore}/{r.maxTotalScore}
-                      </td>
                       <td className={`px-4 py-3 font-bold ${color}`}>
-                        {r.percentage?.toFixed(1)}%
+                        {r.average20 != null ? `${r.average20.toFixed(2)}/20` : "—"}
                       </td>
-                      <td className={`px-4 py-3 font-bold ${color}`}>
-                        {r.overallGrade || "—"}
+                      <td className="px-4 py-3 text-gray-600">
+                        {(i18n.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5

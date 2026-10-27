@@ -151,6 +151,12 @@ teacherRemark: string | null;
 
 export interface ResultSummary {
 _id: string;
+/** The pupil's average on /20 and the school's remark for it (rankings). */
+average20?: number | null;
+remark?: string | null;
+remarkFr?: string | null;
+/** Passed against the school's pass mark, on /20 (rankings). */
+passes?: boolean | null;
 examId: string;
 studentId: string;
 classId: string;
@@ -309,6 +315,7 @@ results: {
   published: number;
   pending: number;
   missingGrades: number;
+  /** Mean average on /20 over this school year's published sequence results. */
   averagePerformance: number;
   passRate: number;
   /** What the pass rate covers: this school year's published sequences. */
@@ -369,8 +376,11 @@ average: number;
 highest: number;
 lowest: number;
 passRate: number;
-averageGpa: number;
-gradeDistribution: Record<string, number>;
+/** Out of twenty: average, highest and lowest are /20 (scale "20"). */
+scale?: "20";
+passMark?: number;
+/** Pupils per band of the school's remark scale, highest band first. */
+remarkDistribution: { remark: string | null; remarkFr: string | null; minMark: number; maxMark: number; count: number }[];
 subjectStats: SubjectStat[];
 };
 }

@@ -1120,7 +1120,8 @@ export default function ExamsPage() {
       },
       {
         id: "avg", label: t("exams.avgScore"),
-        value: `${r.averagePerformance ?? 0}%`, color: "text-green-600",
+        // On /20, over this school year's results (as the pass rate beside it).
+        value: `${Number(r.averagePerformance ?? 0).toFixed(2)}/20`, color: "text-green-600",
         // The analytics page is where this figure is computed and broken down.
         go: (r.published ?? 0) + (r.pending ?? 0) > 0
           ? () => navigate("/exams/results")

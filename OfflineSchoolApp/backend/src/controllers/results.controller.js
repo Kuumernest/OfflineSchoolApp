@@ -207,6 +207,10 @@ const getExamRankings = asyncHandler(async (req, res) => {
   let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role), limit: Number(limit) });
   rankings     = rankings.slice(0, Number(limit));
 
+  // Each pupil's average on /20, the school's remark and pass/fail — what
+  // the analytics tables print instead of a percentage, a letter and a GPA.
+  rankings = await classStats.withAverage20(rankings, scoped.schoolId);
+
   return res.json({
     success: true,
     rankBy:  scope,

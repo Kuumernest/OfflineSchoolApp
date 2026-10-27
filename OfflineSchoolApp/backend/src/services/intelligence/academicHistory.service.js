@@ -31,7 +31,7 @@ const academicOrder = require("../../../../shared/intelligence/academicOrder");
 /** The fields every caller needs. Enough to compare two occasions. */
 const BASE_FIELDS =
   "studentId examId classId percentage average isPassing subjectsFailed " +
-  "term academicYear createdAt";
+  "term academicYear createdAt calcVersion";
 
 /** subjectBreakdown as well — the per-subject marks, on the /20 scale. */
 const SUBJECT_FIELDS = `${BASE_FIELDS} subjectBreakdown`;

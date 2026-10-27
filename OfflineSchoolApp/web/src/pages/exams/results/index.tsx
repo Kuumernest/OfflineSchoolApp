@@ -4,6 +4,7 @@ import { useSearchParams, Link }      from "react-router-dom";
 import { useExams }                   from "@/hooks/useExams";
 import { useUser }                    from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import {
   useExamStats,
   useRankings,
@@ -32,26 +33,30 @@ interface Stats {
   highest:           number;
   lowest:            number;
   passRate:          number;
-  averageGpa:        number;
-  gradeDistribution: Record<string, number>;
+  passMark?:         number;
+  /** Pupils per band of the school's remark scale, highest band first. */
+  remarkDistribution?: RemarkBand[];
   subjectStats:      SubjectStat[];
 }
+
+interface RemarkBand {
+  remark:   string | null;
+  remarkFr: string | null;
+  minMark:  number;
+  maxMark:  number;
+  count:    number;
+}
+
+/** A ranking row's remark in the reader's language. */
+const remarkText = (r: ResultSummary) =>
+  (i18next.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? null;
+
+/** A mark out of twenty, as every analytics figure is printed. */
+const on20 = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toFixed(2)}/20`);
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
-
-const GRADE_COLORS: Record<string, string> = {
-  "A+": "bg-emerald-500",
-  "A":  "bg-emerald-400",
-  "B+": "bg-blue-500",
-  "B":  "bg-blue-400",
-  "C+": "bg-yellow-500",
-  "C":  "bg-yellow-400",
-  "D":  "bg-orange-500",
-  "E":  "bg-red-400",
-  "F":  "bg-red-600",
-};
 
 // `key` is the scope sent to the rankings endpoint — it must not change.
 // Module scope has no `t`, so the label is stored as a key and resolved
@@ -176,14 +181,13 @@ const StatsOverview = ({ stats }: { stats: Stats }) => {
     { id: "passed",   label: t("results.passed"),         value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
     { id: "failed",   label: t("results.failed"),         value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
     { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { id: "average",  label: t("academic.average"),       value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
-    { id: "highest",  label: t("results.highest"),        value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
-    { id: "lowest",   label: t("results.lowest"),         value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
-    { id: "gpa",      label: t("results.avgGpa"),         value: stats.averageGpa.toFixed(2),     color: "text-purple-600",  bg: "bg-purple-50"   },
+    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             color: "text-indigo-600",  bg: "bg-indigo-50"   },
+    { id: "highest",  label: t("results.highest"),        value: on20(stats.highest),             color: "text-emerald-600", bg: "bg-emerald-50"  },
+    { id: "lowest",   label: t("results.lowest"),         value: on20(stats.lowest),              color: "text-rose-600",    bg: "bg-rose-50"     },
   ];
 
   return (
-    <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
       {cards.map((c) => (
         <div key={c.id}
              className={`rounded-xl border border-gray-100 p-3 text-center ${c.bg}`}>
@@ -278,11 +282,11 @@ const ScoreDistributionBar = ({
         <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
           <div
             className={`h-full ${color} rounded-full transition-all`}
-            style={{ width: `${Math.min(value, 100)}%` }}
+            style={{ width: `${Math.min((value / 20) * 100, 100)}%` }}
           />
         </div>
-        <span className="w-10 text-xs font-bold text-gray-700 text-right">
-          {value.toFixed(1)}%
+        <span className="w-16 text-xs font-bold text-gray-700 text-right">
+          {on20(value)}
         </span>
       </div>
     ))}
@@ -293,18 +297,15 @@ const ScoreDistributionBar = ({
 // GRADE DISTRIBUTION CHART
 // ─────────────────────────────────────────────────────────
 
-const GradeDistributionChart = ({
-  distribution,
+const RemarkDistributionChart = ({
+  bands,
   total,
 }: {
-  distribution: Record<string, number>;
-  total:        number;
+  bands: RemarkBand[];
+  total: number;
 }) => {
-  const { t } = useTranslation();
-  const entries = Object.entries(distribution)
-    .sort(([a], [b]) => a.localeCompare(b));
-
-  if (entries.length === 0) {
+  const { t, i18n } = useTranslation();
+  if (bands.every((b) => b.count === 0)) {
     return (
       <p className="text-sm text-gray-400 text-center py-6">
         {t("results.noGradeData")}
@@ -312,39 +313,39 @@ const GradeDistributionChart = ({
     );
   }
 
-  const maxCount = Math.max(...entries.map(([, n]) => n));
+  const maxCount = Math.max(...bands.map((b) => b.count));
+  // Highest band first, shaded from strong to weak; the server sends them in
+  // the school's own order.
+  const SHADES = ["bg-emerald-500", "bg-emerald-400", "bg-blue-500", "bg-blue-400",
+                  "bg-yellow-500", "bg-yellow-400", "bg-orange-500", "bg-red-500", "bg-red-600"];
 
   return (
     <div className="space-y-2.5">
-      {entries.map(([grade, count]) => {
-        const pct      = total > 0 ? Math.round((count / total) * 100) : 0;
-        const barColor = GRADE_COLORS[grade] ?? "bg-gray-400";
-        const barWidth = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
-
+      {bands.map((b, i) => {
+        const pct      = total > 0 ? Math.round((b.count / total) * 100) : 0;
+        const barWidth = maxCount > 0 ? Math.round((b.count / maxCount) * 100) : 0;
+        const label    = (i18n.language?.startsWith("fr") ? b.remarkFr : b.remark) || b.remark || "—";
         return (
-          <div key={grade} className="flex items-center gap-3">
-            {/* Grade label */}
-            <span className="w-8 text-sm font-bold text-gray-700 text-right">
-              {grade}
+          <div key={`${b.minMark}-${b.maxMark}`} className="flex items-center gap-3">
+            <span className="w-40 text-xs font-semibold text-gray-700 text-right truncate" title={label}>
+              {label}
+              <span className="block text-[10px] font-normal text-gray-400">
+                {b.minMark}–{b.maxMark}/20
+              </span>
             </span>
-
-            {/* Bar */}
-            <div className="flex-1 h-7 bg-gray-100 rounded-lg overflow-hidden
-                            relative">
+            <div className="flex-1 h-7 bg-gray-100 rounded-lg overflow-hidden relative">
               <div
-                className={`h-full ${barColor} rounded-lg flex items-center
+                className={`h-full ${SHADES[Math.min(i, SHADES.length - 1)]} rounded-lg flex items-center
                             justify-end pr-2 transition-all`}
-                style={{ width: `${Math.max(barWidth, 3)}%` }}
+                style={{ width: `${b.count > 0 ? Math.max(barWidth, 3) : 0}%` }}
               >
                 {pct > 15 && (
                   <span className="text-white text-xs font-bold">{pct}%</span>
                 )}
               </div>
             </div>
-
-            {/* Count */}
             <span className="w-8 text-sm text-gray-500 font-medium">
-              {count}
+              {b.count}
             </span>
           </div>
         );
@@ -403,13 +404,13 @@ const SubjectPerformanceTable = ({
                   {s.subjectName}
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-indigo-600">
-                  {s.average.toFixed(1)}%
+                  {on20(s.average)}
                 </td>
                 <td className="px-4 py-2.5 text-right text-emerald-600 font-semibold">
-                  {s.highest.toFixed(1)}%
+                  {on20(s.highest)}
                 </td>
                 <td className="px-4 py-2.5 text-right text-red-500 font-semibold">
-                  {s.lowest.toFixed(1)}%
+                  {on20(s.lowest)}
                 </td>
                 <td className={`px-4 py-2.5 text-right font-bold ${passColor}`}>
                   {s.passRate.toFixed(1)}%
@@ -506,10 +507,8 @@ const RankingsTable = ({
               <th className="px-4 py-3 text-left">{t("results.pos")}</th>
               <th className="px-4 py-3 text-left">{t("academic.student")}</th>
               <th className="px-4 py-3 text-left">{t("academic.class")}</th>
-              <th className="px-4 py-3 text-right">{t("academic.score")}</th>
-              <th className="px-4 py-3 text-right">%</th>
-              <th className="px-4 py-3 text-center">{t("academic.grade")}</th>
-              <th className="px-4 py-3 text-center">GPA</th>
+              <th className="px-4 py-3 text-right">{t("academic.average")}</th>
+              <th className="px-4 py-3 text-left">{t("results.remark")}</th>
               <th className="px-4 py-3 text-center">{t("academic.subject_other")}</th>
               <th className="px-4 py-3 text-center">{t("common.status")}</th>
             </tr>
@@ -518,7 +517,8 @@ const RankingsTable = ({
             {filtered.map((r, idx) => {
               const pos     = (r[posField] as number | null) ?? idx + 1;
               const total   = (r[totalField] as number | null) ?? rankings.length;
-              const passing = r.isPassing;
+              // Judged on /20 against the school's pass mark by the server.
+              const passing = r.passes ?? r.isPassing;
               const color   = passing ? "text-green-600" : "text-red-600";
               const medal   =
                 pos === 1 ? "🥇" :
@@ -564,24 +564,14 @@ const RankingsTable = ({
                     {r.className || "—"}
                   </td>
 
-                  {/* Score */}
-                  <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                    {r.totalScore}/{r.maxTotalScore}
-                  </td>
-
-                  {/* Percentage */}
+                  {/* Average /20 */}
                   <td className={`px-4 py-3 text-right font-bold ${color}`}>
-                    {r.percentage?.toFixed(1)}%
+                    {on20(r.average20)}
                   </td>
 
-                  {/* Grade */}
-                  <td className={`px-4 py-3 text-center font-bold ${color}`}>
-                    {r.overallGrade || "—"}
-                  </td>
-
-                  {/* GPA */}
-                  <td className="px-4 py-3 text-center text-gray-500">
-                    {r.gpa != null ? r.gpa.toFixed(2) : "—"}
+                  {/* The school's remark */}
+                  <td className="px-4 py-3 text-gray-600">
+                    {remarkText(r) || "—"}
                   </td>
 
                   {/* Subjects passed/total */}
@@ -636,7 +626,7 @@ const TopBottomStudents = ({
   const { t } = useTranslation();
   if (rankings.length === 0) return null;
 
-  const sorted  = [...rankings].sort((a, b) => b.percentage - a.percentage);
+  const sorted  = [...rankings].sort((a, b) => (b.average20 ?? 0) - (a.average20 ?? 0));
   const top     = sorted.slice(0, n);
   const bottom  = sorted.slice(-n).reverse();
 
@@ -657,10 +647,10 @@ const TopBottomStudents = ({
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-bold
-          ${r.isPassing ? "text-green-600" : "text-red-600"}`}>
-          {r.percentage?.toFixed(1)}%
+          ${(r.passes ?? r.isPassing) ? "text-green-600" : "text-red-600"}`}>
+          {on20(r.average20)}
         </p>
-        <p className="text-xs text-gray-400">{r.overallGrade || "—"}</p>
+        <p className="text-xs text-gray-400">{remarkText(r) || "—"}</p>
       </div>
     </div>
   );
@@ -898,10 +888,10 @@ export default function ExamResultsPage() {
                   {/* Grade distribution */}
                   <div className="bg-white rounded-xl border border-gray-100 p-5">
                     <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                      {t("results.gradeDistribution")}
+                      {t("results.remarkDistribution")}
                     </h3>
-                    <GradeDistributionChart
-                      distribution={stats.gradeDistribution}
+                    <RemarkDistributionChart
+                      bands={stats.remarkDistribution ?? []}
                       total={stats.totalStudents}
                     />
                   </div>

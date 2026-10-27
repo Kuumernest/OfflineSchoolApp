@@ -24,7 +24,7 @@ const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
 const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
-const { scopedPassRate } = require("../services/classStats.service");
+const { scopedPassRate, withAverage20 } = require("../services/classStats.service");
 const { currentYearOf } = require("../services/fees.service");
 const { calendarAcademicYear } = require("../../../shared/academicYear");
 
@@ -245,17 +245,6 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
     .limit(5)
     .lean();
 
-  const avgResult = await ResultSummary.aggregate([
-    { $match: { schoolId, isPublished: true } },
-    {
-      $group: {
-        _id:       null,
-        avg:       { $avg: "$percentage" },
-        total:     { $sum: 1 },
-      },
-    },
-  ]);
-
   const [dashMissingExams, dashPendingExams] = await Promise.all([
     StudentScore.distinct("examId", {
       schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
@@ -263,13 +252,13 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
     ResultSummary.distinct("examId", { schoolId, isPublished: false }),
   ]);
 
-  const averagePerformance = avgResult[0]?.avg
-    ? Math.round(avgResult[0].avg) : 0;
   // The one pass rate (shared/passRate.js), over a stated scope: this school
   // year's published sequence results. It was every published summary the
   // school ever had, read by a stored flag one writer set against a fixed 10.
   const passScope = await scopedPassRate({ schoolId, academicYear: await schoolYearOf(schoolId) });
   const passRate = passScope.rate ?? 0;
+  // The average over the same pupils, on /20 — it was a mean percentage.
+  const averagePerformance = passScope.average;
 
   return res.json({
     success: true,
@@ -344,25 +333,8 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
     startDate: { $gte: todayStr, $lte: in7DaysStr },
   });
 
-  const resultFilter = {
-    schoolId,
-    isPublished: true,
-    ...(term         ? { term }         : {}),
-    ...(academicYear ? { academicYear } : {}),
-  };
-
-  const [passAgg, publishedResults, pendingResults, missingGrades] =
+  const [publishedResults, pendingResults, missingGrades] =
     await Promise.all([
-      ResultSummary.aggregate([
-        { $match: resultFilter },
-        {
-          $group: {
-            _id:       null,
-            total:     { $sum: 1 },
-            avgPct:    { $avg: "$percentage" },
-          },
-        },
-      ]),
       ResultSummary.countDocuments({ schoolId, isPublished: true  }),
       ResultSummary.countDocuments({ schoolId, isPublished: false }),
       StudentScore.countDocuments({
@@ -382,9 +354,8 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
   });
   const passRate = passScope.rate ?? 0;
 
-  const averagePerformance = passAgg[0]?.avgPct != null
-    ? Math.round(passAgg[0].avgPct)
-    : 0;
+  // The average over the same pupils, on /20 — it was a mean percentage.
+  const averagePerformance = passScope.average;
 
   const completedExamIds = await Exam.distinct("_id", {
     ...base,
@@ -1578,7 +1549,8 @@ router.get("/:examId/results", staffOnly, asyncHandler(async (req, res) => {
 
   await backfillResultNames(results, schoolId);
 
-  return res.json({ success: true, results });
+  // Each pupil's average on /20, the school's remark and pass/fail.
+  return res.json({ success: true, results: await withAverage20(results, schoolId) });
 }));
 
 // ─────────────────────────────────────────────────────────

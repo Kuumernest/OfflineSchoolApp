@@ -259,7 +259,7 @@ export default function TermResultsPage() {
                 <th key={sq.number} className="px-4 py-3 text-center">{sq.label}</th>
               ))}
               <th className="px-4 py-3 text-center">{t("termResults.termAverage")}</th>
-              <th className="px-4 py-3 text-center">{t("termResults.grade")}</th>
+              <th className="px-4 py-3 text-center">{t("results.remark")}</th>
               <th className="px-4 py-3 text-center">{t("termResults.position")}</th>
               <th className="px-4 py-3 text-center">{t("termResults.status")}</th>
             </tr>
@@ -316,7 +316,7 @@ export default function TermResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                        {r.overallGrade ?? "—"}
+                        {r.overallRemark ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-gray-700">
