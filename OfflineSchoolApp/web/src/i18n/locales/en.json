@@ -2992,7 +2992,32 @@
       "refresh": "Refresh"
     },
     "childSwitcher": "Choose a child",
-    "account": "Account"
+    "account": "Account",
+    "resultsScreen": {
+      "title": "Results",
+      "trend": "Average over time",
+      "trendLabel": "Average out of 20 for each published result, oldest to newest",
+      "showTable": "Show as a table",
+      "exam": "Exam",
+      "average": "Average",
+      "term": "Term {{term}} · {{year}}",
+      "subject": "Subject",
+      "mark": "Mark /20",
+      "coef": "Coef.",
+      "remark": "Remark",
+      "rank": "{{position}} of {{outOf}}",
+      "passed": "Pass",
+      "belowPass": "Below the pass mark",
+      "absent": "Absent",
+      "published": "Published {{date}}",
+      "reportCard": "Report card (PDF)",
+      "reportCardHint": "Opens the print window: choose “Save as PDF”.",
+      "notIssued": "The school has not issued this report card yet.",
+      "empty": "No results published yet",
+      "emptyHint": "Results appear here as soon as the school publishes them.",
+      "chooseTerm": "Choose a term",
+      "openFailed": "Could not open the report card. Check your connection and try again."
+    }
   },
   "codes": {
     "lastOpened": "Last opened",

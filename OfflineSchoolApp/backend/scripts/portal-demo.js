@@ -120,6 +120,17 @@ const SUBJECTS = [
         subjectsFailed: subjects.filter((s) => !s.isPassing).length,
         isPublished: true, publishedAt: days(offset + 10), calcVersion: "exam-process/3",
       });
+      // The card the school issued (2nd and 3rd Sequence); the 1st was never
+      // printed, so the portal's "not issued yet" state shows too.
+      if (i > 0) {
+        await M("GeneratedReport").collection.insertOne({
+          schoolId: sid, examId, studentId: k._id, templateVersion: 1, deletedAt: null, updatedAt: days(offset + 10),
+          renderedHtml: `<!doctype html><html><body style="font-family:sans-serif;padding:32px"><h1>Bright Future College</h1>` +
+            `<h2>${name} — ${k.studentName} (${k.className})</h2><p>Average: ${average(subjects).toFixed(2)}/20 · ` +
+            `Position ${k.pos[i]} of 42</p><table border="1" cellpadding="6">${subjects.map((x) =>
+              `<tr><td>${x.subjectName}</td><td>${x.normalizedMark}/20</td><td>×${x.coefficient}</td><td>${x.remark}</td></tr>`).join("")}</table></body></html>`,
+        });
+      }
     }
     await M("Exam").collection.insertOne({
       _id: `seq4-${k.classId}`, schoolId: sid, classId: k.classId, classIds: [k.classId], className: k.className,

@@ -2992,7 +2992,32 @@
       "refresh": "Actualiser"
     },
     "childSwitcher": "Choisir un enfant",
-    "account": "Compte"
+    "account": "Compte",
+    "resultsScreen": {
+      "title": "Résultats",
+      "trend": "Évolution de la moyenne",
+      "trendLabel": "Moyenne sur 20 de chaque résultat publié, du plus ancien au plus récent",
+      "showTable": "Afficher sous forme de tableau",
+      "exam": "Examen",
+      "average": "Moyenne",
+      "term": "Trimestre {{term}} · {{year}}",
+      "subject": "Matière",
+      "mark": "Note /20",
+      "coef": "Coef.",
+      "remark": "Appréciation",
+      "rank": "{{position}} sur {{outOf}}",
+      "passed": "Admis",
+      "belowPass": "Sous la moyenne",
+      "absent": "Absent",
+      "published": "Publié le {{date}}",
+      "reportCard": "Bulletin (PDF)",
+      "reportCardHint": "Ouvre la fenêtre d’impression : choisissez « Enregistrer au format PDF ».",
+      "notIssued": "L’école n’a pas encore délivré ce bulletin.",
+      "empty": "Aucun résultat publié pour l’instant",
+      "emptyHint": "Les résultats apparaissent ici dès que l’école les publie.",
+      "chooseTerm": "Choisir un trimestre",
+      "openFailed": "Impossible d’ouvrir le bulletin. Vérifiez votre connexion et réessayez."
+    }
   },
   "codes": {
     "lastOpened": "Dernière consultation",

@@ -33,10 +33,11 @@ import { cn }          from "@/utils/cn";
 import { printHtml }   from "@/print/document";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
+import { ResultsScreen } from "./ResultsScreen";
 import { ChildAvatar, LanguageToggle, Skeleton } from "./ui";
 import {
   portalLogin, portalLogout, hasPortalSession, setPortalSession,
-  fetchMe, fetchFees, fetchResults, fetchAttendance, fetchAnnouncements,
+  fetchMe, fetchFees, fetchAttendance, fetchAnnouncements,
   fetchFeeReminders, fetchNotifications,
   fetchReceiptHtml,
   fetchPortalConversations, fetchPortalRecipients, openPortalConversation,
@@ -120,10 +121,6 @@ export default function ParentPortalPage() {
   const feesQ = useQuery({
     queryKey: ["portal", "fees", selected], queryFn: () => fetchFees(selected),
     enabled: signedIn && screen === "fees", retry: false,
-  });
-  const resultsQ = useQuery({
-    queryKey: ["portal", "results", selected], queryFn: () => fetchResults(selected),
-    enabled: signedIn && screen === "results", retry: false,
   });
   const attendanceQ = useQuery({
     queryKey: ["portal", "attendance", selected], queryFn: () => fetchAttendance(selected),
@@ -548,51 +545,7 @@ export default function ParentPortalPage() {
         )}
 
         {/* ── Results ── */}
-        {screen === "results" && (
-          resultsQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> :
-          (resultsQ.data?.length ?? 0) === 0 ? (
-            <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noResults")}</p></Card>
-          ) : (
-            resultsQ.data?.map((r) => (
-              <Card key={r._id} padding={false}>
-                <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink">
-                      {r.term ?? "—"} · {r.academicYear ?? "—"}
-                    </p>
-                    <p className="text-xs text-ink-muted">{r.className ?? ""}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-semibold text-ink tabular">
-                      {r.average ?? "—"}
-                    </p>
-                    {r.classPosition && (
-                      <p className="text-xs text-ink-muted">
-                        {t("portal.position")} {r.classPosition}
-                        {r.totalInClass ? ` / ${r.totalInClass}` : ""}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <ul className="divide-y divide-line">
-                  {r.subjects.map((s, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 px-4 py-2">
-                      <span className="truncate text-sm text-ink-body">{s.subjectName ?? "—"}</span>
-                      <span className="flex items-center gap-3">
-                        <span className="text-sm tabular text-ink-muted">
-                          {s.normalizedMark ?? "—"}
-                        </span>
-                        <Badge variant={s.isPassing ? "success" : "danger"}>
-                          {s.grade ?? "—"}
-                        </Badge>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ))
-          )
-        )}
+        {screen === "results" && <ResultsScreen studentId={selected} />}
 
         {/* ── Attendance ── */}
         {screen === "attendance" && (

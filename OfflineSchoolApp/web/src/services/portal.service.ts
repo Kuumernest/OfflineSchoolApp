@@ -126,7 +126,9 @@ export interface PortalResult {
   className: string | null; average: number | null; percentage: number | null;
   overallGrade: string | null; classPosition: number | null;
   totalInClass: number | null; isPassing: boolean;
-  subjects: { subjectName: string | null; normalizedMark: number | null;
+  overallRemark?: string | null; issuedAt?: string | null;
+  subjects: { subjectId?: string; subjectName: string | null; normalizedMark: number | null;
+              coefficient?: number | null; remark?: string | null;
               grade: string | null; isPassing: boolean; isAbsent?: boolean }[];
 }
 
@@ -295,6 +297,10 @@ export interface PortalHome {
 /** Every child at once, in one request: a parent on slow data waits for one. */
 export const fetchHome = async (): Promise<PortalHome> =>
   unwrap(await client.get("/home").then((r) => r.data));
+
+/** The card exactly as the school issued it (404 NOT_ISSUED when it has not). */
+export const fetchReportCard = async (resultId: string, studentId?: string | null): Promise<{ html: string; issuedAt: string }> =>
+  unwrap(await client.get(`/results/${resultId}/report-card`, childParams(studentId)).then((r) => r.data));
 
 export const fetchAnnouncements = async (studentId?: string | null): Promise<PortalAnnouncement[]> =>
   unwrap(await client.get("/announcements", childParams(studentId)).then((r) => r.data));
