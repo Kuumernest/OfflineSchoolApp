@@ -121,6 +121,8 @@ export interface PortalFees {
 
 export interface PortalResult {
   _id: string; academicYear: string | null; term: string | null;
+  /** "2nd Sequence": what a parent recognises, where the term alone repeats. */
+  examName?: string | null;
   className: string | null; average: number | null; percentage: number | null;
   overallGrade: string | null; classPosition: number | null;
   totalInClass: number | null; isPassing: boolean;
@@ -257,6 +259,8 @@ export interface PortalMe {
    * no indication anywhere that a message had arrived.
    */
   unreadMessages?: number;
+  /** Notices this guardian has not opened yet: the Messages badge counts them too. */
+  unreadNotices?: number;
 }
 
 export const fetchMe = async (studentId?: string | null): Promise<PortalMe> =>
@@ -270,6 +274,27 @@ export const fetchResults = async (studentId?: string | null): Promise<PortalRes
 
 export const fetchAttendance = async (studentId?: string | null): Promise<PortalAttendance> =>
   unwrap(await client.get("/attendance", childParams(studentId)).then((r) => r.data));
+
+/** One child's card on Home: every figure read as the screen it leads to reads it. */
+export interface PortalHomeChild extends PortalStudent {
+  latest: {
+    resultId: string; examName: string | null; academicYear: string | null; term: string | null;
+    average: number | null; position: number | null; outOf: number | null;
+    previousAverage: number | null; previousExamName: string | null;
+  } | null;
+  attendance: { from: string; present: number; marked: number; rate: number | null };
+  fees: { balance: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
+  nextExam: { name: string; startDate: string; endDate: string | null } | null;
+}
+
+export interface PortalHome {
+  children:   PortalHomeChild[];
+  latestNews: PortalAnnouncement | null;
+}
+
+/** Every child at once, in one request: a parent on slow data waits for one. */
+export const fetchHome = async (): Promise<PortalHome> =>
+  unwrap(await client.get("/home").then((r) => r.data));
 
 export const fetchAnnouncements = async (studentId?: string | null): Promise<PortalAnnouncement[]> =>
   unwrap(await client.get("/announcements", childParams(studentId)).then((r) => r.data));

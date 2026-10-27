@@ -210,6 +210,7 @@ async function activePlans({ schoolId, studentIds, academicYear = null }) {
  */
 async function candidates({
   schoolId, academicYear = null, classId = null, mode = "overdue", asOf = new Date(),
+  onlyStudentIds = null,
 }) {
   if (!schoolId) throw fail("schoolId is required", "BAD_REQUEST");
 
@@ -220,6 +221,8 @@ async function candidates({
   };
   if (academicYear) chargeFilter.academicYear = academicYear;
   if (classId)      chargeFilter.classId      = classId;
+  // One family's children (the parent portal): the same rule, a narrower read.
+  if (Array.isArray(onlyStudentIds)) chargeFilter.studentId = { $in: onlyStudentIds.map(String) };
 
   // Read once, used twice below: for the year that bounds undated charges, and
   // for the channel "reachable" is judged against.
