@@ -59,7 +59,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 
 ## Phase D — test data (prepare only, do NOT run)
 
-- [ ] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting.
+- [x] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting. — `scripts/phase-d-cleanup.js` (`npm run cleanup:phased`, dry run by default, `-- --apply` to write). On apply: soft-deletes the test pupil (and deactivates their login) and the test announcement, clears an email shared by several pupils of one school (the pupils stay), "Faire" → "Fair" (A9). Report only: Kena Academy counts, undated exams, B1 timetable breaches, B3 old-shape admission numbers. `check:phased`. **Not yet run against the real database** — no `MONGODB_URI` in this shell; the owner runs the dry run and gives the go-ahead
 
 ## Final
 
