@@ -61,6 +61,10 @@ check("a guardian's message goes with a clientId, kept for a resend of the same 
 check("a successful reload clears an earlier load error", /setReads\(payload\.participantReads \?\? \[\]\);\s*setError\(null\);/.test(guardian), true);
 check("the portal service sends the clientId", /clientId \? \{ body, clientId \} : \{ body \}/.test(read("src/services/portal.service.js")), true);
 
+check("a report card names the child, so a second child's card is found (404 \"Result not found\" before)",
+  [/fetchReportCardHtml = async \(summaryId, studentId = null\)/.test(read("src/services/portal.service.js")),
+   /fetchReportCardHtml\(summary\._id, childId \?\? me\?\.selectedId\)/.test(read("app/portal/index.js"))], [true, true]);
+
 console.log("--- portal navigation ---");
 // Six tabs in a sideways scroll across the top became five sections in a bar
 // along the bottom (the redesign). What the old check guarded still holds: a

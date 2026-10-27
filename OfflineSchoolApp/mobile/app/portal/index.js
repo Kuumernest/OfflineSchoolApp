@@ -29,6 +29,7 @@ import { conversationName } from "../../src/utils/participantName";
 import BottomTabs     from "../../src/components/portal/BottomTabs";
 import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
 import HomeScreen     from "../../src/components/portal/HomeScreen";
+import ResultsScreen  from "../../src/components/portal/ResultsScreen";
 import { LanguageToggle } from "../../src/components/portal/ui";
 
 const C = {
@@ -59,29 +60,8 @@ const MSG_VIEWS = ["messages", "notices", "news"];
 // shows every child at once; Messages covers the whole family.
 const PER_CHILD = ["results", "attendance", "fees"];
 
-// Results arrive sorted newest-first (academic year desc, then term desc).
-// Grouping preserves that order while giving each school year its own
-// section — the way a report-card file is kept year by year.
-const groupResultsByYear = (rows) => {
-  const groups = [];
-  const index  = {};
-  for (const r of rows ?? []) {
-    const year = r.academicYear || "—";
-    if (!index[year]) {
-      index[year] = { year, items: [] };
-      groups.push(index[year]);
-    }
-    index[year].items.push(r);
-  }
-  return groups;
-};
-
-// Trim trailing zeros on a mark: 18.00 → "18", 16.40 → "16.4".
-const trimMark = (v) => {
-  if (v == null || v === "") return "—";
-  const n = Number(v);
-  return Number.isNaN(n) ? "—" : String(Math.round(n * 100) / 100);
-};
+// Screens that draw their own loading placeholders.
+const SELF_LOADING = ["home", "results"];
 
 // Attendance statuses arrive as English words; map them through i18n so a
 // French portal stays French.
@@ -392,7 +372,7 @@ export default function ParentPortalScreen() {
   const openReportCard = async (summary) => {
     setPrinting(`card-${summary._id}`);
     try {
-      const card = await PortalService.fetchReportCardHtml(summary._id);
+      const card = await PortalService.fetchReportCardHtml(summary._id, childId ?? me?.selectedId);
       if (card?.html) await Print.printAsync({ html: card.html });
     } catch (err) {
       if (err?.response?.status === 404) {
@@ -597,7 +577,18 @@ export default function ParentPortalScreen() {
           </View>
         )}
 
-        {tab === "home" ? null : loading && !data ? (
+        {tab === "results" && (
+          <ResultsScreen
+            data={data}
+            loading={loading}
+            childId={childId ?? me?.selectedId}
+            printing={printing}
+            onOpenReportCard={openReportCard}
+          />
+        )}
+
+        {/* The screens not above draw the shell's spinner while they load. */}
+        {SELF_LOADING.includes(tab) ? null : loading && !data ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
         ) : (
           <>
@@ -733,164 +724,6 @@ export default function ParentPortalScreen() {
                   </View>
                 )}
               </>
-            )}
-
-            {/* ── Results — mirrors the issued report card ── */}
-            {tab === "results" && (
-              (data?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noResults")}</Text>
-                </View>
-              ) : (
-                groupResultsByYear(data).map((group) => (
-                  <View key={group.year} style={{ marginBottom: 4 }}>
-                    <View style={styles.yearHeader}>
-                      <Ionicons name="school-outline" size={15} color={C.primary} />
-                      <Text style={styles.yearHeaderText}>{group.year}</Text>
-                      <Text style={styles.yearHeaderCount}>
-                        {t("portal.resultsCount", { count: group.items.length })}
-                      </Text>
-                    </View>
-
-                    {group.items.map((r) => (
-                      <View key={r._id} style={styles.card}>
-                        <View style={styles.resultHead}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.cardTitle}>
-                              {r.term || "—"} · {r.className || ""}
-                            </Text>
-                            <Text style={styles.lineMeta}>
-                              {r.subjectsTotal
-                                ? t("portal.subjectsSummary", {
-                                    passed: r.subjectsPassed ?? 0,
-                                    failed: r.subjectsFailed ?? 0,
-                                  })
-                                : ""}
-                            </Text>
-                          </View>
-                          <View style={{ alignItems: "flex-end" }}>
-                            {/* The figure was rendered bare, which left a
-                                parent looking at "14" with nothing saying what
-                                it was — and no way to tell 14/20 from 14%. The
-                                label and the denominator are the whole point of
-                                the number. */}
-                            <Text style={styles.averageLabel}>
-                              {t("portal.average")}
-                            </Text>
-                            <Text style={styles.average}>
-                              {trimMark(r.average)}
-                              <Text style={styles.averageOutOf}> / 20</Text>
-                            </Text>
-                            {r.classPosition && (
-                              <Text style={styles.lineMeta}>
-                                {t("portal.position")} {r.classPosition}
-                                {r.totalInClass ? ` / ${r.totalInClass}` : ""}
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-
-                        {r.overallGrade && (
-                          <View
-                            style={[
-                              styles.gradeChip,
-                              r.isPassing
-                                ? { backgroundColor: C.successBg }
-                                : { backgroundColor: C.dangerBg },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.gradeChipText,
-                                { color: r.isPassing ? C.success : C.danger },
-                              ]}
-                            >
-                              {t("portal.overallGrade")}: {r.overallGrade}
-                              {r.gpa != null ? ` · GPA ${trimMark(r.gpa)}` : ""}
-                            </Text>
-                          </View>
-                        )}
-
-                        {r.subjects?.map((s, i) => (
-                          <View key={i} style={styles.subjectRow}>
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text style={styles.lineLabel} numberOfLines={1}>
-                                {s.subjectName || "—"}
-                              </Text>
-                              <Text style={styles.subjectMeta} numberOfLines={2}>
-                                {s.isAbsent
-                                  ? "Absent"
-                                  : `${trimMark(s.score)}${s.maxScore ? `/${s.maxScore}` : ""}`}
-                                {s.coefficient
-                                  ? ` · ${t("portal.coefficient")} ${s.coefficient}`
-                                  : ""}
-                                {!s.isAbsent && s.remark
-                                  ? ` · ${s.remark}`
-                                  : ""}
-                              </Text>
-                            </View>
-                            <View style={{ alignItems: "flex-end" }}>
-                              <Text style={styles.subjectMark}>
-                                {s.isAbsent ? "—" : trimMark(s.normalizedMark)}
-                                <Text style={styles.subjectMarkScale}>/20</Text>
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.subjectGrade,
-                                s.isAbsent
-                                  ? { backgroundColor: C.warningBg }
-                                  : s.isPassing
-                                    ? { backgroundColor: C.successBg }
-                                    : { backgroundColor: C.dangerBg },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.gradeChipText,
-                                  {
-                                    color: s.isAbsent
-                                      ? C.warning
-                                      : s.isPassing ? C.success : C.danger,
-                                  },
-                                ]}
-                              >
-                                {s.isAbsent ? "ABS" : (s.grade || "—")}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-
-                        {r.principalRemark && (
-                          <View style={styles.resultFooter}>
-                            <Text style={styles.cardHint}>
-                              {t("portal.principalRemark")}
-                            </Text>
-                            <Text style={styles.remarkText}>
-                              {r.principalRemark}
-                            </Text>
-                          </View>
-                        )}
-
-                        <TouchableOpacity
-                          style={styles.reportCardBtn}
-                          activeOpacity={0.8}
-                          onPress={() => openReportCard(r)}
-                        >
-                          {printing === `card-${r._id}` ? (
-                            <ActivityIndicator size="small" color={C.primary} />
-                          ) : (
-                            <Ionicons name="document-text-outline" size={16} color={C.primary} />
-                          )}
-                          <Text style={styles.reportCardBtnText}>
-                            {t("portal.viewReportCard")}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                ))
-              )
             )}
 
             {/* ── Attendance — rate, status counts and recent days ── */}
@@ -1299,9 +1132,7 @@ const styles = StyleSheet.create({
   lineLabel:  { flex: 1, fontSize: 13, color: C.inkBody },
   lineMeta:   { marginTop: 2, fontSize: 11, color: C.inkFaint },
   lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
-  grade:      { fontSize: 12, fontWeight: "700", width: 28, textAlign: "right" },
 
-  resultHead: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 6 },
   noticeHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   noticeIcon: {
     width: 24, height: 24, borderRadius: 8,
@@ -1312,56 +1143,13 @@ const styles = StyleSheet.create({
   noticeKind: { flex: 1, fontSize: 12, fontWeight: "700", color: C.inkBody },
   noticePending: { marginTop: 6, fontSize: 11, fontWeight: "600", color: C.warning },
 
-  averageLabel: {
-    fontSize:      10,
-    fontWeight:    "600",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color:         C.inkFaint ?? "#9CA3AF",
-    marginBottom:  1,
-  },
-  average:    { fontSize: 18, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
   // The denominator rides inside the figure so it wraps with it and stays
   // visually subordinate — the mark is what a parent reads first.
-  averageOutOf: { fontSize: 11, fontWeight: "600", color: C.inkFaint ?? "#9CA3AF" },
 
   newsBody: { marginTop: 8, fontSize: 13, color: C.inkBody, lineHeight: 19 },
   empty:    { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
 
   // ── Results — report-card mirror ──────────────────────────────────────────
-  yearHeader: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10,
-    backgroundColor: C.primaryBg, borderRadius: 10,
-  },
-  yearHeaderText:  { flex: 1, fontSize: 14, fontWeight: "700", color: C.ink },
-  yearHeaderCount: { fontSize: 11, fontWeight: "600", color: C.inkMuted },
-
-  gradeChip: {
-    alignSelf: "flex-start", marginBottom: 6,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
-  },
-  gradeChipText: { fontSize: 11, fontWeight: "700" },
-
-  subjectRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  subjectMeta:      { fontSize: 10, color: C.inkFaint, marginTop: 2, lineHeight: 14 },
-  subjectMark:      { fontSize: 14, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  subjectMarkScale: { fontSize: 9, color: C.inkFaint },
-  subjectGrade: {
-    minWidth: 30, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 11,
-    fontSize: 11, fontWeight: "700", textAlign: "center", overflow: "hidden",
-  },
-  resultFooter:  { marginTop: 6 },
-  remarkText:    { fontSize: 11, color: C.inkMuted, fontStyle: "italic", marginTop: 2, lineHeight: 15 },
-  reportCardBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    marginTop: 8, paddingVertical: 9, borderRadius: 9,
-    borderWidth: 1, borderColor: C.primary, backgroundColor: C.primaryBg,
-  },
-  reportCardBtnText: { fontSize: 12, fontWeight: "700", color: C.primary },
 
   // ── Attendance breakdown ──────────────────────────────────────────────────
   attdCounts: { flexDirection: "row", gap: 8, marginTop: 12 },

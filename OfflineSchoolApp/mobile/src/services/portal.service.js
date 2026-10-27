@@ -318,8 +318,13 @@ export const fetchReceiptHtml = async (paymentId, lang = "en", studentId = null)
  * printed, never a re-render. A 404 with code NOT_ISSUED means the marks were
  * published but the school has not issued a card yet.
  */
-export const fetchReportCardHtml = async (summaryId) => {
-  const { data } = await client.get(`/results/${summaryId}/report-card`);
+export const fetchReportCardHtml = async (summaryId, studentId = null) => {
+  // The child is named, as for a receipt: the server looks the result up in
+  // that child's record, and without it a second child's card was looked for
+  // in the first child's and came back "Result not found".
+  const { data } = await client.get(`/results/${summaryId}/report-card`, {
+    params: studentId ? { studentId } : undefined,
+  });
   return data?.data ?? null;
 };
 
