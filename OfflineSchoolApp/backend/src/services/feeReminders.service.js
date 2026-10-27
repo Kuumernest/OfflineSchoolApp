@@ -168,6 +168,32 @@ function planStatus(plan, paid, asOf = new Date()) {
 }
 
 /**
+ * The first charge a family's payments have not covered.
+ *
+ * Payments settle the oldest obligation first: charges in due-date order, an
+ * undated charge counting as due today (it has no grace period), each net of
+ * its waiver. The first one the money runs out on is what is owed now, and its
+ * due date (null when undated) is the deadline. Null when every charge given
+ * is covered.
+ *
+ * @param {Array<{amount:number, waivedAmount?:number, dueDate?:Date|null, createdAt?:Date}>} charges
+ * @param {number} paid
+ * @param {Date}   asOf
+ */
+function firstUnpaid(charges, paid, asOf = new Date()) {
+  const at = (c) => (c.dueDate ? new Date(c.dueDate).getTime() : asOf.getTime());
+  const ordered = [...charges].sort((a, b) =>
+    at(a) - at(b) || new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0));
+  let left = paid;
+  for (const c of ordered) {
+    const net = Math.max(0, (c.amount ?? 0) - (c.waivedAmount ?? 0));
+    if (left >= net) { left -= net; continue; }
+    return c;
+  }
+  return null;
+}
+
+/**
  * Active plans for a set of students, keyed by student id.
  *
  * One query rather than one per student: the arrears list is the screen this
@@ -305,6 +331,23 @@ async function candidates({
     Promise.resolve().then(() => notify.resolveChannel(school)).catch(() => "email"),
   ]);
 
+  // Each student's charges, to find the first one their payments do not cover:
+  // every dated charge, and this year's undated ones (as the groups above).
+  const chargeRows = await FeeCharge.find({
+    ...chargeFilter,
+    studentId: { $in: studentIds },
+    $or: [
+      { dueDate: { $ne: null } },
+      ...(undatedYear ? [{ dueDate: null, academicYear: undatedYear }] : []),
+    ],
+  }).select("studentId amount waivedAmount dueDate createdAt").lean();
+  const chargesBy = new Map();
+  for (const c of chargeRows) {
+    const k = String(c.studentId);
+    if (!chargesBy.has(k)) chargesBy.set(k, []);
+    chargesBy.get(k).push(c);
+  }
+
   const byId = new Map(students.map((s) => [String(s._id), s]));
   const today = startOfDay(asOf);
   const soonCutoff = new Date(today.getTime() + DUE_SOON_DAYS * 86_400_000);
@@ -329,16 +372,23 @@ async function candidates({
       due       = status.isBehind ? status.missedSince : status.nextDue;
       if (!due && !hasUndated) continue;
       isDueSoon = !isOverdue && due && due <= soonCutoff;
-    } else if (group.earliestDue) {
-      due       = group.earliestDue;
-      isOverdue = endOfDay(due) < asOf;
-      isDueSoon = !isOverdue && due <= soonCutoff;
-    } else if (hasUndated) {
-      // No due date on any charge — treat as overdue immediately (no grace
-      // period). This covers pre-feature charges and manually created bills.
-      due       = null;
-      isOverdue = true;
-      isDueSoon = false;
+    } else if (group.earliestDue || hasUndated) {
+      // The deadline is the first charge the payments have NOT covered, not
+      // the earliest charge on the account: a family that paid First Term and
+      // owes a Second Term not yet due is not overdue.
+      const first = firstUnpaid(chargesBy.get(id) ?? [], totals?.paid ?? 0, asOf);
+      if (!first) continue; // what is owed sits outside these charges (another year's)
+      if (first.dueDate) {
+        due       = first.dueDate;
+        isOverdue = endOfDay(due) < asOf;
+        isDueSoon = !isOverdue && due <= soonCutoff;
+      } else {
+        // An undated charge is due at once (no grace period). This covers
+        // pre-feature charges and manually created bills.
+        due       = null;
+        isOverdue = true;
+        isDueSoon = false;
+      }
     } else {
       continue;
     }
@@ -744,5 +794,6 @@ module.exports = {
   applyPenalties,
   // Exported for the check script.
   endOfDay,
+  firstUnpaid,
   penaltyFor,
 };

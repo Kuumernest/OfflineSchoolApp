@@ -31,6 +31,8 @@ it. Also in the repo's `CLAUDE.md`.
 
 - D1: superseded the same day — a shared email is NOT test data (siblings share a guardian). Only clearly fake addresses listed in the script are cleared; other shared addresses are reported, grouped by guardian (owner, 2026-10-27).
 
+- Overdue rule (fix approved by owner 2026-10-27): a family is overdue when the first charge its payments have not covered is past due, not when the earliest charge on the account is. See C6.
+
 ## Phase A — wrong numbers (fix first)
 
 - [x] **A1** Class positions: rank denominator = pupils in that class with results (Term Results page and printed report card; find where "50" comes from). — `52088d7`
@@ -58,7 +60,7 @@ it. Also in the repo's `CLAUDE.md`.
 - [x] **C3** Attendance "–" instead of 0% when nobody was marked; 7-day chart counts school days only. — `schoolDaysOnly`, `dayRate` in shared/attendance.js
 - [x] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
 - [x] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing. — `minChangeObservations` in shared/intelligence/subjectInsights.js; a fall already called a decline is not repeated as a sudden change; "strength is emerging" reworded (it echoed the "emerging" confidence badge)
-- [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`
+- [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`. **Fixed 2026-10-27 (owner's go-ahead):** the rule took the earliest due date of *any* charge, so a family that paid First Term and owed a Second Term not yet due was overdue since First Term's date (found while building the parent portal). Now `feeReminders.firstUnpaid`: payments and waivers settle charges in due-date order (an undated charge counts as due today), and the first charge not covered gives the deadline. Plans unchanged. Reminders, Students to watch, To do and the portal all read it. `check:overdue` (the old rule fails 8 of its 15 checks)
 - [x] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
   - [x] dates — `shared/dateFormat.js` (web `fmt.date`/`fmt.dateTime`/`utils/formatDate`; mobile copy in `mobile/src/i18n/format.js`); `web: check:dates`
   - [x] Admissions vs Applications — the screen is "Admissions" everywhere (page title, dashboard card, banner, search); `/students/applications` redirects there
