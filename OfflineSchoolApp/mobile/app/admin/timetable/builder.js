@@ -8,7 +8,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, RefreshControl, StatusBar,
 } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { getDatabase }    from "../../../src/db/database";
@@ -76,6 +76,11 @@ const getPeriodTime = (period) => ({
 export default function AdminTimetableBuilder() {
   const router     = useRouter();
   const { t }      = useTranslation();
+  // "Open in timetable" from the conflicts screen: which class to show and
+  // which lesson to pick out.
+  const params      = useLocalSearchParams();
+  const paramClass  = typeof params.classId   === "string" ? params.classId   : null;
+  const highlightId = typeof params.highlight === "string" ? params.highlight : null;
   const mountedRef = useRef(true);
   const initialLoadDoneRef = useRef(false);
 
@@ -260,7 +265,10 @@ export default function AdminTimetableBuilder() {
       setSubjectMap(newSubjectMap);
       setTeacherMap(newTeacherMap);
 
-      if (activeClasses.length > 0 && !selectedClassIdRef.current) {
+      if (paramClass && activeClasses.some((c) => c.id === paramClass)) {
+        selectedClassIdRef.current = paramClass;
+        setSelectedClassId(paramClass);
+      } else if (activeClasses.length > 0 && !selectedClassIdRef.current) {
         setSelectedClassId(activeClasses[0].id);
       }
 
@@ -275,7 +283,14 @@ export default function AdminTimetableBuilder() {
         initialLoadDoneRef.current = true;
       }
     }
-  }, [buildLookupMaps, refreshUnsyncedCount, t]);
+  }, [buildLookupMaps, refreshUnsyncedCount, t, paramClass]);
+
+  // A second "Open in timetable" while this screen is already mounted.
+  useEffect(() => {
+    if (paramClass && initialLoadDoneRef.current && classes.some((c) => c.id === paramClass)) {
+      setSelectedClassId(paramClass);
+    }
+  }, [paramClass, classes]);
 
   // ── Boot ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -437,6 +452,20 @@ export default function AdminTimetableBuilder() {
   /**
    * day.key is already canonical ("MON" etc.) — lookup is direct and O(1).
    */
+  /**
+   * The highlighted lesson's cell. Found from the raw rows, not slotMap: when
+   * a class is booked twice in one period the map shows only one of the two,
+   * and the highlighted one may be the one it hid.
+   */
+  const highlightSlot = useMemo(() => {
+    if (!highlightId) return null;
+    return slots.find((s) => String(s._id || s.id) === highlightId) || null;
+  }, [slots, highlightId]);
+
+  const highlightKey = highlightSlot
+    ? `${canonicalDay(highlightSlot.dayOfWeek ?? highlightSlot.day_of_week)}|${String(highlightSlot.periodId ?? highlightSlot.period_id).trim()}`
+    : null;
+
   const getSlot = useCallback(
     (dayOfWeek, periodId) => slotMap.get(`${dayOfWeek}|${periodId}`) || null,
     [slotMap]
@@ -462,7 +491,12 @@ export default function AdminTimetableBuilder() {
     setSelectedCell(null);
   }, []);
 
-  const handleSaveSlot = useCallback(async ({ subjectId, teacherId, room }) => {
+  const handleSaveSlot = useCallback(async ({
+    subjectId, teacherId, room, dayOfWeek, periodId, force = false,
+  }) => {
+    // The editor may have moved the lesson to a free period before saving.
+    const day    = dayOfWeek ?? selectedCell.dayOfWeek;
+    const period = periodId  ?? selectedCell.period.id;
     try {
       if (modalMode === "edit" && selectedSlot) {
         const slotId = selectedSlot._id || selectedSlot.id;
@@ -472,18 +506,20 @@ export default function AdminTimetableBuilder() {
           classId:   selectedClassIdRef.current,
           subjectId,
           teacherId,
-          dayOfWeek: selectedCell.dayOfWeek,   // already canonical "MON" etc.
-          periodId:  selectedCell.period.id,
+          dayOfWeek: day,   // already canonical "MON" etc.
+          periodId:  period,
           room,
+          force,
         });
       } else {
         await timetableService.createSlot({
           classId:   selectedClassIdRef.current,
           subjectId,
           teacherId,
-          dayOfWeek: selectedCell.dayOfWeek,   // already canonical "MON" etc.
-          periodId:  selectedCell.period.id,
+          dayOfWeek: day,   // already canonical "MON" etc.
+          periodId:  period,
           room,
+          force,
         });
       }
 
@@ -499,6 +535,8 @@ export default function AdminTimetableBuilder() {
         if (mountedRef.current) Alert.alert(t("ttAdmin.savedTitle"), t("ttAdmin.savedBody"));
       }
     } catch (err) {
+      // A conflict goes back to the editor, which shows it inline with fixes.
+      if (err?.isConflict) throw err;
       console.error("handleSaveSlot failed:", err);
       Alert.alert(t("ttAdmin.saveFailedTitle"), errorText(t, err, "ttAdmin.saveFailedBody"));
     }
@@ -739,7 +777,20 @@ export default function AdminTimetableBuilder() {
 
                       {/* Slot cells — day.key is "MON","TUE" etc. */}
                       {DAYS.map((day) => {
-                        const slot    = getSlot(day.key, period.id);
+                        const cellKey     = `${day.key}|${period.id}`;
+                        const highlighted = cellKey === highlightKey;
+                        // The highlighted lesson opens itself, even where the
+                        // grid shows its double-booked neighbour.
+                        const slot    = highlighted && highlightSlot
+                          ? {
+                              ...getSlot(day.key, period.id),
+                              ...highlightSlot,
+                              dayOfWeek:   day.key,
+                              periodId:    period.id,
+                              subjectName: subjectMap.get(String(highlightSlot.subjectId)) || getSlot(day.key, period.id)?.subjectName,
+                              teacherName: teacherMap.get(String(highlightSlot.teacherId)) || getSlot(day.key, period.id)?.teacherName,
+                            }
+                          : getSlot(day.key, period.id);
                         const pending = slot && slot._synced === 0;
 
                         return (
@@ -750,6 +801,7 @@ export default function AdminTimetableBuilder() {
                               slot
                                 ? pending ? styles.pendingSlot : styles.filledSlot
                                 : styles.emptySlot,
+                              highlighted && styles.highlightSlot,
                             ]}
                             onPress={() =>
                               slot
@@ -922,6 +974,7 @@ const styles = StyleSheet.create({
   },
   emptySlot:   { backgroundColor: "#FFFFFF", borderColor: "#E5E7EB", borderStyle: "dashed" },
   filledSlot:  { backgroundColor: "#ECFDF5", borderColor: "#059669" },
+  highlightSlot: { borderColor: "#DC2626", borderWidth: 3, borderStyle: "solid" },
   pendingSlot: { backgroundColor: "#FFFBEB", borderColor: "#D97706", borderStyle: "dashed" },
 
   slotInner:   { alignItems: "center", justifyContent: "center", width: "100%" },

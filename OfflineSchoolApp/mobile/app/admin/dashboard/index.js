@@ -357,7 +357,7 @@ const STAT_ROWS = [
   [
     { key: "totalPeriods",             labelKey: "dashAdmin.hPeriods",      icon: "time",             color: "#4F46E5" },
     { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", color: "#DC2626" },
-    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          color: "#DC2626" },
+    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          color: "#DC2626", route: "/admin/timetable/conflicts" },
     { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     color: "#D97706" },
   ],
 ];
@@ -478,17 +478,42 @@ const sb = StyleSheet.create({
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-const StatCard = React.memo(({ item, value }) => {
+const StatCard = React.memo(({ item, value, onPress }) => {
   // Each memoised child owns its translation hook: none of these components
   // close over the screen's `t`, which does not exist at module scope.
   const { t } = useTranslation();
-  return (
-    <View style={[styles.statCard, { backgroundColor: item.color + "15" }]}>
+  const body = (
+    <>
       <Ionicons name={item.icon} size={18} color={item.color} />
       <Text style={styles.statNumber}>{value}</Text>
-      <Text style={styles.statLabel}>{t(item.labelKey)}</Text>
-    </View>
+      {/* One line, shrunk to fit: four tiles to a row left "Unassigned"
+          broken as "Unassigne / d" on a narrow phone. */}
+      <Text
+        style={styles.statLabel}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+      >
+        {t(item.labelKey)}
+      </Text>
+    </>
   );
+  const tileStyle = [styles.statCard, { backgroundColor: item.color + "15" }];
+  // A tile with somewhere to go (the conflicts count) opens it, so the
+  // number is never a dead end.
+  if (onPress && value > 0) {
+    return (
+      <TouchableOpacity
+        style={tileStyle}
+        onPress={onPress}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+      >
+        {body}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={tileStyle}>{body}</View>;
 });
 
 const AlertRow = React.memo(({ alert, onPress }) => {
@@ -744,7 +769,9 @@ export default function AdminDashboard() {
         type:    "danger",
         icon:    "warning-outline",
         message: t("dashAdmin.alertConflicts", { count: stats.timetableConflicts }),
-        route:   "/admin/timetable",
+        // The list of WHICH lessons clash and how to fix each, not the bare
+        // timetable it used to drop the admin on.
+        route:   "/admin/timetable/conflicts",
       });
     }
 
@@ -909,7 +936,12 @@ export default function AdminDashboard() {
                 style={styles.statsRow}
               >
                 {row.map((s) => (
-                  <StatCard key={s.key} item={s} value={statValue(s.key)} />
+                  <StatCard
+                    key={s.key}
+                    item={s}
+                    value={statValue(s.key)}
+                    onPress={s.route ? () => navigate(s.route, t(s.labelKey)) : undefined}
+                  />
                 ))}
               </View>
             ))}
@@ -1062,7 +1094,7 @@ const styles = StyleSheet.create({
     gap:          4,
   },
   statNumber: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  statLabel:  { fontSize: 11, color: "#6B7280", textAlign: "center" },
+  statLabel:  { fontSize: 11, color: "#6B7280", textAlign: "center", alignSelf: "stretch" },
 
   // ── Alert rows ─────────────────────────────────────────
   alertCard: {
