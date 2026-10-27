@@ -101,7 +101,7 @@ Pass `MONGODB_URI` with `read -rs MONGODB_URI && export MONGODB_URI` so the conn
 
 ## Final
 
-- [ ] Run all suites; open PR listing what was fixed and what was skipped and why.
+- [x] Run all suites; open PR listing what was fixed and what was skipped and why. — PR #39. 2026-10-27: backend `npm run check:all` green in one uninterrupted run (125 scripts, exit 0) after fixing what the first runs found: C11's action-items route reachable by a teacher (now `fees.view`); stale expectations from A5 (statistics on /20, `check:panel`) and C5 (one fall said once: calibration fixture re-recorded with S16 added, `check:pilot-readiness`); an unused import from C7 (web lint). Web: 13/15 checks green; `check:l10n` (1) and `check:print` (3) fail identically on master — see Notes.
 
 ## Notes / skipped
 
