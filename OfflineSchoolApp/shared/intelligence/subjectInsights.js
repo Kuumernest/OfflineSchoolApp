@@ -117,6 +117,12 @@ const THRESHOLDS = {
 
   /** Persistent underperformance needs a record, not a bad afternoon. */
   minUnderperformanceObservations: 3,
+  /**
+   * A CHANGE — a decline, a sudden fall, an improvement — needs at least this
+   * many marks (C5, decided 2026-10-27). Two marks are one step, and one step
+   * is a pupil's bad (or good) day, not a direction.
+   */
+  minChangeObservations: 3,
 
   /** How many strong subjects before they are worth naming together. */
   crossSubjectStrengths: 3,
@@ -341,7 +347,8 @@ const insightsFor = (m, grading) => {
   // Sustained decline: the recent half is materially below the earlier half.
   // Unanimous when no sequence in the record went up — a slide rather than one
   // bad paper pulling an average down.
-  if (m.delta !== null && m.delta <= -THRESHOLDS.declineDrop) {
+  const enoughForChange = m.observations >= THRESHOLDS.minChangeObservations;
+  if (enoughForChange && m.delta !== null && m.delta <= -THRESHOLDS.declineDrop) {
     out.push(insight("risk", "academic_decline", m,
       confidenceFrom({
         observations: m.observations,
@@ -361,7 +368,10 @@ const insightsFor = (m, grading) => {
   // which is what makes it a departure from a baseline rather than a volatile
   // subject behaving as it always has.
   const latestDrop = m.latestStep !== null && m.latestStep < 0 ? round1(-m.latestStep) : 0;
-  if (latestDrop >= THRESHOLDS.suddenDrop) {
+  // Said once: when the fall is already reported as a decline, it is not
+  // reported again as a sudden change (C5).
+  const declineSaid = out.some((i) => i.code === "academic_decline");
+  if (enoughForChange && !declineSaid && latestDrop >= THRESHOLDS.suddenDrop) {
     const earlier = m.steps.slice(0, -1).map((s) => Math.abs(s));
     out.push(insight("risk", "sudden_performance_change", m,
       confidenceFrom({
@@ -391,6 +401,13 @@ const insightsFor = (m, grading) => {
   }
 
   // ── Strength ────────────────────────────────────────────────────────────
+  //
+  // A subject that is falling is not also called a strength in the same breath
+  // (C5): a teacher read "declined" and "strength emerging" for one subject.
+  // While a decline or a sudden fall stands, the subject's strengths wait.
+  if (out.some((i) => i.code === "academic_decline" || i.code === "sudden_performance_change")) {
+    return out;
+  }
 
   // Sustained strong performance: the recent half sits in the "Good" band or
   // above. Unanimous when every mark on record does.
@@ -405,7 +422,7 @@ const insightsFor = (m, grading) => {
   }
 
   // Meaningful positive progression. Unanimous when no sequence went down.
-  if (m.delta !== null && m.delta >= THRESHOLDS.improvementGain) {
+  if (enoughForChange && m.delta !== null && m.delta >= THRESHOLDS.improvementGain) {
     out.push(insight("strength", "sustained_improvement", m,
       confidenceFrom({
         observations: m.observations,

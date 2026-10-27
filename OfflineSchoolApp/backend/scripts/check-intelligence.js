@@ -162,9 +162,13 @@ const breakdown = (rows) => rows.map(([subjectId, subjectName, normalizedMark, e
   check("a steady slide → decline, and NOT also a sudden change",
     codesFor([16, 15, 11, 8]), [["academic_decline", "strong"]]);
 
-  check("a sharp fall in the latest sequence → a sudden change as well",
+  // C5: one fall is said once. Already a decline, it is not repeated as a
+  // sudden change — and the strength the earlier 16s earned waits.
+  check("a sharp fall in the latest sequence → said once, as a decline",
     codesFor([16, 16, 16, 9]),
-    [["academic_decline", "strong"], ["sudden_performance_change", "strong"]]);
+    [["academic_decline", "strong"]]);
+  check("a sudden fall that is not (yet) a decline still says sudden change",
+    codesFor([12, 13, 12, 14, 9]).map(([code]) => code).includes("sudden_performance_change"), true);
 
   // 18, 9, 18: the pupil finished exactly where they started. Neither risk may
   // fire — the fall is over — and the strength that does fire is offered as
@@ -199,8 +203,11 @@ const breakdown = (rows) => rows.map(([subjectId, subjectName, normalizedMark, e
     isolated.map(([code]) => code).includes("persistent_underperformance"), false);
   check("what it does raise is offered as emerging, never established",
     isolated.every(([, confidence]) => confidence === "emerging"), true);
-  check("and it is the decline and the single drop, nothing invented",
-    isolated.map(([code]) => code), ["academic_decline", "sudden_performance_change"]);
+  // C5: two marks are one step — no change is claimed from it at all.
+  check("and with two marks no change is claimed — a decline needs three",
+    isolated.map(([code]) => code), []);
+  check("a decline over three marks is never also called a strength",
+    codesFor([17, 16, 13]).map(([code]) => code).filter((c) => c.endsWith("strength")), []);
 
   check("below the minimum observations nothing is claimed in either direction",
     engine.confidenceFrom({ observations: 1, unanimous: true }), "insufficient");
