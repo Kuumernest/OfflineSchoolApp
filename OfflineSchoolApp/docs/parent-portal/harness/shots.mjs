@@ -85,7 +85,7 @@ for (const [size, viewport] of Object.entries(SIZES)) {
     if (go) await go(page);
     await settle(page);
     const pin = await page.addStyleTag({ content: PIN_FOR_CAPTURE });
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(600);
     await page.screenshot({ path: path.join(OUT, `${name}-${size}.png`), fullPage: true });
     await pin.evaluate((el) => el.remove());
     console.log(`  ${phase}/${name}-${size}.png`);
