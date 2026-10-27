@@ -307,10 +307,11 @@ return data;
 
 export const getExamStats = async (
 examId: string,
-schoolId: string
+schoolId: string,
+classId?: string
 ): Promise<StatsResponse> => {
 const { data } = await api.get(`/results/${examId}/stats`, {
-params: { schoolId },
+params: { schoolId, classId },
 });
 return data;
 };

@@ -35,7 +35,7 @@
 const ResultSummary = require("../db/models/ResultSummary");
 const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
 const { summaryPassRate } = require("../../../shared/passRate");
-const { examAnalytics, rowsOn20 } = require("../../../shared/examAnalytics");
+const { examAnalytics, rowsOn20, classesOf, classTopBottom } = require("../../../shared/examAnalytics");
 const GradingConfig = require("../db/models/GradingConfig");
 const { passMarkOf } = require("./passMark.service");
 const TermResult    = require("../db/models/TermResult");
@@ -101,7 +101,24 @@ async function examStatistics({ schoolId, examId, classId, onlyPublished = false
   const cfg = sid
     ? await GradingConfig.findOne({ schoolId: String(sid) }).select("grades passMark").lean().catch(() => null)
     : null;
-  return examAnalytics(results, { passMark: cfg?.passMark ?? undefined, bands: cfg?.grades ?? null });
+  const opts = { passMark: cfg?.passMark ?? undefined, bands: cfg?.grades ?? null };
+  const analytics = examAnalytics(results, opts);
+
+  // Rankings are per class (A6, decided 2026-10-27): the classes this exam has
+  // results in, for the page's class filter, and — once one class is chosen —
+  // that class's best and weakest pupils, numbered by their class position.
+  // Without a class there is no top 5: Form 1 and Upper Sixth are not one list.
+  const { backfillRankingNames } = require("./results.service");
+  await backfillRankingNames(results);
+  let classRows = results;
+  if (classId) {
+    const { classId: _chosen, ...allClasses } = filter;
+    classRows = await ResultSummary.find(allClasses).select("studentId classId className").lean();
+    await backfillRankingNames(classRows);
+  }
+  const classes = classesOf(classRows);
+  const topBottom = classId ? classTopBottom(results, opts) : null;
+  return { ...analytics, classes, topBottom };
 }
 
 /**

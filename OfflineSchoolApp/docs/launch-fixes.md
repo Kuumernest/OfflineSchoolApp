@@ -17,7 +17,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **A3** One outstanding-balance function (no voided payments, current academic year) on Fees > Outstanding, Financial reports, Platform dashboard. — `0846dd5`
 - [x] **A4** One pass rate: average ≥ school pass mark on /20, denominator = pupils with results, same exam/term/year scope. — `ccfaf44`
 - [x] **A5** /20 everywhere on results analytics, exams overview, Students to watch; no GPA, no letter grades; the school's remark scale. — `shared/examAnalytics.js`
-- [ ] **A6** Rankings per class: class filter on exam analytics, rank within class; bottom-5 sorted ascending and numbered consistently.
+- [x] **A6** Rankings per class: class filter on exam analytics, rank within class; bottom-5 sorted ascending and numbered consistently. — `shared/examAnalytics.js` topAndBottom
 - [ ] **A7** Marks progress "2/0 entered": denominator = enrolled pupils in the class.
 - [ ] **A8** Teacher assignments: one source of truth (class-subject assignment) for Subjects page, exam marks screen, report card.
 - [ ] **A9** French report header: all 10 region names translated; remark typo "Faire" → "Fair".

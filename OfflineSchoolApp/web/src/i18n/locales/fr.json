@@ -312,7 +312,10 @@
     "toastCalculated": "Résultats calculés",
     "refusedPublished": "Non recalculée, résultats publiés : {{classes}}",
     "refusedPublished_other": "Non recalculées, résultats publiés dans {{count}} classes : {{classes}}",
-    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes"
+    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes",
+    "allClasses": "Toutes les classes",
+    "chooseClassForTop": "Choisissez une classe pour voir ses meilleurs et ses plus faibles élèves.",
+    "allInTop": "Tous les élèves de cette classe figurent déjà ci-dessus."
   },
   "dashboard": {
     "title": "Tableau de bord",

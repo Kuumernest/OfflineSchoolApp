@@ -721,4 +721,5 @@ module.exports = {
   getRankings,
   getStudentResult,
   getExamStats,
+  backfillRankingNames,
 };

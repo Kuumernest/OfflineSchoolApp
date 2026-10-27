@@ -312,7 +312,10 @@
     "toastCalculated": "Results calculated",
     "refusedPublished": "Not recalculated, results published: {{classes}}",
     "refusedPublished_other": "Not recalculated, results published in {{count}} classes: {{classes}}",
-    "toastPublished": "Results published — students can now view their scores"
+    "toastPublished": "Results published — students can now view their scores",
+    "allClasses": "All classes",
+    "chooseClassForTop": "Choose a class to see its top and bottom pupils.",
+    "allInTop": "Every pupil in this class is already listed above."
   },
   "dashboard": {
     "title": "Dashboard",

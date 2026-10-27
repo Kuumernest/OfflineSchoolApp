@@ -118,4 +118,53 @@ const rowsOn20 = (rows, { passMark = DEFAULT_PASS_MARK, bands = null } = {}) =>
     return { ...r, average20, ...remarkOf(average20, bands), passes: summaryPasses(r, passMark) };
   });
 
-module.exports = { examAnalytics, remarkOf, subjectMarkOn20, rowsOn20 };
+/**
+ * One class's best and weakest pupils (decided 2026-10-27).
+ *
+ * The analytics page took its top 5 from every class the exam was sat in —
+ * Form 1 next to Upper Sixth — and numbered its bottom 5 from the wrong end
+ * (the weakest pupil was #4, the next one up #5). Here the rows are ONE
+ * class's, each pupil is numbered by their position in that class (pupils
+ * level on average share a position), the top list runs best-first and the
+ * bottom list weakest-first. A pupil already in the top list is not repeated
+ * at the bottom, so a class of three shows three pupils, not six.
+ *
+ * @param {Array} rows  rows from rowsOn20, all of one class
+ * @param {number} [n]
+ * @returns {{ top: Array<{position, row}>, bottom: Array<{position, row}>, total: number }}
+ */
+function topAndBottom(rows, n = 5) {
+  const ranked = (rows || [])
+    .filter((r) => r && r.average20 != null && Number.isFinite(Number(r.average20)))
+    .sort((a, b) => Number(b.average20) - Number(a.average20)
+      || String(a.studentName ?? "").localeCompare(String(b.studentName ?? "")));
+  let position = 0;
+  const placed = ranked.map((row, i) => {
+    if (i === 0 || Number(row.average20) !== Number(ranked[i - 1].average20)) position = i + 1;
+    return { position, row };
+  });
+  const top = placed.slice(0, n);
+  const bottom = placed.slice(Math.max(top.length, placed.length - n)).reverse();
+  return { top, bottom, total: placed.length };
+}
+
+/** The classes an exam's results are in, for a class filter, by name. */
+const classesOf = (summaries) =>
+  [...new Map((summaries || []).filter((r) => r && r.classId)
+    .map((r) => [String(r.classId), { classId: String(r.classId), className: r.className || null }])).values()]
+    .sort((a, b) => String(a.className ?? "").localeCompare(String(b.className ?? ""), undefined, { numeric: true }));
+
+/**
+ * One class's top and bottom pupils from its ResultSummary rows, shaped for
+ * the page: position, name, average /20, the school's remark, passes.
+ */
+function classTopBottom(summaries, { passMark = DEFAULT_PASS_MARK, bands = null, n = 5 } = {}) {
+  const tb = topAndBottom(rowsOn20(summaries, { passMark, bands }), n);
+  const slim = ({ position, row }) => ({
+    position, studentId: row.studentId, studentName: row.studentName ?? null, admissionNo: row.admissionNo ?? null,
+    className: row.className ?? null, average20: row.average20, remark: row.remark, remarkFr: row.remarkFr, passes: row.passes,
+  });
+  return { top: tb.top.map(slim), bottom: tb.bottom.map(slim), total: tb.total };
+}
+
+module.exports = { examAnalytics, remarkOf, subjectMarkOn20, rowsOn20, topAndBottom, classesOf, classTopBottom };

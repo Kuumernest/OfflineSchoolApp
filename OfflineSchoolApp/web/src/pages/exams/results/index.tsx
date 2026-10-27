@@ -37,6 +37,23 @@ interface Stats {
   /** Pupils per band of the school's remark scale, highest band first. */
   remarkDistribution?: RemarkBand[];
   subjectStats:      SubjectStat[];
+  /** The classes this exam has results in, for the class filter. */
+  classes?:          { classId: string; className: string | null }[];
+  /** The chosen class's best and weakest pupils; null with no class chosen. */
+  topBottom?:        { top: PlacedPupil[]; bottom: PlacedPupil[]; total: number } | null;
+}
+
+/** A pupil in a class's top or bottom list, numbered by class position. */
+interface PlacedPupil {
+  position:    number;
+  studentId:   string;
+  studentName: string | null;
+  admissionNo: string | null;
+  className:   string | null;
+  average20:   number | null;
+  remark:      string | null;
+  remarkFr:    string | null;
+  passes:      boolean | null;
 }
 
 interface RemarkBand {
@@ -434,16 +451,26 @@ const SubjectPerformanceTable = ({
 const RankingsTable = ({
   examId,
   scope,
+  classId,
 }: {
-  examId: string;
-  scope:  RankScope;
+  examId:   string;
+  scope:    RankScope;
+  classId?: string;
 }) => {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useRankings(examId, scope);
+  const { data, isLoading } = useRankings(examId, scope, classId);
   // Memoised: `?? []` is a new array each render, and these feed a useMemo
   // below, which then recomputes every render instead of memoising.
-  const rankings: ResultSummary[] = useMemo(() => data?.data ?? [], [data]);
+  // Ranked within each class: with every class shown, one class's table
+  // follows the next instead of their positions interleaving (1, 1, 2, 2…).
+  const rankings: ResultSummary[] = useMemo(() => {
+    const rows: ResultSummary[] = data?.data ?? [];
+    if (scope !== "class" || classId) return rows;
+    return [...rows].sort((a, b) =>
+      String(a.className ?? "").localeCompare(String(b.className ?? ""), undefined, { numeric: true })
+      || ((a.classPosition ?? 0) - (b.classPosition ?? 0)));
+  }, [data, scope, classId]);
 
   const posField: keyof ResultSummary =
     scope === "school" ? "schoolPosition" :
@@ -617,20 +644,30 @@ const RankingsTable = ({
 // ─────────────────────────────────────────────────────────
 
 const TopBottomStudents = ({
-  rankings,
+  topBottom,
   n = 5,
 }: {
-  rankings: ResultSummary[];
-  n?:       number;
+  topBottom: Stats["topBottom"];
+  n?:        number;
 }) => {
-  const { t } = useTranslation();
-  if (rankings.length === 0) return null;
+  const { t, i18n } = useTranslation();
+  // One class at a time (A6): Form 1 and Upper Sixth are not one list. The
+  // server numbers each pupil by their position in the class — the bottom
+  // list runs weakest first, so it reads 5, 4, … not 4, 5.
+  if (!topBottom) {
+    return (
+      <p className="text-sm text-gray-400 text-center py-4 bg-white rounded-xl border border-gray-100">
+        {t("results.chooseClassForTop")}
+      </p>
+    );
+  }
+  if (topBottom.total === 0) return null;
+  const top    = topBottom.top;
+  const bottom = topBottom.bottom;
+  const remarkOf = (r: PlacedPupil) =>
+    (i18n.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? null;
 
-  const sorted  = [...rankings].sort((a, b) => (b.average20 ?? 0) - (a.average20 ?? 0));
-  const top     = sorted.slice(0, n);
-  const bottom  = sorted.slice(-n).reverse();
-
-  const Row = ({ r, rank }: { r: ResultSummary; rank: number }) => (
+  const Row = ({ r, rank }: { r: PlacedPupil; rank: number }) => (
     <div className="flex items-center gap-3 py-2 border-b
                     border-gray-50 last:border-0">
       <span className="w-6 text-sm font-bold text-gray-400 text-center">
@@ -647,10 +684,10 @@ const TopBottomStudents = ({
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-bold
-          ${(r.passes ?? r.isPassing) ? "text-green-600" : "text-red-600"}`}>
+          ${r.passes ? "text-green-600" : "text-red-600"}`}>
           {on20(r.average20)}
         </p>
-        <p className="text-xs text-gray-400">{remarkText(r) || "—"}</p>
+        <p className="text-xs text-gray-400">{remarkOf(r) || "—"}</p>
       </div>
     </div>
   );
@@ -665,8 +702,8 @@ const TopBottomStudents = ({
             {t("results.topStudents", { count: n })}
           </h3>
         </div>
-        {top.map((r, i) => (
-          <Row key={r.studentId} r={r} rank={i + 1} />
+        {top.map((r) => (
+          <Row key={r.studentId} r={r} rank={r.position} />
         ))}
       </div>
 
@@ -678,8 +715,11 @@ const TopBottomStudents = ({
             {t("results.needsAttention", { count: n })}
           </h3>
         </div>
-        {bottom.map((r, i) => (
-          <Row key={r.studentId} r={r} rank={rankings.length - n + i + 1} />
+        {bottom.length === 0 && (
+          <p className="text-xs text-gray-400 py-2">{t("results.allInTop")}</p>
+        )}
+        {bottom.map((r) => (
+          <Row key={r.studentId} r={r} rank={r.position} />
         ))}
       </div>
     </div>
@@ -698,16 +738,28 @@ export default function ExamResultsPage() {
     searchParams.get("examId") ?? null
   );
   const [rankScope, setRankScope] = useState<RankScope>("class");
+  // The class the analytics are for; "" is every class the exam was sat in,
+  // null not chosen yet (the first class is picked once the classes load).
+  const [classId, setClassId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<
     "overview" | "rankings" | "subjects"
   >("overview");
 
   // Data fetching
   const { data: examsData } = useExams();
-  const { data: statsData, isLoading: statsLoading } = useExamStats(
-    selectedExamId ?? ""
+  // The exam's classes come from its all-classes statistics. An exam sat by
+  // several classes opens on the first, so its rankings and top 5 are never a
+  // mix of classes; "" (All classes) is still there for the overall figures.
+  const { data: allStatsData, isLoading: allStatsLoading } = useExamStats(selectedExamId ?? "");
+  const classOptions: { classId: string; className: string | null }[] =
+    (allStatsData?.data as Stats | undefined)?.classes ?? [];
+  const activeClassId = classId ?? classOptions[0]?.classId ?? "";
+  const { data: classStatsData, isLoading: classStatsLoading } = useExamStats(
+    activeClassId ? selectedExamId ?? "" : "", activeClassId || undefined
   );
-  const { data: rankingsData } = useRankings(selectedExamId ?? "", rankScope);
+  const statsData    = activeClassId ? classStatsData : allStatsData;
+  const statsLoading = allStatsLoading || (!!activeClassId && classStatsLoading);
+  const { data: rankingsData } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined);
 
   // A processed-but-unpublished exam is the office's to look at; the server
   // answers a teacher's statistics and rankings for published results only,
@@ -729,6 +781,7 @@ export default function ExamResultsPage() {
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
+    setClassId(null);
     setSearchParams({ examId: id });
     setActiveSection("overview");
   };
@@ -824,13 +877,28 @@ export default function ExamResultsPage() {
                       {selectedExam.classNames   ? ` · ${selectedExam.classNames}`   : ""}
                     </p>
                   </div>
-                  <Link
-                    to={`/exams/${selectedExamId}`}
-                    className="text-xs font-semibold text-primary-600
-                               hover:text-primary-700"
-                  >
-                    {t("results.manageExam")} →
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    {classOptions.length > 1 && (
+                      <select
+                        value={activeClassId}
+                        onChange={(e) => setClassId(e.target.value)}
+                        aria-label={t("academic.class")}
+                        className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700"
+                      >
+                        <option value="">{t("results.allClasses")}</option>
+                        {classOptions.map((c) => (
+                          <option key={c.classId} value={c.classId}>{c.className || c.classId}</option>
+                        ))}
+                      </select>
+                    )}
+                    <Link
+                      to={`/exams/${selectedExamId}`}
+                      className="text-xs font-semibold text-primary-600
+                                 hover:text-primary-700"
+                    >
+                      {t("results.manageExam")} →
+                    </Link>
+                  </div>
                 </div>
               )}
 
@@ -897,7 +965,7 @@ export default function ExamResultsPage() {
                   </div>
 
                   {/* Top / Bottom students */}
-                  <TopBottomStudents rankings={rankings} n={5} />
+                  <TopBottomStudents topBottom={stats.topBottom ?? null} n={5} />
                 </div>
               )}
 
@@ -944,6 +1012,7 @@ export default function ExamResultsPage() {
                     <RankingsTable
                       examId={selectedExamId}
                       scope={rankScope}
+                      classId={activeClassId || undefined}
                     />
                   </div>
                 </div>

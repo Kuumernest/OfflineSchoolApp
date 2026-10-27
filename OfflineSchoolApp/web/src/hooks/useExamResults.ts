@@ -13,8 +13,8 @@ import { getErrorMessage } from "@/lib/axios";
 const resultKeys = {
   results:  (examId: string, classId?: string) =>
     ["results", examId, classId ?? "all"] as const,
-  stats:    (examId: string)                   =>
-    ["exam-stats", examId]               as const,
+  stats:    (examId: string, classId?: string) =>
+    ["exam-stats", examId, classId ?? "all"] as const,
   rankings: (examId: string, scope: string, classId?: string) =>
     ["rankings", examId, scope, classId ?? "all"] as const,
   student:  (examId: string, studentId: string) =>
@@ -42,11 +42,11 @@ export const useExamResults = (examId: string, classId?: string) => {
 
 // ─── STATS ────────────────────────────────────────────────────────────────────
 
-export const useExamStats = (examId: string) => {
+export const useExamStats = (examId: string, classId?: string) => {
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   return useQuery({
-    queryKey: resultKeys.stats(examId),
-    queryFn:  () => ExamService.getExamStats(examId, schoolId),
+    queryKey: resultKeys.stats(examId, classId),
+    queryFn:  () => ExamService.getExamStats(examId, schoolId, classId),
     enabled:  !!examId && !!schoolId,
     staleTime: 2 * 60_000,
   });
@@ -96,10 +96,9 @@ export const useProcessResults = () => {
 
     onSuccess: (_data, { examId }) => {
       qc.invalidateQueries({ queryKey: resultKeys.results(examId)              });
-      qc.invalidateQueries({ queryKey: resultKeys.stats(examId)                });
-      qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "class")    });
-      qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "grade")    });
-      qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "school")   });
+      qc.invalidateQueries({ queryKey: ["exam-stats", examId]                });
+      // Prefix: every scope and every class filter of this exam's rankings.
+      qc.invalidateQueries({ queryKey: ["rankings", examId]                    });
       qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId)            });
       toast({ title: t("results.toastCalculated"), kind: "success" });
     },

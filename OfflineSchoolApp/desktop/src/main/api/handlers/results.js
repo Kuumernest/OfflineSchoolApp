@@ -45,7 +45,7 @@ const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 const { DEFAULT_PASS_MARK } = require("../../../../../shared/passRate");
-const { examAnalytics, rowsOn20 } = require("../../../../../shared/examAnalytics");
+const { examAnalytics, rowsOn20, classesOf, classTopBottom } = require("../../../../../shared/examAnalytics");
 
 /** The school's pass mark and remark bands from the local copy. */
 const gradingOf = (docs, schoolId) => {
@@ -147,8 +147,15 @@ module.exports = [
       if (query.classId) filter.classId = String(query.classId).trim();
 
       // The server's examStatistics: shared/examAnalytics on /20, the school's
-      // pass mark and remark bands.
-      return ok({ data: examAnalytics(docs.find("resultSummary", filter), gradingOf(docs, schoolId)) });
+      // pass mark and remark bands; the classes for the page's filter and, once
+      // one is chosen, that class's top and bottom pupils (A6).
+      const rows = docs.find("resultSummary", filter);
+      const grading = gradingOf(docs, schoolId);
+      return ok({ data: {
+        ...examAnalytics(rows, grading),
+        classes:   classesOf(docs.find("resultSummary", { examId: filter.examId, schoolId, deletedAt: null })),
+        topBottom: filter.classId ? classTopBottom(rows, grading) : null,
+      } });
     },
   },
 
