@@ -3047,6 +3047,31 @@
         "Jeu",
         "Ven"
       ]
+    },
+    "feesScreen": {
+      "title": "Frais",
+      "balance": "Solde à payer",
+      "paidUp": "Tout est réglé",
+      "paidUpHint": "Rien n’est dû pour {{name}} pour le moment.",
+      "overdue": "En retard",
+      "overdueSince": "Le paiement était dû le {{date}}",
+      "dueOn": "Prochain paiement le {{date}}",
+      "charged": "Facturé",
+      "waived": "Remise",
+      "paid": "Payé",
+      "charges": "Ce que l’école a facturé",
+      "noDueDate": "Sans échéance",
+      "dueBy": "Échéance le {{date}}",
+      "payments": "Paiements",
+      "noPayments": "Aucun paiement enregistré pour l’instant",
+      "receipt": "Reçu",
+      "receiptFor": "Reçu {{no}}",
+      "reversal": "Annulation",
+      "plan": "Échéancier",
+      "instalment": "Versement {{seq}}",
+      "empty": "Aucun frais enregistré pour l’instant",
+      "emptyHint": "Les frais apparaissent ici dès que l’école les facture.",
+      "receiptFailed": "Impossible d’ouvrir le reçu. Vérifiez votre connexion et réessayez."
     }
   },
   "codes": {

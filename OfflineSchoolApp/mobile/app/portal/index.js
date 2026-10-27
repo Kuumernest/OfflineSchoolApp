@@ -352,7 +352,7 @@ export default function ParentPortalScreen() {
   const printReceipt = async (paymentId) => {
     setPrinting(paymentId);
     try {
-      const html = await PortalService.fetchReceiptHtml(paymentId, language ?? "en");
+      const html = await PortalService.fetchReceiptHtml(paymentId, language ?? "en", childId ?? me?.selectedId);
       await Print.printAsync({ html });
     } catch (err) {
       if (!(await handle401(err))) {

@@ -112,7 +112,7 @@ export interface PortalSchool {
 export interface PortalFees {
   charges:  { _id: string; label: string | null; code: string | null;
               amount: number; waivedAmount: number;
-              academicYear: string; term: string | null }[];
+              academicYear: string; term: string | null; dueDate?: string | null }[];
   payments: { _id: string; receiptNo: string | null; amount: number;
               method: string | null; reference: string | null;
               receivedAt: string; academicYear: string; isReversal: boolean }[];
@@ -419,9 +419,14 @@ export const markPortalRead = async (
   await client.post(`/messages/conversations/${conversationId}/read`, { seq });
 };
 
-export async function fetchReceiptHtml(paymentId: string, lang: string): Promise<string> {
+/**
+ * The receipt for one payment. The child is named: the server looks the
+ * payment up in that child's account, and without it a second child's receipt
+ * was looked for in the first child's and not found.
+ */
+export async function fetchReceiptHtml(paymentId: string, lang: string, studentId?: string | null): Promise<string> {
   const { data } = await client.get(`/receipt/${paymentId}`, {
-    params: { lang },
+    params: { lang, ...(studentId ? { studentId } : {}) },
     responseType: "text",
     transformResponse: [(body: string) => body],
   });

@@ -3047,6 +3047,31 @@
         "Thu",
         "Fri"
       ]
+    },
+    "feesScreen": {
+      "title": "Fees",
+      "balance": "Balance to pay",
+      "paidUp": "All paid up",
+      "paidUpHint": "Nothing is owed for {{name}} at the moment.",
+      "overdue": "Overdue",
+      "overdueSince": "Payment was due on {{date}}",
+      "dueOn": "Next payment due {{date}}",
+      "charged": "Charged",
+      "waived": "Waived",
+      "paid": "Paid",
+      "charges": "What the school has charged",
+      "noDueDate": "No due date",
+      "dueBy": "Due {{date}}",
+      "payments": "Payments",
+      "noPayments": "No payments recorded yet",
+      "receipt": "Receipt",
+      "receiptFor": "Receipt {{no}}",
+      "reversal": "Reversal",
+      "plan": "Payment plan",
+      "instalment": "Instalment {{seq}}",
+      "empty": "No fees recorded yet",
+      "emptyHint": "Charges appear here once the school bills them.",
+      "receiptFailed": "Could not open the receipt. Check your connection and try again."
     }
   },
   "codes": {

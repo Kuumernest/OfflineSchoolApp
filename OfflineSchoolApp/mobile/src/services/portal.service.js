@@ -286,10 +286,14 @@ export const markRead = async (conversationId, seq) => {
   }
 };
 
-/** The printable receipt, as HTML the phone turns into a PDF. */
-export const fetchReceiptHtml = async (paymentId, lang = "en") => {
+/**
+ * The printable receipt, as HTML the phone turns into a PDF. The child is
+ * named: the server looks the payment up in that child's account, and without
+ * it a second child's receipt was looked for in the first child's.
+ */
+export const fetchReceiptHtml = async (paymentId, lang = "en", studentId = null) => {
   const { data } = await client.get(`/receipt/${paymentId}`, {
-    params: { lang },
+    params: { lang, ...(studentId ? { studentId } : {}) },
     responseType: "text",
     transformResponse: [(body) => body],
   });

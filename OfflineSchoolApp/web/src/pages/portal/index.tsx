@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  Printer, LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
+  LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
   MessageSquare, Send, Loader2, ArrowLeft,
   Bell, LogIn, AlertCircle, Receipt, Wallet2, Home,
 } from "lucide-react";
@@ -30,17 +30,15 @@ import { FormField, Input } from "@/components/ui/FormField";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { useFormat }   from "@/i18n/format";
 import { cn }          from "@/utils/cn";
-import { printHtml }   from "@/print/document";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
 import { ResultsScreen } from "./ResultsScreen";
 import { AttendanceScreen } from "./AttendanceScreen";
+import { FeesScreen } from "./FeesScreen";
 import { ChildAvatar, LanguageToggle, Skeleton } from "./ui";
 import {
   portalLogin, portalLogout, hasPortalSession, setPortalSession,
-  fetchMe, fetchFees, fetchAnnouncements,
-  fetchFeeReminders, fetchNotifications,
-  fetchReceiptHtml,
+  fetchMe, fetchAnnouncements, fetchNotifications,
   fetchPortalConversations, fetchPortalRecipients, openPortalConversation,
   fetchPortalThread, sendPortalMessage, markPortalRead,
   type PortalConversation, type PortalMessage, type PortalRecipient,
@@ -79,7 +77,7 @@ const NOTICE_META: Record<
 };
 
 export default function ParentPortalPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const fmt = useFormat();
   const qc  = useQueryClient();
 
@@ -95,7 +93,6 @@ export default function ParentPortalPage() {
   const [code, setCode]               = useState("");
   const [error, setError]             = useState<string | null>(null);
   const [busy, setBusy]               = useState(false);
-  const [printing, setPrinting]       = useState<string | null>(null);
 
   const signOut = () => {
     void portalLogout();
@@ -119,20 +116,9 @@ export default function ParentPortalPage() {
   // Across every thread, from the one query that runs on every tab.
   const unreadMessages = meQ.data?.unreadMessages ?? 0;
 
-  const feesQ = useQuery({
-    queryKey: ["portal", "fees", selected], queryFn: () => fetchFees(selected),
-    enabled: signedIn && screen === "fees", retry: false,
-  });
   const newsQ = useQuery({
     queryKey: ["portal", "news", selected], queryFn: () => fetchAnnouncements(selected),
     enabled: signedIn && screen === "messages" && msgView === "news", retry: false,
-  });
-
-  const feeRemindersQ = useQuery({
-    queryKey: ["portal", "fee-reminders", selected],
-    queryFn:  () => fetchFeeReminders(selected),
-    enabled:  signedIn && screen === "fees",
-    retry:    false,
   });
 
   // Notices had no tab. They were a card at the bottom of Fees, fetched only
@@ -165,16 +151,6 @@ export default function ParentPortalPage() {
       setError(status === 429 ? t("portal.locked") : t("portal.signInFailed"));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const printReceipt = async (paymentId: string) => {
-    setPrinting(paymentId);
-    try {
-      const html = await fetchReceiptHtml(paymentId, i18n.resolvedLanguage ?? "en");
-      printHtml(html);
-    } finally {
-      setPrinting(null);
     }
   };
 
@@ -258,7 +234,6 @@ export default function ParentPortalPage() {
 
   const school   = meQ.data?.school;
   const student  = meQ.data?.student;
-  const fees     = feesQ.data;
   const logo     = resolveLogoSrc(school?.logo);
   const children = meQ.data?.children ?? [];
   const unreadNotices = meQ.data?.unreadNotices ?? 0;
@@ -362,186 +337,8 @@ export default function ParentPortalPage() {
         {/* ── Fees ── */}
         {screen === "home" && <HomeScreen onOpen={open} />}
 
-        {screen === "fees" && (
-          feesQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> : (
-            <>
-              <Card>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                  {(fees?.totals.balance ?? 0) > 0 ? t("portal.balance") : t("portal.settled")}
-                </p>
-                <p className={cn(
-                  "mt-2 font-display text-[32px] leading-none tabular",
-                  (fees?.totals.balance ?? 0) > 0 ? "text-danger" : "text-success"
-                )}>
-                  {fmt.money(fees?.totals.balance ?? 0)}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-muted">
-                  <span>{t("portal.charged")} {fmt.money(fees?.totals.charged ?? 0)}</span>
-                  <span>{t("portal.paid")} {fmt.money(fees?.totals.paid ?? 0)}</span>
-                </div>
-              </Card>
+        {screen === "fees" && <FeesScreen studentId={selected} childName={student?.name ?? null} />}
 
-              <Card padding={false}>
-                <div className="border-b border-line px-4 py-2.5">
-                  <h2 className="text-sm font-semibold text-ink">{t("fees.payments")}</h2>
-                </div>
-                {(fees?.payments.length ?? 0) === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-ink-muted">
-                    {t("portal.noPayments")}
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-line">
-                    {fees?.payments.map((p) => (
-                      <li key={p._id} className="flex items-center gap-3 px-4 py-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-ink">
-                            {p.receiptNo ?? "—"}
-                            {p.isReversal && (
-                              <Badge variant="default" className="ml-2">
-                                {t("portal.reversalNote")}
-                              </Badge>
-                            )}
-                          </p>
-                          <p className="text-xs text-ink-muted">{fmt.dateShort(p.receivedAt)}</p>
-                        </div>
-                        <span className={cn(
-                          "text-sm font-semibold tabular",
-                          p.amount < 0 ? "text-danger" : "text-ink"
-                        )}>
-                          {fmt.money(p.amount)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Printer className="h-4 w-4" />}
-                          loading={printing === p._id}
-                          onClick={() => printReceipt(p._id)}
-                        >
-                          {t("portal.receipt")}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              <Card padding={false}>
-                <div className="border-b border-line px-4 py-2.5">
-                  <h2 className="text-sm font-semibold text-ink">{t("fees.charges")}</h2>
-                </div>
-                {(fees?.charges.length ?? 0) === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-ink-muted">
-                    {t("portal.noCharges")}
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-line">
-                    {fees?.charges.map((c) => (
-                      <li key={c._id} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="truncate text-sm text-ink-body">{c.label ?? c.code}</span>
-                        <span className="text-sm font-medium text-ink tabular">
-                          {fmt.money(c.amount)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              {/* ── Fee Reminders ── */}
-              {feeRemindersQ.data && feeRemindersQ.data.reminders.length > 0 && (
-                <Card padding={false}>
-                  <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">
-                      {t("portal.feeReminders", "Fee Reminders")}
-                    </h2>
-                    <p className="text-xs text-ink-muted">
-                      {t("portal.feeRemindersHint", "What you owe and when it's due")}
-                    </p>
-                  </div>
-                  <ul className="divide-y divide-line">
-                    {feeRemindersQ.data.reminders.map((r) => (
-                      <li key={r.chargeId} className="px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-ink truncate">
-                              {r.label ?? r.code}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className={cn(
-                                "text-xs",
-                                r.isOverdue ? "text-danger font-medium" : "text-ink-muted",
-                              )}>
-                                {t("portal.dueBy", "Due by")} {fmt.dateShort(r.dueDate)}
-                              </span>
-                              {r.isOverdue && (
-                                <Badge variant="danger">
-                                  {t("portal.overdue", "Overdue")} · {r.daysOverdue}d
-                                </Badge>
-                              )}
-                              {r.isDueSoon && !r.isOverdue && (
-                                <Badge variant="warning">
-                                  {t("portal.dueSoon", "Due soon")}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-sm font-semibold text-ink tabular">
-                            {fmt.money(r.netAmount)}
-                          </span>
-                        </div>
-                        {r.term && (
-                          <p className="text-[11px] text-ink-faint mt-1">
-                            {r.academicYear} · {r.term}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-
-              {/* Payment plan info */}
-              {feeRemindersQ.data?.hasPlan && feeRemindersQ.data.plan && (
-                <Card>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                    {t("portal.paymentPlan", "Payment Plan")}
-                  </p>
-                  {feeRemindersQ.data.plan.reason && (
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {feeRemindersQ.data.plan.reason}
-                    </p>
-                  )}
-                  <ul className="mt-2 space-y-1">
-                    {feeRemindersQ.data.plan.instalments.map((inst) => {
-                      const dueDate = new Date(inst.dueDate);
-                      const isPast = dueDate < new Date();
-                      return (
-                        <li key={inst.seq} className="flex items-center justify-between text-xs">
-                          <span className={cn(
-                            isPast ? "text-ink-muted line-through" : "text-ink-body",
-                          )}>
-                            {t("portal.instalment", "Instalment")} {inst.seq} — {fmt.dateShort(inst.dueDate)}
-                          </span>
-                          <span className="font-medium text-ink tabular">
-                            {fmt.money(inst.amount)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
-              )}
-
-              {/* The notification card that used to sit here has moved to its
-                  own tab. It was fetched only while Fees was open and titled
-                  every row by a ternary between two fee wordings, so a gate
-                  arrival would have read "Payment Confirmation". Two places
-                  showing the same list, one of them wrong, is worse than one. */}
-            </>
-          )
-        )}
-
-        {/* ── Results ── */}
         {screen === "results" && <ResultsScreen studentId={selected} />}
 
         {/* ── Attendance ── */}
