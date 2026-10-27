@@ -11,7 +11,8 @@
  *   fees      ama owes 50,000 due 10 days ago                   → 1 overdue, 50,000
  *             bih owes 70,000 due in 20 days                    → not yet overdue
  *
- *   An administrator sees all three; a teacher (who can do none of them) sees none.
+ *   An administrator sees all three; a teacher (who can do none of them) is
+ *   refused (403), which the bell shows as no items.
  *   Once the marks are approved the item is gone — nothing to mark read.
  *
  *   node scripts/check-action-items.js
@@ -95,7 +96,9 @@ const SRC = path.join(__dirname, "..", "src");
 
   console.log("\n--- a teacher ---");
   r = await get("tch-1", "teacher");
-  check("sees no item they cannot act on", [r.status, r.items], [200, []]);
+  // Refused at the route like every admin route (check:admin); the bell reads a
+  // refusal as "no items".
+  check("is refused — a teacher can act on none of them", [r.status, r.items], [403, null]);
 
   console.log("\n--- the work is done ---");
   await M("ExamSubject").updateMany({ examId: "e1" }, { submissionStatus: "approved" });

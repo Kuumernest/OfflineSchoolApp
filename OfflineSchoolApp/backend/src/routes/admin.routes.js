@@ -2871,9 +2871,11 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
 
 // GET /admin/action-items — what is waiting on this reader (C11): marks to
 // approve, results to publish, overdue fees. Each only for a role that can act.
-// Gated on reading notices (every staff role by default): it is the bell
-// panel's To do block; each item below checks its own capability.
-router.get("/action-items", requirePermission("announcements.view"), asyncHandler(async (req, res) => {
+// Gated on fees.view: every holder of any item's capability holds it (admins
+// hold all three, frozen; exams.manage and results.publish cannot be
+// delegated; a bursar has fees.view), and a teacher does not — no admin route
+// is reachable by a teacher (check:admin). Each item still checks its own.
+router.get("/action-items", requirePermission("fees.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendSuccess(res, { items: [] });
   const permissions = require("../services/permissions.service");
