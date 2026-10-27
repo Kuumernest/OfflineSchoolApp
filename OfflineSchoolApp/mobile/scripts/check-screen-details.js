@@ -85,8 +85,9 @@ check("the five sections sit in a bottom bar, each label one line",
   [/<BottomTabs\b/.test(portal), (tabsBar.match(/\{ key: "\w+",/g) ?? []).length,
    /numberOfLines=\{1\}\s*adjustsFontSizeToFit/.test(tabsBar), /<ScrollView horizontal[^>]*styles\.tabsRow/.test(portal)],
   [true, 5, true, false]);
+const messages = read("src/components/portal/MessagesScreen.js");
 check("Messages' three lists are one segmented row, one line each",
-  [/const MSG_VIEWS = \["messages", "notices", "news"\]/.test(portal), /styles\.segmentTextOn\]\} numberOfLines=\{1\}/.test(portal)], [true, true]);
+  [/const MSG_VIEWS = \["messages", "notices", "news"\]/.test(messages), /styles\.segmentTextOn\]\} numberOfLines=\{1\}/.test(messages)], [true, true]);
 
 console.log("--- the pupil-result screen (changed on this branch) ---");
 const result = read("app/admin/exams/results/[examId]/student/[studentId].js");
