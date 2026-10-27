@@ -18,7 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Printer, LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
-  MessageSquare, Send, Loader2, ArrowLeft, Clock, BookOpen,
+  MessageSquare, Send, Loader2, ArrowLeft,
   Bell, LogIn, AlertCircle, Receipt, Wallet2, Home,
 } from "lucide-react";
 
@@ -34,10 +34,11 @@ import { printHtml }   from "@/print/document";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
 import { ResultsScreen } from "./ResultsScreen";
+import { AttendanceScreen } from "./AttendanceScreen";
 import { ChildAvatar, LanguageToggle, Skeleton } from "./ui";
 import {
   portalLogin, portalLogout, hasPortalSession, setPortalSession,
-  fetchMe, fetchFees, fetchAttendance, fetchAnnouncements,
+  fetchMe, fetchFees, fetchAnnouncements,
   fetchFeeReminders, fetchNotifications,
   fetchReceiptHtml,
   fetchPortalConversations, fetchPortalRecipients, openPortalConversation,
@@ -121,10 +122,6 @@ export default function ParentPortalPage() {
   const feesQ = useQuery({
     queryKey: ["portal", "fees", selected], queryFn: () => fetchFees(selected),
     enabled: signedIn && screen === "fees", retry: false,
-  });
-  const attendanceQ = useQuery({
-    queryKey: ["portal", "attendance", selected], queryFn: () => fetchAttendance(selected),
-    enabled: signedIn && screen === "attendance", retry: false,
   });
   const newsQ = useQuery({
     queryKey: ["portal", "news", selected], queryFn: () => fetchAnnouncements(selected),
@@ -548,172 +545,7 @@ export default function ParentPortalPage() {
         {screen === "results" && <ResultsScreen studentId={selected} />}
 
         {/* ── Attendance ── */}
-        {screen === "attendance" && (
-          attendanceQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> :
-          (attendanceQ.data?.total ?? 0) === 0 ? (
-            <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noAttendance")}</p></Card>
-          ) : (
-            <>
-              {/* Overall attendance rate */}
-              <Card>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                  {t("portal.attendanceRate")}
-                </p>
-                <p className="mt-2 font-display text-[32px] leading-none text-ink tabular">
-                  {attendanceQ.data?.rate}%
-                </p>
-                <p className="mt-2 text-xs text-ink-muted">
-                  {t("portal.daysRecorded", { count: attendanceQ.data?.total ?? 0 })}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {Object.entries(attendanceQ.data?.tally ?? {}).map(([status, n]) => (
-                    <Badge key={status} variant={status === "present" ? "success" : status === "absent" ? "danger" : "default"}>
-                      {status} · {n}
-                    </Badge>
-                  ))}
-                  {(attendanceQ.data?.lateCount ?? 0) > 0 && (
-                    <Badge variant="warning">
-                      <Clock className="inline h-3 w-3 mr-1" />
-                      {attendanceQ.data?.lateCount} late
-                    </Badge>
-                  )}
-                </div>
-              </Card>
-
-              {/* Today's periods */}
-              {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 0 && (
-                <Card padding={false}>
-                  <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">{t("portal.todayAttendance")}</h2>
-                    <p className="text-xs text-ink-muted">
-                      {attendanceQ.data.dailySummaries[0]?.date}
-                    </p>
-                  </div>
-                  <div className="px-4 py-2">
-                    <p className="text-xs font-medium text-ink-muted mb-2">
-                      {attendanceQ.data.dailySummaries[0]?.status}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 text-xs">
-                      <span className="text-emerald-600">
-                        {attendanceQ.data.dailySummaries[0]?.present} present
-                      </span>
-                      <span className="text-gray-300">·</span>
-                      <span className="text-red-600">
-                        {attendanceQ.data.dailySummaries[0]?.absent} absent
-                      </span>
-                      <span className="text-gray-300">·</span>
-                      <span className="text-amber-600">
-                        {attendanceQ.data.dailySummaries[0]?.late} late
-                      </span>
-                    </div>
-                  </div>
-                  <ul className="divide-y divide-line">
-                    {(attendanceQ.data.dailySummaries[0]?.periods ?? []).map((p, i) => (
-                      <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            {p.periodName && (
-                              <span className="flex items-center gap-1 text-xs text-ink-muted">
-                                <Clock className="h-3 w-3" />
-                                {p.periodName}
-                              </span>
-                            )}
-                            {p.periodTime && (
-                              <span className="text-[10px] text-ink-faint">{p.periodTime}</span>
-                            )}
-                          </div>
-                          <p className="text-sm font-medium text-ink truncate">
-                            {p.subjectName ?? t("portal.general")}
-                          </p>
-                        </div>
-                        <Badge
-                          variant={
-                            p.status === "present" ? "success"
-                              : p.status === "absent" ? "danger"
-                              : p.status === "late" ? "warning"
-                              : "default"
-                          }
-                        >
-                          {t(`academic.${String(p.status).toLowerCase()}`, { defaultValue: p.status })}
-                        </Badge>
-                      </li>
-                    ))}
-                    {(attendanceQ.data.dailySummaries[0]?.periods ?? []).length === 0 && (
-                      <li className="px-4 py-4 text-center text-xs text-ink-muted">
-                        {t("portal.noPeriodsToday")}
-                      </li>
-                    )}
-                  </ul>
-                </Card>
-              )}
-
-              {/* Per-subject breakdown */}
-              {attendanceQ.data?.subjectSummary && attendanceQ.data.subjectSummary.length > 0 && (
-                <Card padding={false}>
-                  <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                      <BookOpen className="h-4 w-4" />
-                      {t("portal.attendanceBySubject")}
-                    </h2>
-                  </div>
-                  <ul className="divide-y divide-line">
-                    {attendanceQ.data.subjectSummary.map((s, i) => {
-                      const rate = s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
-                      return (
-                        <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-ink truncate">
-                              {s.subjectName ?? t("portal.general")}
-                            </p>
-                            <p className="text-[11px] text-ink-faint">
-                              {s.present}P · {s.absent}A · {s.late}L · {s.excused}E
-                            </p>
-                          </div>
-                          <span className={cn(
-                            "text-sm font-semibold tabular",
-                            rate >= 90 ? "text-emerald-600" : rate >= 70 ? "text-amber-600" : "text-red-600",
-                          )}>
-                            {rate}%
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
-              )}
-
-              {/* Daily history */}
-              {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 1 && (
-                <Card padding={false}>
-                  <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">{t("portal.recentDays")}</h2>
-                  </div>
-                  <ul className="divide-y divide-line">
-                    {attendanceQ.data.dailySummaries.slice(1, 15).map((day) => (
-                      <li key={day.date} className="flex items-center gap-3 px-4 py-2.5">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink">{day.date}</p>
-                          <p className="text-[11px] text-ink-faint">
-                            {day.present}P · {day.absent}A · {day.late}L
-                          </p>
-                        </div>
-                        <Badge
-                          variant={
-                            day.status === "Present" ? "success"
-                              : day.status === "Absent" ? "danger"
-                              : "warning"
-                          }
-                        >
-                          {t(`academic.${String(day.status).toLowerCase()}`, { defaultValue: day.status })}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-            </>
-          )
-        )}
+        {screen === "attendance" && <AttendanceScreen studentId={selected} />}
 
         {/* ── Notices ──────────────────────────────────────────────────────
             Everything the school has recorded for this parent: gate arrivals

@@ -3017,6 +3017,36 @@
       "emptyHint": "Results appear here as soon as the school publishes them.",
       "chooseTerm": "Choose a term",
       "openFailed": "Could not open the report card. Check your connection and try again."
+    },
+    "attendanceScreen": {
+      "title": "Attendance",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "rate": "Attendance rate",
+      "rateHint": "Present, out of every register taken this month",
+      "marked": "{{count}} register taken",
+      "marked_other": "{{count}} registers taken",
+      "present": "Present",
+      "absent": "Absent",
+      "late": "Late",
+      "excused": "Excused",
+      "partial": "Partly absent",
+      "noRecord": "No register",
+      "calendar": "Calendar",
+      "legend": "Key",
+      "days": "Day by day",
+      "arrived": "Arrived {{time}}",
+      "left": "Left {{time}}",
+      "bySubject": "By subject",
+      "empty": "No register taken in {{month}}",
+      "emptyHint": "Days appear here once the school marks the register.",
+      "weekdays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ]
     }
   },
   "codes": {

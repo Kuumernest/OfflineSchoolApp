@@ -3017,6 +3017,36 @@
       "emptyHint": "Les résultats apparaissent ici dès que l’école les publie.",
       "chooseTerm": "Choisir un trimestre",
       "openFailed": "Impossible d’ouvrir le bulletin. Vérifiez votre connexion et réessayez."
+    },
+    "attendanceScreen": {
+      "title": "Présences",
+      "prevMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "rate": "Taux de présence",
+      "rateHint": "Présent, sur tous les appels faits ce mois-ci",
+      "marked": "{{count}} appel fait",
+      "marked_other": "{{count}} appels faits",
+      "present": "Présent",
+      "absent": "Absent",
+      "late": "En retard",
+      "excused": "Excusé",
+      "partial": "Absent en partie",
+      "noRecord": "Pas d’appel",
+      "calendar": "Calendrier",
+      "legend": "Légende",
+      "days": "Jour par jour",
+      "arrived": "Arrivé à {{time}}",
+      "left": "Parti à {{time}}",
+      "bySubject": "Par matière",
+      "empty": "Aucun appel fait en {{month}}",
+      "emptyHint": "Les jours apparaissent ici dès que l’école fait l’appel.",
+      "weekdays": [
+        "Lun",
+        "Mar",
+        "Mer",
+        "Jeu",
+        "Ven"
+      ]
     }
   },
   "codes": {

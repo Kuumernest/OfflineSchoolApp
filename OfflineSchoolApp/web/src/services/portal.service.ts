@@ -151,6 +151,9 @@ export interface PortalAttendance {
   dailySummaries?: {
     date: string;
     status: string;
+    /** First scan in and last scan out at the gate, when the school has one. */
+    arrivedAt?: string | null;
+    departedAt?: string | null;
     present: number;
     absent: number;
     late: number;
@@ -274,8 +277,13 @@ export const fetchFees = async (studentId?: string | null): Promise<PortalFees> 
 export const fetchResults = async (studentId?: string | null): Promise<PortalResult[]> =>
   unwrap(await client.get("/results", childParams(studentId)).then((r) => r.data));
 
-export const fetchAttendance = async (studentId?: string | null): Promise<PortalAttendance> =>
-  unwrap(await client.get("/attendance", childParams(studentId)).then((r) => r.data));
+/** A window of days (YYYY-MM-DD), or everything recorded when none is given. */
+export const fetchAttendance = async (
+  studentId?: string | null, range?: { from: string; to: string },
+): Promise<PortalAttendance> =>
+  unwrap(await client.get("/attendance", {
+    params: { ...(studentId ? { studentId } : {}), ...(range ?? {}) },
+  }).then((r) => r.data));
 
 /** One child's card on Home: every figure read as the screen it leads to reads it. */
 export interface PortalHomeChild extends PortalStudent {
