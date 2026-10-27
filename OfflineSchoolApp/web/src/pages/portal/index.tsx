@@ -16,12 +16,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { LogOut, Wallet, GraduationCap, CalendarCheck, MessageSquare, Home } from "lucide-react";
+import { LogOut, LogIn, Wallet, GraduationCap, CalendarCheck, MessageSquare, Home, AlertCircle, HelpCircle } from "lucide-react";
 
 import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui/FormField";
-import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { cn }          from "@/utils/cn";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
@@ -93,58 +92,65 @@ export default function ParentPortalPage() {
   // ── Sign in ────────────────────────────────────────────────────────────────
   if (!signedIn) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
-        <div className="w-full max-w-sm">
-          <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
-
-          <Card className="space-y-5">
-            <div>
-              <h1 className="font-display text-xl text-ink">{t("portal.title")}</h1>
+      <div className="flex min-h-screen flex-col bg-canvas">
+        <div className="flex justify-end px-4 pt-4"><LanguageToggle /></div>
+        <div className="flex flex-1 items-start justify-center px-4 pb-10 pt-6 sm:items-center sm:pt-0">
+          <div className="w-full max-w-sm">
+            <div className="mb-6 text-center">
+              <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-white shadow-card" aria-hidden="true">
+                <GraduationCap className="h-7 w-7" />
+              </span>
+              <h1 className="text-2xl font-semibold text-ink">{t("portal.title")}</h1>
               <p className="mt-1 text-sm text-ink-muted">{t("portal.intro")}</p>
             </div>
 
-            <form className="space-y-4" onSubmit={submit}>
-              <FormField label={t("portal.admissionNo")} hint={t("portal.admissionHint")} required>
-                <Input
-                  value={admissionNo}
-                  onChange={(e) => setAdmissionNo(e.target.value)}
-                  autoComplete="username"
-                  autoFocus
-                />
-              </FormField>
+            <Card className="space-y-5">
+              <form className="space-y-4" onSubmit={submit}>
+                <FormField label={t("portal.admissionNo")} hint={t("portal.admissionHint")} required>
+                  <Input
+                    value={admissionNo}
+                    onChange={(e) => setAdmissionNo(e.target.value)}
+                    autoComplete="username"
+                    autoCapitalize="characters"
+                    autoFocus
+                    className="h-12 text-base"
+                  />
+                </FormField>
 
-              <FormField label={t("portal.code")} hint={t("portal.codeHint")} required>
-                <Input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  // Not type="password": the parent is reading this off a slip
-                  // of paper, and hiding it only causes typos.
-                  autoComplete="one-time-code"
-                  spellCheck={false}
-                  className="font-mono tracking-wider uppercase"
-                />
-              </FormField>
+                <FormField label={t("portal.code")} hint={t("portal.codeHint")} required>
+                  <Input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    // Not type="password": the parent is reading this off a slip
+                    // of paper, and hiding it only causes typos.
+                    autoComplete="one-time-code"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    className="h-12 font-mono text-base tracking-wider uppercase"
+                  />
+                </FormField>
 
-              {error && (
-                <p className="rounded-control border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
-                  {error}
-                </p>
-              )}
+                {error && (
+                  <p role="alert" className="flex items-start gap-2 rounded-control border border-danger-line bg-danger-soft px-3 py-2.5 text-sm text-danger">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}
+                  </p>
+                )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                loading={busy}
-                disabled={!admissionNo.trim() || !code.trim()}
-              >
-                {t("portal.signIn")}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  className="h-12 w-full text-base"
+                  loading={busy}
+                  disabled={!admissionNo.trim() || !code.trim()}
+                >
+                  {t("portal.signIn")}
+                </Button>
+              </form>
+            </Card>
 
-            <p className="border-t border-line pt-4 text-xs text-ink-muted">
-              {t("portal.noAccount")}
+            <p className="mt-4 flex items-start gap-2 px-1 text-sm text-ink-muted">
+              <HelpCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{t("portal.noAccount")}
             </p>
-          </Card>
+          </div>
         </div>
       </div>
     );
@@ -158,9 +164,12 @@ export default function ParentPortalPage() {
   if (meQ.isError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <Card className="max-w-sm space-y-3 text-center">
+        <Card className="w-full max-w-sm space-y-4 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning-soft text-warning" aria-hidden="true">
+            <LogIn className="h-6 w-6" />
+          </span>
           <p className="text-sm text-ink-body">{t("portal.sessionExpired")}</p>
-          <Button className="w-full" onClick={signOut}>{t("portal.signIn")}</Button>
+          <Button className="h-12 w-full text-base" onClick={signOut}>{t("portal.signIn")}</Button>
         </Card>
       </div>
     );

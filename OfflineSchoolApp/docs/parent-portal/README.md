@@ -11,11 +11,11 @@ after, at phone width (390px) and desktop (1280px):
 | Screen | Before | After |
 |---|---|---|
 | Sign-in | `sign-in` | `sign-in` |
-| Home (new) | — | `home` |
+| Home (new) | — | `home`, `home-fr` (in French) |
 | Results | `results` | `results` |
 | Attendance | `attendance` | `attendance` |
 | Fees | `fees` | `fees` |
-| Messages (conversations, notices, news) | `messages`, `notices`, `news` | `messages` |
+| Messages (conversations, notices, news) | `messages`, `notices`, `news` | `messages`, `messages-notices`, `messages-news` |
 
 The React Native app's portal (`mobile/app/portal/`) is not part of this pass.
 

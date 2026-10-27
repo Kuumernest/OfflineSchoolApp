@@ -53,6 +53,8 @@ const SCREENS = {
     home: nav("home"), results: nav("results"), attendance: nav("attendance"),
     fees: nav("fees"), messages: nav("messages"),
     "messages-notices": seg(1), "messages-news": seg(2),
+    // Last, so every shot above stays in English.
+    "home-fr": async (page) => { await page.locator('button[lang="fr"]').first().click(); await nav("home")(page); },
   },
 }[phase];
 
