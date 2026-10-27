@@ -223,8 +223,15 @@ check("the fixture holds a subject exactly on the decline threshold", s08.delta,
 const d = report.sensitivity.thresholds.declineDrop.deltas;
 check("raising declineDrop by one loses exactly that classification",
   [d["1"].classificationsLost, d["1"].lostByCode.academic_decline], [1, 1]);
-check("and lowering it gains more, never loses",
-  [d["-1"].classificationsLost, d["-1"].classificationsGained > 0], [0, true]);
+// Lowering it gains declines. Since C5 (2026-10-27) no strength is stated
+// beside a decline, so the only thing it may lose is a strength on a subject
+// that has just become a decline — never a decline or a concern.
+const STRENGTH_CODES = ["subject_strength", "consistency_strength"];
+check("and lowering it gains declines, losing only strengths beside them",
+  [d["-1"].classificationsGained > 0,
+   Object.keys(d["-1"].lostByCode ?? {}).every((c) => STRENGTH_CODES.includes(c)),
+   d["-1"].classificationsLost <= (d["-1"].gainedByCode?.academic_decline ?? 0)],
+  [true, true, true]);
 check("the on-the-line case is listed as borderline",
   report.sensitivity.borderline.some((b) => b.studentId === "S08" && b.code === "academic_decline"), true);
 
