@@ -12,6 +12,7 @@
  *     cho  Form 1  one result; owes 20,000, due in 10 days
  *   dan, another family's child in Form 1, is never on her Home.
  *   Form 1's next exam starts in 6 days; a past exam is not "next".
+ *   Notices list newest first.
  *
  *   node scripts/check-portal-home.js
  */
@@ -86,6 +87,11 @@ const SRC = path.join(__dirname, "..", "src");
   await M("FeePayment").create({ schoolId: sid, studentId: "bih", academicYear: YEAR, amount: 40000 });
 
   await M("Announcement").create({ schoolId: sid, title: "Sports day", body: "Friday", audience: "all", isActive: true });
+  // Three notices on days whose weekday names sort in the wrong order.
+  await C("Notification").insertMany([1, 13, 3].map((ago) => ({
+    schoolId: sid, studentId: "ama", kind: "result.published", channel: "log", to: "x@example.test",
+    subject: `${ago} days ago`, body: "", status: "sent", deletedAt: null, readBy: [], createdAt: days(-ago), updatedAt: days(-ago),
+  })));
 
   const portal = require(path.join(SRC, "services/portal.service"));
   const { code } = await portal.issueAccess({ schoolId: sid, studentIds: ["ama", "bih", "cho"], label: "Mrs Bate" });
@@ -141,6 +147,10 @@ const SRC = path.join(__dirname, "..", "src");
   check("the class's next exam that has not started", [card("ama").nextExam?.name, card("cho").nextExam?.name], ["3rd Sequence", "3rd Sequence"]);
   check("a class with none scheduled", card("bih").nextExam, null);
   check("the latest announcement", home.body.data?.latestNews?.title, "Sports day");
+
+  console.log("\n--- notices, newest first ---");
+  const notices = (await get("/notifications")).body.data ?? [];
+  check("ordered by time, not by the weekday's name", notices.map((n) => n.subject), ["1 days ago", "3 days ago", "13 days ago"]);
 
   server.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);

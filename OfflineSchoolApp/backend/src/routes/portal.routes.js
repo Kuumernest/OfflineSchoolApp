@@ -326,6 +326,9 @@ async function examNamesFor(schoolId, rows) {
 
 const isoDay = (d) => d.toISOString().slice(0, 10);
 
+/** A notice's moment, as a number to sort by: sent, else created. */
+const timeOf = (n) => new Date(n.sentAt || n.createdAt || 0).getTime() || 0;
+
 /**
  * GET /home: one card per child, in one request (a parent on slow data
  * should not wait for fifteen). Every figure is read the way the screen it
@@ -632,9 +635,9 @@ router.get("/notifications", asyncHandler(async (req, res) => {
       sentAt:    n.sentAt,
       createdAt: n.createdAt,
     })),
-  ].sort((a, b) =>
-    String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
-  );
+  // Newest first, by time. String() of a Date is "Tue Oct 13 …", so comparing
+  // those sorted the list by weekday name.
+  ].sort((a, b) => timeOf(b) - timeOf(a));
 
   // Nothing is marked read here any more.
   //

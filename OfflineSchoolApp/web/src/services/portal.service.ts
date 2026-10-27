@@ -346,7 +346,19 @@ export interface PortalNotification {
    */
   conversationId?: string;
   unread?:         number;
+  /** Whether this guardian has opened it (per guardian: two parents read separately). */
+  read?:           boolean;
+  /** The child it is about. */
+  studentId?:      string | null;
 }
+
+/** Mark one notice read; returns the server's new unread count. */
+export const markNoticeRead = async (noticeId: string): Promise<number | null> =>
+  (await client.post(`/notifications/${noticeId}/read`)).data?.unreadNotices ?? null;
+
+/** Mark every notice read, for a parent coming back after a week of gate scans. */
+export const markAllNoticesRead = async (): Promise<number | null> =>
+  (await client.post("/notifications/read-all")).data?.unreadNotices ?? null;
 
 export const fetchNotifications = async (studentId?: string | null): Promise<PortalNotification[]> =>
   unwrap(await client.get("/notifications", childParams(studentId)).then((r) => r.data));

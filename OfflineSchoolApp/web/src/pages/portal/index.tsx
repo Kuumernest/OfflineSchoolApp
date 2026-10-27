@@ -13,72 +13,29 @@
 // server's communication policy — teachers, the office, and their own child —
 // so nothing here filters the list it is handed.
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import {
-  LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
-  MessageSquare, Send, Loader2, ArrowLeft,
-  Bell, LogIn, AlertCircle, Receipt, Wallet2, Home,
-} from "lucide-react";
+import { LogOut, Wallet, GraduationCap, CalendarCheck, MessageSquare, Home } from "lucide-react";
 
 import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
-import { Badge }       from "@/components/ui/Badge";
-import { Spinner } from "@/components/ui/Spinner";
 import { FormField, Input } from "@/components/ui/FormField";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
-import { useFormat }   from "@/i18n/format";
 import { cn }          from "@/utils/cn";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
 import { ResultsScreen } from "./ResultsScreen";
 import { AttendanceScreen } from "./AttendanceScreen";
 import { FeesScreen } from "./FeesScreen";
+import { MessagesScreen, type MsgView } from "./MessagesScreen";
 import { ChildAvatar, LanguageToggle, Skeleton } from "./ui";
 import {
-  portalLogin, portalLogout, hasPortalSession, setPortalSession,
-  fetchMe, fetchAnnouncements, fetchNotifications,
-  fetchPortalConversations, fetchPortalRecipients, openPortalConversation,
-  fetchPortalThread, sendPortalMessage, markPortalRead,
-  type PortalConversation, type PortalMessage, type PortalRecipient,
+  portalLogin, portalLogout, hasPortalSession, setPortalSession, fetchMe,
 } from "@/services/portal.service";
-
-/** Inside Messages: the conversations, the school's notices about a child, the news. */
-type MsgView = "messages" | "notices" | "news";
-
-/**
- * One row per notification kind the portal is allowed to show.
- *
- * Keyed on the kind the server sends, so a kind added server-side and not
- * listed here falls back rather than being mislabelled — which is what the
- * card this replaced did: it chose between two fee wordings with a ternary, so
- * anything that was not a fee reminder was announced as a payment
- * confirmation.
- *
- * The same keys as the phone's NOTICE_META, and the same wording, because the
- * two catalogues are kept in step deliberately.
- */
-const NOTICE_META: Record<
-  string,
-  { icon: React.ReactNode; tone: string; labelKey: string }
-> = {
-  "gate.arrival":      { icon: <LogIn className="h-3.5 w-3.5" />,        tone: "bg-success-50 text-success-700",  labelKey: "portal.noticeArrival" },
-  "gate.departure":    { icon: <LogOut className="h-3.5 w-3.5" />,       tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeDeparture" },
-  "attendance.absent": { icon: <AlertCircle className="h-3.5 w-3.5" />,  tone: "bg-danger-50 text-danger-700",    labelKey: "portal.noticeAbsent" },
-  "fee.reminder":      { icon: <Wallet2 className="h-3.5 w-3.5" />,      tone: "bg-warning-50 text-warning-700",  labelKey: "portal.noticeFeeReminder" },
-  "fee.payment":       { icon: <Receipt className="h-3.5 w-3.5" />,      tone: "bg-success-50 text-success-700",  labelKey: "portal.noticePayment" },
-  "result.published":  { icon: <GraduationCap className="h-3.5 w-3.5" />,tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeResults" },
-  "announcement":      { icon: <Megaphone className="h-3.5 w-3.5" />,    tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeAnnouncement" },
-  // Not a row in the notification queue — derived by the server from the
-  // threads it already stores. See the /notifications route.
-  "message":           { icon: <MessageSquare className="h-3.5 w-3.5" />,tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeMessage" },
-  default:             { icon: <Bell className="h-3.5 w-3.5" />,         tone: "bg-canvas text-ink-muted",        labelKey: "portal.noticeOther" },
-};
 
 export default function ParentPortalPage() {
   const { t } = useTranslation();
-  const fmt = useFormat();
   const qc  = useQueryClient();
 
   // A session, not an access token: the client renews the latter on its own.
@@ -115,27 +72,6 @@ export default function ParentPortalPage() {
 
   // Across every thread, from the one query that runs on every tab.
   const unreadMessages = meQ.data?.unreadMessages ?? 0;
-
-  const newsQ = useQuery({
-    queryKey: ["portal", "news", selected], queryFn: () => fetchAnnouncements(selected),
-    enabled: signedIn && screen === "messages" && msgView === "news", retry: false,
-  });
-
-  // Notices had no tab. They were a card at the bottom of Fees, fetched only
-  // while that tab was open, so a gate arrival or an absence had nowhere to
-  // appear at all — and the card titled every row with a two-way ternary
-  // between "Fee Reminder" and "Payment Confirmation", which would have
-  // labelled a child's arrival at school a payment confirmation.
-  const notificationsQ = useQuery({
-    queryKey: ["portal", "notifications", selected],
-    queryFn:  () => fetchNotifications(selected),
-    enabled:  signedIn && screen === "messages" && msgView === "notices",
-    // A message arriving is the thing a parent most wants to know about and
-    // the list is derived server-side from stored threads, so it is cheap to
-    // ask again. Matches the conversation list's own interval.
-    refetchInterval: 25_000,
-    retry:    false,
-  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,7 +222,7 @@ export default function ParentPortalPage() {
         {/* Child switcher — only when there is a choice, and not on Home,
             which shows every child at once. A parent with one child is not
             shown a control with one option in it. */}
-        {screen !== "home" && children.length > 1 && (
+        {screen !== "home" && screen !== "messages" && children.length > 1 && (
           <div className="mx-auto max-w-3xl px-4 pb-2.5">
             <div role="radiogroup" aria-label={t("portal.childSwitcher")} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
               {children.map((c, i) => {
@@ -329,7 +265,7 @@ export default function ParentPortalPage() {
       </nav>
 
       <main className="mx-auto max-w-3xl space-y-4 px-4 pb-28 pt-4 lg:pb-10 lg:pl-[calc(16rem+1rem)] lg:max-w-[calc(48rem+16rem)]">
-        {screen !== "home" && student && (
+        {screen !== "home" && screen !== "messages" && student && (
           <p className="text-xs text-ink-muted">
             {student.name}{student.className ? ` · ${student.className}` : ""}{student.enrollmentNo ? ` · ${student.enrollmentNo}` : ""}
           </p>
@@ -356,129 +292,9 @@ export default function ParentPortalPage() {
             tomorrow. The delivery status is shown only when the school tried
             and has not managed it yet. */}
         {screen === "messages" && (
-          <div role="tablist" aria-label={t("portal.nav.messages")} className="grid grid-cols-3 gap-1 rounded-card border border-line bg-surface p-1">
-            {([["messages", t("portal.messages"), unreadMessages], ["notices", t("portal.notices"), unreadNotices], ["news", t("portal.news"), 0]] as const).map(([key, label, n]) => (
-              <button key={key} type="button" role="tab" aria-selected={msgView === key} onClick={() => setMsgView(key)}
-                className={cn("relative min-h-11 rounded-control px-2 text-sm font-medium transition-colors",
-                  msgView === key ? "bg-primary-600 text-white" : "text-ink-body hover:bg-canvas")}>
-                {label}
-                {n > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 text-xs font-bold", msgView === key ? "bg-white/25" : "bg-danger text-white")}>{n > 9 ? "9+" : n}</span>}
-              </button>
-            ))}
-          </div>
+          <MessagesScreen view={msgView} onView={setMsgView} children={children}
+            unreadMessages={unreadMessages} unreadNotices={unreadNotices} />
         )}
-
-        {screen === "messages" && msgView === "notices" && (
-          notificationsQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> :
-          (notificationsQ.data?.length ?? 0) === 0 ? (
-            <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noNotices")}</p></Card>
-          ) : (
-            <Card padding={false}>
-              <ul className="divide-y divide-line">
-                {notificationsQ.data?.map((n) => {
-                  const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
-                  const openable = Boolean(n.conversationId);
-                  return (
-                    <li key={n._id}>
-                      <button
-                        type="button"
-                        disabled={!openable}
-                        onClick={() => { if (openable) setMsgView("messages"); }}
-                        className={cn(
-                          "flex w-full items-start gap-3 px-4 py-3 text-left",
-                          openable && "transition-colors hover:bg-canvas"
-                        )}
-                      >
-                        <span className={cn(
-                          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                          meta.tone
-                        )}>
-                          {meta.icon}
-                        </span>
-
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                              {t(meta.labelKey)}
-                            </span>
-                            {(n.unread ?? 0) > 0 && (
-                              <span className="inline-flex min-w-[1.1rem] items-center justify-center
-                                               rounded-full bg-ink px-1 text-[0.65rem] font-bold
-                                               leading-tight text-white">
-                                {n.unread}
-                              </span>
-                            )}
-                            <span className="ml-auto shrink-0 text-xs text-ink-faint">
-                              {fmt.dateShort(n.sentAt ?? n.createdAt)}
-                            </span>
-                          </span>
-
-                          {n.subject && (
-                            <span className="mt-0.5 block truncate text-sm font-medium text-ink">
-                              {n.subject}
-                            </span>
-                          )}
-                          {/* `body` is the plain-text rendering. The HTML the
-                              channel carried is under `html` and is not put on
-                              screen — a whole email document in a text node is
-                              what the phone was showing its readers. */}
-                          {n.body && (
-                            <span className="mt-0.5 block text-sm text-ink-body">{n.body}</span>
-                          )}
-
-                          {/* Only while the school is still trying, or has
-                              failed. A skipped notice — an on-time arrival, or
-                              a family with no address — needs no apology on the
-                              screen where it is being read. */}
-                          {(n.status === "pending" || n.status === "failed") && (
-                            <span className="mt-1 block">
-                              <Badge variant={n.status === "failed" ? "danger" : "default"}>
-                                {t(`portal.noticeStatus_${n.status}`)}
-                              </Badge>
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-          )
-        )}
-
-        {/* ── News ── */}
-        {screen === "messages" && msgView === "news" && (
-          newsQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> :
-          (newsQ.data?.length ?? 0) === 0 ? (
-            <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noNews")}</p></Card>
-          ) : (
-            newsQ.data?.map((a) => {
-              // Whose notice it is, when it names a child. The list now
-              // carries notices for every child's class rather than only the
-              // one selected, so a parent with three children needs the card
-              // to say which of them "bring PE kit on Thursday" is about.
-              const about = (a.forStudents ?? [])
-                .map((id) => meQ.data?.children
-                  ?.find((c) => String(c._id) === String(id))?.name)
-                .filter(Boolean);
-              return (
-                <Card key={a._id}>
-                  <p className="text-sm font-semibold text-ink">{a.title ?? "—"}</p>
-                  <p className="mt-0.5 text-xs text-ink-faint">
-                    {fmt.dateShort(a.createdAt)}
-                    {about.length ? ` · ${about.join(", ")}` : ""}
-                  </p>
-                  {a.body && (
-                    <p className="mt-2 whitespace-pre-line text-sm text-ink-body">{a.body}</p>
-                  )}
-                </Card>
-              );
-            })
-          )
-        )}
-
-        {screen === "messages" && msgView === "messages" && <PortalMessages enabled={signedIn} />}
       </main>
 
       {/* Phone: the five sections along the bottom, within thumb reach. */}
@@ -515,258 +331,5 @@ function ShellSkeleton() {
         <Skeleton className="h-56 w-full rounded-card" />
       </div>
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GUARDIAN MESSAGING
-//
-// The first part of this portal that writes anything. Who a parent may reach
-// is decided entirely by the server's communication policy — teachers, the
-// office, and their own child — so this component never filters the list it
-// is given.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PortalMessages({ enabled }: { enabled: boolean }) {
-  const { t } = useTranslation();
-  const qc    = useQueryClient();
-
-  const [openId,  setOpenId]  = useState<string | null>(null);
-  const [draft,   setDraft]   = useState("");
-  const [picking, setPicking] = useState(false);
-  const [busy,    setBusy]    = useState(false);
-  const [err,     setErr]     = useState<string | null>(null);
-
-  const listQ = useQuery({
-    queryKey: ["portal-conversations"],
-    queryFn:  fetchPortalConversations,
-    enabled,
-    refetchInterval: 25_000,
-  });
-
-  const threadQ = useQuery({
-    queryKey: ["portal-thread", openId],
-    queryFn:  () => fetchPortalThread(openId as string),
-    enabled:  Boolean(openId),
-    refetchInterval: 15_000,
-  });
-
-  const peopleQ = useQuery({
-    queryKey: ["portal-recipients"],
-    queryFn:  () => fetchPortalRecipients(""),
-    enabled:  picking,
-  });
-
-  const messages: PortalMessage[] = [...(threadQ.data?.messages ?? [])]
-    .sort((a, b) => a.seq - b.seq);
-
-  // Advance the read marker as the thread is shown.
-  useEffect(() => {
-    if (!openId || messages.length === 0) return;
-    markPortalRead(openId, messages[messages.length - 1].seq)
-      .then(() => qc.invalidateQueries({ queryKey: ["portal-conversations"] }))
-      .catch(() => { /* a receipt failing is not worth telling a parent about */ });
-  }, [openId, messages, qc]);
-
-  const send = async () => {
-    const body = draft.trim();
-    if (!body || !openId || busy) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await sendPortalMessage(openId, body);
-      setDraft("");
-      qc.invalidateQueries({ queryKey: ["portal-thread", openId] });
-      qc.invalidateQueries({ queryKey: ["portal-conversations"] });
-    } catch (e) {
-      const r = (e as { response?: { data?: { message?: string } } })?.response?.data;
-      setErr(r?.message ?? (e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const start = async (r: PortalRecipient) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const c = await openPortalConversation(r.id, r.kind);
-      setPicking(false);
-      setOpenId(c._id);
-      qc.invalidateQueries({ queryKey: ["portal-conversations"] });
-    } catch (e) {
-      const d = (e as { response?: { data?: { message?: string } } })?.response?.data;
-      setErr(d?.message ?? (e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // ── One thread ────────────────────────────────────────────────────────────
-  if (openId) {
-    return (
-      <Card>
-        <div className="flex items-center gap-2 border-b border-line pb-3">
-          <button
-            onClick={() => { setOpenId(null); setErr(null); }}
-            className="text-ink-muted hover:text-ink"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <p className="flex-1 truncate text-sm font-semibold text-ink">
-            {threadQ.data?.conversation?.title
-              ?? threadQ.data?.conversation?.participants
-                   ?.map((p) => p.name).filter(Boolean).join(", ")
-              ?? t("portal.messages")}
-          </p>
-        </div>
-
-        <div className="max-h-80 space-y-2 overflow-y-auto py-3">
-          {threadQ.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
-          {messages.map((m) => (
-            <div key={m._id} className="rounded-lg bg-canvas px-3 py-2">
-              <p className="text-xs font-semibold text-ink-muted">
-                {m.sender?.name ?? "—"}
-              </p>
-              <p className="whitespace-pre-line text-sm text-ink-body">
-                {m.isDeleted ? t("portal.messageDeleted") : m.body}
-              </p>
-              {(m.attachments?.length ?? 0) > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {m.attachments!.map((a) => (
-                    <li key={a.url}>
-                      <a href={a.url} target="_blank" rel="noreferrer"
-                         className="text-xs underline">
-                        {a.name ?? a.url.split("/").pop()}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-          {!threadQ.isLoading && messages.length === 0 && (
-            <p className="py-6 text-center text-sm text-ink-muted">
-              {t("portal.noMessages")}
-            </p>
-          )}
-        </div>
-
-        {err && <p className="pb-2 text-xs text-red-600">{err}</p>}
-
-        <div className="flex items-end gap-2 border-t border-line pt-3">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-            }}
-            rows={1}
-            placeholder={t("portal.writeMessage")}
-            className="flex-1 resize-none rounded-lg border border-line bg-canvas
-                       px-3 py-2 text-sm outline-none focus:border-ink-muted"
-          />
-          <button
-            onClick={send}
-            disabled={!draft.trim() || busy}
-            className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2
-                       text-sm font-semibold text-surface disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
-        </div>
-      </Card>
-    );
-  }
-
-  // ── Picking somebody to write to ──────────────────────────────────────────
-  if (picking) {
-    return (
-      <Card>
-        <div className="flex items-center gap-2 border-b border-line pb-3">
-          <button onClick={() => setPicking(false)} className="text-ink-muted hover:text-ink">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <p className="flex-1 text-sm font-semibold text-ink">
-            {t("portal.chooseRecipient")}
-          </p>
-        </div>
-
-        {err && <p className="pt-2 text-xs text-red-600">{err}</p>}
-
-        {peopleQ.isLoading ? (
-          <div className="flex justify-center py-8"><Spinner /></div>
-        ) : (peopleQ.data?.length ?? 0) === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-muted">
-            {t("portal.noRecipients")}
-          </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {peopleQ.data?.map((r) => (
-              <li key={`${r.kind}:${r.id}`}>
-                <button
-                  onClick={() => start(r)}
-                  disabled={busy}
-                  className="w-full py-3 text-left disabled:opacity-50"
-                >
-                  <p className="text-sm font-semibold text-ink">{r.name}</p>
-                  {r.subtitle && (
-                    <p className="text-xs text-ink-faint">{r.subtitle}</p>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    );
-  }
-
-  // ── The list ──────────────────────────────────────────────────────────────
-  const rows: PortalConversation[] = listQ.data ?? [];
-
-  return (
-    <>
-      <button
-        onClick={() => { setPicking(true); setErr(null); }}
-        className="mb-3 w-full rounded-lg bg-ink px-4 py-2.5 text-sm
-                   font-semibold text-surface"
-      >
-        {t("portal.newMessage")}
-      </button>
-
-      {listQ.isLoading ? (
-        <div className="flex justify-center py-10"><Spinner /></div>
-      ) : rows.length === 0 ? (
-        <Card>
-          <p className="py-6 text-center text-sm text-ink-muted">
-            {t("portal.noConversations")}
-          </p>
-        </Card>
-      ) : (
-        rows.map((c) => (
-          <Card key={c._id}>
-            <button onClick={() => setOpenId(c._id)} className="w-full text-left">
-              <div className="flex items-center gap-2">
-                <p className="flex-1 truncate text-sm font-semibold text-ink">
-                  {c.title
-                    ?? c.participants?.map((p) => p.name).filter(Boolean).join(", ")
-                    ?? "—"}
-                </p>
-                {Boolean(c.unread) && (
-                  <span className="rounded-full bg-ink px-1.5 py-0.5 text-[10px]
-                                   font-bold text-surface">
-                    {c.unread}
-                  </span>
-                )}
-              </div>
-              <p className="mt-0.5 truncate text-xs text-ink-faint">
-                {c.lastMessagePreview ?? "—"}
-              </p>
-            </button>
-          </Card>
-        ))
-      )}
-    </>
   );
 }

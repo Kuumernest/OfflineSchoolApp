@@ -3072,6 +3072,22 @@
       "empty": "No fees recorded yet",
       "emptyHint": "Charges appear here once the school bills them.",
       "receiptFailed": "Could not open the receipt. Check your connection and try again."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Mark all as read",
+      "new": "New",
+      "about": "About {{names}}",
+      "you": "You",
+      "send": "Send",
+      "back": "Back to messages",
+      "writeTo": "Write to a teacher or the office",
+      "noConversationsHint": "Start a conversation with your child’s teacher or the school office.",
+      "noNoticesHint": "Absences, fee reminders and published results appear here.",
+      "noNewsHint": "The school’s announcements appear here.",
+      "tabMessages": "Messages",
+      "tabNotices": "Notices",
+      "tabNews": "News"
     }
   },
   "codes": {

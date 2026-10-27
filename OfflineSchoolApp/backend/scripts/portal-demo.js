@@ -193,7 +193,20 @@ const SUBJECTS = [
   await notice("eve", "attendance.absent", "Absence recorded", "Eve Bate was marked absent on the 13th.", 14);
 
   const portal = require("../src/services/portal.service");
-  const { code } = await portal.issueAccess({ schoolId: sid, studentIds: kids.map((k) => k._id), label: "Mrs Bate" });
+  const { code, accessId } = await portal.issueAccess({ schoolId: sid, studentIds: kids.map((k) => k._id), label: "Mrs Bate" });
+
+  // One conversation with Eve's maths teacher, his reply not yet read.
+  try {
+    const comms = require("../src/services/communication/conversation.service");
+    const parent  = { kind: "guardian", id: String(accessId), schoolId: sid, studentIds: kids.map((k) => k._id), name: "Mrs Bate" };
+    const teacher = { kind: "user", id: "t-ngwa", role: "teacher", schoolId: sid, name: "Mr Ngwa" };
+    const conversation = await comms.openDirect(parent, teacher);
+    await comms.postMessage({ conversation, principal: parent, body: "Good morning Mr Ngwa. How is Eve doing in mathematics this term?" });
+    await comms.postMessage({ conversation: await M("Conversation").findById(conversation._id), principal: teacher,
+      body: "Good morning Mrs Bate. Eve has improved a lot: 14.5 on the last sequence. She should keep practising fractions at home." });
+  } catch (err) {
+    console.warn("[portal-demo] conversation not seeded:", err.message);
+  }
   await mongoose.disconnect();
 
   fs.writeFileSync(OUT, JSON.stringify({ admissionNo: kids[0].enrollmentNo, code }, null, 2));

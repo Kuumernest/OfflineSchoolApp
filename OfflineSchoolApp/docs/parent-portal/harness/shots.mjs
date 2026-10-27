@@ -38,6 +38,10 @@ const tab = (label) => async (page) => {
 const nav = (key) => async (page) => {
   await page.locator(`[data-nav="${key}"]:visible`).first().click();
 };
+// A tab inside Messages, by position (the labels change with the language).
+const seg = (i) => async (page) => {
+  await page.locator('[role="tablist"] [role="tab"]').nth(i).click();
+};
 const SCREENS = {
   before: {
     "sign-in": null,
@@ -48,6 +52,7 @@ const SCREENS = {
     "sign-in": null,
     home: nav("home"), results: nav("results"), attendance: nav("attendance"),
     fees: nav("fees"), messages: nav("messages"),
+    "messages-notices": seg(1), "messages-news": seg(2),
   },
 }[phase];
 

@@ -3072,6 +3072,22 @@
       "empty": "Aucun frais enregistré pour l’instant",
       "emptyHint": "Les frais apparaissent ici dès que l’école les facture.",
       "receiptFailed": "Impossible d’ouvrir le reçu. Vérifiez votre connexion et réessayez."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Tout marquer comme lu",
+      "new": "Nouveau",
+      "about": "Concerne {{names}}",
+      "you": "Vous",
+      "send": "Envoyer",
+      "back": "Retour aux messages",
+      "writeTo": "Écrire à un enseignant ou au secrétariat",
+      "noConversationsHint": "Commencez une conversation avec l’enseignant de votre enfant ou le secrétariat.",
+      "noNoticesHint": "Les absences, rappels de frais et résultats publiés apparaissent ici.",
+      "noNewsHint": "Les annonces de l’école apparaissent ici.",
+      "tabMessages": "Messages",
+      "tabNotices": "Avis",
+      "tabNews": "Actualités"
     }
   },
   "codes": {
