@@ -2871,7 +2871,9 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
 
 // GET /admin/action-items — what is waiting on this reader (C11): marks to
 // approve, results to publish, overdue fees. Each only for a role that can act.
-router.get("/action-items", asyncHandler(async (req, res) => {
+// Gated on reading notices (every staff role by default): it is the bell
+// panel's To do block; each item below checks its own capability.
+router.get("/action-items", requirePermission("announcements.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendSuccess(res, { items: [] });
   const permissions = require("../services/permissions.service");
