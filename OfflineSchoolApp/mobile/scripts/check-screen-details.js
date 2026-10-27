@@ -61,11 +61,18 @@ check("a guardian's message goes with a clientId, kept for a resend of the same 
 check("a successful reload clears an earlier load error", /setReads\(payload\.participantReads \?\? \[\]\);\s*setError\(null\);/.test(guardian), true);
 check("the portal service sends the clientId", /clientId \? \{ body, clientId \} : \{ body \}/.test(read("src/services/portal.service.js")), true);
 
-console.log("--- portal tabs ---");
+console.log("--- portal navigation ---");
+// Six tabs in a sideways scroll across the top became five sections in a bar
+// along the bottom (the redesign). What the old check guarded still holds: a
+// label is one line and shrinks before it wraps mid-word.
 const portal = read("app/portal/index.js");
-check("the six tabs sit in a horizontal scroll, one line each",
-  [/<ScrollView horizontal showsHorizontalScrollIndicator=\{false\} contentContainerStyle=\{styles\.tabsRow\}>/.test(portal),
-   /styles\.tabTextOn\]\} numberOfLines=\{1\}/.test(portal), /tab: \{\s*flex: 1,/.test(portal)], [true, true, false]);
+const tabsBar = read("src/components/portal/BottomTabs.js");
+check("the five sections sit in a bottom bar, each label one line",
+  [/<BottomTabs\b/.test(portal), (tabsBar.match(/\{ key: "\w+",/g) ?? []).length,
+   /numberOfLines=\{1\}\s*adjustsFontSizeToFit/.test(tabsBar), /<ScrollView horizontal[^>]*styles\.tabsRow/.test(portal)],
+  [true, 5, true, false]);
+check("Messages' three lists are one segmented row, one line each",
+  [/const MSG_VIEWS = \["messages", "notices", "news"\]/.test(portal), /styles\.segmentTextOn\]\} numberOfLines=\{1\}/.test(portal)], [true, true]);
 
 console.log("--- the pupil-result screen (changed on this branch) ---");
 const result = read("app/admin/exams/results/[examId]/student/[studentId].js");

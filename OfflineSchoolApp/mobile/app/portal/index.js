@@ -26,6 +26,10 @@ import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatMoney, formatDateShort, formatTime } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
 import { conversationName } from "../../src/utils/participantName";
+import BottomTabs     from "../../src/components/portal/BottomTabs";
+import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
+import HomeScreen     from "../../src/components/portal/HomeScreen";
+import { LanguageToggle } from "../../src/components/portal/ui";
 
 const C = {
   primary:   "#3B4996",
@@ -45,10 +49,15 @@ const C = {
   canvas:    "#F4F5F8",
 };
 
-// "notices" is what the school has already sent this parent by email or SMS —
-// gate arrivals, absences, fee reminders, published results. The records
-// existed all along; nothing in the portal read them.
-const TABS = ["fees", "results", "attendance", "notices", "news", "messages"];
+// The three lists behind the Messages tab. "notices" is what the school has
+// already sent this parent by email or SMS — gate arrivals, absences, fee
+// reminders, published results. The records existed all along; nothing in the
+// portal read them.
+const MSG_VIEWS = ["messages", "notices", "news"];
+
+// The screens that are about one child, and so carry the child switcher. Home
+// shows every child at once; Messages covers the whole family.
+const PER_CHILD = ["results", "attendance", "fees"];
 
 // Results arrive sorted newest-first (academic year desc, then term desc).
 // Grouping preserves that order while giving each school year its own
@@ -107,6 +116,7 @@ export default function ParentPortalScreen() {
   const router          = useRouter();
   const { t, language } = useTranslation();
   const screenPad       = useScreenInsets({ top: 24, bottom: 28 });
+  const headPad         = useScreenInsets({ top: 8, bottom: 0 });
 
   const [checking, setChecking] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
@@ -116,7 +126,11 @@ export default function ParentPortalScreen() {
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState(null);
 
-  const [tab, setTab]         = useState("fees");
+  // Which of the five sections is on screen, and inside Messages which list.
+  // `tab` is what is fetched: one of the five, or one of Messages' three.
+  const [screen, setScreen]   = useState("home");
+  const [msgView, setMsgView] = useState("messages");
+  const tab = screen === "messages" ? msgView : screen;
   const [me, setMe]           = useState(null);
   // Which child is on screen. Null means "whichever the server picks first",
   // which is what a parent with one child gets and never has to think about.
@@ -142,6 +156,7 @@ export default function ParentPortalScreen() {
     setMe(null);
     setSection(null);
     setChildId(null);
+    setScreen("home");
     setCode("");
   }, []);
 
@@ -204,6 +219,8 @@ export default function ParentPortalScreen() {
       if (!childId && selected) setChildId(selected);
 
       const fetcher = {
+        // Every child's card in one request; the child is not passed.
+        home:       PortalService.fetchHome,
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
         attendance: PortalService.fetchAttendance,
@@ -324,6 +341,13 @@ export default function ParentPortalScreen() {
     } catch {
       // Left to the poll, like one card.
     }
+  }, []);
+
+  /** To a section, and from a Home card to that child's page. */
+  const open = useCallback((id, next, view = null) => {
+    if (id) setChildId(id);
+    if (view) setMsgView(view);
+    setScreen(next);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -493,104 +517,34 @@ export default function ParentPortalScreen() {
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={styles.header}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title} numberOfLines={1}>
-            {me?.student?.name || t("portal.title")}
-          </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {me?.student?.enrollmentNo}
-            {me?.student?.className ? ` · ${me.student.className}` : ""}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={leave} hitSlop={10}>
+      {/* The school, the language, the way out. */}
+      <View style={[styles.header, { paddingTop: headPad.paddingTop }]}>
+        <Text style={styles.title} numberOfLines={1}>
+          {me?.school?.name || t("portal.title")}
+        </Text>
+        <LanguageToggle />
+        <TouchableOpacity
+          onPress={leave}
+          hitSlop={8}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("portal.signOut")}
+        >
           <Ionicons name="log-out-outline" size={22} color={C.inkBody} />
         </TouchableOpacity>
       </View>
 
-      {/* Child switcher — only when there is a choice to make. A parent with
-          one child should not be shown a control with one option. */}
-      {(me?.children?.length ?? 0) > 1 && (
-        <View style={styles.childBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.childRow}>
-            {me.children.map((c) => {
-              const on = (childId ?? me.selectedId) === c._id;
-              return (
-                <TouchableOpacity
-                  key={c._id}
-                  style={[styles.childChip, on && styles.childChipOn]}
-                  onPress={() => setChildId(c._id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.childChipText, on && styles.childChipTextOn]}
-                        numberOfLines={1}>
-                    {c.name || c.enrollmentNo}
-                  </Text>
-                  {c.className ? (
-                    <Text style={[styles.childChipMeta, on && styles.childChipTextOn]}
-                          numberOfLines={1}>
-                      {c.className}
-                    </Text>
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+      {/* Whose page this is, on the three screens about one child. */}
+      {PER_CHILD.includes(screen) && (
+        <ChildSwitcher
+          family={me?.children}
+          selected={childId ?? me?.selectedId}
+          onSelect={setChildId}
+        />
       )}
 
-      {/* The unread count on the tab itself.
-          A parent had no indication anywhere that a message had arrived: the
-          count existed on every thread and nothing carried it to a place it
-          could be seen without first opening the tab it was about. It rides on
-          /portal/me, which is the one request every load makes whatever tab is
-          showing — a badge that needs a second request to a tab nobody has
-          opened is a badge no client draws. */}
-      <View style={styles.tabs}>
-        {/* Six tabs at 360 px leave about 60 px each, less than "Attendance"
-            or "Informations": they fill the width when they fit, and scroll
-            sideways when they do not, rather than wrapping mid-word. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
-        {TABS.map((key) => {
-          // Messages counts unread threads; Notices counts school notices
-          // that arrived since the parent last opened that tab. Deliberately
-          // disjoint — the notices list carries an unread-thread row too, and
-          // a number showing up in two badges at once is a number nobody
-          // trusts.
-          const unread =
-            key === "messages" ? (me?.unreadMessages ?? 0) :
-            key === "notices"  ? (me?.unreadNotices  ?? 0) : 0;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[styles.tab, tab === key && styles.tabOn]}
-              onPress={() => setTab(key)}
-              activeOpacity={0.8}
-              accessibilityLabel={
-                unread > 0
-                  ? `${t(`portal.${key}`)} (${t("portal.unreadCount", { count: unread })})`
-                  : t(`portal.${key}`)
-              }
-            >
-              <Text style={[styles.tabText, tab === key && styles.tabTextOn]} numberOfLines={1}>
-                {t(`portal.${key}`)}
-              </Text>
-              {unread > 0 ? (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>
-                    {unread > 9 ? "9+" : unread}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-        </ScrollView>
-      </View>
-
       <ScrollView
-        contentContainerStyle={[styles.body, { paddingBottom: screenPad.paddingBottom }]}
+        contentContainerStyle={styles.body}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />
         }
@@ -606,7 +560,44 @@ export default function ParentPortalScreen() {
           </View>
         )}
 
-        {loading && !data ? (
+        {/* Home draws its own placeholders. */}
+        {tab === "home" && (
+          <HomeScreen data={data} loading={loading} onOpen={open} />
+        )}
+
+        {/* Messages: conversations, notices and news, each with its count. */}
+        {screen === "messages" && (
+          <View style={styles.segment} accessibilityRole="tablist" accessibilityLabel={t("portal.messages")}>
+            {MSG_VIEWS.map((key) => {
+              const label = t(`portal.messagesScreen.${{ messages: "tabMessages", notices: "tabNotices", news: "tabNews" }[key]}`);
+              const unread =
+                key === "messages" ? (me?.unreadMessages ?? 0) :
+                key === "notices"  ? (me?.unreadNotices  ?? 0) : 0;
+              const on = msgView === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  testID={`portal-msg-${key}`}
+                  style={[styles.segmentBtn, on && styles.segmentBtnOn]}
+                  onPress={() => setMsgView(key)}
+                  activeOpacity={0.8}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={unread > 0 ? `${label} (${t("portal.unreadCount", { count: unread })})` : label}
+                >
+                  <Text style={[styles.segmentText, on && styles.segmentTextOn]} numberOfLines={1}>{label}</Text>
+                  {unread > 0 ? (
+                    <View style={[styles.tabBadge, on && styles.tabBadgeOn]}>
+                      <Text style={styles.tabBadgeText}>{unread > 9 ? "9+" : unread}</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {tab === "home" ? null : loading && !data ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
         ) : (
           <>
@@ -1205,6 +1196,12 @@ export default function ParentPortalScreen() {
           </>
         )}
       </ScrollView>
+
+      <BottomTabs
+        screen={screen}
+        onChange={(next) => open(null, next)}
+        badges={{ messages: (me?.unreadMessages ?? 0) + (me?.unreadNotices ?? 0) }}
+      />
     </View>
   );
 }
@@ -1219,45 +1216,31 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
+    paddingHorizontal: 16, paddingBottom: 10,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  title:    { fontSize: 16, fontWeight: "700", color: C.ink },
-  subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  title:   { flex: 1, minWidth: 0, fontSize: 16, fontWeight: "700", color: C.ink },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 10 },
 
-  childBar: {
-    backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
+  // Messages' three lists, as one segmented control.
+  segment: {
+    flexDirection: "row", gap: 4, padding: 4, borderRadius: 14,
+    borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
   },
-  childRow:  { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  childChip: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 9,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
-    minWidth: 96,
+  segmentBtn: {
+    flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 4,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
   },
-  childChipOn:      { backgroundColor: C.primary, borderColor: C.primary },
-  childChipText:    { fontSize: 13, fontWeight: "600", color: C.inkBody },
-  childChipMeta:    { fontSize: 10, color: C.inkFaint, marginTop: 1 },
-  childChipTextOn:  { color: "#fff" },
+  segmentBtnOn:  { backgroundColor: C.primary },
+  segmentText:   { flexShrink: 1, fontSize: 13, fontWeight: "600", color: C.inkBody },
+  segmentTextOn: { color: "#FFFFFF" },
+  tabBadgeOn:    { backgroundColor: "rgba(255,255,255,0.28)" },
 
-  tabs: {
-    flexDirection: "row", backgroundColor: C.surface,
-    borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  tabsRow: { flexGrow: 1 },
-  tab: {
-    flexGrow: 1, minWidth: 64, paddingHorizontal: 10, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent",
-    // Row rather than centre-only, so the badge sits beside the word instead
-    // of over it. The gap holds the label in place whether or not it is there.
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
-  },
-  tabOn:     { borderBottomColor: C.primary },
   tabBadge: {
     minWidth: 16, paddingHorizontal: 4, paddingVertical: 1,
     borderRadius: 8, backgroundColor: C.danger, alignItems: "center",
   },
   tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
-  tabText:   { fontSize: 12, fontWeight: "600", color: C.inkMuted },
-  tabTextOn: { color: C.primary },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
