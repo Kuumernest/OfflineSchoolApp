@@ -69,6 +69,7 @@ export default function ParentPortalScreen() {
   const [code, setCode]     = useState("");
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState(null);
+  const codeField           = useRef(null);
 
   // Which of the five sections is on screen, and inside Messages which list.
   // `tab` is what is fetched: one of the five, or one of Messages' three.
@@ -383,27 +384,47 @@ export default function ParentPortalScreen() {
       >
         <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={[styles.loginBody, screenPad]} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={{ alignSelf: "flex-start" }}>
-            <Ionicons name="chevron-back" size={24} color={C.inkBody} />
-          </TouchableOpacity>
+          <View style={styles.loginTop}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
+            >
+              <Ionicons name="chevron-back" size={24} color={C.inkBody} />
+            </TouchableOpacity>
+            <LanguageToggle />
+          </View>
 
-          <Text style={styles.loginTitle}>{t("portal.title")}</Text>
-          <Text style={styles.loginIntro}>{t("portal.intro")}</Text>
+          <View style={styles.loginHead}>
+            <View style={styles.loginBadge}>
+              <Ionicons name="school-outline" size={28} color="#FFFFFF" />
+            </View>
+            <Text style={styles.loginTitle} accessibilityRole="header">{t("portal.title")}</Text>
+            <Text style={styles.loginIntro}>{t("portal.intro")}</Text>
+          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>{t("portal.admissionNo")}</Text>
+          <View style={styles.loginCard}>
+            <Text style={styles.label} nativeID="portal-admission-label">{t("portal.admissionNo")}</Text>
             <TextInput
               style={styles.input}
               value={admissionNo}
               onChangeText={setAdmissionNo}
               autoCapitalize="characters"
               autoCorrect={false}
+              autoComplete="username"
+              returnKeyType="next"
+              onSubmitEditing={() => codeField.current?.focus()}
+              submitBehavior="submit"
+              accessibilityLabelledBy="portal-admission-label"
+              accessibilityHint={t("portal.admissionHint")}
               placeholderTextColor={C.inkFaint}
             />
             <Text style={styles.hint}>{t("portal.admissionHint")}</Text>
 
-            <Text style={styles.label}>{t("portal.code")}</Text>
+            <Text style={styles.label} nativeID="portal-code-label">{t("portal.code")}</Text>
             <TextInput
+              ref={codeField}
               // Not secureTextEntry: the parent is reading this off a slip of
               // paper, and hiding it only causes typing mistakes.
               style={[styles.input, styles.codeInput]}
@@ -411,28 +432,40 @@ export default function ParentPortalScreen() {
               onChangeText={setCode}
               autoCapitalize="characters"
               autoCorrect={false}
+              autoComplete="one-time-code"
+              returnKeyType="go"
+              onSubmitEditing={() => { if (admissionNo.trim() && code.trim() && !busy) submit(); }}
+              accessibilityLabelledBy="portal-code-label"
+              accessibilityHint={t("portal.codeHint")}
               placeholder="ABCD-EFGH"
               placeholderTextColor={C.inkFaint}
             />
             <Text style={styles.hint}>{t("portal.codeHint")}</Text>
 
             {error && (
-              <View style={styles.errorBox}>
+              <View style={styles.errorBox} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                <Ionicons name="alert-circle-outline" size={18} color={C.danger} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
             <TouchableOpacity
+              testID="portal-sign-in"
               style={[styles.submit, (!admissionNo.trim() || !code.trim() || busy) && styles.submitOff]}
               onPress={submit}
               disabled={!admissionNo.trim() || !code.trim() || busy}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !admissionNo.trim() || !code.trim() || busy, busy }}
             >
               {busy
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.submitText}>{t("portal.signIn")}</Text>}
             </TouchableOpacity>
+          </View>
 
+          <View style={styles.footRow}>
+            <Ionicons name="help-circle-outline" size={18} color={C.inkMuted} />
             <Text style={styles.footNote}>{t("portal.noAccount")}</Text>
           </View>
         </ScrollView>
@@ -574,9 +607,19 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.canvas },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  loginBody:  { paddingHorizontal: 20, gap: 10 },
-  loginTitle: { fontSize: 24, fontWeight: "700", color: C.ink, marginTop: 12 },
-  loginIntro: { fontSize: 13, color: C.inkMuted, marginBottom: 10 },
+  loginBody:  { paddingHorizontal: 16, gap: 16, flexGrow: 1 },
+  loginTop:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  loginHead:  { alignItems: "center", marginTop: 8 },
+  loginBadge: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: C.primary,
+    alignItems: "center", justifyContent: "center", marginBottom: 12,
+  },
+  loginTitle: { fontSize: 26, fontWeight: "700", color: C.ink, textAlign: "center" },
+  loginIntro: { marginTop: 4, fontSize: 15, color: C.inkMuted, textAlign: "center", lineHeight: 21 },
+  loginCard: {
+    backgroundColor: C.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: C.line, padding: 18,
+  },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -595,30 +638,28 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
-  card: {
-    backgroundColor: C.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: C.line, padding: 14,
-  },
-
-  label: { fontSize: 12, fontWeight: "600", color: C.inkBody, marginBottom: 5, marginTop: 10 },
+  // Fields a thumb can hit and an eye can read off a slip of paper.
+  label: { fontSize: 14, fontWeight: "600", color: C.inkBody, marginBottom: 6, marginTop: 12 },
   input: {
-    height: 46, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
-    paddingHorizontal: 12, fontSize: 16, color: C.ink, backgroundColor: C.surface,
+    height: 52, borderRadius: 10, borderWidth: 1, borderColor: "#D5D9E2",
+    paddingHorizontal: 14, fontSize: 17, color: C.ink, backgroundColor: C.surface,
   },
   codeInput: { fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", letterSpacing: 2 },
-  hint: { marginTop: 4, fontSize: 11, color: C.inkFaint },
+  hint: { marginTop: 5, fontSize: 13, color: C.inkMuted, lineHeight: 18 },
 
   errorBox: {
-    marginTop: 12, padding: 10, borderRadius: 9,
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    marginTop: 14, padding: 12, borderRadius: 10,
     backgroundColor: C.dangerBg, borderWidth: 1, borderColor: "#F2D3CF",
   },
-  errorText: { fontSize: 12, color: C.danger },
+  errorText: { flex: 1, fontSize: 14, color: C.danger, lineHeight: 20 },
 
   submit: {
-    marginTop: 18, height: 48, borderRadius: 10, backgroundColor: C.primary,
+    marginTop: 20, height: 52, borderRadius: 12, backgroundColor: C.primary,
     alignItems: "center", justifyContent: "center",
   },
   submitOff:  { opacity: 0.45 },
-  submitText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  footNote:   { marginTop: 14, fontSize: 11, color: C.inkFaint, lineHeight: 16 },
+  submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  footRow:    { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingHorizontal: 4 },
+  footNote:   { flex: 1, fontSize: 14, color: C.inkMuted, lineHeight: 20 },
 });
