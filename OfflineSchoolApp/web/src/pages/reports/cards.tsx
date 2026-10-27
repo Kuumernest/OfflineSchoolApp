@@ -486,7 +486,41 @@ export default function ReportCardsPage() {
       return true;
     };
 
-    for (let i = 0; i < targetStudents.length; i++) {
+    /*
+     * C2: a class is fetched four cards at a time. One at a time, a class of
+     * forty waited out forty renders back to back; the server answers several
+     * at once without trouble. Each card lands in its pupil's slot, so the
+     * preview and the print keep the roster's order whatever finishes first.
+     */
+    if (!singleInTab) {
+      const slots: (PreviewCard | null)[] = targetStudents.map(() => null);
+      let next = 0;
+      let done = 0;
+      const worker = async () => {
+        while (next < targetStudents.length && isCurrent()) {
+          const i       = next++;
+          const student = targetStudents[i];
+          const name    = student.studentName || student.name || String(student._id);
+          const sid     = String(student._id);
+          try {
+            const body = (await cardRequest(sid))?.data;
+            const html = typeof body === "string" ? body : body?.data?.html || body?.html || "";
+            if (html) slots[i] = { id: sid, name, html, issue: issueCard(sid) };
+            else error++;
+          } catch {
+            error++;
+          }
+          done++;
+          if (isCurrent()) setProgress({ done, total: targetStudents.length, current: name });
+        }
+      };
+      setProgress({ done: 0, total: targetStudents.length, current: "" });
+      await Promise.all(Array.from({ length: Math.min(4, targetStudents.length) }, worker));
+      if (stale()) return;
+      for (const card of slots) if (card) collected.push(card);
+    }
+
+    for (let i = 0; singleInTab && i < targetStudents.length; i++) {
       if (stale()) return;
       const student = targetStudents[i];
       const name    = student.studentName || student.name || String(student._id);

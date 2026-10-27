@@ -124,10 +124,13 @@ const EmptyState = ({
 
 const ExamPicker = ({
   exams,
+  loading = false,
   selectedId,
   onSelect,
 }: {
   exams:      Exam[];
+  /** C2: while the exams load, a spinner — not "no completed exams". */
+  loading?:   boolean;
   selectedId: string | null;
   onSelect:   (id: string) => void;
 }) => {
@@ -139,7 +142,9 @@ const ExamPicker = ({
       </p>
     </div>
 
-    {exams.length === 0 ? (
+    {loading ? (
+      <div className="flex justify-center py-8"><Spinner /></div>
+    ) : exams.length === 0 ? (
       <div className="px-4 py-8 text-center text-sm text-gray-400">
         {t("results.noneCompleted")}
       </div>
@@ -746,7 +751,7 @@ export default function ExamResultsPage() {
   >("overview");
 
   // Data fetching
-  const { data: examsData } = useExams();
+  const { data: examsData, isLoading: examsLoading } = useExams();
   // The exam's classes come from its all-classes statistics. An exam sat by
   // several classes opens on the first, so its rankings and top 5 are never a
   // mix of classes; "" (All classes) is still there for the overall figures.
@@ -759,7 +764,7 @@ export default function ExamResultsPage() {
   );
   const statsData    = activeClassId ? classStatsData : allStatsData;
   const statsLoading = allStatsLoading || (!!activeClassId && classStatsLoading);
-  const { data: rankingsData } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined);
+  const { data: rankingsData, isLoading: rankingsLoading } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined);
 
   // A processed-but-unpublished exam is the office's to look at; the server
   // answers a teacher's statistics and rankings for published results only,
@@ -818,6 +823,7 @@ export default function ExamResultsPage() {
         <div className="space-y-3">
           <ExamPicker
             exams={completedExams}
+            loading={examsLoading}
             selectedId={selectedExamId}
             onSelect={handleSelectExam}
           />
@@ -1005,7 +1011,7 @@ export default function ExamResultsPage() {
                       <h3 className="font-semibold text-gray-900 text-sm">
                         {t(RANKINGS_TITLE_KEYS[rankScope])}
                         <span className="ml-2 text-xs text-gray-400 font-normal">
-                          {t("results.studentCount", { count: rankings.length })}
+                          {rankingsLoading ? "…" : t("results.studentCount", { count: rankings.length })}
                         </span>
                       </h3>
                     </div>
