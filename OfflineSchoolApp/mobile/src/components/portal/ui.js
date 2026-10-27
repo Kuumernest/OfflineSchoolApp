@@ -12,6 +12,9 @@ import { SUPPORTED_LANGUAGES } from "../../i18n";
 import { useTranslation } from "../../i18n/useTranslation";
 import { C, TAP } from "./theme";
 
+/** A screen reader's label from its parts, in order, skipping the empty ones. */
+export const said = (...parts) => parts.filter((x) => x != null && x !== "").join(", ");
+
 /** The portal's card. */
 export function Card({ style, children, ...rest }) {
   return <View style={[s.card, style]} {...rest}>{children}</View>;

@@ -23,13 +23,14 @@ import * as Print from "expo-print";
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
-import { formatMoney, formatDateShort, formatTime } from "../../src/i18n/format";
+import { formatMoney, formatDateShort } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
 import { conversationName } from "../../src/utils/participantName";
 import BottomTabs     from "../../src/components/portal/BottomTabs";
 import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
 import HomeScreen     from "../../src/components/portal/HomeScreen";
 import ResultsScreen  from "../../src/components/portal/ResultsScreen";
+import AttendanceScreen, { monthKey, monthRange } from "../../src/components/portal/AttendanceScreen";
 import { LanguageToggle } from "../../src/components/portal/ui";
 
 const C = {
@@ -61,10 +62,8 @@ const MSG_VIEWS = ["messages", "notices", "news"];
 const PER_CHILD = ["results", "attendance", "fees"];
 
 // Screens that draw their own loading placeholders.
-const SELF_LOADING = ["home", "results"];
+const SELF_LOADING = ["home", "results", "attendance"];
 
-// Attendance statuses arrive as English words; map them through i18n so a
-// French portal stays French.
 // One row per notification kind the portal is allowed to show. Keyed on the
 // kind the server sends, so a kind that is added server-side and not listed
 // here falls back rather than rendering a blank card.
@@ -81,15 +80,6 @@ const NOTICE_META = {
   // would be a message per message.
   "message":          { icon: "chatbubble-outline",    fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeMessage" },
   default:            { icon: "notifications-outline", fg: "#4F5A70", bg: "#F4F5F8", labelKey: "portal.noticeOther" },
-};
-
-const ATTD_STATUS_KEY = {
-  "Present":                      "portal.present",
-  "Absent":                       "portal.absent",
-  "Late":                         "portal.late",
-  "Excused":                      "portal.excused",
-  "Partial absence":              "portal.partialAbsence",
-  "Present with partial absence": "portal.presentPartial",
 };
 
 export default function ParentPortalScreen() {
@@ -111,6 +101,8 @@ export default function ParentPortalScreen() {
   const [screen, setScreen]   = useState("home");
   const [msgView, setMsgView] = useState("messages");
   const tab = screen === "messages" ? msgView : screen;
+  // The month Attendance shows, "YYYY-MM"; this month to begin with.
+  const [month, setMonth]     = useState(() => monthKey(new Date()));
   const [me, setMe]           = useState(null);
   // Which child is on screen. Null means "whichever the server picks first",
   // which is what a parent with one child gets and never has to think about.
@@ -203,7 +195,7 @@ export default function ParentPortalScreen() {
         home:       PortalService.fetchHome,
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
-        attendance: PortalService.fetchAttendance,
+        attendance: (id) => PortalService.fetchAttendance(id, monthRange(month)),
         // Notices, including the threads with something unread in them.
         //
         // The merge used to happen here, on the phone: two requests, sorted
@@ -246,7 +238,7 @@ export default function ParentPortalScreen() {
   // `t` was a dependency while the notices fetcher named an untitled thread
   // with it. The server names them now, so nothing in here translates and
   // keeping it would refetch all six tabs on a language switch for no reason.
-  }, [tab, childId, handle401]);
+  }, [tab, childId, handle401, month]);
 
   useEffect(() => {
     if (signedIn) loadAll();
@@ -587,6 +579,10 @@ export default function ParentPortalScreen() {
           />
         )}
 
+        {tab === "attendance" && (
+          <AttendanceScreen data={data} loading={loading} month={month} onMonth={setMonth} />
+        )}
+
         {/* The screens not above draw the shell's spinner while they load. */}
         {SELF_LOADING.includes(tab) ? null : loading && !data ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
@@ -724,107 +720,6 @@ export default function ParentPortalScreen() {
                   </View>
                 )}
               </>
-            )}
-
-            {/* ── Attendance — rate, status counts and recent days ── */}
-            {tab === "attendance" && (
-              // A school that scans at the gate but keeps no period register
-              // had nothing on this tab at all, because the empty test only
-              // asked about register rows.
-              (data?.total ?? 0) === 0 && (data?.gate?.length ?? 0) === 0 ? (
-                <View style={styles.card}>
-                  <Text style={styles.empty}>{t("portal.noAttendance")}</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.card}>
-                    <Text style={styles.balanceLabel}>{t("portal.attendanceRate")}</Text>
-                    <Text style={[styles.balanceValue, { color: C.ink }]}>{data.rate}%</Text>
-                    <Text style={styles.lineMeta}>
-                      {t("portal.daysRecorded", { count: data.total })}
-                    </Text>
-                  </View>
-
-                  <View style={styles.attdCounts}>
-                    {["present", "absent", "late", "excused"].map((key) => (
-                      <View key={key} style={styles.attdCell}>
-                        <Text style={styles.attdCellValue}>
-                          {data.tally?.[key] ?? 0}
-                        </Text>
-                        <Text style={styles.attdCellLabel}>{t(`portal.${key}`)}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* The gate.
-                      A parent could not see what time their child reached
-                      school. The scan does notify them, but only when the
-                      child was late or left early — which is the right rule
-                      for a push and the wrong one for a page somebody chose
-                      to open. */}
-                  {(data.gate?.length ?? 0) > 0 && (
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("portal.gateTimes")}</Text>
-                      <Text style={styles.lineMeta}>{t("portal.gateBlurb")}</Text>
-
-                      {data.gate.slice(0, 14).map((day) => (
-                        <View key={day.date} style={styles.gateRow}>
-                          <Text style={styles.gateDate} numberOfLines={1}>
-                            {formatDateShort(day.date)}
-                          </Text>
-
-                          <View style={styles.gateTimes}>
-                            <Text style={styles.gateLabel}>{t("portal.arrived")}</Text>
-                            <Text style={styles.gateValue}>
-                              {day.arrivedAt ? formatTime(day.arrivedAt) : "—"}
-                            </Text>
-                          </View>
-
-                          <View style={styles.gateTimes}>
-                            <Text style={styles.gateLabel}>{t("portal.left")}</Text>
-                            <Text style={styles.gateValue}>
-                              {day.departedAt ? formatTime(day.departedAt) : "—"}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {(data.dailySummaries?.length ?? 0) > 0 && (
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("portal.recentDays")}</Text>
-                      {data.dailySummaries.slice(0, 14).map((day) => (
-                        <View key={day.date} style={styles.recentDayRow}>
-                          <View
-                            style={[
-                              styles.recentDayDot,
-                              {
-                                backgroundColor:
-                                  day.status?.toLowerCase().includes("absent")
-                                    ? C.danger
-                                    : day.status?.toLowerCase().includes("late")
-                                      ? C.warning
-                                      : C.success,
-                              },
-                            ]}
-                          />
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {formatDateShort(day.date)}
-                          </Text>
-                          <Text style={styles.recentDayStatus}>
-                            {t(ATTD_STATUS_KEY[day.status] ?? "portal.present")}
-                          </Text>
-                          <Text style={styles.recentDayMeta}>
-                            {day.present}P{day.absent ? ` · ${day.absent}A` : ""}
-                            {day.late ? ` · ${day.late}L` : ""}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </>
-              )
             )}
 
             {/* ── Messages ── */}
@@ -1152,36 +1047,10 @@ const styles = StyleSheet.create({
   // ── Results — report-card mirror ──────────────────────────────────────────
 
   // ── Attendance breakdown ──────────────────────────────────────────────────
-  attdCounts: { flexDirection: "row", gap: 8, marginTop: 12 },
-  attdCell: {
-    flex: 1, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
-    borderRadius: 9, paddingVertical: 8, alignItems: "center",
-  },
-  attdCellValue: { fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  attdCellLabel: { fontSize: 10, color: C.inkFaint, marginTop: 2 },
-
-  recentDayRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
 
   // The gate row: date, then arrival and departure as two labelled columns.
   // Times are tabular so a fortnight of arrivals reads as a column rather than
   // a ragged list — which is the whole point of looking at it.
-  gateRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  gateDate:  { flex: 1, fontSize: 13, color: C.ink, fontWeight: "600" },
-  gateTimes: { width: 78, alignItems: "flex-end" },
-  gateLabel: { fontSize: 10, color: C.inkFaint, textTransform: "uppercase", letterSpacing: 0.4 },
-  gateValue: {
-    fontSize: 14, color: C.ink, fontWeight: "600",
-    fontVariant: ["tabular-nums"],
-  },
-  recentDayDot:    { width: 8, height: 8, borderRadius: 4 },
-  recentDayMeta:   { fontSize: 10, color: C.inkFaint, fontVariant: ["tabular-nums"] },
-  recentDayStatus: { fontSize: 11, fontWeight: "600" },
 
   // ── Messages ──────────────────────────────────────────────────────────────
   newMsgBtn: {
