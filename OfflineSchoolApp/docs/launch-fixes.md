@@ -77,6 +77,27 @@ it. Also in the repo's `CLAUDE.md`.
 - [x] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting. — `scripts/phase-d-cleanup.js` (`npm run cleanup:phased`, dry run by default, `-- --apply` to write). On apply: soft-deletes the test pupil (and deactivates their login) and the test announcement, clears only clearly fake addresses (`FAKE_EMAILS` / `FAKE_DOMAINS` / `test@…` in the script) from a pupil's email or guardian email (the pupils stay), "Faire" → "Fair" (A9). Report only: other addresses shared by several pupils, grouped by guardian (siblings — review, never cleared), Kena Academy counts, undated exams, B1 timetable breaches, B3 old-shape admission numbers. `check:phased`. **Not yet run against the real database** — no `MONGODB_URI` in this shell; the owner runs the dry run and gives the go-ahead
 
 - [x] **D2** Delete Green Valley Academy (all test data — owner, 2026-10-27): `scripts/delete-school.js` (`npm run school:delete -- --school <id or exact name>`), dry run by default (count per collection, logins, portal codes, files). `--apply` asks for the exact school name, refuses a name matching several schools, runs in a transaction on a replica set (otherwise in order, school record last). Sweeps every collection with the school's `schoolId` (read from the database, so none is missed), plus exam marks of its exams/pupils, its staff and pupil logins (never Super Admin), their idempotency keys and sync logs, and uploaded files no remaining record points to. A portal code that also covers a child elsewhere is kept, unlinked from the deleted children and filed under the remaining child's school. Platform stats are built from the school list, so the school just drops out (tested). `check:deleteschool` (two schools + a duplicate name); transaction path checked by hand on an in-memory replica set. **Not applied** — owner runs the dry run first
+  - Schools to delete (owner, 2026-10-27): **Green Valley Academy** (`6a4ccbfac10ad6faa189bd85`; real dry run: ~4,600 documents, 72 students, 88 logins, 9 uploaded files) and **Kena Academy** (test data: 0 teachers, 2 undated exams, a portal code shared with a Green Valley child). Delete Green Valley first — the shared code is unlinked and moves to Kena — then Kena, which takes the code with it.
+  - Deleting both leaves zero schools and a working platform: Super Admin logs in, dashboard / performance / filters / school list load empty with zero totals, a new school can be created — `check:deleteallschools`.
+  - Uploaded files live on the server's disk: run `--apply` on the server, or remove the listed files there afterwards (from anywhere else the script reports "Files removed: 0").
+
+## Launch order
+
+1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
+2. Merge PR #39 into master.
+3. Deploy.
+4. Back up the production database: Atlas → Backup → take snapshot, or `mongodump --uri "$MONGODB_URI" --out backup-2026-10-31`. Confirm the backup finished before going on.
+5. D2, Green Valley Academy — dry run, read the counts, then apply (asks for the exact name):
+   `npm run -s school:delete -- --school "Green Valley Academy"`
+   `npm run -s school:delete -- --school 6a4ccbfac10ad6faa189bd85 --apply`
+6. D2, Kena Academy — dry run, then apply:
+   `npm run -s school:delete -- --school "Kena Academy"`
+   `npm run -s school:delete -- --school "Kena Academy" --apply`
+7. Delete the 9 uploaded files on the server (paths printed by the Green Valley dry run, under `backend/uploads/`), unless step 5 ran on the server and reported them removed.
+8. Create the new clean test school (Super Admin → Schools → New).
+9. Check: `npm run -s cleanup:phased` dry run should list nothing; the platform dashboard shows only the new school.
+
+Pass `MONGODB_URI` with `read -rs MONGODB_URI && export MONGODB_URI` so the connection string is not echoed or kept in shell history.
 
 ## Final
 
