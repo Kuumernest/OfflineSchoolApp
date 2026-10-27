@@ -51,7 +51,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
   - [x] Fees group header — "Form 5 – 5 owing"
   - [x] line icons only — colour emoji used as icons replaced by lucide line icons (exams, results, report cards, assignments, subjects, teachers, applications); emoji removed from web + mobile strings; `web: check:icons`
   - [x] one primary button colour — 26 hand-made indigo/blue/purple filled buttons and 11 green "main action" buttons now `primary-*`; green kept only for approve / publish / copied (`success`); `web: check:buttons`
-- [ ] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student.
+- [x] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student. — the column header read "Never opened"; `GET /documents/guardian-access` now returns `guardianNames` (from the children's records, shown when no label) and `linkedToNoStudent` (badge + count banner); `check:portalcodes`
 - [ ] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20".
 - [ ] **C10** Student profile: results, attendance, fee balance, guardian contact. *(may go to follow-up PR)*
 - [ ] **C11** Notifications: action items (marks awaiting approval, unpublished exams, overdue fees). *(may go to follow-up PR)*

@@ -2918,6 +2918,11 @@
     "general": "Général"
   },
   "codes": {
+    "lastOpened": "Dernière consultation",
+    "neverShort": "Jamais",
+    "noStudent": "Lié à aucun élève",
+    "noStudentCount": "{{count}} code n'est lié à aucun élève actuel — révoquez-le ou liez-le à un enfant.",
+    "noStudentCount_other": "{{count}} codes ne sont liés à aucun élève actuel — révoquez-les ou liez-les à un enfant.",
     "title": "Accès parents",
     "blurb": "Donnez à un tuteur un code pour consulter les frais, résultats et présences de son enfant. Le code n'est affiché qu'une fois — notez-le avant de fermer.",
     "issue": "Générer un code",

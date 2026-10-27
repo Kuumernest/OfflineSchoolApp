@@ -2918,6 +2918,11 @@
     "general": "General"
   },
   "codes": {
+    "lastOpened": "Last opened",
+    "neverShort": "Never",
+    "noStudent": "Linked to no student",
+    "noStudentCount": "{{count}} code is linked to no current student — revoke it or link it to a child.",
+    "noStudentCount_other": "{{count}} codes are linked to no current student — revoke them or link them to a child.",
     "title": "Portal access",
     "blurb": "Give a guardian a code to see their child's fees, results and attendance. Codes are shown once — write it down before closing.",
     "issue": "Issue code",
