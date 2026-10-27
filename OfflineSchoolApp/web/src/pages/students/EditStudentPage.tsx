@@ -34,6 +34,7 @@ import {
   getStudentHistory,
   type StudentEditPayload,
 } from "@/services/student.service";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 /*
  * The editable fields, in the order the form shows them.
@@ -400,7 +401,7 @@ export default function EditStudentPage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-ink-faint">
-                      {new Date(h.changedAt).toLocaleString()}
+                      {formatDayTime(h.changedAt)}
                       {h.changedByName ? " · " + t("studentEdit.historyBy", { name: h.changedByName }) : ""}
                       {h.reason ? " · " + h.reason : ""}
                     </p>

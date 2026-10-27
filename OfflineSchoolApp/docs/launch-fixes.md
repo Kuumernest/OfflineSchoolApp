@@ -45,6 +45,7 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - [x] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing. — `minChangeObservations` in shared/intelligence/subjectInsights.js; a fall already called a decline is not repeated as a sudden change; "strength is emerging" reworded (it echoed the "emerging" confidence badge)
 - [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`
 - [ ] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
+  - [x] dates — `shared/dateFormat.js` (web `fmt.date`/`fmt.dateTime`/`utils/formatDate`; mobile copy in `mobile/src/i18n/format.js`); `web: check:dates`
 - [ ] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student.
 - [ ] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20".
 - [ ] **C10** Student profile: results, attendance, fee balance, guardian contact. *(may go to follow-up PR)*
@@ -68,3 +69,4 @@ removed with its coefficient; CA on/off per school; grading is /20.
 - C2: no true server-side bulk print endpoint yet. A card already reads its class in a constant 23 queries (measured); the cost was ~20 sequential round trips per card and one card at a time. Fixed by parallel reads within a card and 4 cards in flight. A single bulk endpoint would cut further; follow-up if prints are still slow on the real database.
 - C4: the pilot section is hidden in the UI for everyone but Super Admin; the server's pilot endpoints still accept any role holding the `insights.pilot` permission (changing role permissions is a policy call — not done).
 - C5: the rules changed but `ENGINE_VERSION` stays "1.0.0" — pilot reviews are filed under that version; bumping it (so pre- and post-C5 reviews are told apart) is the owner's call.
+- C7: `web/scripts/check-localization.mjs` has one failure that predates this branch's C7 work ("the exam page offers Unpublish while any class's results are out") — not a date issue; left for the final suite run.

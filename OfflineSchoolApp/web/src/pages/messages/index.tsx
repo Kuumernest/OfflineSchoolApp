@@ -41,6 +41,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/utils/cn";
 import { conversationMatches, participantName } from "./participants";
 import { currentLocale } from "@/i18n";
+import { formatDay, formatTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,10 +59,7 @@ const timeLabel = (iso?: string | null): string => {
   if (Number.isNaN(d.getTime())) return "";
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  // In the console's language, not the browser's.
-  return sameDay
-    ? d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short" });
+  return sameDay ? formatTime(d) : formatDay(d);
 };
 
 /**

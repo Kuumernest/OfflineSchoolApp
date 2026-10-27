@@ -46,6 +46,7 @@ import {
   type DocumentVerificationRow,
 } from "@/services/document.service";
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -126,14 +127,7 @@ const getStatusConfig = (status: string) => {
 
 const formatDate = (value?: string | null): string | null => {
   if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString(undefined, {
-        year:  "numeric",
-        month: "long",
-        day:   "numeric",
-      });
+  return formatDay(value, value);
 };
 
 /**

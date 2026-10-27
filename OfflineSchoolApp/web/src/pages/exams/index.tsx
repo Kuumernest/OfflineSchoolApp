@@ -23,6 +23,7 @@ import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,11 +98,7 @@ const shortWeekdays = () => {
 
 const fmtDate = (d?: string | null) => {
   if (!d) return "—";
-  try {
-    return new Date(d + "T00:00:00").toLocaleDateString(currentLocale(), {
-      day: "numeric", month: "short", year: "numeric",
-    });
-  } catch { return d; }
+  return formatDay(d, d);
 };
 
 const daysUntil = (dateStr?: string | null) => {

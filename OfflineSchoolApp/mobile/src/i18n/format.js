@@ -4,8 +4,8 @@
 /**
  * Locale-aware formatting, matching web/src/i18n/format.ts.
  *
- *   en-CM  1,234  ·  21 August 2026
- *   fr-CM  1 234  ·  21 août 2026
+ *   en-CM  1,234  ·  27/10/2026
+ *   fr-CM  1 234  ·  27/10/2026
  *
  * XAF — the Central African CFA franc — has no minor unit. There are no
  * centimes in circulation, so fraction digits are forced to zero; Intl would
@@ -22,8 +22,19 @@ import { currentLocale } from "./index";
 
 export const CURRENCY = "XAF";
 
+// Dates and times: DD/MM/YYYY and HH:mm (24-hour) in both languages (C7).
+// Mobile's copy of shared/dateFormat.js — Metro does not reach outside the app
+// folder. Change both together. No Intl, so a Hermes build without ICU writes
+// the same thing.
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const pad = (n) => String(n).padStart(2, "0");
+
 const toDate = (value) => {
   if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const m = DAY_ONLY.exec(value);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
   const d = value instanceof Date ? value : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 };
@@ -66,29 +77,13 @@ export const formatMoney = (amount, locale = currentLocale()) => {
   }
 };
 
-export const formatDate = (value, locale = currentLocale()) => {
+/** 27/10/2026. The locale parameter is kept for callers; it no longer matters. */
+export const formatDate = (value) => {
   const d = toDate(value);
-  if (!d) return "—";
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      day: "numeric", month: "long", year: "numeric",
-    }).format(d);
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
+  return d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` : "—";
 };
 
-export const formatDateShort = (value, locale = currentLocale()) => {
-  const d = toDate(value);
-  if (!d) return "—";
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      day: "2-digit", month: "2-digit", year: "numeric",
-    }).format(d);
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
-};
+export const formatDateShort = formatDate;
 
 /**
  * A clock time, for a moment where only the time of day is the point.
@@ -97,16 +92,9 @@ export const formatDateShort = (value, locale = currentLocale()) => {
  * they already know they are looking at. Two digits on the hour so a column of
  * arrivals lines up.
  */
-export const formatTime = (value, locale = currentLocale()) => {
+export const formatTime = (value) => {
   const d = toDate(value);
-  if (!d) return "—";
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      hour: "2-digit", minute: "2-digit",
-    }).format(d);
-  } catch {
-    return d.toISOString().slice(11, 16);
-  }
+  return d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
 };
 
 /**
@@ -129,15 +117,8 @@ export const formatMonth = (periodMonth, locale = currentLocale()) => {
   }
 };
 
-export const formatDateTime = (value, locale = currentLocale()) => {
+/** 27/10/2026 14:05. */
+export const formatDateTime = (value) => {
   const d = toDate(value);
-  if (!d) return "—";
-  try {
-    return new Intl.DateTimeFormat(locale, {
-      day: "numeric", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }).format(d);
-  } catch {
-    return d.toISOString().slice(0, 16).replace("T", " ");
-  }
+  return d ? `${formatDate(d)} ${formatTime(d)}` : "—";
 };

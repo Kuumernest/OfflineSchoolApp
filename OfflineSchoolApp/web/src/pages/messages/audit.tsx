@@ -35,6 +35,7 @@ import { roleLabel } from "@/utils/roleLabel";
 
 import { cn } from "@/utils/cn";
 import { summariseParticipants, participantName } from "./participants";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,9 +45,7 @@ const errorText = (err: unknown, t: (key: string) => string): string => {
 };
 
 const stamp = (iso?: string | null): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return formatDayTime(iso);
 };
 
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
