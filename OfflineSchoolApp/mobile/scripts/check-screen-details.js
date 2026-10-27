@@ -61,9 +61,19 @@ check("a guardian's message goes with a clientId, kept for a resend of the same 
 check("a successful reload clears an earlier load error", /setReads\(payload\.participantReads \?\? \[\]\);\s*setError\(null\);/.test(guardian), true);
 check("the portal service sends the clientId", /clientId \? \{ body, clientId \} : \{ body \}/.test(read("src/services/portal.service.js")), true);
 
+const portal0 = read("app/portal/index.js");
 check("a report card names the child, so a second child's card is found (404 \"Result not found\" before)",
   [/fetchReportCardHtml = async \(summaryId, studentId = null\)/.test(read("src/services/portal.service.js")),
    /fetchReportCardHtml\(summary\._id, childId \?\? me\?\.selectedId\)/.test(read("app/portal/index.js"))], [true, true]);
+
+{
+  // A paid term showed "Overdue · 59d": the badge read each charge's due date
+  // and ignored the payments. Overdue is the account's, from the server's rule.
+  const fees = read("src/components/portal/FeesScreen.js");
+  check("Fees says overdue once, for the account, never per charge",
+    [/status\?\.isOverdue/.test(fees), /\b(r|c|charge)\.isOverdue\b|daysOverdue/.test(fees + portal0),
+     /fetchHome\(\)/.test(portal0)], [true, false, true]);
+}
 
 console.log("--- portal navigation ---");
 // Six tabs in a sideways scroll across the top became five sections in a bar

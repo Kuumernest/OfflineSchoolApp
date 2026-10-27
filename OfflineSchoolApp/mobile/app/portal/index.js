@@ -23,7 +23,7 @@ import * as Print from "expo-print";
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
-import { formatMoney, formatDateShort } from "../../src/i18n/format";
+import { formatDateShort } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
 import { conversationName } from "../../src/utils/participantName";
 import BottomTabs     from "../../src/components/portal/BottomTabs";
@@ -31,6 +31,7 @@ import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
 import HomeScreen     from "../../src/components/portal/HomeScreen";
 import ResultsScreen  from "../../src/components/portal/ResultsScreen";
 import AttendanceScreen, { monthKey, monthRange } from "../../src/components/portal/AttendanceScreen";
+import FeesScreen     from "../../src/components/portal/FeesScreen";
 import { LanguageToggle } from "../../src/components/portal/ui";
 
 const C = {
@@ -62,7 +63,7 @@ const MSG_VIEWS = ["messages", "notices", "news"];
 const PER_CHILD = ["results", "attendance", "fees"];
 
 // Screens that draw their own loading placeholders.
-const SELF_LOADING = ["home", "results", "attendance"];
+const SELF_LOADING = ["home", "results", "attendance", "fees"];
 
 // One row per notification kind the portal is allowed to show. Keyed on the
 // kind the server sends, so a kind that is added server-side and not listed
@@ -109,6 +110,9 @@ export default function ParentPortalScreen() {
   const [childId, setChildId] = useState(null);
   const [section, setSection] = useState(null);
   const [feeReminders, setFeeReminders] = useState(null);
+  // The account's overdue and due date, by the school's own rule: the figure
+  // Home shows, read from the same card so the two never disagree.
+  const [feeStatus, setFeeStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [printing, setPrinting] = useState(null);
@@ -216,14 +220,22 @@ export default function ParentPortalScreen() {
       // being handed to another tab's markup.
       setSection({ ...loaded, tab });
 
-      // Also fetch fee reminders when on the fees tab
+      // On Fees, the payment plan and the account's status as well.
       if (tab === "fees") {
+        const id = childId ?? selected;
         try {
-          const remindersRes = await PortalService.fetchFeeReminders(childId ?? selected);
+          const remindersRes = await PortalService.fetchFeeReminders(id);
           if (!current()) return;
           setFeeReminders(remindersRes.data);
         } catch {
           if (current()) setFeeReminders(null);
+        }
+        try {
+          const homeRes = await PortalService.fetchHome();
+          if (!current()) return;
+          setFeeStatus(homeRes.data?.children?.find((c) => String(c._id) === String(id))?.fees ?? null);
+        } catch {
+          if (current()) setFeeStatus(null);
         }
       }
     } catch (err) {
@@ -583,145 +595,23 @@ export default function ParentPortalScreen() {
           <AttendanceScreen data={data} loading={loading} month={month} onMonth={setMonth} />
         )}
 
+        {tab === "fees" && (
+          <FeesScreen
+            data={data}
+            loading={loading}
+            plan={feeReminders?.hasPlan ? feeReminders.plan : null}
+            status={feeStatus}
+            childName={me?.student?.name ?? null}
+            printing={printing}
+            onPrintReceipt={printReceipt}
+          />
+        )}
+
         {/* The screens not above draw the shell's spinner while they load. */}
         {SELF_LOADING.includes(tab) ? null : loading && !data ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
         ) : (
           <>
-            {/* ── Fees ── */}
-            {tab === "fees" && data && (
-              <>
-                <View style={[
-                  styles.balanceCard,
-                  (data.totals?.balance ?? 0) > 0 ? styles.owes : styles.clear,
-                ]}>
-                  <Text style={styles.balanceLabel}>
-                    {(data.totals?.balance ?? 0) > 0 ? t("portal.balance") : t("portal.settled")}
-                  </Text>
-                  <Text style={[
-                    styles.balanceValue,
-                    { color: (data.totals?.balance ?? 0) > 0 ? C.danger : C.success },
-                  ]}>
-                    {formatMoney(data.totals?.balance ?? 0)}
-                  </Text>
-                  <View style={styles.balanceRow}>
-                    <Text style={styles.balanceMeta}>
-                      {t("portal.charged")} {formatMoney(data.totals?.charged ?? 0)}
-                    </Text>
-                    <Text style={styles.balanceMeta}>
-                      {t("portal.paid")} {formatMoney(data.totals?.paid ?? 0)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>{t("fees.payments")}</Text>
-                  {(data.payments?.length ?? 0) === 0 ? (
-                    <Text style={styles.empty}>{t("portal.noPayments")}</Text>
-                  ) : (
-                    data.payments.map((p) => (
-                      <View key={p._id} style={styles.line}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {p.receiptNo || "—"}
-                            {p.isReversal ? ` · ${t("portal.reversalNote")}` : ""}
-                          </Text>
-                          <Text style={styles.lineMeta}>{formatDateShort(p.receivedAt)}</Text>
-                        </View>
-                        <Text style={[
-                          styles.lineAmount, p.amount < 0 && { color: C.danger },
-                        ]}>
-                          {formatMoney(p.amount)}
-                        </Text>
-                        <TouchableOpacity onPress={() => printReceipt(p._id)} hitSlop={8}>
-                          {printing === p._id
-                            ? <ActivityIndicator color={C.primary} size="small" />
-                            : <Ionicons name="print-outline" size={18} color={C.primary} />}
-                        </TouchableOpacity>
-                      </View>
-                    ))
-                  )}
-                </View>
-
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>{t("fees.charges")}</Text>
-                  {(data.charges?.length ?? 0) === 0 ? (
-                    <Text style={styles.empty}>{t("portal.noCharges")}</Text>
-                  ) : (
-                    data.charges.map((c) => (
-                      <View key={c._id} style={styles.line}>
-                        <Text style={styles.lineLabel} numberOfLines={1}>
-                          {c.label || c.code}
-                        </Text>
-                        <Text style={styles.lineAmount}>{formatMoney(c.amount)}</Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-
-                {/* Fee Reminders */}
-                {feeReminders?.reminders?.length > 0 && (
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.feeReminders")}</Text>
-                    <Text style={styles.cardHint}>{t("portal.feeRemindersHint")}</Text>
-                    {feeReminders.reminders.map((r) => (
-                      <View key={r.chargeId} style={styles.line}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.lineLabel} numberOfLines={1}>
-                            {r.label || r.code}
-                          </Text>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
-                            <Text style={[
-                              styles.lineMeta,
-                              r.isOverdue && { color: C.danger, fontWeight: "700" },
-                            ]}>
-                              {t("portal.dueBy")} {formatDateShort(r.dueDate)}
-                            </Text>
-                            {r.isOverdue && (
-                              <View style={[styles.badge, { backgroundColor: C.dangerBg }]}>
-                                <Text style={[styles.badgeText, { color: C.danger }]}>
-                                  {t("portal.overdue")} · {r.daysOverdue}d
-                                </Text>
-                              </View>
-                            )}
-                            {r.isDueSoon && !r.isOverdue && (
-                              <View style={[styles.badge, { backgroundColor: C.warningBg }]}>
-                                <Text style={[styles.badgeText, { color: C.warning }]}>
-                                  {t("portal.dueSoon")}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                        <Text style={styles.lineAmount}>{formatMoney(r.netAmount)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {/* Payment Plan */}
-                {feeReminders?.hasPlan && feeReminders.plan && (
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.paymentPlan")}</Text>
-                    {feeReminders.plan.reason && (
-                      <Text style={styles.cardHint}>{feeReminders.plan.reason}</Text>
-                    )}
-                    {feeReminders.plan.instalments?.map((inst) => {
-                      const isPast = new Date(inst.dueDate) < new Date();
-                      return (
-                        <View key={inst.seq} style={styles.line}>
-                          <Text style={[styles.lineLabel, isPast && { textDecorationLine: "line-through", color: C.inkMuted }]}>
-                            {t("portal.instalment")} {inst.seq} — {formatDateShort(inst.dueDate)}
-                          </Text>
-                          <Text style={styles.lineAmount}>{formatMoney(inst.amount)}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </>
-            )}
-
             {/* ── Messages ── */}
             {tab === "messages" && (
               <>
@@ -979,24 +869,11 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
-  balanceCard:  { borderRadius: 12, borderWidth: 1, padding: 16 },
-  owes:         { backgroundColor: C.dangerBg,  borderColor: "#F2D3CF" },
-  clear:        { backgroundColor: C.successBg, borderColor: "#C3E2D0" },
-  balanceLabel: { fontSize: 11, fontWeight: "600", color: C.inkMuted, textTransform: "uppercase", letterSpacing: 0.6 },
-  balanceValue: { marginTop: 6, fontSize: 30, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  balanceRow:   { flexDirection: "row", gap: 16, marginTop: 8 },
-  balanceMeta:  { fontSize: 11, color: C.inkMuted, fontVariant: ["tabular-nums"] },
-
   card: {
     backgroundColor: C.surface, borderRadius: 12,
     borderWidth: 1, borderColor: C.line, padding: 14,
   },
   cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink },
-  cardHint:  { fontSize: 11, color: C.inkFaint, marginTop: 2, marginBottom: 8 },
-  badge: {
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
-  },
-  badgeText: { fontSize: 10, fontWeight: "700" },
 
   label: { fontSize: 12, fontWeight: "600", color: C.inkBody, marginBottom: 5, marginTop: 10 },
   input: {
@@ -1024,9 +901,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  lineLabel:  { flex: 1, fontSize: 13, color: C.inkBody },
   lineMeta:   { marginTop: 2, fontSize: 11, color: C.inkFaint },
-  lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
 
   noticeHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   noticeIcon: {
