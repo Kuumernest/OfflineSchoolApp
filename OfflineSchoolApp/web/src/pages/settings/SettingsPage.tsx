@@ -2159,7 +2159,11 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const user = useUser();
-  const [activeSection, setActiveSection] = useState<SectionId>("school");
+  // ?section= opens a section directly (C12: "Choose what prints" links here).
+  const [activeSection, setActiveSection] = useState<SectionId>(() => {
+    const asked = new URLSearchParams(window.location.search).get("section");
+    return (SECTIONS.find((s) => s.id === asked)?.id ?? "school") as SectionId;
+  });
 
   const schoolId     = user?.schoolId     ?? "";
   const currentUserId = user?._id ?? (user as unknown as Record<string, string>)?.id ?? "";

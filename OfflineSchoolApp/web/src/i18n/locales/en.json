@@ -1380,6 +1380,30 @@
     "blurb": "Where the school stands today, and the tools to produce paperwork"
   },
   "templates": {
+    "readyMade": "Ready-made layouts",
+    "readyMadeHint": "Pick a layout for your report cards. Every layout prints the same information.",
+    "chooseSections": "Choose what prints",
+    "customInUse": "Your school’s own template “{{name}}” is in use. Pick a layout below to switch.",
+    "inUse": "In use",
+    "printingWithThis": "Report cards print with this layout",
+    "useLayout": "Use this layout",
+    "layoutChosen": "Layout chosen — new report cards will use it.",
+    "advanced": "Advanced — custom HTML",
+    "advancedHint": "Write your own template in HTML. Only needed for a design the layouts above cannot give.",
+    "preset": {
+      "classic": {
+        "name": "Classic",
+        "description": "The standard card: official header, blue title band and the full subject table."
+      },
+      "compact": {
+        "name": "Compact",
+        "description": "The same card in smaller type and tighter spacing, so a long subject list fits on one page."
+      },
+      "clear": {
+        "name": "Clear",
+        "description": "Larger type and black-and-white bands — the easiest to read and to photocopy."
+      }
+    },
     "title": "Report templates",
     "blurb": "Manage your report card HTML designs",
     "create": "Create template",

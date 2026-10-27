@@ -1380,6 +1380,30 @@
     "blurb": "La situation de l'établissement aujourd'hui, et les outils pour produire les documents"
   },
   "templates": {
+    "readyMade": "Mises en page prêtes",
+    "readyMadeHint": "Choisissez une mise en page pour vos bulletins. Toutes impriment les mêmes informations.",
+    "chooseSections": "Choisir ce qui s’imprime",
+    "customInUse": "Le modèle propre à l’école « {{name}} » est utilisé. Choisissez une mise en page ci-dessous pour changer.",
+    "inUse": "Utilisée",
+    "printingWithThis": "Les bulletins s’impriment avec cette mise en page",
+    "useLayout": "Utiliser cette mise en page",
+    "layoutChosen": "Mise en page choisie — les nouveaux bulletins l’utiliseront.",
+    "advanced": "Avancé — HTML personnalisé",
+    "advancedHint": "Écrivez votre propre modèle en HTML. Utile seulement pour un rendu que les mises en page ci-dessus n’offrent pas.",
+    "preset": {
+      "classic": {
+        "name": "Classique",
+        "description": "Le bulletin standard : en-tête officiel, bandeau de titre bleu et tableau complet des matières."
+      },
+      "compact": {
+        "name": "Compacte",
+        "description": "Le même bulletin en plus petit et plus serré, pour qu’une longue liste de matières tienne sur une page."
+      },
+      "clear": {
+        "name": "Lisible",
+        "description": "Gros caractères et bandes noir et blanc — la plus facile à lire et à photocopier."
+      }
+    },
     "title": "Modèles de bulletins",
     "blurb": "Gérer les maquettes HTML de vos bulletins",
     "create": "Créer un modèle",

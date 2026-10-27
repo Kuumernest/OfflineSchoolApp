@@ -6,6 +6,7 @@ import api              from "@/services/api";
 import { getErrorMessage } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
+import { ReadyMadeLayouts } from "@/components/reports/ReadyMadeLayouts";
 import {
   Plus, Edit2, Eye, Star, Copy, Trash2,
   FileText, Info, Loader2, AlertCircle,
@@ -164,6 +165,19 @@ export default function TemplatesPage() {
               {t("templates.blurb")}
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
+
+        {/* Ready-made layouts first (C12); HTML is the advanced path */}
+        {schoolId && <ReadyMadeLayouts schoolId={schoolId} onChanged={load} />}
+
+        <div className="flex flex-wrap items-end justify-between gap-2 border-t border-gray-200 pt-6">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">{t("templates.advanced")}</h2>
+            <p className="mt-0.5 text-sm text-gray-500">{t("templates.advancedHint")}</p>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleSeedDefault}
@@ -180,8 +194,9 @@ export default function TemplatesPage() {
             </button>
             <button
               onClick={() => navigate("/reports/builder")}
-              className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
-                         text-white text-sm font-semibold px-4 py-2 rounded-lg
+              className="flex items-center gap-2 border border-gray-300
+                         hover:bg-gray-50 text-gray-700
+                         text-sm font-semibold px-4 py-2 rounded-lg
                          transition-colors"
             >
               <Plus size={16} />
@@ -189,9 +204,6 @@ export default function TemplatesPage() {
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
 
         {/* Info banner */}
         <div className="flex items-start gap-3 bg-blue-50 border border-blue-200
