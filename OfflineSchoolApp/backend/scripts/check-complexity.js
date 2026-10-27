@@ -130,7 +130,11 @@ const check = (label, actual, expected) => {
   // dropped from the ranking — one read here, two when the year is current.
   // ≤ 13: the grade and school places (schoolRanking.service), reads of the
   // year's rows and their classes' levels, and one write of those that moved.
-  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 13, small.r.computed, large.r.computed], [true, true, 5, 40]);
+  // ≤ 20: the annual average is read from the year's marks (annual/4,
+  // periodMarks.service) — the exams, the CA settings, the scores, the exam
+  // subjects and the deleted pupils among them (+5) — and, when the roster
+  // does not decide, the pupils with a term result who are not deleted (+2).
+  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 20, small.r.computed, large.r.computed], [true, true, 5, 40]);
   if (small.n !== large.n) console.log("       small: " + small.cmds.map((c) => c.commandName).join(" ") + " | large: " + large.cmds.map((c) => c.commandName).join(" "));
   const fast = await M("AnnualResult").find({ schoolId: A, classId: "cls-l" }).sort({ studentId: 1 }).lean();
   await M("AnnualResult").deleteMany({ schoolId: A, classId: "cls-l" });

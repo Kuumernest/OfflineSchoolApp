@@ -30,6 +30,8 @@ const { rosterDecides } = require("./rankingScope.service");
 const { rankAcrossClasses } = require("./schoolRanking.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, sequenceFigureOn20 } = require("../../../shared/academicRules");
+const { averageOfSubjects } = require("../../../shared/averages");
+const periodMarks = require("./periodMarks.service");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,7 +134,7 @@ async function loadTermContext({ schoolId, academicYear, term }) {
  *
  * @returns {{ doc: object, hasAnyMark: boolean }}
  */
-function termResultFields({ context, summaries, studentName, admissionNo, className }) {
+function termResultFields({ context, summaries, subjectMarks = null, studentName, admissionNo, className }) {
   const { termConfig, sequenceNumbers, exams, passMark } = context;
   // The school's bands; the built-in scale only for a context built by hand.
   const gradeOf = context.gradeOf || lookupGrade;
@@ -172,9 +174,22 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
     }
   }
 
-  const termAverage = totalWeight > 0
+  /*
+   * The term average: sum(subject term mark x coefficient) / sum(coefficients
+   * of the subjects with a mark) — shared/averages.js, the figure the card's
+   * TOTAL row prints (decided 2026-10-27, term/4). It was the weighted mean of
+   * the sequence averages, which disagrees with the card whenever a pupil's
+   * subjects differ between sequences: 14.5 above a table totalling 14.42.
+   *
+   * The sequence averages above are still stored, for the card's sequence
+   * columns. They decide the term only for a pupil whose summaries have no
+   * marks behind them to read (a context built by hand, or rows that
+   * predate per-subject marks).
+   */
+  const fromSubjects = subjectMarks && subjectMarks.size ? averageOfSubjects(subjectMarks) : null;
+  const termAverage = fromSubjects ?? (totalWeight > 0
     ? Math.round((totalWeightedAvg / totalWeight) * 100) / 100
-    : 0;
+    : 0);
 
   const termGrade = gradeOf(termAverage);
 
@@ -271,15 +286,19 @@ async function computeStudentTermAverage({
 }) {
   const context = await loadTermContext({ schoolId, academicYear, term });
 
-  const summaries = context.examIds.length
-    ? await ResultSummary.find({
-        examId: { $in: context.examIds }, studentId, classId, schoolId,
-        deletedAt: null,
-      }).lean()
-    : [];
+  const [summaries, marks] = await Promise.all([
+    context.examIds.length
+      ? ResultSummary.find({
+          examId: { $in: context.examIds }, studentId, classId, schoolId,
+          deletedAt: null,
+        }).lean()
+      : [],
+    periodMarks.termMarks({ schoolId, academicYear, term, classId, termConfig: context.termConfig }),
+  ]);
 
   const { doc, hasAnyMark } = termResultFields({
-    context, summaries, studentName, admissionNo, className,
+    context, summaries, subjectMarks: marks.byStudent.get(String(studentId)),
+    studentName, admissionNo, className,
   });
 
   /*
@@ -340,9 +359,10 @@ async function computeClassTermAverages({
   const resolvedClassName = classDoc?.name ?? null;
 
   const Student = mongoose.model("Student");
-  const [students, byStudent] = await Promise.all([
+  const [students, byStudent, marks] = await Promise.all([
     Student.find({ schoolId, classId, isActive: true, deletedAt: null }).lean(),
     summariesByStudent({ examIds: ctx.examIds, classId, schoolId }),
+    periodMarks.termMarks({ schoolId, academicYear, term, classId, termConfig: ctx.termConfig }),
   ]);
 
   // A published term row is never recomputed in place (D3, decided for every
@@ -368,6 +388,7 @@ async function computeClassTermAverages({
     const { doc, hasAnyMark } = termResultFields({
       context:     ctx,
       summaries:   byStudent.get(studentId) || [],
+      subjectMarks: marks.byStudent.get(studentId),
       studentName: student.studentName,
       admissionNo: student.enrollmentNo,
       className:   student.className || resolvedClassName,

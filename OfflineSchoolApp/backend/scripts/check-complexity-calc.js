@@ -49,9 +49,13 @@ const check = (label, actual, expected) => {
 //
 // And for the term and annual cards: which of the class's scored pupils have
 // been deleted, so their marks are not ranked against (+1, one per card).
+//
+// And for term compute: the term average is read from the term's marks
+// (term/4, periodMarks.service) — the exams, the CA settings, the scores, the
+// exam subjects and the deleted pupils among them (+5).
 const CEILING = {
   "process one exam, one class": 16,
-  "term compute, one class": 15,
+  "term compute, one class": 20,
   "sequence card payload": 12,
   "term card": 12,
   "annual card": 12,

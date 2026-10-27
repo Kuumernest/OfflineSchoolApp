@@ -16,7 +16,7 @@
  *      absent subject against a genuine zero, a pupil with no marks, an
  *      incomplete year and a complete one.
  *   2. Provenance: every row's calcVersion is its writer's (exam-process/3,
- *      term/3, annual/3) and its policyHash names a snapshot recording the
+ *      term/4, annual/4) and its policyHash names a snapshot recording the
  *      decided rule set and the bars. Legacy rows (policyHash null) are read
  *      as they are and keep their null.
  *   3. D3: a published sequence, term or year is never recomputed — every
@@ -191,16 +191,16 @@ const main = async () => {
   check("term 1: [average, grade, passing, place]", await term(1, ["termAverage", "overallGrade", "isPassing", "classPosition"]), {
     ama: [13, "MID", true, 2], bih: [14, "TOP", true, 1], cho: [10, "MID", true, 4], dan: [3.33, "LOW", false, 5], eve: null, fay: [13, "MID", true, 2],
   });
-  check("  term rows: term/3, on the same snapshot as the summaries",
-    [...new Set((await rows("TermResult")).map((t) => `${t.calcVersion}|${t.policyHash === HASH}`))], ["term/3|true"]);
+  check("  term rows: term/4, on the same snapshot as the summaries",
+    [...new Set((await rows("TermResult")).map((t) => `${t.calcVersion}|${t.policyHash === HASH}`))], ["term/4|true"]);
 
   let r = await computeYear();
   check("two terms of three: the year is the two terms' figure, every status pending; eve has no row",
     [r.body?.computed, r.body?.noTerms, await year(["annualAverage", "overallGrade", "promotionStatus", "classPosition"])],
     [5, 1, { ama: [13, "MID", "pending", 2], bih: [14, "TOP", "pending", 1], cho: [10, "MID", "pending", 4],
       dan: [3.33, "LOW", "pending", 5], eve: null, fay: [13, "MID", "pending", 2] }]);
-  check("  stamped annual/3, on the summaries' snapshot",
-    [...new Set((await rows("AnnualResult")).map((a) => `${a.calcVersion}|${a.policyHash === HASH}`))], ["annual/3|true"]);
+  check("  stamped annual/4, on the summaries' snapshot",
+    [...new Set((await rows("AnnualResult")).map((a) => `${a.calcVersion}|${a.policyHash === HASH}`))], ["annual/4|true"]);
   for (const t of [1, 2]) await call("POST", "adm", "/term-results/publish", { academicYear: YEAR, term: t });
   await M("ResultSummary").updateMany({ schoolId: A }, { $set: { isPublished: true } });
   await call("POST", "adm", "/annual-results/publish", { academicYear: YEAR });
@@ -267,9 +267,9 @@ const main = async () => {
     { ama: "promoted", bih: "promoted", cho: "repeated", dan: "repeated", eve: null, fay: "promoted" });
   check("  the run agrees", await run(), { ama: ["promoted", "results_pass"], bih: ["promoted", "results_pass"],
     cho: ["repeated", "average_fail"], dan: ["repeated", "average_fail"], eve: ["unassigned", "no_results"], fay: ["promoted", "results_pass"] });
-  check("  stamped annual/3 on a snapshot recording the decided rules and the bar",
+  check("  stamped annual/4 on a snapshot recording the decided rules and the bar",
     [[...new Set((await rows("AnnualResult")).map((a) => a.calcVersion))], await snapshotRules((await rows("AnnualResult"))[0]?.policyHash)],
-    [["annual/3"], { platform: "agreed/1", promotionThreshold: 12 }]);
+    [["annual/4"], { platform: "agreed/1", promotionThreshold: 12 }]);
 
   r = await putBars({ classThresholds: { f1: 10 } });
   await unpublish("AnnualResult");
@@ -291,7 +291,7 @@ const main = async () => {
   const gil = (await rows("AnnualResult", { classId: "f2" }))[0];
   // (11·33.33 + 12·33.33 + 13·33.34)/100 = 12.0001 → 12
   check("the year read from legacy term rows as stored: 12, stamped with today's snapshot",
-    [r.status, gil?.annualAverage, gil?.calcVersion, typeof gil?.policyHash === "string"], [200, 12, "annual/3", true]);
+    [r.status, gil?.annualAverage, gil?.calcVersion, typeof gil?.policyHash === "string"], [200, 12, "annual/4", true]);
   check("  the legacy term rows keep their null hash and are not rewritten",
     JSON.stringify(await rows("TermResult", { classId: "f2" })), legacyBefore);
 
