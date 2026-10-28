@@ -36,10 +36,13 @@ const isPublicKey = (key) => PUBLIC_DIRS.includes(dirOf(key));
 /** The school a file belongs to, as a string, or null when it cannot be told. */
 async function schoolOfFile(key, file) {
   if (file?.schoolId) return String(file.schoolId);
-  const m = /^photos\/([0-9a-f]{24})-/i.exec(String(key));
+  // photos/<student id>-<12-hex hash>.<ext> (utils/photoStorage.js). Pupil
+  // ids are stored as strings; an ObjectId form is tried too.
+  const m = /^photos\/([A-Za-z0-9_-]+)-[0-9a-f]{12}\.[a-z]+$/i.exec(String(key));
   if (m) {
+    const ids = [m[1], ...(/^[0-9a-f]{24}$/i.test(m[1]) ? [new mongoose.Types.ObjectId(m[1])] : [])];
     const s = await mongoose.connection.db?.collection("students")
-      .findOne({ _id: new mongoose.Types.ObjectId(m[1]) }, { projection: { schoolId: 1 } });
+      .findOne({ _id: { $in: ids } }, { projection: { schoolId: 1 } });
     if (s?.schoolId) return String(s.schoolId);
   }
   return null;
