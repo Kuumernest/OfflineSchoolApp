@@ -55,9 +55,11 @@ const isPhotoReference = (value) =>
  *
  * @param {string} studentId
  * @param {string} base64  raw base64, with or without a data: prefix
+ * @param {object} [opts]
+ * @param {string} [opts.schoolId]  the pupil's school, kept with the file
  * @returns {Promise<{ publicPath: string, bytes: number, mime: string, filename: string }>}
  */
-const savePhotoFromBase64 = async (studentId, base64) => {
+const savePhotoFromBase64 = async (studentId, base64, { schoolId = null } = {}) => {
   const clean = stripDataUri(base64);
   if (!clean) throw new Error("Photo payload is empty");
 
@@ -88,7 +90,7 @@ const savePhotoFromBase64 = async (studentId, base64) => {
   const store    = getStore();
 
   if (!(await store.stat(`photos/${filename}`))) {
-    await store.put(`photos/${filename}`, buf, { contentType: kind.mime });
+    await store.put(`photos/${filename}`, buf, { contentType: kind.mime, schoolId });
   }
 
   return {

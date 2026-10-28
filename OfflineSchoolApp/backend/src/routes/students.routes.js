@@ -974,7 +974,7 @@ router.put(
 
     let saved;
     try {
-      saved = await photoStorage.savePhotoFromBase64(student._id, photoBase64);
+      saved = await photoStorage.savePhotoFromBase64(student._id, photoBase64, { schoolId: student.schoolId ?? schoolId });
     } catch (err) {
       // These messages name the actual problem — too large, not an image — so
       // they are worth passing through rather than replacing with "bad request".

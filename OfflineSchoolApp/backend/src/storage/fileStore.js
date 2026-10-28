@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Where uploaded files live — one small module, two drivers.
+ * Where uploaded files live — one small module, three drivers.
  *
  * ── Why ───────────────────────────────────────────────────────────────────
  *
@@ -13,14 +13,22 @@
  * Valley's logo went 404 after the 22:13 UTC redeploy of 2026-10-27.
  *
  *   local  the uploads directory, as before — development, tests, desktop
- *   s3     an S3-compatible bucket: Cloudflare R2 in production, or any S3
+ *   mongo  GridFS in the app's own MongoDB (collections uploads.files and
+ *          uploads.chunks) — production's default: no extra account, no
+ *          extra variable, and the files go wherever the database goes
+ *   s3     an S3-compatible bucket (Cloudflare R2, any S3), when one is set up
  *
  * ── Keys and URLs ─────────────────────────────────────────────────────────
  *
  * A file's key is its path under uploads/: "logos/<school>-<hash>.jpg". The
  * records keep the URL they always had, "/uploads/logos/…", and server.js
- * answers that URL from whichever driver is configured — redirecting to the
- * bucket — so nothing stored has to change and old records keep working.
+ * answers that URL from whichever driver is configured — streaming it from
+ * GridFS, redirecting to a bucket — so nothing stored has to change and old
+ * records keep working. A GridFS file is also reachable as /files/<id>.
+ *
+ * A file can carry the school it belongs to (put(…, { schoolId })): GridFS
+ * keeps it in the file's metadata, which is what decides who may read it and
+ * what deleting a school removes.
  *
  * The bucket stays PRIVATE. A file is handed out as a short-lived signed URL,
  * except under PUBLIC_DIRS (school logos, which the public school list shows
@@ -28,7 +36,8 @@
  *
  * ── Configuration (environment) ───────────────────────────────────────────
  *
- *   STORAGE_DRIVER              local | s3   (default: s3 when STORAGE_BUCKET is set)
+ *   STORAGE_DRIVER              local | mongo | s3   (default: s3 when STORAGE_BUCKET
+ *                               is set, else mongo in production, else local)
  *   STORAGE_BUCKET              bucket name
  *   STORAGE_ENDPOINT            https://<account id>.r2.cloudflarestorage.com for R2
  *   STORAGE_REGION              "auto" for R2 (default)
@@ -42,6 +51,8 @@
 
 const fs     = require("fs");
 const path   = require("path");
+const { Readable } = require("stream");
+const { pipeline } = require("stream/promises");
 
 const UPLOADS_ROOT = path.resolve(__dirname, "..", "uploads");
 
@@ -61,6 +72,9 @@ const CONTENT_TYPES = {
   ".xls": "application/vnd.ms-excel", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".txt": "text/plain", ".csv": "text/csv", ".zip": "application/zip",
 };
+/** GridFS bucket name: its collections are uploads.files and uploads.chunks. */
+const GRIDFS_BUCKET = "uploads";
+
 const contentTypeOf = (key) => CONTENT_TYPES[path.extname(String(key)).toLowerCase()] || "application/octet-stream";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,6 +194,124 @@ function localDriver({ root = UPLOADS_ROOT } = {}) {
 }
 
 /**
+ * GridFS in the app's MongoDB. A file's GridFS filename is its key; its
+ * metadata holds { contentType, schoolId }. Writing a key again replaces it.
+ *
+ * @param {object} cfg
+ * @param {object|Function} [cfg.db]  a Db, or () => Db; default mongoose's connection
+ */
+function mongoDriver(cfg = {}) {
+  const mongoose   = require("mongoose");
+  const { GridFSBucket, ObjectId } = mongoose.mongo;
+  const bucketName = cfg.bucketName || GRIDFS_BUCKET;
+  const getDb = () => {
+    const db = typeof cfg.db === "function" ? cfg.db() : (cfg.db || mongoose.connection.db);
+    if (!db) throw new Error("MongoDB is not connected — the mongo storage driver uses the app's connection");
+    return db;
+  };
+  const bucket = () => new GridFSBucket(getDb(), { bucketName });
+  const files  = () => getDb().collection(`${bucketName}.files`);
+  const need = (key) => {
+    const k = cleanKey(key);
+    if (!k) throw new Error(`Not a storable key: ${key}`);
+    return k;
+  };
+  let indexed = null;
+  const ensureIndexes = () => (indexed ??= files().createIndex({ "metadata.schoolId": 1 })
+    .catch((err) => { indexed = null; console.warn("[fileStore] GridFS index:", err.message); }));
+
+  const latest = (k) => files().find({ filename: k }).sort({ uploadDate: -1, _id: -1 }).limit(1).next();
+  const describe = (doc) => doc && {
+    id:          String(doc._id),
+    key:         doc.filename,
+    size:        doc.length,
+    contentType: doc.metadata?.contentType || contentTypeOf(doc.filename),
+    schoolId:    doc.metadata?.schoolId ?? null,
+    uploadDate:  doc.uploadDate,
+  };
+
+  const write = async (key, source, { contentType, schoolId } = {}) => {
+    const k = need(key);
+    await ensureIndexes();
+    const up = bucket().openUploadStream(k, {
+      metadata: { contentType: contentType || contentTypeOf(k), schoolId: schoolId ? String(schoolId) : null },
+    });
+    await pipeline(source, up);
+    // The new copy is in; older ones under the same key go.
+    const older = await files().find({ filename: k, _id: { $ne: up.id } }).project({ _id: 1 }).toArray();
+    for (const o of older) await bucket().delete(o._id).catch(() => {});
+    return String(up.id);
+  };
+
+  return {
+    driver: "mongo",
+    bucketName,
+    async put(key, body, opts) { return write(key, Readable.from([Buffer.from(body)]), opts); },
+    /** Upload a file from disk, then drop the local copy — the disk is not kept. */
+    async putFile(key, localPath, opts) {
+      const id = await write(key, fs.createReadStream(localPath), opts);
+      await fs.promises.unlink(localPath).catch(() => {});
+      return id;
+    },
+    async stat(key) {
+      const k = cleanKey(key);
+      return k ? describe(await latest(k)) : null;
+    },
+    /** A file by its GridFS id — what /files/<id> names. */
+    async statId(id) {
+      if (!ObjectId.isValid(String(id)) || !/^[0-9a-f]{24}$/i.test(String(id))) return null;
+      return describe(await files().findOne({ _id: new ObjectId(String(id)) }));
+    },
+    /** A stream of a file's bytes, or of bytes [start, end] inclusive. */
+    openStream(id, { start, end } = {}) {
+      const range = start !== undefined ? { start, end: end + 1 } : {};
+      return bucket().openDownloadStream(new ObjectId(String(id)), range);
+    },
+    async read(key) {
+      const k = cleanKey(key);
+      const doc = k && await latest(k);
+      if (!doc) return null;
+      const chunks = [];
+      for await (const c of bucket().openDownloadStream(doc._id)) chunks.push(c);
+      return Buffer.concat(chunks);
+    },
+    async remove(key) {
+      const k = cleanKey(key);
+      if (!k) return false;
+      const all = await files().find({ filename: k }).project({ _id: 1 }).toArray();
+      for (const o of all) await bucket().delete(o._id).catch(() => {});
+      return all.length > 0;
+    },
+    async list(prefix) {
+      const escaped = String(prefix).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return (await files().distinct("filename", { filename: new RegExp("^" + escaped) })).sort();
+    },
+    /** Files filed under a school: { count, bytes, keys }. */
+    async schoolFiles(schoolId) {
+      const docs = await files().find({ "metadata.schoolId": String(schoolId) })
+        .project({ filename: 1, length: 1 }).toArray();
+      return { count: docs.length, bytes: docs.reduce((n, d) => n + (d.length || 0), 0), keys: docs.map((d) => d.filename) };
+    },
+    /** Remove every file filed under a school. Returns how many went. */
+    async removeSchool(schoolId) {
+      const docs = await files().find({ "metadata.schoolId": String(schoolId) }).project({ _id: 1 }).toArray();
+      let n = 0;
+      for (const d of docs) { try { await bucket().delete(d._id); n++; } catch { /* gone already */ } }
+      return n;
+    },
+    /** Bytes and files per school (null: files filed under no school). */
+    async usageBySchool() {
+      return files().aggregate([
+        { $group: { _id: "$metadata.schoolId", files: { $sum: 1 }, bytes: { $sum: "$length" } } },
+        { $sort: { bytes: -1 } },
+      ]).toArray();
+    },
+    /** The app itself serves GridFS files, at the URL records keep. */
+    async url(key) { return `/uploads/${need(key)}`; },
+  };
+}
+
+/**
  * @param {object} cfg
  * @param {object} [cfg.client]   an S3Client, or anything with send(command) — the tests' fake
  * @param {Function} [cfg.presign] (key, seconds) => url; defaults to the SDK's presigner
@@ -290,7 +422,9 @@ function s3Driver(cfg) {
 
 /** A store from explicit settings — the tests', and fromEnv's. */
 function createStore(cfg = {}) {
-  const d = cfg.driver === "s3" ? s3Driver(cfg) : localDriver(cfg);
+  const d = cfg.driver === "s3" ? s3Driver(cfg)
+    : cfg.driver === "mongo" ? mongoDriver(cfg)
+    : localDriver(cfg);
 
   // Images the print renderers embed, which they read synchronously: loaded
   // by warmImages() before a document is built. Small and short-lived.
@@ -306,18 +440,19 @@ function createStore(cfg = {}) {
     ...d,
     contentTypeOf,
     isImageDir: (key) => IMAGE_DIRS.includes(dirOf(key)),
+    isPublicDir: (key) => PUBLIC_DIRS.includes(dirOf(key)),
 
-    /** Write bytes. */
-    async put(key, body, opts) { await d.put(key, body, opts); cache.delete(cleanKey(key)); },
+    /** Write bytes. opts: { contentType, schoolId }. */
+    async put(key, body, opts) { const r = await d.put(key, body, opts); cache.delete(cleanKey(key)); return r; },
 
     /**
      * A file multer (or a base64 decoder) has just written under uploads/:
      * moved into the store. With the local driver it is already there.
      */
-    async adoptLocal(localPath, { contentType } = {}) {
+    async adoptLocal(localPath, { contentType, schoolId } = {}) {
       const key = keyOfLocalPath(localPath, d.driver === "local" ? d.root : UPLOADS_ROOT);
       if (!key) throw new Error(`Not under uploads/: ${localPath}`);
-      await d.putFile(key, localPath, { contentType });
+      await d.putFile(key, localPath, { contentType, schoolId });
       return key;
     },
 
@@ -373,7 +508,10 @@ function createStore(cfg = {}) {
 
 /** The store the environment describes. */
 function configFromEnv(env = process.env) {
-  const driver = (env.STORAGE_DRIVER || (env.STORAGE_BUCKET ? "s3" : "local")).toLowerCase();
+  // Production keeps uploads in its own database unless a bucket is named:
+  // the server's disk does not survive a deploy, and GridFS needs nothing new.
+  const driver = (env.STORAGE_DRIVER
+    || (env.STORAGE_BUCKET ? "s3" : env.NODE_ENV === "production" ? "mongo" : "local")).toLowerCase();
   return {
     driver,
     bucket:          env.STORAGE_BUCKET || null,
@@ -395,7 +533,7 @@ const getStore = () => (current ??= createStore(configFromEnv()));
 const setStore = (store) => { current = store; };
 
 module.exports = {
-  UPLOADS_ROOT, PUBLIC_DIRS, IMAGE_DIRS,
+  UPLOADS_ROOT, PUBLIC_DIRS, IMAGE_DIRS, GRIDFS_BUCKET,
   cleanKey, keyFromUrl, keyOfLocalPath, contentTypeOf,
   createStore, configFromEnv, getStore, setStore,
 };

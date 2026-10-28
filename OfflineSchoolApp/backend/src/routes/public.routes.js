@@ -653,7 +653,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     const stored = [];
     for (const doc of savedDocs) {
       try {
-        await getStore().adoptLocal(doc.path, { contentType: doc.mimeType });
+        await getStore().adoptLocal(doc.path, { contentType: doc.mimeType, schoolId: schoolId.trim() });
         stored.push(doc);
       } catch (err) {
         console.warn(`⚠️  Could not store "${doc.title}":`, err.message);

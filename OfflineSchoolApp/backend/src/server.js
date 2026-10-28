@@ -1096,11 +1096,11 @@ async function startServer() {
       {
         // Where uploads go. Never the credentials.
         const store = getStore();
-        console.log(store.driver === "local"
-          ? "📁 Uploads        →  local disk (backend/src/uploads)"
+        console.log(store.driver === "local" ? "📁 Uploads        →  local disk (backend/src/uploads)"
+          : store.driver === "mongo"         ? "🍃 Uploads        →  MongoDB GridFS (uploads.files / uploads.chunks)"
           : `🪣 Uploads        →  bucket "${store.bucket}"`);
         if (store.driver === "local" && process.env.NODE_ENV === "production") {
-          console.warn("⚠️  Uploads are on this server's disk. On Render that disk is wiped on every deploy — set STORAGE_BUCKET and the STORAGE_* variables.");
+          console.warn("⚠️  Uploads are on this server's disk. On Render that disk is wiped on every deploy — unset STORAGE_DRIVER (GridFS is the production default) or set STORAGE_BUCKET.");
         }
       }
       console.log("════════════════════════════════════");

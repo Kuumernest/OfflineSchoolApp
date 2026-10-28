@@ -9,6 +9,7 @@
  * be tested on its own. What it now does with the file depends on the store
  * (storage/fileStore.js):
  *
+ *   mongo   streamed from GridFS, with range support (sendStored)
  *   bucket  a 302 to the file — a signed URL, or the bucket's public URL for
  *           logos — so ranges, caching and bandwidth are the bucket's
  *   local   streamed from disk with range support, as before; a type this
@@ -25,6 +26,52 @@ const { getStore }        = require("./fileStore");
 const { sendPlaceholder } = require("./placeholder");
 
 const PLACEHOLDER_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+
+/**
+ * Send a GridFS file (as stat/statId describe it), honouring a byte range.
+ * `cacheControl` is the caller's: public for logos, private for the rest.
+ */
+const sendStored = (req, res, store, file, { cacheControl }) => {
+  const size  = file.size;
+  const range = req.headers.range;
+  const headers = {
+    "Content-Type":                  file.contentType,
+    "Accept-Ranges":                 "bytes",
+    "Cache-Control":                 cacheControl,
+    "ETag":                          `"${file.id}"`,
+    "X-Content-Type-Options":        "nosniff",
+    "Cross-Origin-Resource-Policy":  "cross-origin",
+    "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+  };
+  if (req.headers["if-none-match"] === headers.ETag) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+
+  let start, end;
+  if (range) {
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
+    start = m && m[1] !== "" ? parseInt(m[1], 10) : NaN;
+    end   = m && m[2] !== "" ? parseInt(m[2], 10) : size - 1;
+    if (m && m[1] === "" && m[2] !== "") { start = Math.max(0, size - parseInt(m[2], 10)); end = size - 1; }
+    if (!Number.isFinite(start) || start < 0 || start >= size || end < start) {
+      res.set("Content-Range", `bytes */${size}`);
+      return res.status(416).end();
+    }
+    end = Math.min(end, size - 1);
+    res.writeHead(206, { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": end - start + 1 });
+  } else {
+    res.writeHead(200, { ...headers, "Content-Length": size });
+  }
+  if (req.method === "HEAD" || size === 0) return res.end();
+
+  const stream = store.openStream(file.id, range ? { start, end } : {});
+  stream.on("error", (err) => {
+    console.error("[files] stream error:", err.message);
+    res.destroy(err);
+  });
+  return stream.pipe(res);
+};
 
 /**
  * @param {object} opts
@@ -96,6 +143,16 @@ const serveUploads = ({ uploadsRoot, mediaMime }) => {
     const store    = getStore();
     const missingImage = () =>
       store.isImageDir(canonicalPath) && PLACEHOLDER_EXTS.has(ext) ? sendPlaceholder(res) : null;
+
+    if (store.driver === "mongo") {
+      return (async () => {
+        const file = await store.stat(canonicalPath);
+        if (!file) return missingImage() ?? res.status(404).json({ error: "File not found" });
+        return sendStored(req, res, store, file, {
+          cacheControl: store.isPublicDir?.(canonicalPath) ? "public, max-age=86400" : "private, max-age=3600",
+        });
+      })().catch(next);
+    }
 
     if (store.driver !== "local") {
       return (async () => {
@@ -171,4 +228,4 @@ const serveUploads = ({ uploadsRoot, mediaMime }) => {
   };
 };
 
-module.exports = { serveUploads, PLACEHOLDER_EXTS };
+module.exports = { serveUploads, sendStored, PLACEHOLDER_EXTS };

@@ -227,7 +227,9 @@ const multerForContent = (req, res, next) => {
 
       // Into the file store before the route sees it: on Render the local
       // disk is rebuilt on every deploy (storage/fileStore.js).
-      return getStore().adoptLocal(req.file.path, { contentType: req.file.mimetype })
+      return getStore().adoptLocal(req.file.path, {
+        contentType: req.file.mimetype, schoolId: req.user?.schoolId ?? null,
+      })
         .then(() => next())
         .catch((e) => {
           console.error("[content] could not store the upload:", e.message);

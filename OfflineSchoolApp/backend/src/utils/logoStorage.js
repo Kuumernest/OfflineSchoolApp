@@ -180,7 +180,7 @@ const saveLogoFromBase64 = async (schoolId, base64) => {
 
   // Content-addressed: identical bytes mean the file is already correct.
   if (!(await store.stat(`logos/${filename}`))) {
-    await store.put(`logos/${filename}`, buf, { contentType: kind.mime });
+    await store.put(`logos/${filename}`, buf, { contentType: kind.mime, schoolId });
   }
 
   return {

@@ -326,7 +326,9 @@ router.post("/conversations/:id/attachments", (req, res, next) => {
   // Into the file store (storage/fileStore.js) — the server's disk does not
   // survive a deploy.
   try {
-    await getStore().adoptLocal(req.file.path, { contentType: req.file.mimetype });
+    await getStore().adoptLocal(req.file.path, {
+      contentType: req.file.mimetype, schoolId: conversation.schoolId ?? null,
+    });
   } catch (err) {
     console.error("[messages] could not store the attachment:", err.message);
     discard();

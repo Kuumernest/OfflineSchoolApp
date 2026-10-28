@@ -511,7 +511,7 @@ router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res
 
   let saved;
   try {
-    saved = await photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64);
+    saved = await photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64, { schoolId });
   } catch (err) {
     return bad(res, err.message, "BAD_PHOTO");
   }
