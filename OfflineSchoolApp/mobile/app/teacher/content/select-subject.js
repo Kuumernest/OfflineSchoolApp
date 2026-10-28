@@ -33,7 +33,7 @@ const CONTENT_TYPES = [
     color: "#7C3AED",
     bg:    "#EDE9FE",
     hint:  "PDF, DOC",
-    maxMB: 50,
+    maxMB: 20,
   },
   {
     id:    "notes",
@@ -42,7 +42,7 @@ const CONTENT_TYPES = [
     color: "#4F46E5",
     bg:    "#EEF2FF",
     hint:  "PDF, DOC, DOCX",
-    maxMB: 50,
+    maxMB: 20,
   },
   {
     id:    "image",
@@ -60,7 +60,7 @@ const CONTENT_TYPES = [
     color: "#D97706",
     bg:    "#FEF3C7",
     hint:  "MP3, WAV, M4A",
-    maxMB: 100,
+    maxMB: 20,
   },
   {
     id:    "video",
@@ -69,7 +69,7 @@ const CONTENT_TYPES = [
     color: "#DC2626",
     bg:    "#FEE2E2",
     hint:  "MP4, MOV, AVI",
-    maxMB: 500,
+    maxMB: 20,
   },
   {
     id:    "document",
@@ -78,7 +78,7 @@ const CONTENT_TYPES = [
     color: "#059669",
     bg:    "#ECFDF5",
     hint:  "PDF, DOCX, XLSX",
-    maxMB: 50,
+    maxMB: 20,
   },
 ];
 

@@ -91,16 +91,22 @@ for (const [contentType, mimes] of Object.entries(ALLOWED_MIMES)) {
   }
 }
 
+// Teacher content is stored in the app's own MongoDB (GridFS), and the Atlas
+// free tier holds 512 MB for everything — one 500 MB video would fill it. So
+// every type stops at 20 MB: enough for notes, a syllabus, a photo of the
+// board or a short clip recorded at low quality.
+const MAX_CONTENT_BYTES = 20 * 1024 * 1024;
+
 const MAX_FILE_SIZES = {
-  video:    500 * 1024 * 1024,
-  audio:    100 * 1024 * 1024,
-  image:     10 * 1024 * 1024,
-  syllabus:  50 * 1024 * 1024,
-  notes:     50 * 1024 * 1024,
-  document:  50 * 1024 * 1024,
+  video:    MAX_CONTENT_BYTES,
+  audio:    MAX_CONTENT_BYTES,
+  image:    MAX_CONTENT_BYTES,
+  syllabus: MAX_CONTENT_BYTES,
+  notes:    MAX_CONTENT_BYTES,
+  document: MAX_CONTENT_BYTES,
 };
 
-const DEFAULT_MAX_SIZE = 100 * 1024 * 1024;
+const DEFAULT_MAX_SIZE = MAX_CONTENT_BYTES;
 
 let _multerInstance = null;
 
@@ -174,7 +180,7 @@ const getMulterInstance = () => {
   _multerInstance = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 500 * 1024 * 1024, files: 1 },
+    limits: { fileSize: MAX_CONTENT_BYTES, files: 1 },
   });
 
   return _multerInstance;
@@ -187,7 +193,7 @@ const multerForContent = (req, res, next) => {
   instance.single("file")(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ success: false, error: "File exceeds the maximum allowed size." });
+        return res.status(413).json({ success: false, error: `File too large. Maximum: ${MAX_CONTENT_BYTES / 1024 / 1024} MB` });
       }
       if (err.code === "LIMIT_UNEXPECTED_FILE") {
         return res.status(400).json({ success: false, error: 'Unexpected field name. Use field name "file".' });
