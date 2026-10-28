@@ -17,20 +17,20 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: |
-            web/package-lock.json
-            desktop/package-lock.json
+            OfflineSchoolApp/web/package-lock.json
+            OfflineSchoolApp/desktop/package-lock.json
 
       - name: Install web dependencies
         run: npm ci
-        working-directory: web
+        working-directory: OfflineSchoolApp/web
 
       - name: Install desktop dependencies
         run: npm ci
-        working-directory: desktop
+        working-directory: OfflineSchoolApp/desktop
 
       - name: Build web and package installer
         run: npm run package
-        working-directory: desktop
+        working-directory: OfflineSchoolApp/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -38,6 +38,6 @@ jobs:
         with:
           name: OfflineSchoolApp-windows
           path: |
-            desktop/dist/*.exe
-            desktop/release/*.exe
+            OfflineSchoolApp/desktop/dist/*.exe
+            OfflineSchoolApp/desktop/release/*.exe
           if-no-files-found: warn
