@@ -2,7 +2,7 @@
   "expo": {
     "name": "My School On The Move",
     "slug": "mobile",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "scheme": "myschoolonthemove",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
