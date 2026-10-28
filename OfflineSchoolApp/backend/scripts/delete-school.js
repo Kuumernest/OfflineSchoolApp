@@ -23,7 +23,10 @@
  *     records point to, plus any logo or photo file named after the school
  *     or one of its pupils that no record points to any more (a replaced
  *     logo) — from wherever the uploads live: the local uploads directory or
- *     the bucket (src/storage/fileStore.js, STORAGE_* variables)
+ *     the bucket (src/storage/fileStore.js, STORAGE_* variables), and always
+ *     from GridFS in this same database (uploads.files / uploads.chunks):
+ *     every file filed under the school, whichever driver this machine is
+ *     set to — the dry run counts them and their size
  *   - the school itself, last
  *
  * What stays:
@@ -44,6 +47,11 @@ const mongoose = require("mongoose");
 
 // Handled on their own, not by the schoolId sweep.
 const SPECIAL = new Set(["schools", "users", "guardianaccesses", "exammarks", "idempotencykeys", "synclogs"]);
+
+// GridFS's own collections: files are removed through the store, and the
+// chunks — the bytes themselves — are never scanned for paths.
+const { GRIDFS_BUCKET } = require("../src/storage/fileStore");
+const GRIDFS_COLLECTIONS = new Set([`${GRIDFS_BUCKET}.files`, `${GRIDFS_BUCKET}.chunks`]);
 
 const UPLOAD = /(?:^|[\\/])uploads[\\/][^\s"'<>?#]+/g;
 
@@ -92,11 +100,24 @@ const storeFor = ({ uploadsRoot, store } = {}) => {
     : fileStore.getStore();
 };
 
+/**
+ * The stores to clean: the configured one, plus GridFS in this database when
+ * that is not it already — run from a laptop (local driver by default) the
+ * production files are still in the database being cleaned.
+ */
+const storesFor = (db, store) => {
+  if (store?.driver === "mongo") return [store];
+  const grid = require("../src/storage/fileStore").createStore({ driver: "mongo", db });
+  return store ? [store, grid] : [grid];
+};
+
 async function plan(db, school, { store = null } = {}) {
   const sid  = school._id;
   const ours = { $in: idForms(sid) };
   const names = (await db.listCollections({}, { nameOnly: true }).toArray())
-    .map((c) => c.name).filter((n) => !n.startsWith("system.")).sort();
+    .map((c) => c.name).filter((n) => !n.startsWith("system.") && !GRIDFS_COLLECTIONS.has(n)).sort();
+  const stores = storesFor(db, store);
+  const grid   = stores.find((s) => s.driver === "mongo");
 
   const counts = {};
   const files  = new Set();
@@ -152,13 +173,19 @@ async function plan(db, school, { store = null } = {}) {
   // Files named after the school or one of its pupils (logos/<school id>-…,
   // photos/<student id>-…): a logo replaced long ago that no record names any
   // more is still this school's. Listed from the store itself.
-  if (store) {
+  {
     const prefixes = [`logos/${String(sid).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40)}-`,
       ...studentIds.map((id) => `photos/${id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40)}-`)];
-    for (const prefix of prefixes) {
-      for (const key of await store.list(prefix)) files.add(`uploads/${key}`);
+    for (const st of stores) {
+      for (const prefix of prefixes) {
+        for (const key of await st.list(prefix)) files.add(`uploads/${key}`);
+      }
     }
   }
+
+  // Every GridFS file filed under the school (its metadata), whatever its
+  // name: documents, attachments, teacher content.
+  for (const key of (await grid.schoolFiles(sid)).keys) files.add(`uploads/${key}`);
 
   // A file any record that stays still points to is kept — every collection,
   // since a path can sit anywhere (a sibling's documents, a login's avatar).
@@ -175,8 +202,16 @@ async function plan(db, school, { store = null } = {}) {
     }
   }
 
+  // What of that is in GridFS, and how much room it takes.
+  const gridfs = { files: 0, bytes: 0 };
+  for (const rel of files) {
+    const f = await grid.stat(rel.replace(/^uploads\//, "")).catch(() => null);
+    if (f) { gridfs.files++; gridfs.bytes += f.size || 0; }
+  }
+
   for (const k of Object.keys(counts)) if (!counts[k]) delete counts[k];
   return {
+    gridfs,
     school: { _id: sid, name: school.name },
     counts, schoolScoped: Object.keys(counts).filter((n) => !SPECIAL.has(n)),
     studentIds, examIds, userIds, codesDeleted, codesUnlinked, codesMoved,
@@ -218,16 +253,21 @@ async function apply(db, p, { store }) {
 
   // After the records: a file whose delete fails is an orphan, which is
   // harmless; a record pointing at a deleted file is a broken image.
-  let filesRemoved = 0;
+  let filesRemoved = 0, gridfsRemoved = 0;
   const { cleanKey } = require("../src/storage/fileStore");
   for (const rel of p.files) {
     const key = cleanKey(rel.replace(/^uploads\//, ""));
-    if (!key || !(await store.stat(key).catch(() => null))) continue;
-    try { if (await store.remove(key)) filesRemoved++; } catch (err) {
-      console.warn(`  could not remove ${key}: ${err.message}`);
+    if (!key) continue;
+    for (const st of storesFor(db, store)) {
+      if (!(await st.stat(key).catch(() => null))) continue;
+      try {
+        if (await st.remove(key)) { filesRemoved++; if (st.driver === "mongo") gridfsRemoved++; }
+      } catch (err) {
+        console.warn(`  could not remove ${key}: ${err.message}`);
+      }
     }
   }
-  return { transaction, filesRemoved };
+  return { transaction, filesRemoved, gridfsRemoved };
 }
 
 function print(p, { applied = false, result = null } = {}) {
@@ -241,7 +281,8 @@ function print(p, { applied = false, result = null } = {}) {
   console.log(`Portal codes kept but unlinked (they cover a child at another school): ${p.codesUnlinked.length}`);
   console.log(`Uploaded files only this school uses: ${p.files.length}`);
   p.files.forEach((f) => console.log(`  - ${f}`));
-  if (result) console.log(`\n${result.transaction ? "Ran in one transaction." : "No transaction support — ran in order, school record last."} Files removed: ${result.filesRemoved}`);
+  console.log(`  of which in GridFS (this database): ${p.gridfs.files} files, ${(p.gridfs.bytes / 1024 / 1024).toFixed(2)} MB`);
+  if (result) console.log(`\n${result.transaction ? "Ran in one transaction." : "No transaction support — ran in order, school record last."} Files removed: ${result.filesRemoved} (GridFS: ${result.gridfsRemoved})`);
 }
 
 /** For the command line and the check script alike. */
