@@ -1,0 +1,43 @@
+name: Desktop build
+
+# Builds the Windows installer for the OfflineSchoolApp desktop app.
+# Run it from GitHub: Actions > Desktop build > Run workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: desktop
+
+      - name: Build web and package installer
+        run: npm run package
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OfflineSchoolApp-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/release/*.exe
+          if-no-files-found: warn
