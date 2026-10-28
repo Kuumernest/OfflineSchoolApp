@@ -13,12 +13,12 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-STAGING-HOST/api" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://offlineschool-app.onrender.com/api" }
     },
     "production": {
       "autoIncrement": true,
       "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-PRODUCTION-HOST/api" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://offlineschool-app.onrender.com/api" }
     },
     "production-apk": {
       "extends": "production",
