@@ -173,7 +173,8 @@
     "portal:demo": "node scripts/portal-demo.js",
     "check:overdue": "node scripts/check-overdue-rule.js",
     "check:filestore": "node scripts/check-file-store.js",
-    "uploads:to-bucket": "node scripts/uploads-to-bucket.js"
+    "uploads:to-bucket": "node scripts/uploads-to-bucket.js",
+    "uploads:usage": "node scripts/uploads-usage.js"
   },
   "keywords": [],
   "author": "",
