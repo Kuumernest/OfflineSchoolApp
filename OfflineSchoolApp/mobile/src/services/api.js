@@ -295,6 +295,9 @@ const getToken = async () => {
   return null;
 };
 
+/** The signed-in user's token, for a request made outside axios (a download, an <Image>). */
+export const getAuthToken = () => getToken();
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 8 — TOKEN REFRESH
 // ═════════════════════════════════════════════════════════════════════════════

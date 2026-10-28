@@ -194,10 +194,12 @@ const check = (label, actual, expected) => {
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- attachments: protection is judged on the resolved path ---");
-  // The /uploads handler, which server.js mounts from storage/serveUploads.js.
+  // The /uploads handler, which server.js mounts from storage/serveUploads.js,
+  // and the gate it calls (storage/fileAccess.js).
   const serverSrc = fs.readFileSync(path.join(SRC, "storage", "serveUploads.js"), "utf8");
+  const gateSrc   = fs.readFileSync(path.join(SRC, "storage", "fileAccess.js"), "utf8");
   check("the upload gate checks the canonical path, so ./messages/x is protected too",
-    /isProtectedPath\(canonicalPath\)/.test(serverSrc) && /verifyMediaSignature\(canonicalPath/.test(serverSrc), true);
+    /gate\(req, res, canonicalPath/.test(serverSrc) && /verifyMediaSignature\(key/.test(gateSrc), true);
 
   await new Promise((r) => server.close(r));
   await mongoose.disconnect();

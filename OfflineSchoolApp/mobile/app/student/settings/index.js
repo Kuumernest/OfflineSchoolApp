@@ -613,6 +613,7 @@ export default function StudentSettingsScreen() {
   const user       = useAuthStore((s) => s.user);
   const logout     = useAuthStore((s) => s.logout);
   const updateUser = useAuthStore((s) => s.updateUser);
+  const token      = useAuthStore((s) => s.token);
 
   const userId = String(user?._id || user?.id || "");
 
@@ -984,7 +985,10 @@ export default function StudentSettingsScreen() {
           <View style={styles.photoRow}>
             <View style={styles.photoFrame}>
               {photoUrl ? (
-                <Image source={{ uri: absolutePhoto(photoUrl) }} style={styles.photoImg} />
+                <Image
+                  source={{ uri: absolutePhoto(photoUrl), headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
+                  style={styles.photoImg}
+                />
               ) : (
                 <Ionicons name="person" size={34} color="#9AA3B2" />
               )}

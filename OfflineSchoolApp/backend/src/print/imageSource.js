@@ -43,7 +43,16 @@
  */
 
 const path = require("path");
-const { getStore } = require("../storage/fileStore");
+const { getStore, PUBLIC_DIRS } = require("../storage/fileStore");
+const { signMediaPath } = require("../utils/mediaSignature");
+
+/**
+ * How long a photo link on a printed card stays signed. A pupil photo needs a
+ * login (storage/fileAccess.js) and a card opens in a window that has none; a
+ * published card is stored whole and reopened for the rest of the school
+ * year, so the signature has to outlive it.
+ */
+const LINK_SIGNATURE_HOURS = 24 * 400;
 
 const EMBEDDABLE   = ["logos", "photos"];
 
@@ -143,7 +152,12 @@ function resolveImageSrc(value, { origin = null, embed = false } = {}) {
     // An absolute URL is passed on as it is — it may be another server's.
     if (/^https?:\/\//i.test(v)) return v;
     if (EMBEDDABLE.includes(upload.dir) && !uploadExists(upload)) return null;
-    return origin ? `${origin}/uploads/${upload.dir}/${encodeURIComponent(upload.file)}` : null;
+    if (!origin) return null;
+    const link = `${origin}/uploads/${upload.dir}/${encodeURIComponent(upload.file)}`;
+    if (PUBLIC_DIRS.includes(upload.dir)) return link;
+    // The signature covers the key the server will decode the path back to.
+    const query = signMediaPath(keyOf(upload), { hours: LINK_SIGNATURE_HOURS }).split("?")[1];
+    return `${link}?${query}`;
   }
 
   if (/^https?:\/\//i.test(v)) return v;

@@ -177,10 +177,22 @@ app.get(BROWSER_AUTO_REQUESTS, (_req, res) => res.status(204).end());
 // A uniform 404, because "forbidden" would confirm the file exists.
 app.use("/uploads/applications", require("./utils/applicationDocuments").blockPublicApplicationsPath);
 
+// One gate for every stored file (storage/fileAccess.js): logos are public;
+// a photo, an attachment or teacher content needs a signed-in user of its
+// school, a Super Admin, or a signed link.
+const fileGate = require("./storage/fileAccess").makeFileGate(auth.authenticate);
+
 app.get("/uploads/{*path}", require("./storage/serveUploads").serveUploads({
   uploadsRoot: path.join(__dirname, "uploads"),
   mediaMime:   MEDIA_MIME,
+  gate:        fileGate,
 }));
+
+// A GridFS file by its id — the same gate, the same headers.
+app.get("/files/:id", require("./storage/serveUploads").serveFileById({ gate: fileGate }));
+
+// A one-hour link to a private file, for the phone's browser or another app.
+app.get("/api/files/signed-link", auth.authenticate, require("./storage/fileAccess").signedLink);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC FILES
@@ -195,6 +207,9 @@ app.use(
     setHeaders: (res, filePath) => {
       res.set("Cross-Origin-Resource-Policy", "cross-origin");
       res.set("Access-Control-Allow-Origin",  "*");
+      // Reached only past the gate above; a private file stays private.
+      const rel = path.relative(path.join(__dirname, "uploads"), filePath).split(path.sep)[0];
+      if (rel !== "logos") res.set("Cache-Control", "private, max-age=3600");
       const ext = path.extname(filePath).toLowerCase();
       if (MEDIA_EXTS.has(ext)) {
         res.set("Accept-Ranges", "bytes");

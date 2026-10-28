@@ -181,7 +181,17 @@ const request = (port, urlPath, headers = {}) => new Promise((resolve, reject) =
   console.log("\n--- serving /uploads/… ---");
   const app = express();
   app.use("/uploads/applications", require(path.join(SRC, "utils/applicationDocuments")).blockPublicApplicationsPath);
-  app.get("/uploads/{*path}", require(path.join(SRC, "storage/serveUploads")).serveUploads({ uploadsRoot: UPLOADS_ROOT, mediaMime: { ".mp4": "video/mp4" } }));
+  // The real gate (storage/fileAccess.js) behind a stand-in login: an
+  // "x-test-user" header is the signed-in user, none is a 401.
+  const fakeAuth = (req, res, next) => {
+    const u = req.headers["x-test-user"];
+    if (!u) return res.status(401).json({ message: "No token provided" });
+    req.user = JSON.parse(u);
+    return next();
+  };
+  const gate = require(path.join(SRC, "storage/fileAccess")).makeFileGate(fakeAuth);
+  const staff = { "x-test-user": JSON.stringify({ _id: "u1", role: "school_admin", schoolId: "schoolA" }) };
+  app.get("/uploads/{*path}", require(path.join(SRC, "storage/serveUploads")).serveUploads({ uploadsRoot: UPLOADS_ROOT, mediaMime: { ".mp4": "video/mp4" }, gate }));
   app.use((_req, res) => res.status(404).json({ error: "not here" }));
   const server = app.listen(0);
   const port = server.address().port;
@@ -195,7 +205,9 @@ const request = (port, urlPath, headers = {}) => new Promise((resolve, reject) =
   check("the same URL, once the file is in the bucket: sent to the bucket's public URL", [r.status, r.headers.location],
     [302, "https://files.example.test/logos/6a4ccbfac10ad6faa189bd85-ad40837113a2.jpg"]);
   r = await request(port, "/uploads/photos/kid-1.jpg");
-  check("a photo: a signed URL, kept briefly and privately", [r.status, r.headers.location, r.headers["cache-control"]],
+  check("a photo with no login: 401, bucket not consulted for a URL", [r.status, r.headers.location], [401, undefined]);
+  r = await request(port, "/uploads/photos/kid-1.jpg", staff);
+  check("a photo, signed in: a signed URL, kept briefly and privately", [r.status, r.headers.location, r.headers["cache-control"]],
     [302, "https://signed.example.test/photos/kid-1.jpg?expires=3600", "private, max-age=300"]);
   r = await request(port, "/uploads/photos/gone.png");
   check("a missing photo: the placeholder too", [r.status, r.headers["x-upload-missing"]], [200, "1"]);
@@ -206,13 +218,11 @@ const request = (port, urlPath, headers = {}) => new Promise((resolve, reject) =
   check("an applicant's document is never served from /uploads", [r.status, r.headers.location], [404, undefined]);
   r = await request(port, "/uploads/%2e%2e/%2e%2e/package.json");
   check("a path out of uploads/ is refused", r.status, 403);
-  process.env.REQUIRE_MEDIA_SIGNATURE = "1";
   r = await request(port, `/uploads/${adopted}`);
-  check("a message attachment without its signature: refused, bucket not consulted", [r.status, r.headers.location], [401, undefined]);
+  check("a message attachment without its signature or a login: refused, bucket not consulted", [r.status, r.headers.location], [401, undefined]);
   const { signMediaPath } = require(path.join(SRC, "utils/mediaSignature"));
   r = await request(port, signMediaPath(adopted));
   check("with its signature: a signed bucket URL", [r.status, r.headers.location], [302, `https://signed.example.test/${adopted}?expires=3600`]);
-  delete process.env.REQUIRE_MEDIA_SIGNATURE;
 
   // The local driver keeps today's behaviour, and the placeholder.
   setStore(createStore({ driver: "local" }));
