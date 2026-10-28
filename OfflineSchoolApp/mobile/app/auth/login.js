@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
+import PortalService from "../../src/services/portal.service";
 
 // The scrim across the screen — the same shape as before at about half the
 // weight, so the building and the sign read as a photograph rather than as a
@@ -134,22 +135,46 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState("");
   const [password,   setPassword]   = useState("");
   const [showPass,   setShowPass]   = useState(false);
+  const [portalError, setPortalError] = useState(null);
 
   const looksLikeEmail = identifier.includes("@");
 
   const handleLogin = async () => {
     const clean = identifier.trim();
-    if (!clean || !password.trim()) return;
+    const secret = password.trim();
+    if (!clean || !secret) return;
+    setPortalError(null);
 
-    const payload = clean.includes("@")
-      ? { email:        clean.toLowerCase(), password: password.trim() }
-      : { enrollmentNo: clean.toUpperCase(), password: password.trim() };
+    const ok = (r) => r === true || r?.success === true;
 
-    const result  = await login(payload);
-    const success = result === true || result?.success === true;
-    if (!success) return;
+    // Staff sign in with an email, and only ever as staff.
+    if (clean.includes("@")) {
+      const staff = await login({ email: clean.toLowerCase(), password: secret });
+      if (ok(staff)) router.replace("/");
+      return;
+    }
 
-    router.replace("/");
+    // Anyone else: a student (enrolment number + password) or a parent
+    // (admission number + access code). A parent's code is eight letters
+    // and digits, so only a password of that shape is tried on the portal;
+    // an ordinary password is never sent there.
+    const codeShaped = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(secret);
+
+    if (codeShaped) {
+      try {
+        await PortalService.login({ admissionNo: clean.toUpperCase(), code: secret });
+        router.replace("/portal");
+        return;
+      } catch (err) {
+        if (err?.response?.status === 429) {
+          setPortalError(t("portal.locked"));
+          return;
+        }
+      }
+    }
+
+    const student = await login({ enrollmentNo: clean.toUpperCase(), password: secret });
+    if (ok(student)) router.replace("/");
   };
 
   return (
@@ -181,9 +206,9 @@ export default function LoginScreen() {
 
         {/* ── Form ── */}
         <View style={styles.card}>
-          {error ? (
+          {(portalError || error) ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {error}</Text>
+              <Text style={styles.errorText}>⚠️ {portalError || error}</Text>
             </View>
           ) : null}
 
