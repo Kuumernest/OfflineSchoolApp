@@ -19,6 +19,7 @@ import {
   ScrollView, ActivityIndicator, ImageBackground,
 } from "react-native";
 import { useRouter }    from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
@@ -171,7 +172,9 @@ export default function LoginScreen() {
         >
         {/* ── Header ── */}
         <View style={styles.header}>
-          <Text style={styles.emoji}>🏫</Text>
+          <View style={styles.logoTile}>
+            <Ionicons name="school" size={32} color="#FFFFFF" />
+          </View>
           <Text style={styles.title}>{t("login.appName")}</Text>
           <Text style={styles.subtitle}>{t("login.signInToAccount")}</Text>
         </View>
@@ -242,37 +245,11 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Divider ── */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>{t("login.or")}</Text>
-          <View style={styles.dividerLine} />
-        </View>
 
-        {/* ── Apply CTA ── */}
-        <View style={styles.applyCard}>
-          <Text style={styles.applyTitle}>{t("login.newStudent")}</Text>
-          <Text style={styles.applySubtitle}>
-            {t("login.applyBlurb")}
+          {/* Footer */}
+          <Text style={styles.footer}>
+            {t("login.copyright", { year: new Date().getFullYear() })}
           </Text>
-          <TouchableOpacity
-            style={styles.applyBtn}
-            onPress={() => router.push("/auth/select-school")}
-          >
-            <Text style={styles.applyBtnText}>{t("login.applyCta")} →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Parent portal ──
-            A guardian has no account here — they sign in with their child's
-            admission number and a code from the school office, so this is a
-            separate door rather than another way through this form. */}
-        <TouchableOpacity
-          style={styles.portalLink}
-          onPress={() => router.push("/portal")}
-        >
-          <Text style={styles.portalLinkText}>{t("login.parentPortal")}</Text>
-        </TouchableOpacity>
         </ScrollView>
       </ImageBackground>
     </KeyboardAvoidingView>
@@ -327,7 +304,18 @@ const styles = StyleSheet.create({
   },
 
   header:    { alignItems: "center", marginBottom: 32 },
-  emoji:     { fontSize: 48, marginBottom: 8 },
+  logoTile: {
+    width: 64, height: 64, borderRadius: 16,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+    marginBottom: 16,
+  },
+  footer: {
+    textAlign: "center", color: "#C7D2FE", fontSize: 13, marginTop: 8,
+    textShadowColor: "rgba(12, 10, 40, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
 
   // The shadow is not decoration. These two lines sit on the photograph, and
   // a shadow keeps them readable against whatever image is dropped in next —
