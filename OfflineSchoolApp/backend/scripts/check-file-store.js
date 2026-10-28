@@ -158,8 +158,8 @@ const request = (port, urlPath, headers = {}) => new Promise((resolve, reject) =
   const logo = await logoStorage.saveLogoFromBase64("schoolA", PNG.toString("base64"));
   const logoKey = keyFromUrl(logo.publicPath);
   check("a logo goes to the bucket, as an image, under the URL shape records already use",
-    [/^\/uploads\/logos\/schoolA-[0-9a-f]{12}\.png$/.test(logo.publicPath), bucket.objects.get(logoKey)?.contentType, bucket.objects.get(logoKey)?.body.equals(PNG)],
-    [true, "image/png", true]);
+    [/^\/uploads\/logos\/schoolA-[0-9a-f]{12}\.webp$/.test(logo.publicPath), bucket.objects.get(logoKey)?.contentType, bucket.objects.get(logoKey)?.body.subarray(8, 12).toString()],
+    [true, "image/webp", "WEBP"]);
   check("and not to the server's disk", fs.existsSync(logoStorage.LOGO_DIR) ? fs.readdirSync(logoStorage.LOGO_DIR).length : 0, before);
   const puts = bucket.calls.filter(([n]) => n === "PutObjectCommand").length;
   await logoStorage.saveLogoFromBase64("schoolA", PNG.toString("base64"));
@@ -226,7 +226,7 @@ const request = (port, urlPath, headers = {}) => new Promise((resolve, reject) =
   check("before the logo is loaded it is linked, not embedded",
     resolveImageSrc(logo.publicPath, { origin: "https://api.example.test", embed: true }), `https://api.example.test${logo.publicPath}`);
   await store.warmImages([logo.publicPath, "/uploads/photos/gone.png"]);
-  check("after warmImages it is embedded", resolveImageSrc(logo.publicPath, { origin: "https://api.example.test", embed: true }), `data:image/png;base64,${PNG.toString("base64")}`);
+  check("after warmImages it is embedded", resolveImageSrc(logo.publicPath, { origin: "https://api.example.test", embed: true }), `data:image/webp;base64,${bucket.objects.get(logoKey).body.toString("base64")}`);
   check("a photo known to be missing prints the empty box, not a broken image",
     resolveImageSrc("/uploads/photos/gone.png", { origin: "https://api.example.test", embed: true }), null);
 

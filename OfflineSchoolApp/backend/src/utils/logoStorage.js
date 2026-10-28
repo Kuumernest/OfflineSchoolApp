@@ -19,13 +19,14 @@ const fs     = require("fs");
 const path   = require("path");
 const crypto = require("crypto");
 const { getStore } = require("../storage/fileStore");
+const { shrinkImage, MAX_IMAGE_BYTES } = require("../storage/imageResize");
 
 const UPLOADS_ROOT = path.resolve(__dirname, "..", "uploads");
 const LOGO_DIR     = path.join(UPLOADS_ROOT, "logos");
 const PUBLIC_PREFIX = "/uploads/logos";
 
-/** Max decoded logo size we will accept (2 MB). */
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+/** Max decoded logo size we will accept (5 MB) — shrunk to 512 px before it is stored. */
+const MAX_LOGO_BYTES = MAX_IMAGE_BYTES;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORMAT SNIFFING
@@ -141,7 +142,10 @@ const resolveLogoFile = (publicPath) => {
 };
 
 /**
- * Writes a base64 logo to disk and returns its public path.
+ * Writes a base64 logo to the file store and returns its public path.
+ *
+ * Shrunk first (storage/imageResize.js): at most 512 px, WebP, metadata
+ * stripped — what is stored is a few tens of KB, not the upload.
  *
  * The filename embeds a content hash, so re-uploading the same image is a
  * no-op and a changed image gets a new URL — which is what lets clients and
@@ -170,23 +174,23 @@ const saveLogoFromBase64 = async (schoolId, base64) => {
     );
   }
 
-  const kind = sniffImage(buf);
-  if (!kind) throw new Error("Logo is not a JPEG, PNG, GIF or WebP image");
+  if (!sniffImage(buf)) throw new Error("Logo is not a JPEG, PNG, GIF or WebP image");
+  const image = await shrinkImage(buf, "logo", "Logo");
 
-  const hash     = crypto.createHash("md5").update(buf).digest("hex").slice(0, 12);
+  const hash     = crypto.createHash("md5").update(image.buffer).digest("hex").slice(0, 12);
   const safeId   = String(schoolId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "school";
-  const filename = `${safeId}-${hash}.${kind.ext}`;
+  const filename = `${safeId}-${hash}.${image.ext}`;
   const store    = getStore();
 
   // Content-addressed: identical bytes mean the file is already correct.
   if (!(await store.stat(`logos/${filename}`))) {
-    await store.put(`logos/${filename}`, buf, { contentType: kind.mime, schoolId });
+    await store.put(`logos/${filename}`, image.buffer, { contentType: image.mime, schoolId });
   }
 
   return {
     publicPath: `${PUBLIC_PREFIX}/${filename}`,
-    bytes:      buf.length,
-    mime:       kind.mime,
+    bytes:      image.buffer.length,
+    mime:       image.mime,
     filename,
   };
 };

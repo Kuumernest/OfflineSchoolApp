@@ -20,20 +20,22 @@ const crypto = require("crypto");
 
 const { sniffImage, stripDataUri } = require("./logoStorage");
 const { getStore } = require("../storage/fileStore");
+const { shrinkImage, MAX_IMAGE_BYTES } = require("../storage/imageResize");
 
 const UPLOADS_ROOT  = path.resolve(__dirname, "..", "uploads");
 const PHOTO_DIR     = path.join(UPLOADS_ROOT, "photos");
 const PUBLIC_PREFIX = "/uploads/photos";
 
 /**
- * 3 MB.
+ * 5 MB, as uploaded.
  *
- * Higher than the logo limit because this arrives straight from a phone camera
- * without the chance to prepare it, and a rejected upload at the counter with a
- * parent waiting is worse than a slightly large file. The clients downscale
- * before sending, so this is a backstop rather than the normal size.
+ * A photo arrives straight from a phone camera without the chance to prepare
+ * it, and a rejected upload at the counter with a parent waiting is worse than
+ * a slightly large file. It is shrunk before it is stored (at most 400 px,
+ * JPEG, metadata stripped — storage/imageResize.js), so this bounds the
+ * upload, not what is kept.
  */
-const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+const MAX_PHOTO_BYTES = MAX_IMAGE_BYTES;
 
 const ensurePhotoDir = () => {
   if (!fs.existsSync(PHOTO_DIR)) {
@@ -81,22 +83,22 @@ const savePhotoFromBase64 = async (studentId, base64, { schoolId = null } = {}) 
   // Sniffed from the magic bytes, not from a client-sent mime type or a file
   // extension — both are attacker-controlled and neither says what the bytes
   // actually are.
-  const kind = sniffImage(buf);
-  if (!kind) throw new Error("Photo is not a JPEG, PNG, GIF or WebP image");
+  if (!sniffImage(buf)) throw new Error("Photo is not a JPEG, PNG, GIF or WebP image");
+  const image = await shrinkImage(buf, "photo", "Photo");
 
-  const hash     = crypto.createHash("md5").update(buf).digest("hex").slice(0, 12);
+  const hash     = crypto.createHash("md5").update(image.buffer).digest("hex").slice(0, 12);
   const safeId   = String(studentId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "student";
-  const filename = `${safeId}-${hash}.${kind.ext}`;
+  const filename = `${safeId}-${hash}.${image.ext}`;
   const store    = getStore();
 
   if (!(await store.stat(`photos/${filename}`))) {
-    await store.put(`photos/${filename}`, buf, { contentType: kind.mime, schoolId });
+    await store.put(`photos/${filename}`, image.buffer, { contentType: image.mime, schoolId });
   }
 
   return {
     publicPath: `${PUBLIC_PREFIX}/${filename}`,
-    bytes:      buf.length,
-    mime:       kind.mime,
+    bytes:      image.buffer.length,
+    mime:       image.mime,
     filename,
   };
 };
