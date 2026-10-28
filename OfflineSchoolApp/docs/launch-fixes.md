@@ -102,7 +102,7 @@ it. Also in the repo's `CLAUDE.md`.
    `npm run -s school:delete -- --school "Kena Academy"`
    `npm run -s school:delete -- --school "Kena Academy" --apply`
 7. Delete the 9 uploaded files on the server (paths printed by the Green Valley dry run, under `backend/uploads/`), unless step 5 ran on the server and reported them removed.
-8. Create the new clean test school (Super Admin → Schools → New).
+8. Create the new clean test school: `npm run -s seed:test-school` — "Ecole Test Bilingue" (code ETEST): 4 classes, 8 teachers covering every class-subject, a clash-free timetable, 40 pupils with four multi-child guardians, Sequences 1–2 marked (1 published), two weeks of attendance, fees paid / part-paid / overdue, one announcement. Prints the head teacher, a teacher and a three-child parent sign-in once; refuses if the school exists. `check:seedtestschool`.
 9. Check: `npm run -s cleanup:phased` dry run should list nothing; the platform dashboard shows only the new school.
 
 Pass `MONGODB_URI` with `read -rs MONGODB_URI && export MONGODB_URI` so the connection string is not echoed or kept in shell history.
