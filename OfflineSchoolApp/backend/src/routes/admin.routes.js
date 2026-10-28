@@ -4021,7 +4021,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
   let previousLogo = null;
   if (logoBase64) {
     try {
-      const saved = logoStorage.saveLogoFromBase64(schoolId, logoBase64);
+      const saved = await logoStorage.saveLogoFromBase64(schoolId, logoBase64);
       const current = await School.findById(schoolId).select("logo").lean();
       previousLogo = current?.logo || null;
       updateFields.logo = saved.publicPath;
@@ -4038,7 +4038,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     // because previousLogo is null.
     const current = await School.findById(schoolId).select("logo").lean();
     if (current?.logo && logoStorage.isLogoReference(current.logo)) {
-      logoStorage.deleteLogoFile(current.logo);
+      await logoStorage.deleteLogoFile(current.logo);
     }
     updateFields.logo = null;
   }
@@ -4073,7 +4073,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
   // only if it is genuinely a different file.
   if (previousLogo && previousLogo !== updateFields.logo &&
       logoStorage.isLogoReference(previousLogo)) {
-    logoStorage.deleteLogoFile(previousLogo);
+    await logoStorage.deleteLogoFile(previousLogo);
   }
 
   return sendSuccess(res, { school });

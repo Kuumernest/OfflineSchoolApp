@@ -23,6 +23,7 @@
 
 const express = require("express");
 const router  = express.Router();
+const { getStore } = require("../storage/fileStore");
 const multer  = require("multer");
 const path    = require("path");
 const fs      = require("fs");
@@ -206,11 +207,12 @@ const multerErrorHandler = (err, req, res, next) => {
   next(err);
 };
 
+// The local copy and, once adopted, the stored file (storage/fileStore.js).
 const cleanupFiles = (files = []) => {
   if (!Array.isArray(files)) return;
   files.forEach((f) => {
     const p = f?.path || f;
-    if (p && typeof p === "string") fs.unlink(p, () => {});
+    if (p && typeof p === "string") getStore().removeLocalPath(p).catch(() => {});
   });
 };
 
@@ -642,6 +644,23 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     savedDocs = req.files.map((file, i) =>
       fileToDocument(file, resolveDocType(req.body, i))
     );
+  }
+
+  // Into the file store before any record points at them: the server's own
+  // disk does not survive a deploy. A file that cannot be stored is dropped,
+  // as a file that could not be written always was.
+  {
+    const stored = [];
+    for (const doc of savedDocs) {
+      try {
+        await getStore().adoptLocal(doc.path, { contentType: doc.mimeType, schoolId: schoolId.trim() });
+        stored.push(doc);
+      } catch (err) {
+        console.warn(`⚠️  Could not store "${doc.title}":`, err.message);
+        cleanupFiles([{ path: doc.path }]);
+      }
+    }
+    savedDocs = stored;
   }
 
   // ── Duplicate detection ─────────────────────────────────────────────────────

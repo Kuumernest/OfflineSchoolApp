@@ -42,7 +42,7 @@ const CONTENT_TYPES = [
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ],
     hint:  "PDF, DOC",
-    maxMB: 50,
+    maxMB: 20,
   },
   {
     id:     "notes",
@@ -56,7 +56,7 @@ const CONTENT_TYPES = [
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ],
     hint:  "PDF, DOC, DOCX",
-    maxMB: 50,
+    maxMB: 20,
   },
   {
     id:     "image",
@@ -76,7 +76,7 @@ const CONTENT_TYPES = [
     bg:     "#FEF3C7",
     accept: ["audio/mpeg", "audio/mp3", "audio/wav", "audio/mp4"],
     hint:   "MP3, WAV, M4A",
-    maxMB:  100,
+    maxMB:  20,
   },
   {
     id:     "video",
@@ -86,7 +86,7 @@ const CONTENT_TYPES = [
     bg:     "#FEE2E2",
     accept: ["video/mp4", "video/quicktime", "video/x-msvideo"],
     hint:   "MP4, MOV, AVI",
-    maxMB:  500,
+    maxMB:  20,
   },
   {
     id:     "document",
@@ -100,7 +100,7 @@ const CONTENT_TYPES = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ],
     hint:  "PDF, DOCX, XLSX",
-    maxMB: 50,
+    maxMB: 20,
   },
 ];
 

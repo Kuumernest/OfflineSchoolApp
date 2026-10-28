@@ -39,8 +39,8 @@
  */
 
 const path   = require("path");
-const fs     = require("fs");
 const crypto = require("crypto");
+const { getStore } = require("../storage/fileStore");
 
 const APPLICATIONS_DIR = path.resolve(__dirname, "..", "uploads", "applications");
 
@@ -146,17 +146,19 @@ const redactDocumentsDeep = (req, value, depth = 0) => {
 };
 
 /**
- * The file for one key, if it is inside the applications directory. The key
- * is reduced to a basename first, so a key cannot climb out of the directory.
+ * The bytes of one document, from the file store (storage/fileStore.js), or
+ * null. The key is reduced to a basename first, so it cannot climb out of
+ * applications/.
+ *
+ * @returns {Promise<{ body: Buffer, contentType: string } | null>}
  */
-const resolveDocumentFile = (key) => {
+const readDocument = async (key) => {
   const base = path.basename(String(key || ""));
   if (!base || base === "." || base === "..") return null;
-  const filePath = path.resolve(APPLICATIONS_DIR, base);
-  if (!filePath.startsWith(APPLICATIONS_DIR + path.sep)) return null;
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
+  const body = await getStore().read(`applications/${base}`);
+  if (!body) return null;
   const ext = path.extname(base).toLowerCase();
-  return { filePath, contentType: CONTENT_TYPES[ext] || "application/octet-stream" };
+  return { body, contentType: CONTENT_TYPES[ext] || "application/octet-stream" };
 };
 
 /** A filename safe to put in a Content-Disposition header. */
@@ -184,6 +186,6 @@ module.exports = {
   presentDocument,
   presentDocuments,
   redactDocumentsDeep,
-  resolveDocumentFile,
+  readDocument,
   safeDownloadName,
 };
