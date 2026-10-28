@@ -26,12 +26,14 @@ import {
 import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { openStoredFile } from "../../../src/utils/storedFile";
 import {
   getTeacherContent,
   getTeacherSubjectsForContent,
   deleteContent,
   updateContentStatus,
-} from "../../../src/services/content.service";
+} from "../../../src/services/content.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
@@ -594,7 +596,7 @@ function ContentLibraryPage() {
 
   const handleOpenItem = useCallback((item) => {
     if (item.fileUrl) {
-      Linking.openURL(item.fileUrl).catch(() => {
+      openStoredFile(item.fileUrl).catch(() => {
                                             return Alert.alert(t("teacherContent.errTitle"), t("teacherContent.openFailedBody"));
                                           }
       );

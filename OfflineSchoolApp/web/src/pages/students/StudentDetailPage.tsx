@@ -48,6 +48,7 @@ import {
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
 import { formatDay } from "../../../../shared/dateFormat.js";
 import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
+import { useAuthedImage } from "@/hooks/useAuthedImage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -519,9 +520,8 @@ function PhotoCard({
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const src = photoUrl
-    ? (/^https?:/i.test(photoUrl) ? photoUrl : photoUrl)
-    : null;
+  // A photo needs the signed-in user's token, which an <img> cannot send.
+  const src = useAuthedImage(photoUrl);
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;

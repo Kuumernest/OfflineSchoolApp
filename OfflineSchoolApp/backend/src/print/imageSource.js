@@ -30,17 +30,30 @@
  * the page is complete in itself: nothing to wait for before printing, no host
  * to get wrong, nothing to break when a photo is replaced.
  *
- * Only logos and photos are ever read from disk. Messages and applicant
- * documents are private and are never resolved here.
+ * Only logos and photos are ever read. Messages and applicant documents are
+ * private and are never resolved here.
+ *
+ * The files are read through the file store (storage/fileStore.js). With a
+ * bucket the read is asynchronous and these renderers are not, so a route
+ * loads the images first — getStore().warmImages([...]) — and an image that
+ * was not loaded is linked instead of embedded.
  *
  * A value that resolves to nothing returns null, and every template already
  * prints its empty state for null (the ID card's "affix photo" box, no logo).
  */
 
-const fs   = require("fs");
 const path = require("path");
+const { getStore, PUBLIC_DIRS } = require("../storage/fileStore");
+const { signMediaPath } = require("../utils/mediaSignature");
 
-const UPLOADS_ROOT = path.resolve(__dirname, "..", "uploads");
+/**
+ * How long a photo link on a printed card stays signed. A pupil photo needs a
+ * login (storage/fileAccess.js) and a card opens in a window that has none; a
+ * published card is stored whole and reopened for the rest of the school
+ * year, so the signature has to outlive it.
+ */
+const LINK_SIGNATURE_HOURS = 24 * 400;
+
 const EMBEDDABLE   = ["logos", "photos"];
 
 /** An embedded image larger than this is linked instead. */
@@ -87,28 +100,19 @@ const uploadOf = (value) => {
   return { dir: m[1].toLowerCase(), file };
 };
 
-/** The bytes of a logo or photo on disk as a data URI, or null. */
-const embedUpload = ({ dir, file }) => {
-  if (!EMBEDDABLE.includes(dir)) return null;
-  const base     = path.join(UPLOADS_ROOT, dir);
-  const filePath = path.resolve(base, path.basename(file));
-  if (!filePath.startsWith(base + path.sep)) return null;
-  try {
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile() || stat.size > MAX_EMBED_BYTES) return null;
-    const buf  = fs.readFileSync(filePath);
-    const mime = sniffMime(buf) || MIME_BY_EXT[path.extname(filePath).toLowerCase()];
-    return mime ? `data:${mime};base64,${buf.toString("base64")}` : null;
-  } catch {
-    return null;
-  }
+const keyOf = ({ dir, file }) => `${dir}/${path.basename(file)}`;
+
+/** The bytes of a logo or photo in the store as a data URI, or null. */
+const embedUpload = (upload) => {
+  if (!EMBEDDABLE.includes(upload.dir)) return null;
+  const buf = getStore().readImageSync(keyOf(upload));
+  if (!buf || buf.length > MAX_EMBED_BYTES) return null;
+  const mime = sniffMime(buf) || MIME_BY_EXT[path.extname(upload.file).toLowerCase()];
+  return mime ? `data:${mime};base64,${buf.toString("base64")}` : null;
 };
 
-/** Is this upload's file actually on disk? */
-const uploadExists = ({ dir, file }) => {
-  try { return fs.statSync(path.join(UPLOADS_ROOT, dir, path.basename(file))).isFile(); }
-  catch { return false; }
-};
+/** Is this upload's file there? (For a bucket: not known missing.) */
+const uploadExists = (upload) => getStore().existsSync(keyOf(upload));
 
 /**
  * Where a request was addressed, honouring the forwarded headers a proxy sets.
@@ -148,7 +152,12 @@ function resolveImageSrc(value, { origin = null, embed = false } = {}) {
     // An absolute URL is passed on as it is — it may be another server's.
     if (/^https?:\/\//i.test(v)) return v;
     if (EMBEDDABLE.includes(upload.dir) && !uploadExists(upload)) return null;
-    return origin ? `${origin}/uploads/${upload.dir}/${encodeURIComponent(upload.file)}` : null;
+    if (!origin) return null;
+    const link = `${origin}/uploads/${upload.dir}/${encodeURIComponent(upload.file)}`;
+    if (PUBLIC_DIRS.includes(upload.dir)) return link;
+    // The signature covers the key the server will decode the path back to.
+    const query = signMediaPath(keyOf(upload), { hours: LINK_SIGNATURE_HOURS }).split("?")[1];
+    return `${link}?${query}`;
   }
 
   if (/^https?:\/\//i.test(v)) return v;

@@ -28,6 +28,7 @@ const {
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
 const reminders = require("../services/feeReminders.service");
+const { getStore } = require("../storage/fileStore");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 
@@ -1204,6 +1205,8 @@ router.get("/receipt/:paymentId", requirePermission("fees.view"), asyncHandler(a
     totals: { charged, waived, paid, balance: charged - waived - paid },
   };
 
+  // The receipt embeds the school logo; with a bucket it is fetched first.
+  await getStore().warmImages([data.school?.logo]);
   const html = buildReceiptHtml({
     data,
     labels:    labelsFor(lang),

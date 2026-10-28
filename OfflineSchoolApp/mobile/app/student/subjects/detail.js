@@ -27,9 +27,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   getSubjectContentForStudent,
   resolveTypeFromItem,
-} from "../../../src/services/student.content.service";
+} from "../../../src/services/student.content.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { authHeaders, openStoredFile } from "../../../src/utils/storedFile";
 
 let IntentLauncher = null;
 try {
@@ -194,8 +196,9 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone, t) => {
     }
 
     console.log("[downloadAndOpen] downloading →", url);
+    // Teacher content needs the signed-in user's token.
     const downloadResumable = FileSystem.createDownloadResumable(
-      url, localUri, {},
+      url, localUri, { headers: await authHeaders() },
       (progress) => {
         if (onProgress && progress.totalBytesExpectedToWrite > 0) {
           onProgress(Math.round(
@@ -218,7 +221,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone, t) => {
       errorText(t, err),
       [
         { text: t("common.cancel"), style: "cancel" },
-        { text: t("studentSubj.openBrowser"), onPress: () => Linking.openURL(url).catch(() => {}) },
+        { text: t("studentSubj.openBrowser"), onPress: () => openStoredFile(url).catch(() => {}) },
       ]
     );
   }
