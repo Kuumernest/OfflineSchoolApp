@@ -576,11 +576,11 @@
     "phoneHint": "Saved as +237 and 9 digits.",
     "dobFuture": "The date of birth cannot be in the future.",
     "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved.",
-    "countRegistered_one": "{{count}} student registered",
+    "countRegistered": "{{count}} student registered",
     "countRegistered_other": "{{count}} students registered",
-    "countResults_one": "{{count}} result",
+    "countResults": "{{count}} result",
     "countResults_other": "{{count}} results",
-    "countResultsOf_one": "{{count}} result of {{total}} students",
+    "countResultsOf": "{{count}} result of {{total}} students",
     "countResultsOf_other": "{{count}} results of {{total}} students",
     "noneMatch": "No students match these filters"
   },
@@ -1460,7 +1460,7 @@
     "filterAlerts": "Alerts",
     "alertCount": "{{count}} alert",
     "alertCount_other": "{{count}} alerts",
-    "families_one": "{{count}} family",
+    "families": "{{count}} family",
     "families_other": "{{count}} families"
   },
   "applications": {
@@ -2195,9 +2195,9 @@
     "noClass": "No class",
     "overdue": "Overdue",
     "overdueOfIt": "{{amount}} of it overdue",
-    "overduePupils_one": "{{count}} pupil late ({{families}})",
+    "overduePupils": "{{count}} pupil late ({{families}})",
     "overduePupils_other": "{{count}} pupils late ({{families}})",
-    "overdueCount_one": "{{count}} overdue",
+    "overdueCount": "{{count}} overdue",
     "overdueCount_other": "{{count}} overdue",
     "noneOverdue": "Nothing overdue yet"
   },
@@ -5728,7 +5728,7 @@
     "message": "Your changes on this page have not been saved and will be lost.",
     "leave": "Leave",
     "stay": "Stay",
-    "marks_one": "{{count}} unsaved mark will be lost.",
+    "marks": "{{count}} unsaved mark will be lost.",
     "marks_other": "{{count}} unsaved marks will be lost."
   }
 }

@@ -576,11 +576,11 @@
     "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
     "dobFuture": "La date de naissance ne peut pas être dans le futur.",
     "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée.",
-    "countRegistered_one": "{{count}} élève inscrit",
+    "countRegistered": "{{count}} élève inscrit",
     "countRegistered_other": "{{count}} élèves inscrits",
-    "countResults_one": "{{count}} résultat",
+    "countResults": "{{count}} résultat",
     "countResults_other": "{{count}} résultats",
-    "countResultsOf_one": "{{count}} résultat sur {{total}} élèves",
+    "countResultsOf": "{{count}} résultat sur {{total}} élèves",
     "countResultsOf_other": "{{count}} résultats sur {{total}} élèves",
     "noneMatch": "Aucun élève ne correspond à ces filtres"
   },
@@ -1460,7 +1460,7 @@
     "filterAlerts": "Alertes",
     "alertCount": "{{count}} alerte",
     "alertCount_other": "{{count}} alertes",
-    "families_one": "{{count}} famille",
+    "families": "{{count}} famille",
     "families_other": "{{count}} familles"
   },
   "applications": {
@@ -2195,9 +2195,9 @@
     "noClass": "Sans classe",
     "overdue": "En retard",
     "overdueOfIt": "dont {{amount}} en retard",
-    "overduePupils_one": "{{count}} élève en retard ({{families}})",
+    "overduePupils": "{{count}} élève en retard ({{families}})",
     "overduePupils_other": "{{count}} élèves en retard ({{families}})",
-    "overdueCount_one": "{{count}} en retard",
+    "overdueCount": "{{count}} en retard",
     "overdueCount_other": "{{count}} en retard",
     "noneOverdue": "Rien en retard pour l'instant"
   },
@@ -5728,7 +5728,7 @@
     "message": "Vos modifications sur cette page n'ont pas été enregistrées et seront perdues.",
     "leave": "Quitter",
     "stay": "Rester",
-    "marks_one": "{{count}} marque non enregistrée sera perdue.",
+    "marks": "{{count}} marque non enregistrée sera perdue.",
     "marks_other": "{{count}} marques non enregistrées seront perdues."
   }
 }
