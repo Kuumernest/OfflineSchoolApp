@@ -19,6 +19,7 @@ import {
   printHtml,
 } from "@/print/document";
 import { isDesktop }      from "@/lib/offline/bridge";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -45,8 +46,9 @@ interface PreviewCard {
   id:   string;
   name: string;
   html: string;
-  /** Issues the card once its print is requested; see issueCard. */
-  issue: () => void;
+  /** The card as printed: fetched with ?issue=1, so it carries its
+   *  verification code (a preview no longer mints one); see issuedHtml. */
+  issued: () => Promise<string>;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -118,6 +120,10 @@ export default function ReportCardsPage() {
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [selectedClass,   setSelectedClass]   = useState<ClassOption | null>(null);
   const [students,        setStudents]        = useState<StudentOption[]>([]);
+  // Sequence cards: pupils on the roster with no marks for the chosen exam.
+  // Left out of the picker and the run, and named in a note so the office
+  // knows who is missing rather than wondering.
+  const [noMarks,         setNoMarks]         = useState<StudentOption[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
   const [classLoading,    setClassLoading]    = useState(false);
   const [studentLoading,  setStudentLoading]  = useState(false);
@@ -258,9 +264,10 @@ export default function ReportCardsPage() {
   /**
    * Load the pupils this card can be printed for.
    *
-   * A sequence card comes from the class roster: the exam covers the class, and
-   * a pupil with no marks prints an empty card, which is a legitimate thing to
-   * hand a parent.
+   * A sequence card comes from the class roster, less the pupils with no marks
+   * for the exam: a result, a real score, or a mark of absent or exempt. A
+   * pupil with none used to be listed and printed as an empty card (or a
+   * 404); they are now named in a note under the picker instead.
    *
    * A term or annual card cannot. Its marks are computed — the sequences
    * combined by weight, then the terms — and a pupil the computation has not
@@ -274,13 +281,29 @@ export default function ReportCardsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudentLoading(true);
     setStudents([]);
+    setNoMarks([]);
     setSelectedStudent(null);
 
+    const examId = selectedExam?._id;
     const request = cardType === "sequence"
-      ? api.get("/admin/students", {
-          params: { schoolId, classId: selectedClass._id },
-        }).then((res) =>
-          res.data?.students || (Array.isArray(res.data) ? res.data : []))
+      ? Promise.all([
+          api.get("/admin/students", { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.students || (Array.isArray(res.data) ? res.data : [])) as StudentOption[]),
+          api.get(`/exams/${examId}/scores`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.scores ?? []) as { studentId: string; score: number | null; isAbsent?: boolean; isExempt?: boolean }[]),
+          api.get(`/exams/${examId}/results`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.results ?? []) as { studentId: string }[]),
+        ]).then(([roster, scores, results]) => {
+          const marked = new Set<string>([
+            ...results.map((r) => String(r.studentId)),
+            ...scores
+              .filter((sc) => sc.score != null || sc.isAbsent || sc.isExempt)
+              .map((sc) => String(sc.studentId)),
+          ]);
+          const without = roster.filter((st) => !marked.has(String(st._id)));
+          if (!stale) setNoMarks(without);
+          return roster.filter((st) => marked.has(String(st._id)));
+        })
       : api.get(cardType === "term" ? "/term-results" : "/annual-results", {
           params: {
             schoolId, academicYear, classId: selectedClass._id,
@@ -306,7 +329,7 @@ export default function ReportCardsPage() {
       .catch(() => { if (!stale) setStudents([]); })
       .finally(() => { if (!stale) setStudentLoading(false); });
     return () => { stale = true; };
-  }, [selectedClass, cardType, academicYear, termNumber, schoolId]);
+  }, [selectedClass, cardType, selectedExam, academicYear, termNumber, schoolId]);
 
   // ── Generate ────────────────────────────────────────────
   /**
@@ -400,13 +423,14 @@ export default function ReportCardsPage() {
   };
 
   /**
-   * Issue a card once its print has been requested: the server re-renders it,
-   * archives a sequence card (the first issue wins) and counts the print. Bound
-   * at fetch time, so a selection changed since still issues the card printed.
-   * A failure here must not cost the reader the print they already have.
+   * The card as it is printed: requested with ?issue=1, which archives it and
+   * mints (or reuses) its verification code. A preview no longer creates a
+   * code, so the paper has to come from this request rather than from the
+   * preview's HTML — which, for a card never printed, carries no code.
    */
-  const issueCard = (sid: string) => () => {
-    cardRequest(sid, true).catch(() => {});
+  const issuedHtml = (sid: string) => async () => {
+    const body = (await cardRequest(sid, true))?.data;
+    return typeof body === "string" ? body : body?.data?.html || body?.html || "";
   };
 
   const handleGenerate = async () => {
@@ -505,7 +529,7 @@ export default function ReportCardsPage() {
           try {
             const body = (await cardRequest(sid))?.data;
             const html = typeof body === "string" ? body : body?.data?.html || body?.html || "";
-            if (html) slots[i] = { id: sid, name, html, issue: issueCard(sid) };
+            if (html) slots[i] = { id: sid, name, html, issued: issuedHtml(sid) };
             else error++;
           } catch {
             error++;
@@ -530,9 +554,10 @@ export default function ReportCardsPage() {
         current: name,
       });
       try {
-        // One renderer, three endpoints — see cardRequest.
+        // One renderer, three endpoints — see cardRequest. A single card in
+        // its own tab is printed straight away, so it is fetched as issued.
         const sid  = String(student._id);
-        const res2 = await cardRequest(sid);
+        const res2 = await cardRequest(sid, singleInTab);
         if (stale()) return;
 
         // The term and annual routes send the document; the sequence route
@@ -555,7 +580,7 @@ export default function ReportCardsPage() {
             singleFailure = "closed";
             break;
           }
-          if (!showInPreviewWindow(previewWindow, html, { onPrint: issueCard(sid) })) {
+          if (!showInPreviewWindow(previewWindow, html)) {
             error++;
             singleFailure = "show";
             discardPreviewWindow();
@@ -568,7 +593,7 @@ export default function ReportCardsPage() {
           // A class — and any single card in the packaged desktop app — is
           // shown in the in-app preview. Opening one window per pupil is
           // exactly what browsers block after the first card.
-          collected.push({ id: sid, name, html, issue: issueCard(sid) });
+          collected.push({ id: sid, name, html, issued: issuedHtml(sid) });
         }
       } catch {
         if (stale()) return;
@@ -637,14 +662,19 @@ export default function ReportCardsPage() {
    * rest of the console uses. "Requested", not "printed": the browser does not
    * tell the page whether the dialog was accepted.
    */
-  const handlePrintPreview = async () => {
+  // One print at a time: fetching the issued card takes a moment, and a
+  // second click would print it twice.
+  const printFlight = useSingleFlight();
+  const handlePrintPreview = () => printFlight.run("print", async () => {
     if (!previewCard) return;
     const run = ++printRunRef.current;
     setPreviewMessage("");
     try {
+      // The issued card, not the preview's HTML: it carries the code.
+      const html = await previewCard.issued();
+      if (printRunRef.current !== run) return;
       // Resolves once the iframe has reached print(); false when it could not.
-      const requested = await printHtml(previewCard.html);
-      if (requested) previewCard.issue();
+      const requested = html ? await printHtml(html) : false;
       if (printRunRef.current !== run) return;
       setPreviewMessage(
         requested
@@ -657,7 +687,7 @@ export default function ReportCardsPage() {
       if (printRunRef.current !== run) return;
       setPreviewMessage(t("reportCards.printNotStarted"));
     }
-  };
+  });
 
   return (
     <div className="space-y-6">
@@ -896,9 +926,11 @@ export default function ReportCardsPage() {
                  */
                 <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
                   <p className="text-sm font-semibold text-warning">
-                    {cardType === "sequence"
-                      ? t("reportCards.emptyRoster")
-                      : t("reportCards.emptyComputed", { type: typeLabel })}
+                    {cardType !== "sequence"
+                      ? t("reportCards.emptyComputed", { type: typeLabel })
+                      : noMarks.length > 0
+                        ? t("reportCards.noneMarked")
+                        : t("reportCards.emptyRoster")}
                   </p>
                   {cardType !== "sequence" && (
                     <Link
@@ -948,6 +980,17 @@ export default function ReportCardsPage() {
                     );
                   })}
                 </div>
+              )}
+
+              {/* Who is left out, by name: a pupil with no marks for this
+                  exam has no card to print. */}
+              {!studentLoading && cardType === "sequence" && noMarks.length > 0 && (
+                <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  <span className="font-semibold">
+                    {t("reportCards.noMarksNote", { count: noMarks.length })}
+                  </span>{" "}
+                  {noMarks.map((st) => st.studentName || st.name).filter(Boolean).join(", ")}
+                </p>
               )}
             </div>
           )}
@@ -1147,12 +1190,12 @@ export default function ReportCardsPage() {
             <button
               type="button"
               onClick={handlePrintPreview}
-              disabled={!previewCard}
+              disabled={!previewCard || printFlight.busy}
               className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"
             >
-              {t("common.print")}
+              {printFlight.busy ? t("common.preparing") : t("common.print")}
             </button>
           </div>
         </div>

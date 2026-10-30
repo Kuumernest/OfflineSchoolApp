@@ -12,6 +12,7 @@ import { useToast }       from "@/components/ui/Toast";
 import {
   EXAM_TYPE_KEYS,
   ACADEMIC_YEAR_OPTIONS,
+  EXAM_STATUS_META,
   examTypeLabel,
 } from "@/constants/exam.constants";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
@@ -826,6 +827,10 @@ form: DetailsForm;
 assignments: Record<string, ClassAssignment>;
 }) => {
   const { t } = useTranslation();
+  // The sequence as the picker on step 1 showed it — the school's own name.
+  const periods = useAcademicPeriods(form.academicYear);
+  const sequenceLabel = periods.sequencesOf(form.term)
+    .find((sq) => String(sq.number) === form.sequenceNumber)?.label ?? null;
 const totalSubjects = Object.values(assignments).reduce(
 (acc, cls) => acc + Object.keys(cls.subjects).length, 0
 );
@@ -840,8 +845,16 @@ return (
         { label: t("common.name"),          value: form.name },
         { label: t("common.type"),          value: examTypeLabel(t, form.type) },
         { label: t("academic.schoolYear"), value: form.academicYear },
-        { label: t("academic.term"),          value: form.term },
-        { label: t("common.status"),        value: form.status },
+        // "1st Term" / "1er Trimestre", not the bare number the form holds.
+        { label: t("academic.term"),
+          value: form.term ? t(`examTerms.term${form.term}`, { defaultValue: form.term }) : "—" },
+        // The sequence picked on step 1: it was missing from the summary.
+        ...(form.type !== "practical"
+          ? [{ label: t("examCreate.sequence"), value: sequenceLabel ?? "—" }]
+          : []),
+        // "Draft" / "Brouillon", not the stored "draft".
+        { label: t("common.status"),
+          value: t(EXAM_STATUS_META[form.status as ExamStatus]?.labelKey ?? "examStatus.draft") },
         { label: t("common.startDate"),    value: form.startDate || "—" },
         { label: t("common.endDate"),      value: form.endDate   || "—" },
         { label: t("examCreate.totalMarks"),   value: form.totalMarks },

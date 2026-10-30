@@ -1,5 +1,5 @@
 // web/src/layouts/DashboardLayout.tsx
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation }        from "react-i18next";
 import Sidebar                   from "@/components/layout/Sidebar";
@@ -8,6 +8,8 @@ import SchoolContextBar          from "@/components/layout/SchoolContextBar";
 import InitialSyncBanner         from "@/components/offline/InitialSyncBanner";
 import { useActiveSchool, useUser } from "@/store/auth.store";
 import { NAV_ITEMS }             from "@/config/navigation";
+import { useQuery }              from "@tanstack/react-query";
+import { fetchSchoolInfo }       from "@/services/dashboard.service";
 
 // ── Derive page title from current path ───────────────────
 function usePageTitle(): string {
@@ -33,6 +35,25 @@ function usePageTitle(): string {
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const title = usePageTitle();
+
+  // The browser tab names the page and the school — "Attendance - Ecole …",
+  // in the reader's language — where every tab used to read the same
+  // "My School On The Move", which says nothing among a dozen open tabs.
+  // The school's name is the dashboard banner's query (same key, so it is one
+  // cached request); a super admin acting on a school has it on the session.
+  const tabUser   = useUser();
+  const tabSchool = useActiveSchool();
+  const tabSchoolId = tabUser?.schoolId || "";
+  const schoolInfoQ = useQuery({
+    queryKey:  ["dashboard", "school", tabSchoolId],
+    queryFn:   () => fetchSchoolInfo(tabSchoolId),
+    enabled:   !!tabSchoolId,
+    staleTime: 1000 * 60 * 10,
+  });
+  const schoolName = schoolInfoQ.data?.name || tabUser?.schoolName || tabSchool?.name || "";
+  useEffect(() => {
+    document.title = schoolName ? `${title} - ${schoolName}` : title;
+  }, [title, schoolName]);
 
   // Stable identity: Sidebar closes itself on navigation via an effect, so an
   // inline arrow here would change every render and re-fire it in a loop.

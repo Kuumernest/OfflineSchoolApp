@@ -1,6 +1,7 @@
 // web/src/pages/exams/[id]/index.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery }                          from "@tanstack/react-query";
+import { useQuery, useQueryClient }          from "@tanstack/react-query";
+import { examQueryKeys }                     from "@/hooks/useExams";
 import { useParams, useNavigate,
          useSearchParams, Link }             from "react-router-dom";
 import { fetchClasses }                      from "@/services/class.service";
@@ -141,8 +142,22 @@ interface MarkEntryStudent {
   id?:           string;
   name?:         string;
   studentName?:  string;
-  admissionNo?:  string;
+  /** What the student record stores, and what the ID card prints. */
+  enrollmentNo?: string | null;
+  /** Legacy names for the same number, read only when enrollmentNo is absent. */
+  admissionNo?:  string | null;
+  admissionNumber?: string | null;
 }
+
+/**
+ * A pupil's admission number on the marks sheet.
+ *
+ * The sheet read `admissionNo`, which the student list does not send — the
+ * record holds `enrollmentNo` — so every pupil, a newly enrolled one most
+ * visibly, showed a dash while their ID card printed ETEST-2026-041.
+ */
+const admissionOf = (s: MarkEntryStudent): string =>
+  s.enrollmentNo || s.admissionNo || s.admissionNumber || "";
 
 /** One saved score row as the scores endpoint returns it. */
 interface RawScoreRow {
@@ -722,6 +737,7 @@ const ScoreEntryPanel = ({
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [students, setStudents] = useState<MarkEntryStudent[]>([]);
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
@@ -839,7 +855,17 @@ const ScoreEntryPanel = ({
   const [reasonPrompt, setReasonPrompt] = useState<null | "locked" | "published">(null);
   const [reasonText,   setReasonText]   = useState("");
 
-  const handleSave = async (changeReason?: string) => {
+  // Which save the reason prompt (423) is completing: a draft, or a submit.
+  const [draftMode, setDraftMode] = useState(false);
+  const [savedAs, setSavedAs] = useState<"draft" | "submitted" | null>(null);
+
+  /**
+   * Save the sheet. A draft keeps what has been typed — blanks allowed — and
+   * does not submit; submitting wants every present pupil marked, the check
+   * that used to stop any save at all while a single cell was empty.
+   */
+  const handleSave = async (changeReason?: string, draft = draftMode) => {
+    setDraftMode(draft);
     setSaving(true);
     try {
       const records = students.map((s) => {
@@ -868,9 +894,9 @@ const ScoreEntryPanel = ({
         return;
       }
 
-      // A present student must have a score — a blank cell means the sheet is
-      // unfinished, so the save is blocked until every row is filled or absent.
-      const unentered = records.filter((r) => !r.isAbsent && r.score === null);
+      // Submitting: every present student must have a score. A draft may be
+      // unfinished — that is what a draft is.
+      const unentered = draft ? [] : records.filter((r) => !r.isAbsent && r.score === null);
       if (unentered.length > 0) {
         setInvalidIds(new Set(unentered.map((r) => r.studentId)));
         setFormError(t("exams.missingScores", { count: unentered.length }));
@@ -887,14 +913,22 @@ const ScoreEntryPanel = ({
           subjectId,
           examSubjectId: subId,
           scores:        records,
+          draft,
           schoolId,
           ...(changeReason ? { changeReason } : {}),
         },
         { onProgress: (done, total) => setSaveProgress({ done, total }) },
       );
       setSaved(true);
+      setSavedAs(draft ? "draft" : "submitted");
       setTouched(false);
       setReasonPrompt(null);
+      // This sheet saves through the service, not useSaveBulkScores, so
+      // nothing told the page: the subject's row kept "0/11 scores entered ·
+      // Not submitted" until a reload. The same keys that hook refreshes.
+      void qc.invalidateQueries({ queryKey: ["submissions", examId] });
+      void qc.invalidateQueries({ queryKey: ["scores", examId] });
+      void qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId) });
       setReasonText("");
     } catch (err) {
       // 423 is not a failure to report and stop at — it is the server asking
@@ -923,7 +957,7 @@ const ScoreEntryPanel = ({
     return (
       !q ||
       (s.studentName || s.name || "").toLowerCase().includes(q) ||
-      (s.admissionNo || "").toLowerCase().includes(q)
+      admissionOf(s).toLowerCase().includes(q)
     );
   });
 
@@ -967,22 +1001,34 @@ const ScoreEntryPanel = ({
             />
           )}
           <button
+            onClick={() => handleSave(undefined, true)}
+            disabled={saving}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-300
+                       bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            {saving && draftMode
+              ? t("common.saving")
+              : saved && savedAs === "draft"
+                ? `✓ ${t("exams.draftSaved")}`
+                : t("exams.saveDraft")}
+          </button>
+          <button
             // Wrapped: passing the handler directly hands React's click event
             // in as the first argument, which is now the changeReason.
-            onClick={() => handleSave()}
+            onClick={() => handleSave(undefined, false)}
             disabled={saving}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold
               transition-colors disabled:opacity-60
-              ${saved
+              ${saved && savedAs === "submitted"
                 ? "bg-green-100 text-green-700 border border-green-200"
                 : "bg-primary-600 text-white hover:bg-primary-700"
               }`}
           >
-            {saving
+            {saving && !draftMode
               ? t("common.saving")
-              : saved
-                ? `✓ ${t("exams.saved")}`
-                : t("exams.saveMarks")}
+              : saved && savedAs === "submitted"
+                ? `✓ ${t("exams.submitted")}`
+                : t("exams.submitMarks")}
           </button>
           <button
             onClick={onClose}
@@ -1085,7 +1131,7 @@ const ScoreEntryPanel = ({
 
                 {/* Admission number */}
                 <p className="text-xs text-gray-400 text-center">
-                  {student.admissionNo ? `#${student.admissionNo}` : "—"}
+                  {admissionOf(student) ? `#${admissionOf(student)}` : "—"}
                 </p>
 
                 {/* Absent toggle */}

@@ -37,13 +37,29 @@ export async function downloadExport(
   schoolId: string,
   lang: string,
   params: ExportParams = {}
-): Promise<number> {
-  const response = await api.get(`${BASE}/${kind}`, {
-    params: { schoolId, lang, ...params },
-    responseType: "blob",
-    // The workbook is built server-side before a single byte comes back.
-    timeout: TIMEOUTS.long,
-  });
+): Promise<{ rows: number; fileName: string }> {
+  let response;
+  try {
+    response = await api.get(`${BASE}/${kind}`, {
+      params: { schoolId, lang, ...params },
+      responseType: "blob",
+      // The workbook is built server-side before a single byte comes back.
+      timeout: TIMEOUTS.long,
+    });
+  } catch (err) {
+    // With responseType "blob" the server's JSON error arrives as a Blob, so
+    // getErrorMessage found no message or code in it and the toast could only
+    // say "something went wrong". Put the parsed body back where it looks.
+    const res = (err as { response?: { data?: unknown } })?.response;
+    if (res && res.data instanceof Blob) {
+      try {
+        res.data = JSON.parse(await res.data.text());
+      } catch {
+        // Not JSON: the original error says as much as there is to say.
+      }
+    }
+    throw err;
+  }
 
   const disposition = String(response.headers?.["content-disposition"] ?? "");
   const match = /filename="?([^";]+)"?/i.exec(disposition);
@@ -61,5 +77,5 @@ export async function downloadExport(
   // Revoked late: revoking immediately can beat the browser to the download.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
-  return Number(response.headers?.["x-export-rows"] ?? 0);
+  return { rows: Number(response.headers?.["x-export-rows"] ?? 0), fileName };
 }

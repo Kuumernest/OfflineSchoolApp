@@ -133,8 +133,8 @@ const main = async () => {
     const r = await call("GET", who, `/results/${k}-ex1/student/${k}-${p}/reportcard/html${query}`);
     return { status: r.status, html: r.body?.data?.html ?? "", data: r.body?.data ?? null };
   };
-  const termCard = (who, k, p = "p1") =>
-    call("GET", who, `/term-results/${k}-${p}/report-card?academicYear=${encodeURIComponent(YEAR)}&term=1&classId=${k}-cls`);
+  const termCard = (who, k, p = "p1", query = "") =>
+    call("GET", who, `/term-results/${k}-${p}/report-card?academicYear=${encodeURIComponent(YEAR)}&term=1&classId=${k}-cls${query}`);
 
   // Markers of each built-in block (reportHtml.service renderReportCardHtml).
   const MARK = {
@@ -186,8 +186,13 @@ const main = async () => {
   check("no layout configured → every section, version 0, source default",
     [dflt.body?.layout?.version, dflt.body?.layout?.source, Object.values(dflt.body?.layout?.sections || {}).every(Boolean)],
     [0, "default", true]);
-  check("an unconfigured school's card prints every block", shows((await seqCard("adm-A", "A", "p2")).html),
-    Object.fromEntries(Object.keys(MARK).map((id) => [id, true])));
+  // A preview of a card never printed has no verification code yet (a
+  // preview issues none, 2026-10-30), so no strip; every layout block is
+  // there. That the same layout prints the strip on paper is A's issued card
+  // below. Not issued here: p2 is first issued later, under layout v2.
+  check("an unconfigured school's card prints every block (preview: no code yet, so no strip)",
+    shows((await seqCard("adm-A", "A", "p2")).html),
+    Object.fromEntries(Object.keys(MARK).map((id) => [id, id !== "verification"])));
 
   // Snapshot every stored academic figure, and the intelligence layer's input,
   // before any layout is changed — compared again at the end (3).
@@ -226,7 +231,8 @@ const main = async () => {
     [201, 1, SCHOOLS.B]);
 
   const aCard = await seqCard("adm-A", "A", "p1", "?issue=1");
-  const bCard = await seqCard("adm-B", "B", "p1");
+  // Both printed (?issue=1), so both carry the verification strip.
+  const bCard = await seqCard("adm-B", "B", "p1", "?issue=1");
   check("A's card: no results; every other block still printed", shows(aCard.html),
     { header: true, studentInfo: true, results: false, performance: true, classProfile: true, conduct: true, remarks: true, verification: true, footer: true });
   check("B's card: results printed; remarks and conduct not", shows(bCard.html),
@@ -327,7 +333,8 @@ const main = async () => {
   console.log("--- legacy cards ---");
   {
     await putLayout("adm-A", { results: false });
-    const legacy = await seqCard("adm-A", "A", "p3");
+    // A reprint is a print (?issue=1): it carries its verification code.
+    const legacy = await seqCard("adm-A", "A", "p3", "?issue=1");
     check("a card issued before layouts existed reprints with every section",
       [legacy.data?.layout?.source, Object.values(shows(legacy.html)).every(Boolean)], ["legacy", true]);
     const stored = await M("GeneratedReport").findOne({ examId: "A-ex1", studentId: "A-p3" }).lean();
@@ -371,7 +378,9 @@ const main = async () => {
     await putLayout("adm-A", { results: true, footer: true, verification: true });
     const back = await seqCard("adm-A", "A", "p2");   // issued under v2: results on, footer off
     check("p2 reprints with the layout it was issued with (v2)", [back.data?.layout?.version, shows(back.html).results], [2, true]);
-    const term = await termCard("adm-A", "A", "p2");
+    // Printed (&issue=1): a term card is never archived, and a print is what
+    // carries the verification strip.
+    const term = await termCard("adm-A", "A", "p2", "&issue=1");
     check("the term card (never archived) prints the current layout: results back",
       [term.text.includes("<table>"), term.text.includes('<div class="verify">')], [true, true]);
     // A section on with no data behind it prints nothing new: verification

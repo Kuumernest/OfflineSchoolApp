@@ -90,6 +90,8 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
   const [card, setCard] = useState<"idle" | "loading" | "notIssued" | "failed">("idle");
 
   const openCard = async () => {
+    // A second tap while the card is being fetched would print it twice.
+    if (card === "loading") return;
     setCard("loading");
     try {
       const { html } = await fetchReportCard(r._id, studentId);
@@ -163,7 +165,7 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
       <footer className="border-t border-line px-4 py-3">
         <button type="button" onClick={openCard} disabled={card === "loading"}
           className="flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong bg-surface text-sm font-medium text-ink hover:bg-surface-muted disabled:opacity-60 sm:w-auto sm:px-4">
-          <FileDown className="h-4 w-4" aria-hidden="true" />{t("portal.resultsScreen.reportCard")}
+          <FileDown className="h-4 w-4" aria-hidden="true" />{card === "loading" ? t("common.preparing") : t("portal.resultsScreen.reportCard")}
         </button>
         <p className="mt-1.5 text-xs text-ink-muted" aria-live="polite">
           {card === "notIssued" ? t("portal.resultsScreen.notIssued")

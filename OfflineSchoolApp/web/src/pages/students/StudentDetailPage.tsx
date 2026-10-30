@@ -49,6 +49,7 @@ import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
 import { formatDay } from "../../../../shared/dateFormat.js";
 import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
 import { useAuthedImage } from "@/hooks/useAuthedImage";
+import { genderLabel } from "@/utils/genderLabel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -1144,7 +1145,7 @@ export default function StudentDetailPage() {
           <InfoRow
             icon={User}
             label={t("common.gender")}
-            value={student.gender}
+            value={genderLabel(t, student.gender)}
             iconColor="text-pink-500"
           />
           <InfoRow

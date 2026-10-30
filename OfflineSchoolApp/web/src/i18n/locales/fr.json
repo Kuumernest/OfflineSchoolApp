@@ -118,7 +118,8 @@
     "unknownError": "Erreur inconnue",
     "notProvided": "Non renseigné",
     "notSpecified": "Non précisé",
-    "send": "Envoyer"
+    "send": "Envoyer",
+    "preparing": "Préparation…"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -1076,7 +1077,13 @@
     "errCreate": "Échec de la création de l'examen",
     "errUpdateStatus": "Échec de la mise à jour du statut",
     "errUpdate": "Échec de la mise à jour de l'examen",
-    "errDelete": "Échec de la suppression de l'examen"
+    "errDelete": "Échec de la suppression de l'examen",
+    "saveDraft": "Enregistrer le brouillon",
+    "draftSaved": "Brouillon enregistré",
+    "submitMarks": "Soumettre pour validation",
+    "submitted": "Soumis",
+    "marksIncomplete": "{{count}} élève n'a pas encore de note : saisissez une note ou marquez-le absent avant de valider.",
+    "marksIncomplete_other": "{{count}} élèves n'ont pas encore de note : saisissez une note ou marquez-les absents avant de valider."
   },
   "examCreate": {
     "title": "Créer une évaluation",
@@ -1177,7 +1184,10 @@
     "printOne": "Aperçu et impression du bulletin",
     "printAll": "Aperçu de {{count}} bulletin",
     "printAll_other": "Aperçu des {{count}} bulletins",
-    "viewResults": "Voir les résultats"
+    "viewResults": "Voir les résultats",
+    "noneMarked": "Aucun élève de cette classe n'a encore de notes pour cet examen.",
+    "noMarksNote": "{{count}} élève n'a aucune note pour cet examen et n'aura pas de bulletin :",
+    "noMarksNote_other": "{{count}} élèves n'ont aucune note pour cet examen et n'auront pas de bulletin :"
   },
   "admissions": {
     "title": "Admissions",
@@ -2571,7 +2581,8 @@
     "payroll": "Paie",
     "payrollHint": "Les bulletins réellement émis. Les brouillons sont exclus.",
     "enrollments": "Historique des classes",
-    "enrollmentsHint": "La classe de chaque élève, année par année."
+    "enrollmentsHint": "La classe de chaque élève, année par année.",
+    "savedAs": "Enregistré sous {{file}} dans vos téléchargements"
   },
   "platform": {
     "title": "Plateforme",
@@ -5730,5 +5741,9 @@
     "stay": "Rester",
     "marks": "{{count}} marque non enregistrée sera perdue.",
     "marks_other": "{{count}} marques non enregistrées seront perdues."
+  },
+  "verifyPage": {
+    "opening": "Ouverture de la page de vérification…",
+    "continue": "Continuer"
   }
 }

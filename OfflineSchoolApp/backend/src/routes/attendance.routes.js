@@ -301,7 +301,9 @@ router.get("/students/roster", staffRead, async (req, res) => {
     const students = await Student.find(query)
       .select(
         "_id studentName firstName lastName email " +
-        "classId className grade admissionNo"
+        // enrollmentNo is the field a student record holds; admissionNo
+        // only on older imports.
+        "classId className grade enrollmentNo admissionNo"
       )
       .sort({ studentName: 1 })
       .lean();

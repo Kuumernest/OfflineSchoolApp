@@ -400,7 +400,8 @@ const renderCard = ({ student, school, labels, origin, academicYear, validUntil 
   const logo  = absoluteLogo(school.logo, origin);
   const photo = absoluteLogo(student.photoUrl, origin);
   const contact = [school.address, school.phone].filter(Boolean).join(" · ");
-  const sex = student.gender ? (labels.sexValues?.[student.gender] ?? null) : null;
+  // A gender not given reads "Not specified", as on every screen — not a dash.
+  const sex = (student.gender && labels.sexValues?.[student.gender]) || labels.sexUnspecified || null;
   const emergency = [student.guardianName, student.guardianPhone].filter(Boolean).join(" · ");
 
   return `

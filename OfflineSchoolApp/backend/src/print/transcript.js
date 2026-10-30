@@ -23,12 +23,40 @@ const {
 const num = (v) =>
   v === null || v === undefined ? "—" : String(Math.round(v * 10) / 10);
 
+/** 02/04/2011 — DD/MM/YYYY, as every date in the app is written (shared/dateFormat). */
+const dayOf = (value) => {
+  if (!value) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
+/** A stored value as a word: "female" → "Female" / "Féminin"; unknown values capitalised. */
+const wordFor = (map, value) => {
+  if (value === null || value === undefined || value === "") return "";
+  return map?.[value] ?? String(value).charAt(0).toUpperCase() + String(value).slice(1);
+};
+
+/**
+ * "1st Term · Sequence 1". A year holds one row per sequence, and two rows
+ * that both said "Term 1" left the reader to guess which was which.
+ */
+const periodLabel = (tm, labels) => {
+  const n = Number(String(tm.term ?? "").replace(/\D/g, ""));
+  const term = labels.termNames?.[n - 1] ?? (tm.term != null ? String(tm.term) : null);
+  const seq  = tm.sequenceNumber != null ? `${labels.sequenceWord} ${tm.sequenceNumber}` : null;
+  return [term, seq].filter(Boolean).join(" · ") || "—";
+};
+
 const yearBlock = (y, labels) => {
   const heading = `
     <div class="section__title">
       ${esc(y.academicYear)}
       ${y.className ? ` &nbsp;·&nbsp; ${esc(y.className)}` : ""}
-      ${y.outcome ? ` &nbsp;·&nbsp; ${esc(y.outcome)}` : ""}
+      ${y.outcome ? ` &nbsp;·&nbsp; ${esc(wordFor(labels.outcomeValues, y.outcome))}` : ""}
     </div>
   `;
 
@@ -38,7 +66,7 @@ const yearBlock = (y, labels) => {
 
   const termRows = y.terms.map((tm) => `
     <tr>
-      <td>${orDash(tm.term)}</td>
+      <td>${esc(periodLabel(tm, labels))}</td>
       <td class="num">${num(tm.average)}</td>
       <td class="num ${tm.isPassing ? "pass" : "fail"}">${orDash(tm.overallGrade)}</td>
       <td class="num">${
@@ -68,7 +96,7 @@ const yearBlock = (y, labels) => {
         <thead>
           <tr>
             <th>${esc(labels.term)}</th>
-            <th class="num">${esc(labels.average)}</th>
+            <th class="num">${esc(labels.average)} ${esc(labels.outOf20 ?? "/20")}</th>
             <th class="num">${esc(labels.grade)}</th>
             <th class="num">${esc(labels.position)}</th>
           </tr>
@@ -103,14 +131,15 @@ const buildTranscriptHtml = ({ data, labels, printedOn, origin, verify }) => {
       ${renderFacts([
         { label: labels.student,     value: student.name ?? "" },
         { label: labels.admissionNo, value: student.enrollmentNo ?? "" },
-        { label: labels.gender,      value: student.gender ?? "" },
-        { label: labels.dateOfBirth, value: student.dateOfBirth ?? "" },
-        { label: labels.status,      value: student.status },
+        { label: labels.gender,      value: wordFor(labels.sexValues, student.gender) || labels.sexUnspecified },
+        { label: labels.dateOfBirth, value: dayOf(student.dateOfBirth) },
+        { label: labels.status,      value: wordFor(labels.statusValues, student.status) },
       ])}
 
       ${renderFacts([
         { label: labels.yearsOnRecord,  value: String(overall.yearsOnRecord) },
-        { label: labels.overallAverage, value: num(overall.average) },
+        { label: labels.overallAverage,
+          value: overall.average == null ? "—" : `${num(overall.average)} ${labels.outOf20 ?? "/20"}` },
       ])}
 
       ${years.length === 0
@@ -133,4 +162,4 @@ const buildTranscriptHtml = ({ data, labels, printedOn, origin, verify }) => {
   });
 };
 
-module.exports = { buildTranscriptHtml };
+module.exports = { buildTranscriptHtml, dayOf, periodLabel };

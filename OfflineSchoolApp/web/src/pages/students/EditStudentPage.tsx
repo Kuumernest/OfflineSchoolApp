@@ -21,6 +21,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { genderLabel, GENDER_VALUES } from "@/utils/genderLabel";
 import { ArrowLeft, Save, History, Loader2, AlertCircle } from "lucide-react";
 
 import { Card, CardHeader }        from "@/components/ui/Card";
@@ -268,12 +269,8 @@ export default function EditStudentPage() {
           <SelectField
             value={form.gender}
             onChange={set("gender")}
-            placeholder={t("studentEdit.emptyValue")}
-            options={[
-              { value: "male",   label: t("common.male")    },
-              { value: "female", label: t("common.female")  },
-              { value: "other",  label: t("common.unknown") },
-            ]}
+            placeholder={t("common.notSpecified")}
+            options={GENDER_VALUES.map((g) => ({ value: g, label: genderLabel(t, g) }))}
           />
         </FormField>
       );
@@ -397,15 +394,19 @@ export default function EditStudentPage() {
                       </span>
                       <span className="text-ink-faint">{t("studentEdit.was")}</span>
                       <span className="text-ink-body">
-                        {h.previousValue == null || h.previousValue === ""
-                          ? t("studentEdit.emptyValue")
-                          : String(h.previousValue)}
+                        {h.field === "gender"
+                          ? genderLabel(t, h.previousValue as string | null)
+                          : h.previousValue == null || h.previousValue === ""
+                            ? t("studentEdit.emptyValue")
+                            : String(h.previousValue)}
                       </span>
                       <span aria-hidden="true" className="text-ink-faint">→</span>
                       <span className="text-ink-body">
-                        {h.newValue == null || h.newValue === ""
-                          ? t("studentEdit.emptyValue")
-                          : String(h.newValue)}
+                        {h.field === "gender"
+                          ? genderLabel(t, h.newValue as string | null)
+                          : h.newValue == null || h.newValue === ""
+                            ? t("studentEdit.emptyValue")
+                            : String(h.newValue)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-ink-faint">

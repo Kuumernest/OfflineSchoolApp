@@ -409,7 +409,15 @@ module.exports = [
       if (String(exam.schoolId) !== String(schoolId)) return null;
       if (exam.deletedAt) return null;
 
-      const { classId, subjectId, scores } = body;
+      const { classId, subjectId } = body;
+      // The server's rule: a draft leaves blank rows alone; a submit with a
+      // blank for a present pupil is refused (400) — so it is declined here
+      // rather than queued, where a refusal would stop the outbox.
+      const draft   = body.draft === true || body.draft === "true";
+      const isBlank = (r) => r && !r.isAbsent && !r.isExempt &&
+        (r.score === null || r.score === undefined || r.score === "");
+      if (!draft && Array.isArray(body.scores) && body.scores.some(isBlank)) return null;
+      const scores = Array.isArray(body.scores) && draft ? body.scores.filter((r) => !isBlank(r)) : body.scores;
       if (!Array.isArray(scores) || scores.length === 0) return null;
 
       // By schoolId: GradingConfig's _id is a Mongo ObjectId, not the school's
@@ -480,6 +488,7 @@ module.exports = [
             saved:   saved.length,
             failed:  failed.length,
             failedRecords: failed,
+            draft,
           },
         },
       };

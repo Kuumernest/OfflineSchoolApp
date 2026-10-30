@@ -227,6 +227,8 @@ schoolId: string;
  * because each chunk is its own request and each is guarded separately.
  */
 changeReason?: string;
+/** Save what is there without submitting for approval; blanks are allowed. */
+draft?: boolean;
 },
   opts: {
     /** Rows per request. 0 or below sends everything in one. */

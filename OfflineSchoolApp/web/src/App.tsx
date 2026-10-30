@@ -98,6 +98,7 @@ const DocumentsPage    = lazy(() => import("@/pages/documents/index"));
 const ExportsPage      = lazy(() => import("@/pages/exports/index"));
 const PortalCodesPage  = lazy(() => import("@/pages/portal/codes"));
 const ParentPortalPage = lazy(() => import("@/pages/portal/index"));
+const VerifyPage       = lazy(() => import("@/pages/verify/index"));
 const NotFoundPage     = lazy(() => import("@/pages/NotFoundPage"));
 
 // The platform: above any school. super_admin only — see navigation.ts.
@@ -216,6 +217,10 @@ export default function App() {
         so a staff session here is simply irrelevant rather than a conflict.
       */}
       <Route path="/portal" element={page(<ParentPortalPage />)} />
+
+      {/* Where a printed document's QR code points; public, like the portal. */}
+      <Route path="/verify"       element={page(<VerifyPage />)} />
+      <Route path="/verify/:code" element={page(<VerifyPage />)} />
 
       {/* ── Authenticated ─────────────────────────────────────────────────── */}
       <Route element={<ProtectedRoute />}>

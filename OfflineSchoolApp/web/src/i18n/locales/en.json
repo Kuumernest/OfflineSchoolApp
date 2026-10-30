@@ -118,7 +118,8 @@
     "unknownError": "Unknown error",
     "notProvided": "Not provided",
     "notSpecified": "Not specified",
-    "send": "Send"
+    "send": "Send",
+    "preparing": "Preparing…"
   },
   "flow": {
     "title": "Results workflow",
@@ -1076,7 +1077,13 @@
     "errCreate": "Failed to create exam",
     "errUpdateStatus": "Failed to update status",
     "errUpdate": "Failed to update exam",
-    "errDelete": "Failed to delete exam"
+    "errDelete": "Failed to delete exam",
+    "saveDraft": "Save draft",
+    "draftSaved": "Draft saved",
+    "submitMarks": "Submit for approval",
+    "submitted": "Submitted",
+    "marksIncomplete": "{{count}} student has no mark yet: enter a score or mark them absent before approving.",
+    "marksIncomplete_other": "{{count}} students have no mark yet: enter a score or mark them absent before approving."
   },
   "examCreate": {
     "title": "Create exam",
@@ -1177,7 +1184,10 @@
     "printOne": "Preview & Print Report Card",
     "printAll": "Preview {{count}} Report",
     "printAll_other": "Preview All {{count}} Reports",
-    "viewResults": "View Results"
+    "viewResults": "View Results",
+    "noneMarked": "No student in this class has marks for this exam yet.",
+    "noMarksNote": "{{count}} student has no marks for this exam and gets no card:",
+    "noMarksNote_other": "{{count}} students have no marks for this exam and get no card:"
   },
   "admissions": {
     "title": "Admissions",
@@ -2571,7 +2581,8 @@
     "payroll": "Payroll",
     "payrollHint": "Payslips actually issued. Drafts are left out.",
     "enrollments": "Class history",
-    "enrollmentsHint": "Which class each student sat in, year by year."
+    "enrollmentsHint": "Which class each student sat in, year by year.",
+    "savedAs": "Saved as {{file}} in your downloads"
   },
   "platform": {
     "title": "Platform",
@@ -5730,5 +5741,9 @@
     "stay": "Stay",
     "marks": "{{count}} unsaved mark will be lost.",
     "marks_other": "{{count}} unsaved marks will be lost."
+  },
+  "verifyPage": {
+    "opening": "Opening the verification page…",
+    "continue": "Continue"
   }
 }

@@ -57,6 +57,15 @@ const LABELS = {
     emptyRecord:    "Nothing on record for this student yet",
     disclaimer:
       "This is a record of results published by the school. It is not a certificate.",
+    // Words for the stored values, so the record reads "Female", "Approved",
+    // "1st Term · Sequence 1" rather than female / approved / "Term 1" twice.
+    termNames:     ["1st Term", "2nd Term", "3rd Term"],
+    sequenceWord:  "Sequence",
+    outOf20:       "/20",
+    statusValues:  { pending: "Pending", approved: "Approved", rejected: "Rejected",
+                     suspended: "Suspended", graduated: "Graduated" },
+    outcomeValues: { promoted: "Promoted", repeated: "Repeated", graduated: "Graduated",
+                     transferred: "Transferred", withdrawn: "Withdrawn" },
 
     // ── Receipt ──
     receipt:         "Fee receipt",
@@ -95,6 +104,8 @@ const LABELS = {
     studentSignature: "Student's signature",
     emergencyContact: "Emergency contact",
     sexValues:   { male: "Male", female: "Female", other: "Other" },
+    // A gender not given: the same phrase on every screen and document.
+    sexUnspecified: "Not specified",
   },
 
   fr: {
@@ -136,6 +147,13 @@ const LABELS = {
     emptyRecord:    "Aucun élément enregistré pour cet élève",
     disclaimer:
       "Ceci est un relevé des résultats publiés par l'établissement. Ce n'est pas un diplôme.",
+    termNames:     ["1er trimestre", "2e trimestre", "3e trimestre"],
+    sequenceWord:  "Séquence",
+    outOf20:       "/20",
+    statusValues:  { pending: "En attente", approved: "Admis(e)", rejected: "Refusé(e)",
+                     suspended: "Suspendu(e)", graduated: "Diplômé(e)" },
+    outcomeValues: { promoted: "Admis(e) en classe supérieure", repeated: "Redouble",
+                     graduated: "Diplômé(e)", transferred: "Transféré(e)", withdrawn: "Retiré(e)" },
 
     receipt:         "Reçu de frais",
     receiptReversal: "Reçu — paiement annulé",
@@ -169,6 +187,7 @@ const LABELS = {
     studentSignature: "Signature de l'élève",
     emergencyContact: "Contact d'urgence",
     sexValues:   { male: "Masculin", female: "Féminin", other: "Autre" },
+    sexUnspecified: "Non précisé",
   },
 };
 

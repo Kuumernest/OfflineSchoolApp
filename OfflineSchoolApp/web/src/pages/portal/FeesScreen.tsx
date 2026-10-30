@@ -18,13 +18,14 @@ import { Printer, Wallet, CheckCircle2, AlertCircle, CalendarClock, Receipt } fr
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
 import { printHtml } from "@/print/document";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { fetchFees, fetchFeeReminders, fetchHome, fetchReceiptHtml } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState } from "./ui";
 
 export function FeesScreen({ studentId, childName }: { studentId: string | null; childName: string | null }) {
   const { t, i18n } = useTranslation();
   const fmt = useFormat();
-  const [printing, setPrinting] = useState<string | null>(null);
+  const receipts = useSingleFlight();
   const [failed, setFailed] = useState<string | null>(null);
 
   const feesQ = useQuery({ queryKey: ["portal", "fees", studentId], queryFn: () => fetchFees(studentId), enabled: Boolean(studentId), retry: false });
@@ -33,17 +34,16 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
   const homeQ = useQuery({ queryKey: ["portal", "home"], queryFn: fetchHome, retry: false, staleTime: 60_000 });
   const status = homeQ.data?.children.find((c) => c._id === studentId)?.fees ?? null;
 
-  const printReceipt = async (paymentId: string) => {
-    setPrinting(paymentId);
+  // One receipt at a time; its button says "Preparing…" until the print
+  // dialog has it, and a second tap does nothing.
+  const printReceipt = (paymentId: string) => receipts.run(paymentId, async () => {
     setFailed(null);
     try {
       await printHtml(await fetchReceiptHtml(paymentId, i18n.resolvedLanguage ?? "en", studentId));
     } catch {
       setFailed(paymentId);
-    } finally {
-      setPrinting(null);
     }
-  };
+  });
 
   if (feesQ.isLoading || !studentId) return <FeesSkeleton />;
   const fees = feesQ.data;
@@ -156,10 +156,10 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
                     </p>
                   </div>
                   {!p.isReversal && (
-                    <button type="button" onClick={() => printReceipt(p._id)} disabled={printing === p._id}
+                    <button type="button" onClick={() => printReceipt(p._id)} disabled={receipts.busy}
                       aria-label={t("portal.feesScreen.receiptFor", { no: p.receiptNo ?? "" })}
                       className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-control border border-line-strong px-3 text-sm font-medium text-ink hover:bg-surface-muted disabled:opacity-60">
-                      <Printer className="h-4 w-4" aria-hidden="true" />{t("portal.feesScreen.receipt")}
+                      <Printer className="h-4 w-4" aria-hidden="true" />{receipts.busyKey === p._id ? t("common.preparing") : t("portal.feesScreen.receipt")}
                     </button>
                   )}
                 </div>

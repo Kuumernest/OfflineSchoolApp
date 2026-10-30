@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }    from "@/store/auth.store";
 import * as ExamService    from "@/services/exam.service";
 import { examQueryKeys }   from "./useExams";
-import { useToast }        from "@/components/ui/Toast";
+import { getErrorMessage } from "@/lib/axios";
+import { useToast }        from "@/components/ui/Toast";
+
 import { useTranslation } from "react-i18next";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
@@ -55,8 +57,17 @@ export const useApproveSubmission = (examId: string) => {
       qc.invalidateQueries({ queryKey: ["submissions", examId] });
       toast({ title: t("exams.toastApproved"), kind: "success" });
     },
-    onError: (e: Error) =>
-      toast({ title: e.message || t("exams.errApproveSubmission"), kind: "error" }),
+    onError: (e: unknown) => {
+      // A sheet with pupils still unmarked is refused (MARKS_INCOMPLETE):
+      // say how many, in the reader's language, rather than "status 409".
+      const res = (e as { response?: { data?: { code?: string; unmarked?: unknown[] } } })?.response?.data;
+      toast({
+        title: res?.code === "MARKS_INCOMPLETE"
+          ? t("exams.marksIncomplete", { count: res.unmarked?.length ?? 0 })
+          : getErrorMessage(e) || t("exams.errApproveSubmission"),
+        kind: "error",
+      });
+    },
   });
 };
 
