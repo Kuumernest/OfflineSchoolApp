@@ -5721,5 +5721,9 @@
     "stay": "Stay",
     "marks_one": "{{count}} unsaved mark will be lost.",
     "marks_other": "{{count}} unsaved marks will be lost."
+  },
+  "verifyPage": {
+    "opening": "Opening the verification page…",
+    "continue": "Continue"
   }
 }

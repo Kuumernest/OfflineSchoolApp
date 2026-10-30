@@ -45,8 +45,9 @@ interface PreviewCard {
   id:   string;
   name: string;
   html: string;
-  /** Issues the card once its print is requested; see issueCard. */
-  issue: () => void;
+  /** The card as printed: fetched with ?issue=1, so it carries its
+   *  verification code (a preview no longer mints one); see issuedHtml. */
+  issued: () => Promise<string>;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -400,13 +401,14 @@ export default function ReportCardsPage() {
   };
 
   /**
-   * Issue a card once its print has been requested: the server re-renders it,
-   * archives a sequence card (the first issue wins) and counts the print. Bound
-   * at fetch time, so a selection changed since still issues the card printed.
-   * A failure here must not cost the reader the print they already have.
+   * The card as it is printed: requested with ?issue=1, which archives it and
+   * mints (or reuses) its verification code. A preview no longer creates a
+   * code, so the paper has to come from this request rather than from the
+   * preview's HTML — which, for a card never printed, carries no code.
    */
-  const issueCard = (sid: string) => () => {
-    cardRequest(sid, true).catch(() => {});
+  const issuedHtml = (sid: string) => async () => {
+    const body = (await cardRequest(sid, true))?.data;
+    return typeof body === "string" ? body : body?.data?.html || body?.html || "";
   };
 
   const handleGenerate = async () => {
@@ -505,7 +507,7 @@ export default function ReportCardsPage() {
           try {
             const body = (await cardRequest(sid))?.data;
             const html = typeof body === "string" ? body : body?.data?.html || body?.html || "";
-            if (html) slots[i] = { id: sid, name, html, issue: issueCard(sid) };
+            if (html) slots[i] = { id: sid, name, html, issued: issuedHtml(sid) };
             else error++;
           } catch {
             error++;
@@ -530,9 +532,10 @@ export default function ReportCardsPage() {
         current: name,
       });
       try {
-        // One renderer, three endpoints — see cardRequest.
+        // One renderer, three endpoints — see cardRequest. A single card in
+        // its own tab is printed straight away, so it is fetched as issued.
         const sid  = String(student._id);
-        const res2 = await cardRequest(sid);
+        const res2 = await cardRequest(sid, singleInTab);
         if (stale()) return;
 
         // The term and annual routes send the document; the sequence route
@@ -555,7 +558,7 @@ export default function ReportCardsPage() {
             singleFailure = "closed";
             break;
           }
-          if (!showInPreviewWindow(previewWindow, html, { onPrint: issueCard(sid) })) {
+          if (!showInPreviewWindow(previewWindow, html)) {
             error++;
             singleFailure = "show";
             discardPreviewWindow();
@@ -568,7 +571,7 @@ export default function ReportCardsPage() {
           // A class — and any single card in the packaged desktop app — is
           // shown in the in-app preview. Opening one window per pupil is
           // exactly what browsers block after the first card.
-          collected.push({ id: sid, name, html, issue: issueCard(sid) });
+          collected.push({ id: sid, name, html, issued: issuedHtml(sid) });
         }
       } catch {
         if (stale()) return;
@@ -642,9 +645,11 @@ export default function ReportCardsPage() {
     const run = ++printRunRef.current;
     setPreviewMessage("");
     try {
+      // The issued card, not the preview's HTML: it carries the code.
+      const html = await previewCard.issued();
+      if (printRunRef.current !== run) return;
       // Resolves once the iframe has reached print(); false when it could not.
-      const requested = await printHtml(previewCard.html);
-      if (requested) previewCard.issue();
+      const requested = html ? await printHtml(html) : false;
       if (printRunRef.current !== run) return;
       setPreviewMessage(
         requested

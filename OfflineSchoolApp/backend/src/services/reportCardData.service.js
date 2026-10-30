@@ -602,31 +602,15 @@ async function cardVerification({ data, schoolId, studentId, documentKey, req, c
   const isPassing = data.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
   const position  = data.summary?.classPosition;
 
-  /*
-   * Where the code can be checked.
-   *
-   * BASE_URL when the deployment sets one — the same variable the uploads
-   * links use — so a card printed from behind a proxy, a worker or a queue
-   * carries the address a parent can actually reach. The request is the
-   * fallback, which is right in development and for a single-origin
-   * deployment, and nothing is hard-coded either way: with neither, no
-   * strip is printed rather than a wrong address.
-   */
-  const origin = (() => {
-    const configured = String(process.env.BASE_URL || "").trim().replace(/\/+$/, "");
-    if (configured) return configured;
-    const proto = req?.headers?.["x-forwarded-proto"] || req?.protocol || "http";
-    const host  = req?.headers?.["x-forwarded-host"]  || req?.get?.("host");
-    return host ? `${proto}://${host}` : null;
-  })();
-
+  // Where the code can be checked: documentVerify.verifyBase — the app's own
+  // domain unless PUBLIC_VERIFY_BASE_URL says otherwise.
   return docVerify.printableBlock({
     count,
     schoolId: String(schoolId),
     kind:     "report_card",
     studentId: String(studentId),
     examId:   String(documentKey),
-    origin,
+    req,
     snapshot: {
       facts: [
         { label: { en: "Student", fr: "Élève" },           value: data.studentName },

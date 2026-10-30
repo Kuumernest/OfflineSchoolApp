@@ -51,9 +51,41 @@ const normalizeCode = (raw) =>
 const formatCode = (code) =>
   String(code).replace(/(.{4})(?=.)/g, "$1-");
 
-/** The public page for a code. `origin` comes from the printing request. */
-const verifyUrl = (origin, code) =>
-  `${origin ?? ""}/api/verify/${formatCode(code)}`;
+/**
+ * Where printed codes send people: the base every QR and link starts with.
+ *
+ * Documents used to take the address of whichever host rendered them — on a
+ * split deployment the API's, offlineschool-app.onrender.com — so the paper
+ * pointed at a server address rather than the school's app. Now, in order:
+ *
+ *   PUBLIC_VERIFY_BASE_URL   set it to say exactly, e.g. https://app.example.cm/verify
+ *   APP_LOGIN_URL's origin   the app's own domain (already set for emails),
+ *                            + /verify — the web console's public page, which
+ *                            hands over to this server's /api/verify
+ *   the browser's Origin     the app the request came from, + /verify
+ *   the request's own host   + /api/verify — development, single-origin setups
+ *
+ * Codes already printed keep working: /api/verify/:code is still served.
+ */
+const firstHeader = (v) => String(v || "").split(",")[0].trim();
+const originOfUrl = (raw) => {
+  try { return new URL(String(raw)).origin; } catch { return null; }
+};
+const verifyBase = (req) => {
+  const configured = String(process.env.PUBLIC_VERIFY_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (configured) return configured;
+  const app = originOfUrl(process.env.APP_LOGIN_URL);
+  if (app) return `${app}/verify`;
+  const browser = originOfUrl(req?.headers?.origin);
+  if (browser) return `${browser}/verify`;
+  const proto = firstHeader(req?.headers?.["x-forwarded-proto"]) || req?.protocol || "http";
+  const host  = firstHeader(req?.headers?.["x-forwarded-host"])  || req?.get?.("host");
+  return host ? `${proto}://${host}/api/verify` : null;
+};
+
+/** The public page for a code, under verifyBase(). */
+const verifyUrl = (base, code) =>
+  `${base ?? ""}/${formatCode(code)}`;
 
 /**
  * The verification row for a document, minted on first print.
@@ -63,9 +95,9 @@ const verifyUrl = (origin, code) =>
  * record. A result corrected after printing therefore shows up as a mismatch
  * between page and paper — which is the check working, not failing.
  *
- * `count: false` is a preview: it shows the code the paper will carry but is
- * not a print, so it neither refreshes the snapshot nor bumps printCount. A
- * code first minted by a preview starts at printCount 0 — nothing printed yet.
+ * `count: false` is a preview: it shows the code the paper already carries,
+ * if any, and is not a print — no snapshot refresh, no printCount, and no new
+ * code: a document never printed previews without one (null).
  */
 const ensure = async ({ schoolId, kind, studentId, examId, snapshot, count = true }) => {
   const key = {
@@ -86,6 +118,9 @@ const ensure = async ({ schoolId, kind, studentId, examId, snapshot, count = tru
       ).lean()
     : await DocumentVerification.findOne(key).lean();
   if (existing) return existing;
+  // A preview shows a code the paper already has, and never issues one: a
+  // code is minted by a print or a download, not by looking.
+  if (!count) return null;
 
   // First print. The unique code index can collide with astronomically low
   // probability, and the document key can collide when two prints race — in
@@ -152,10 +187,13 @@ const verify = async (rawCode) => {
  * Returns null rather than throwing — a document that cannot get its QR is
  * still a valid document, exactly like the ID card's rule.
  */
-const printableBlock = async ({ schoolId, kind, studentId, examId, snapshot, origin, count = true }) => {
+const printableBlock = async ({ schoolId, kind, studentId, examId, snapshot, req, count = true }) => {
   try {
     const record = await ensure({ schoolId, kind, studentId, examId, snapshot, count });
-    const url = verifyUrl(origin, record.code);
+    if (!record) return null;   // a preview of a document never printed
+    const base = verifyBase(req);
+    if (!base) return null;
+    const url = verifyUrl(base, record.code);
     const qrSvg = await QRCode.toString(url, {
       type: "svg", margin: 0, width: 120, errorCorrectionLevel: "M",
     });
@@ -206,6 +244,6 @@ const setRevoked = async ({ schoolId, id, revoked, reason, by }) => {
 module.exports = {
   ensure, verify, printableBlock,
   listForStudent, setRevoked,
-  mintCode, normalizeCode, formatCode, verifyUrl,
+  mintCode, normalizeCode, formatCode, verifyUrl, verifyBase,
   CODE_LENGTH, ALPHABET,
 };

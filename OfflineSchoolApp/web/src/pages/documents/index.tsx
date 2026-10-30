@@ -81,7 +81,7 @@ export default function DocumentsPage() {
       const html =
         tab === "classList"  ? await fetchClassListHtml(classId, schoolId, variant, lang) :
         tab === "idCards"    ? await fetchIdCardsHtml(classId, schoolId, lang) :
-                               await fetchTranscriptHtml(studentId, schoolId, lang);
+                               await fetchTranscriptHtml(studentId, schoolId, lang, mode === "preview");
 
       if (mode === "print") printHtml(html);
       else previewHtml(html);

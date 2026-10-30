@@ -437,6 +437,9 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
    * paper, nothing the paper does not already say.
    */
   const isHtml = String(req.query.format || "").toLowerCase() === "html";
+  // ?preview=1 is a look, not a print: it shows the code the transcript
+  // already has, and issues none.
+  const preview = req.query.preview === "1" || req.query.preview === "true";
   let verify = null;
   if (isHtml) {
     const round1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : null);
@@ -445,7 +448,8 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
       kind: "transcript",
       studentId: String(student._id),
       examId: null,
-      origin: originOf(req),
+      req,
+      count: !preview,
       snapshot: {
         facts: [
           { label: { en: "Student", fr: "Élève" },          value: data.student.name },

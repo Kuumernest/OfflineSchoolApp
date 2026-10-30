@@ -5721,5 +5721,9 @@
     "stay": "Rester",
     "marks_one": "{{count}} marque non enregistrée sera perdue.",
     "marks_other": "{{count}} marques non enregistrées seront perdues."
+  },
+  "verifyPage": {
+    "opening": "Ouverture de la page de vérification…",
+    "continue": "Continuer"
   }
 }
