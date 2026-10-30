@@ -1,6 +1,7 @@
 // web/src/pages/exams/[id]/index.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery }                          from "@tanstack/react-query";
+import { useQuery, useQueryClient }          from "@tanstack/react-query";
+import { examQueryKeys }                     from "@/hooks/useExams";
 import { useParams, useNavigate,
          useSearchParams, Link }             from "react-router-dom";
 import { fetchClasses }                      from "@/services/class.service";
@@ -722,6 +723,7 @@ const ScoreEntryPanel = ({
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [students, setStudents] = useState<MarkEntryStudent[]>([]);
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
@@ -895,6 +897,12 @@ const ScoreEntryPanel = ({
       setSaved(true);
       setTouched(false);
       setReasonPrompt(null);
+      // This sheet saves through the service, not useSaveBulkScores, so
+      // nothing told the page: the subject's row kept "0/11 scores entered ·
+      // Not submitted" until a reload. The same keys that hook refreshes.
+      void qc.invalidateQueries({ queryKey: ["submissions", examId] });
+      void qc.invalidateQueries({ queryKey: ["scores", examId] });
+      void qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId) });
       setReasonText("");
     } catch (err) {
       // 423 is not a failure to report and stop at — it is the server asking
