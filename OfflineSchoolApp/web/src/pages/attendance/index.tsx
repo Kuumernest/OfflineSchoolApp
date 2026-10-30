@@ -271,7 +271,7 @@ export default function AttendancePage() {
   const discard = async () => {
     const ok = await confirm({
       title:        t("attendance.discardConfirm"),
-      message:      `${dirtyCount} ${dirtyCount === 1 ? "mark" : "marks"} will be lost.`,
+      message:      t("unsaved.marks", { count: dirtyCount }),
       confirmLabel: t("common.discard"),
       kind:         "warning",
     });
@@ -507,7 +507,11 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            <ul className="divide-y divide-gray-100">
+            {/* With unsaved marks the save bar floats over the foot of the
+                list: room below the last row, and a scroll margin on every
+                row, keep the pupil being marked above it — more on a phone,
+                where the bar wraps to two lines. */}
+            <ul className={cn("divide-y divide-gray-100", dirtyCount > 0 && "pb-32 sm:pb-24")}>
               {filtered.map((entry) => {
                 const current = statusOf(entry);
                 const isDirty = entry.id in draft;
@@ -516,7 +520,7 @@ export default function AttendancePage() {
                   <li
                     key={entry.id}
                     className={cn(
-                      "px-4 py-2.5 flex flex-wrap items-center gap-3 transition-colors",
+                      "px-4 py-2.5 flex flex-wrap items-center gap-3 transition-colors scroll-mb-36 sm:scroll-mb-28",
                       isDirty && "bg-primary-50/40",
                     )}
                   >
@@ -572,9 +576,8 @@ export default function AttendancePage() {
           {dirtyCount > 0 && (
             <div className="sticky bottom-4 z-10">
               <div className="mx-auto max-w-xl px-4 py-3 rounded-xl bg-gray-900 text-white shadow-lg flex items-center justify-between gap-4">
-                <p className="text-sm">
-                  <strong>{dirtyCount}</strong> unsaved{" "}
-                  {dirtyCount === 1 ? "mark" : "marks"}
+                <p className="text-sm font-medium">
+                  {t("attendance.unsavedCount", { count: dirtyCount })}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
