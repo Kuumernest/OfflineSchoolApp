@@ -406,12 +406,21 @@
     "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again."
   },
   "staffOnly": {
-    "title": "This console is for school staff",
-    "body": "Your account is a student account. Student features live in the mobile app — sign in there with your enrolment number.",
     "signOut": "Sign out",
-    "greeting": "Hello{{name}} — this site is for staff",
-    "explain": "Your sign-in worked. This particular site is the one teachers and administrators use to run the school, so there is nothing here for a student account to open.",
-    "useApp": "Use the My School On The Move app on your phone instead. Your results, timetable and announcements are all there, and it keeps working when you have no signal. Sign in with the same enrolment number{{enrollment}} and password."
+    "greeting": "Hello{{name}}, your sign-in worked.",
+    "teacher": {
+      "title": "Teachers use the mobile app",
+      "explain": "This website is for the school office — the head, the administrators and the bursar. Marks, attendance, your timetable and messages are all in the My School On The Move app on your phone.",
+      "useApp": "Install the app and sign in with the same email and password. It keeps working when you have no signal and sends your marks when you are back online."
+    },
+    "student": {
+      "title": "Students use the mobile app",
+      "explain": "This website is for the school office — the head, the administrators and the bursar. Your results, timetable and announcements are all in the My School On The Move app on your phone.",
+      "useApp": "Install the app and sign in with the same enrolment number{{enrollment}} and password. It keeps working when you have no signal."
+    },
+    "getAndroid": "Download for Android",
+    "getIos": "Download for iPhone",
+    "askOffice": "Ask your school office how to install the app on your phone."
   },
   "requireRole": {
     "title": "This part of the console is not yours to open",
