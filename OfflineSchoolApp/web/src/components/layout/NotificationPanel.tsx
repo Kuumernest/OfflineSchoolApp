@@ -195,6 +195,11 @@ export default function NotificationPanel() {
       {/* ── Bell Button ────────────────────────────────────────────────────── */}
       <button
         onClick={() => setIsOpen((o) => !o)}
+        aria-label={
+          unreadCount > 0
+            ? `${t("notifications.title")} · ${t("portal.unreadCount", { count: unreadCount })}`
+            : t("notifications.title")
+        }
         className={cn(
           "relative p-2 rounded-lg transition-colors",
           isOpen
@@ -204,17 +209,23 @@ export default function NotificationPanel() {
       >
         <Bell className="w-5 h-5" />
 
-        {/* Unread notifications plus things to do (C11) */}
-        {unreadCount + actions.length > 0 && (
+        {/* Unread notifications only: the same count the panel's header
+            reads, so the badge is gone exactly when the panel says "All
+            read". It used to add the to-do items (C11), which reading cannot
+            clear — a bell showing "1" over a panel that said all read. The
+            to-dos are still listed at the top of the panel. */}
+        {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white">
-            {unreadCount + actions.length > 99 ? "99+" : unreadCount + actions.length}
+            {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
 
       {/* ── Dropdown Panel ─────────────────────────────────────────────────── */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+        // On a phone the 384px panel, hung from the bell, started off the
+        // left edge of a 390px screen; there it spans the viewport instead.
+        <div className="fixed inset-x-2 top-14 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
 
           {/* Header */}
           {/* gap and min-w-0: the panel is a fixed w-96 with overflow-hidden, so
