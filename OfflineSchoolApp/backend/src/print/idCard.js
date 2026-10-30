@@ -272,6 +272,24 @@ const CARD_CSS = `
   .value--name.n3 { font-size: 7.2pt; }
   .value--name.n4 { font-size: 6.2pt; }
 
+  /**
+   * The admission number is never truncated either.
+   *
+   * It is what the office types to find the pupil and what the parent signs in
+   * with; "ETEST-2026-…" is no use for either. It has half a column (~19 mm),
+   * so it steps down by length like the name, and as a last resort breaks at
+   * a hyphen rather than losing characters.
+   */
+  .value--id {
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.05;
+  }
+  .value--id.a1 { font-size: 6.2pt; }
+  .value--id.a2 { font-size: 5.4pt; }
+  .value--id.a3 { font-size: 4.8pt; }
+
   /* Sized for a cheap camera at arm's length in the shade of a doorway —
      below about 13mm a phone starts hunting for focus. */
   .qr { width: 13.5mm; height: 13.5mm; }
@@ -289,13 +307,6 @@ const CARD_CSS = `
   /* The head's signature and the school's stamp go here by hand: a clean
      space above the line (no placeholder text), the head's title below it. */
   .sig__space { height: 5.4mm; width: 100%; }
-
-    font-size: 10pt; color: ${GOLD};
-    line-height: 0.75;
-    margin-bottom: -0.2mm;
-    height: 3.2mm;
-    overflow: hidden;
-  }
   .sig__line  { height: 0.3mm; background: ${NAVY}; width: 100%; margin-bottom: 0.5mm; }
   .sig__label {
     font-family: ${F_LABEL}; font-weight: 600;
@@ -336,6 +347,14 @@ const CARD_CSS = `
       box-shadow: 0 4px 18px rgba(0,0,0,.25);
     }
   }
+  /* A phone shows the sheet one card wide (85.6 mm is ~324 px) rather than
+     scrolling sideways across two. Screen only: the printed sheet keeps its
+     two columns. */
+  @media screen and (max-width: 760px) {
+    body { padding: 8px; }
+    .sheet { grid-template-columns: 85.6mm; padding: 4mm; width: auto;
+             max-width: max-content; }
+  }
 `;
 
 /**
@@ -350,6 +369,14 @@ const schoolTier = (name) => {
   if (length <= 30) return "s1";
   if (length <= 40) return "s2";
   return "s3";
+};
+
+/** Measured against half the fields column, about 19 mm. */
+const idTier = (value) => {
+  const length = String(value ?? "").length;
+  if (length <= 11) return "a1";
+  if (length <= 14) return "a2";
+  return "a3";
 };
 
 const nameTier = (name) => {
@@ -408,7 +435,7 @@ const renderCard = ({ student, school, labels, origin, academicYear, validUntil 
             <div class="pair">
               <div>
                 <div class="label">${esc(labels.admissionNo)}</div>
-                <div class="value value--small">${orDash(student.enrollmentNo)}</div>
+                <div class="value value--id ${idTier(student.enrollmentNo)}">${orDash(student.enrollmentNo)}</div>
               </div>
               <div>
                 <div class="label">${esc(labels.class)}</div>

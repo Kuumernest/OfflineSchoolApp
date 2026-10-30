@@ -17,7 +17,7 @@ export function Select({
     <select
       className={cn(
         "h-9 rounded-control border border-line-strong bg-surface",
-        "pl-3 pr-8 text-sm text-ink-body",
+        "min-w-0 pl-3 pr-8 text-base sm:text-sm text-ink-body",
         "cursor-pointer appearance-none transition-colors",
         "hover:border-ink-faint focus:border-primary-500 focus:outline-none",
         // appearance-none removes the native arrow; without a replacement the

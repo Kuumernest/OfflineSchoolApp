@@ -30,7 +30,7 @@ export function SearchInput({
         placeholder={ph}
         className="
           h-9 w-full rounded-control border border-line-strong bg-surface
-          pl-9 pr-9 text-sm text-ink-body placeholder:text-ink-faint
+          min-w-0 pl-9 pr-9 text-base sm:text-sm text-ink-body placeholder:text-ink-faint
           transition-colors hover:border-ink-faint
           focus:border-primary-500 focus:outline-none
         "

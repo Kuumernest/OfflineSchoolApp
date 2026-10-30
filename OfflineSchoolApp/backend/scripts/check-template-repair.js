@@ -239,8 +239,8 @@ check("the print rules are appended to a stylesheet without them",
   /@page/.test(repairPrintCss(".x { color: red }")), true);
 check("and a stylesheet that has @page is not given a second one",
   repairPrintCss(DEFAULT_TEMPLATE_CSS), null);
-check("A4 and a 9mm margin",
-  /@page\s*\{[^}]*size:\s*A4[^}]*margin:\s*9mm/.test(repairPrintCss(".x{}")), true);
+check("A4 and a 10mm margin",
+  /@page\s*\{[^}]*size:\s*A4[^}]*margin:\s*10mm/.test(repairPrintCss(".x{}")), true);
 // A block split down the fold is how a signature ends up alone on page two.
 check("blocks are told not to break across the fold",
   /break-inside:\s*avoid/.test(repairPrintCss(".x{}")), true);

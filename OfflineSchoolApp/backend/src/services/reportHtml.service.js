@@ -343,6 +343,65 @@ function schoolWatermark(school) {
 }
 
 /**
+ * The rules that make a card readable on a phone and clean on paper, for the
+ * built-in layout and a school's own template alike.
+ *
+ * A card opens in a fresh tab (about:blank written to, on the web) or a
+ * WebView. Without the viewport meta a phone lays it out 980px wide and
+ * shrinks it to a postage stamp; these rules then fit it to the screen:
+ * fluid up to a sheet's width, the bilingual header stacked, the pupil grid
+ * in two columns, and a marks table that scrolls sideways inside itself
+ * rather than widening the page.
+ *
+ * Screen-only, so the printed sheet is untouched by them. The print half
+ * keeps colour (headers, tints and the pass/fail figures print as designed),
+ * holds a block to one sheet, and hides anything marked for the screen only.
+ *
+ * Appended after a school's template CSS, so a template cannot leave a phone
+ * reader with an unreadable card — but only under 600px wide and on screen,
+ * so the template still decides everything else.
+ */
+const RESPONSIVE_CSS = `
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    img, svg { max-width: 100%; }
+
+    @media screen and (max-width: 600px) {
+      body { padding: 12px !important; max-width: 100% !important; }
+      .report-wrapper { padding: 12px !important; max-width: 100% !important; }
+      .report-header-top { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+      .report-header-top > .school-head,
+      .report-header-top > .school-identity { grid-column: 1 / -1; order: -1; }
+      .info-grid { grid-template-columns: 1fr 1fr !important; }
+      /* The template's rows are label-beside-value with a 110px label:
+         one to a line, or the value is pushed off the screen. */
+      .student-info-grid { grid-template-columns: 1fr !important; }
+      .info-grid > *, .student-info-grid > * { min-width: 0; }
+      .val, .info-val { overflow-wrap: anywhere; }
+      /* The seeded template floats the photo up beside the details with an
+         inline margin-top of -120px; with the details one to a line that
+         lands it on the pupil's name. Below them instead. */
+      div:has(> .student-photo, > .student-photo-placeholder)
+        { float: none !important; margin: 0 0 12px !important; }
+      .info-grid--photo .info-photo { grid-column: 1 / -1; grid-row: auto; order: -1; }
+      .summary-section, .closing-section, .verdict, .stat-row, .remarks-row
+        { flex-wrap: wrap; }
+      /* The marks table scrolls inside itself: ten columns do not fit
+         390px, and squeezing them would wrap every mark onto two lines. */
+      table { display: block; max-width: 100%; overflow-x: auto;
+              -webkit-overflow-scrolling: touch; }
+      th { white-space: nowrap; }
+      td:first-child { min-width: 7.5em; }
+    }
+
+    @media print {
+      .no-print, .screen-only { display: none !important; }
+      .report-header, .school-header, .info-grid, .student-info-grid,
+      .info-panel, .remarks, .verify, .verify-strip, .footer
+        { break-inside: avoid; page-break-inside: avoid; }
+    }`;
+
+/**
  * Render the canonical printable report card.
  *
  * @param {object} payload  Report card payload (see header comment)
@@ -740,11 +799,13 @@ function renderReportCardHtml(payload, opts = {}) {
 <html lang="${lang}">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${t.title} — ${esc(payload.studentName || "")}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 12px;
-           color: #111827; padding: 24px; max-width: 800px; margin: 0 auto; }
+           color: #111827; padding: 24px; width: 100%; max-width: 210mm;
+           margin: 0 auto; }
     /* ── The official header ───────────────────────────────────────────
        Ministry and delegations in English down the left, the school in the
        middle, the same in French down the right. Both languages on every
@@ -895,8 +956,9 @@ function renderReportCardHtml(payload, opts = {}) {
 
        The break rules are the other half: a block split down the fold is
        how a signature ends up alone at the top of a second sheet. */
-    @page { size: A4; margin: 9mm; }
+    @page { size: A4; margin: 10mm; }
 ${watermark.css}
+${RESPONSIVE_CSS}
 
     @media print {
       body { padding: 0; font-size: 10.5px; max-width: none; }
@@ -1418,11 +1480,13 @@ function wrapTemplateHtml(body, css, { lang, title, school, sections }) {
 <html lang="${lang}">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 12px;
-           color: #111827; padding: 24px; max-width: 800px; margin: 0 auto; }
+           color: #111827; padding: 24px; width: 100%; max-width: 210mm;
+           margin: 0 auto; }
     .subjects-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     .subjects-table th, .subjects-table td { border: 1px solid #333; padding: 6px 8px; }
     /* The default head tint goes on the row group, not the cells: a th
@@ -1444,14 +1508,15 @@ function wrapTemplateHtml(body, css, { lang, title, school, sections }) {
        @page rule — the seeded template now does — overrides it. A
        template that predates it still gets a sheet-sized page rather than
        the browser default with 12mm of padding inside it. */
-    @page { size: A4; margin: 9mm; }
+    @page { size: A4; margin: 10mm; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; max-width: none; }
       thead { display: table-header-group; }
       tr { break-inside: avoid; page-break-inside: avoid; }
     }
 ${watermark.css}
     ${css || ""}
+${RESPONSIVE_CSS}
   </style>
 </head>
 <body>${showWatermark ? watermark.html : ""}${body}</body>

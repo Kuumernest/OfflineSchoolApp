@@ -838,5 +838,23 @@ check("a bare base64 logo is wrapped the way the header wraps it",
     { ...tplOpts, school: { name: "GBHS Molyko", logoBase64: "AAAA" } }).html)?.src,
   "data:image/png;base64,AAAA");
 
+console.log("--- on a phone and on paper ---");
+// A card opens in a fresh tab or a WebView. Without the viewport meta a phone
+// lays it out 980px wide and shows it postage-stamp sized.
+const builtinCard = render();
+const templateCard = renderReportCard(payload(), tplOpts).html;
+for (const [which, html] of [["built-in", builtinCard], ["template", templateCard]]) {
+  check(`${which}: a viewport meta, so a phone lays it out at its own width`,
+    /<meta name="viewport" content="width=device-width, initial-scale=1">/.test(html), true);
+  check(`${which}: A4 at 10mm, colour kept in print, screen-only controls hidden`,
+    [/@page \{ size: A4; margin: 10mm; \}/.test(html) || /@page\s*\{\s*size:\s*A4;\s*margin:\s*10mm;/.test(html),
+     /print-color-adjust: exact/.test(html),
+     /\.no-print, \.screen-only \{ display: none !important; \}/.test(html)], [true, true, true]);
+  check(`${which}: on a narrow screen the marks table scrolls inside itself`,
+    /@media screen and \(max-width: 600px\)[\s\S]*table \{ display: block; max-width: 100%; overflow-x: auto;/.test(html), true);
+}
+check("template: the phone rules come after the school's own CSS, so a template cannot undo them",
+  templateCard.lastIndexOf("@media screen and (max-width: 600px)") > templateCard.indexOf(".report-wrapper {"), true);
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
