@@ -142,8 +142,22 @@ interface MarkEntryStudent {
   id?:           string;
   name?:         string;
   studentName?:  string;
-  admissionNo?:  string;
+  /** What the student record stores, and what the ID card prints. */
+  enrollmentNo?: string | null;
+  /** Legacy names for the same number, read only when enrollmentNo is absent. */
+  admissionNo?:  string | null;
+  admissionNumber?: string | null;
 }
+
+/**
+ * A pupil's admission number on the marks sheet.
+ *
+ * The sheet read `admissionNo`, which the student list does not send — the
+ * record holds `enrollmentNo` — so every pupil, a newly enrolled one most
+ * visibly, showed a dash while their ID card printed ETEST-2026-041.
+ */
+const admissionOf = (s: MarkEntryStudent): string =>
+  s.enrollmentNo || s.admissionNo || s.admissionNumber || "";
 
 /** One saved score row as the scores endpoint returns it. */
 interface RawScoreRow {
@@ -931,7 +945,7 @@ const ScoreEntryPanel = ({
     return (
       !q ||
       (s.studentName || s.name || "").toLowerCase().includes(q) ||
-      (s.admissionNo || "").toLowerCase().includes(q)
+      admissionOf(s).toLowerCase().includes(q)
     );
   });
 
@@ -1093,7 +1107,7 @@ const ScoreEntryPanel = ({
 
                 {/* Admission number */}
                 <p className="text-xs text-gray-400 text-center">
-                  {student.admissionNo ? `#${student.admissionNo}` : "—"}
+                  {admissionOf(student) ? `#${admissionOf(student)}` : "—"}
                 </p>
 
                 {/* Absent toggle */}
