@@ -1076,7 +1076,13 @@
     "errCreate": "Échec de la création de l'examen",
     "errUpdateStatus": "Échec de la mise à jour du statut",
     "errUpdate": "Échec de la mise à jour de l'examen",
-    "errDelete": "Échec de la suppression de l'examen"
+    "errDelete": "Échec de la suppression de l'examen",
+    "saveDraft": "Enregistrer le brouillon",
+    "draftSaved": "Brouillon enregistré",
+    "submitMarks": "Soumettre pour validation",
+    "submitted": "Soumis",
+    "marksIncomplete_one": "{{count}} élève n'a pas encore de note : saisissez une note ou marquez-le absent avant de valider.",
+    "marksIncomplete_other": "{{count}} élèves n'ont pas encore de note : saisissez une note ou marquez-les absents avant de valider."
   },
   "examCreate": {
     "title": "Créer une évaluation",

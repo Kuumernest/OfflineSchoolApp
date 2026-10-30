@@ -1076,7 +1076,13 @@
     "errCreate": "Failed to create exam",
     "errUpdateStatus": "Failed to update status",
     "errUpdate": "Failed to update exam",
-    "errDelete": "Failed to delete exam"
+    "errDelete": "Failed to delete exam",
+    "saveDraft": "Save draft",
+    "draftSaved": "Draft saved",
+    "submitMarks": "Submit for approval",
+    "submitted": "Submitted",
+    "marksIncomplete_one": "{{count}} student has no mark yet: enter a score or mark them absent before approving.",
+    "marksIncomplete_other": "{{count}} students have no mark yet: enter a score or mark them absent before approving."
   },
   "examCreate": {
     "title": "Create exam",

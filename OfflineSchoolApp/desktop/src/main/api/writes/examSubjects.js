@@ -253,6 +253,23 @@ module.exports = [
       });
       if (!row) return null;
 
+      // The server refuses to approve while a pupil on the roster has no mark
+      // (no score, not absent, not exempt): 409 MARKS_INCOMPLETE. Declined
+      // here too, so the refusal is answered now rather than queued to stop
+      // the outbox later.
+      const marked = new Set(
+        docs.find("studentScore", {
+          schoolId, examId: String(row.examId), classId: String(row.classId),
+          subjectId: String(row.subjectId), deletedAt: null,
+        })
+          .filter((sc) => sc.score != null || sc.isAbsent || sc.isExempt)
+          .map((sc) => String(sc.studentId)),
+      );
+      const roster = docs.find("student", {
+        schoolId, classId: String(row.classId), status: "approved", deletedAt: null,
+      }).filter((st) => st.isActive !== false);
+      if (roster.some((st) => !marked.has(String(st._id)))) return null;
+
       const now = new Date().toISOString();
       const doc = {
         ...row,

@@ -558,6 +558,9 @@ module.exports = [
           classId:      s.classId,
           className:    s.className,
           grade:        s.grade,
+          // As the server selects: the number the record holds, and the
+          // legacy field for older imports.
+          enrollmentNo: s.enrollmentNo,
           admissionNo:  s.admissionNo,
         }))
         // .sort({ studentName: 1 }) on the server: byte order, not a locale's.

@@ -1301,8 +1301,11 @@ const main = async () => {
    * request can, so there is now a request.
    */
   const cardRes = await fetch(
+    // ?issue=1: a print. A preview of a card never printed carries no
+    // verification strip (a preview issues no code, 2026-10-30), and the
+    // order checked below is the printed card's.
     `http://127.0.0.1:${port}/api/results/exam-0/student/stu-1/reportcard/html` +
-    `?schoolId=${SCHOOL}&lang=en`,
+    `?schoolId=${SCHOOL}&lang=en&issue=1`,
     { headers: { authorization: `Bearer ${token}` } }
   );
   check("the sequence card route answers 200", cardRes.status, 200);
@@ -2397,9 +2400,27 @@ const main = async () => {
     rejected.data.subject.rejectReason, "Two students are missing");
   check("and the status says so", rejected.data.subject.submissionStatus, "rejected");
 
+  // Émile (p2) has no mark yet. Approving is refused on the server (409
+  // MARKS_INCOMPLETE, 2026-10-30), so the desk declines it rather than
+  // queueing a write the server would refuse and stop the outbox on.
+  const approvePath = "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/approve";
+  check("approving with a pupil unmarked is not queued",
+    api.handle({ method: "PATCH", path: approvePath, query: {}, body: { schoolId: SCHOOL } }, marksCtx),
+    null);
+  const incompleteRefused = await (await fetch("http://127.0.0.1:" + port + approvePath, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", authorization: "Bearer " + token },
+    body: JSON.stringify({ schoolId: SCHOOL }),
+  })).json().then((b) => b.code);
+  check("and the server really would have refused it", incompleteRefused, "MARKS_INCOMPLETE");
+
+  // Émile marked absent: every pupil now has a mark or a reason not to.
+  await StudentScore.collection.updateOne({ _id: "sc-2" }, { $set: { isAbsent: true, updatedAt: new Date() } });
+  await marksEngine.cycle();
+
   const approved = api.handle({
     method: "PATCH",
-    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/approve",
+    path: approvePath,
     query: {}, body: { schoolId: SCHOOL },
   }, marksCtx);
   check("approving after a rejection works", approved?.status, 200);
@@ -2902,7 +2923,7 @@ const main = async () => {
   }, teachCtx).data.students;
   check("the roster carries only the fields the endpoint selects",
     Object.keys(roster[0]).sort().join(),
-    ["_id", "admissionNo", "className", "classId", "email", "firstName",
+    ["_id", "admissionNo", "className", "classId", "email", "enrollmentNo", "firstName",
      "grade", "lastName", "studentName"].sort().join());
   check("and nothing from the rest of the record",
     roster.some((s) => "guardianPhone" in s), false);

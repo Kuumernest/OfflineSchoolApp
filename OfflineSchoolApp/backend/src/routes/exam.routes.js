@@ -573,6 +573,26 @@ const enrolledCountsFor = async (schoolId, classIds) => {
   return (es) => counts.get(String(es.classId)) ?? 0;
 };
 
+/**
+ * Pupils on the class roster with no mark for this exam subject: no score,
+ * and not marked absent or exempt. A draft may leave them blank; submitting
+ * for approval and approving may not.
+ */
+const unmarkedFor = async (es, schoolId) => {
+  const Student = require("../db/models/Student");
+  const [roster, marked] = await Promise.all([
+    Student.find({ schoolId: String(schoolId), classId: String(es.classId), status: "approved",
+      isActive: { $ne: false }, deletedAt: null }).select("_id").lean(),
+    StudentScore.distinct("studentId", {
+      examId: String(es.examId), classId: String(es.classId), subjectId: String(es.subjectId),
+      schoolId: String(schoolId), deletedAt: null,
+      $or: [{ score: { $ne: null } }, { isAbsent: true }, { isExempt: true }],
+    }),
+  ]);
+  const has = new Set(marked.map(String));
+  return roster.map((r) => String(r._id)).filter((id) => !has.has(id));
+};
+
 router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
@@ -1209,7 +1229,16 @@ router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
 router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
-  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId, scores } = req.body;
+  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId } = req.body;
+  // A draft: the teacher's sheet so far. Blank rows are left alone rather
+  // than refused, and the subject is not submitted for approval — that is
+  // the plain save's job, which still wants every present pupil marked.
+  const draft = req.body.draft === true || req.body.draft === "true";
+  const isBlank = (s) => s && !s.isAbsent && !s.isExempt &&
+    (s.score === null || s.score === undefined || s.score === "");
+  const scores = Array.isArray(req.body.scores) && draft
+    ? req.body.scores.filter((s) => !isBlank(s))
+    : req.body.scores;
 
   if (!bodyClassId || !bodySubjectId || !Array.isArray(scores)) {
     return res.status(400).json({
@@ -1492,7 +1521,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
 
   await logResultChange(audit, changes);
 
-  if (examSubject) {
+  if (examSubject && !draft) {
     await ExamSubject.findByIdAndUpdate(examSubject._id, {
       submissionStatus: "submitted",
       submittedBy:      req.user?._id,
@@ -1518,6 +1547,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
     saved:         savedCount,
     failed:        failed.length,
     failedRecords: failed,
+    draft,
   });
 }));
 
@@ -1627,6 +1657,22 @@ router.patch(
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     const now      = new Date();
+
+    // Every pupil marked — a score, or absent, or exempt — before the marks
+    // are approved. A draft may have blanks; an approved sheet may not.
+    const target = await ExamSubject.findOne({
+      _id: req.params.examSubjectId, examId: req.params.examId, schoolId,
+    }).lean();
+    if (!target) return res.status(404).json({ message: "Exam subject not found" });
+    const unmarked = await unmarkedFor(target, schoolId);
+    if (unmarked.length) {
+      return res.status(409).json({
+        success: false,
+        code:    "MARKS_INCOMPLETE",
+        message: `${unmarked.length} student(s) have no mark yet: enter a score or mark them absent before approving.`,
+        unmarked,
+      });
+    }
 
     const es = await ExamSubject.findOneAndUpdate(
       {
