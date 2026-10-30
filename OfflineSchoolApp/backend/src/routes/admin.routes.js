@@ -1048,24 +1048,11 @@ router.get("/exams/stats", requirePermission("dashboard.view"), asyncHandler(asy
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
-  let Exam = null;
-  try { Exam = require("../db/models/Exam"); } catch { /* optional */ }
-
-  if (!Exam) {
-    return sendSuccess(res, {
-      total: 0, ongoing: 0, completed: 0, draft: 0, scheduled: 0,
-    });
-  }
-
-  const [total, ongoing, completed, draft, scheduled] = await Promise.all([
-    Exam.countDocuments({ schoolId, deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "ongoing",   deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "completed", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "draft",     deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "scheduled", deletedAt: null }),
-  ]);
-
-  return sendSuccess(res, { total, ongoing, completed, draft, scheduled });
+  // Every status, from the same count the exams page shows. This listed four
+  // of the six, so published and archived exams were in the total and in no
+  // segment.
+  const { countExamsByStatus } = require("../services/examStatusCounts.service");
+  return sendSuccess(res, await countExamsByStatus({ schoolId: String(schoolId), deletedAt: null }));
 }));
 
 router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {

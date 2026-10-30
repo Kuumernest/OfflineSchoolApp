@@ -25,6 +25,7 @@ const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
 const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
 const { scopedPassRate, withAverage20 } = require("../services/classStats.service");
+const { countExamsByStatus } = require("../services/examStatusCounts.service");
 const { withAssignedTeachers } = require("../services/classSubjectTeacher.service");
 const { currentYearOf } = require("../services/fees.service");
 const { calendarAcademicYear } = require("../../../shared/academicYear");
@@ -218,18 +219,11 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const [
-    total, draft, scheduled, ongoing,
-    completed, published, archived,
+    examCounts,
     publishedResults, pendingResults,
     studentsWithMissingGrades,
   ] = await Promise.all([
-    Exam.countDocuments({ schoolId, deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "draft",     deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "scheduled", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "ongoing",   deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "completed", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "published", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "archived",  deletedAt: null }),
+    countExamsByStatus({ schoolId: String(schoolId), deletedAt: null }),
     ResultSummary.countDocuments({ schoolId, isPublished: true  }),
     ResultSummary.countDocuments({ schoolId, isPublished: false }),
     StudentScore.countDocuments({
@@ -264,7 +258,7 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     dashboard: {
-      exams:   { total, draft, scheduled, ongoing, completed, published, archived },
+      exams:   examCounts,
       results: {
         published:          publishedResults,
         pending:            pendingResults,
@@ -303,26 +297,16 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
 
   const { term, academicYear, classId } = req.query;
 
-  const base = { schoolId, deletedAt: null };
+  const base = { schoolId: String(schoolId), deletedAt: null };
   if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
   if (term)         base.term         = Number(term);
-  if (academicYear) base.academicYear = academicYear;
+  if (academicYear) base.academicYear = String(academicYear);
   if (classId) {
-    base.$or = [{ classId }, { classIds: classId }];
+    base.$or = [{ classId: String(classId) }, { classIds: String(classId) }];
   }
 
-  const [
-    total, draft, scheduled, ongoing,
-    completed, published, archived,
-  ] = await Promise.all([
-    Exam.countDocuments(base),
-    Exam.countDocuments({ ...base, status: "draft"     }),
-    Exam.countDocuments({ ...base, status: "scheduled" }),
-    Exam.countDocuments({ ...base, status: "ongoing"   }),
-    Exam.countDocuments({ ...base, status: "completed" }),
-    Exam.countDocuments({ ...base, status: "published" }),
-    Exam.countDocuments({ ...base, status: "archived"  }),
-  ]);
+  const examCounts = await countExamsByStatus(base);
+  const { total, draft, scheduled, ongoing, completed, published, archived } = examCounts;
 
   const todayStr   = new Date().toISOString().split("T")[0];
   const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
