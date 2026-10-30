@@ -287,8 +287,10 @@ export interface ActionItem {
   key:     "marksAwaitingApproval" | "resultsUnpublished" | "overdueFees";
   count:   number;
   link:    string;
-  /** Overdue fees: the total owed. */
+  /** Overdue fees: the amount past due (not the late pupils' whole balances). */
   amount?: number;
+  /** Overdue fees: the families those pupils belong to. */
+  families?: number;
 }
 
 export async function fetchActionItems(schoolId: string): Promise<ActionItem[]> {

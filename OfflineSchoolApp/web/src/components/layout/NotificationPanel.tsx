@@ -284,6 +284,7 @@ export default function NotificationPanel() {
                         {t(`notifications.action.${a.key}`, {
                           count: a.count,
                           amount: a.amount != null ? fmt.money(a.amount) : "",
+                          families: t("notifications.families", { count: a.families ?? a.count }),
                         })}
                       </span>
                       <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />

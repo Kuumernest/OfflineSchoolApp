@@ -11,15 +11,17 @@
  *
  *   marksAwaitingApproval   ExamSubject submitted, not approved   exams.manage
  *   resultsUnpublished      results processed, not published      results.publish
- *   overdueFees             families behind on a due date         fees.view
- *                           (feeReminders.candidates, overdue — the same rule
- *                           as Fee reminders and Students to watch, C6)
+ *   overdueFees             pupils behind on a due date, the     fees.view
+ *                           families they belong to, and the
+ *                           amount past due (arrears.service — the
+ *                           figures the Fees page, Fee reminders and
+ *                           Students to watch read, C6)
  */
 
 const Exam          = require("../db/models/Exam");
 const ExamSubject   = require("../db/models/ExamSubject");
 const ResultSummary = require("../db/models/ResultSummary");
-const { candidates } = require("./feeReminders.service");
+const { arrearsFor } = require("./arrears.service");
 
 /** One exam → its own page; several → the list. */
 const linkFor = (examIds, tab) =>
@@ -42,7 +44,7 @@ const actionItemsFor = async ({ schoolId, can, asOf = new Date() }) => {
     can.publish
       ? ResultSummary.distinct("examId", { ...live, isPublished: { $ne: true } })
       : [],
-    can.fees ? candidates({ schoolId, mode: "overdue", asOf }) : [],
+    can.fees ? arrearsFor({ schoolId, asOf }) : null,
   ]);
 
   // Processed but unpublished, on an exam that still exists and is not out.
@@ -61,9 +63,13 @@ const actionItemsFor = async ({ schoolId, can, asOf = new Date() }) => {
     items.push({ key: "resultsUnpublished", count: unpublished.length,
       link: linkFor(unpublished, "results") });
   }
-  if (overdue.length) {
-    items.push({ key: "overdueFees", count: overdue.length,
-      amount: overdue.reduce((sum, r) => sum + (r.balance || 0), 0), link: "/fees" });
+  // Pupils, not "families" (a guardian with three late children is one
+  // family), and only what is past due — it was each late pupil's whole
+  // balance, next term's fees included.
+  if (overdue?.totals.overdueStudents) {
+    const { overdueStudents, overdueFamilies, overdue: amount } = overdue.totals;
+    items.push({ key: "overdueFees", count: overdueStudents, families: overdueFamilies,
+      amount, link: "/fees" });
   }
   return items;
 };

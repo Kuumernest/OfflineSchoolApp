@@ -1458,8 +1458,8 @@
       "marksAwaitingApproval_other": "Les notes de {{count}} matières attendent l'approbation",
       "resultsUnpublished": "Les résultats de {{count}} examen sont prêts à publier",
       "resultsUnpublished_other": "Les résultats de {{count}} examens sont prêts à publier",
-      "overdueFees": "{{count}} famille a des frais en retard ({{amount}})",
-      "overdueFees_other": "{{count}} familles ont des frais en retard ({{amount}})"
+      "overdueFees": "{{count}} élève en retard ({{families}}) · {{amount}} échu",
+      "overdueFees_other": "{{count}} élèves en retard ({{families}}) · {{amount}} échus"
     },
     "justNow": "À l'instant",
     "title": "Notifications",
@@ -1478,7 +1478,9 @@
     "filterUnread": "Non lues",
     "filterAlerts": "Alertes",
     "alertCount": "{{count}} alerte",
-    "alertCount_other": "{{count}} alertes"
+    "alertCount_other": "{{count}} alertes",
+    "families": "{{count}} famille",
+    "families_other": "{{count}} familles"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
@@ -2209,7 +2211,14 @@
     "activate": "Impossible d’activer la grille tarifaire",
     "reactivate": "Réactiver",
     "owingCount": "{{count}} en retard",
-    "noClass": "Sans classe"
+    "noClass": "Sans classe",
+    "overdue": "En retard",
+    "overdueOfIt": "dont {{amount}} en retard",
+    "overduePupils": "{{count}} élève en retard ({{families}})",
+    "overduePupils_other": "{{count}} élèves en retard ({{families}})",
+    "overdueCount": "{{count}} en retard",
+    "overdueCount_other": "{{count}} en retard",
+    "noneOverdue": "Rien en retard pour l'instant"
   },
   "chase": {
     "title": "Recouvrement",

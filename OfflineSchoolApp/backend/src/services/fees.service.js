@@ -241,7 +241,7 @@ const CURRENT_STUDENT = { deletedAt: null, status: "approved", isActive: { $ne: 
  * @returns {Promise<Map<string, {academicYear, charged, waived, billed, paid,
  *   outstanding, owing, rows?}>>}  keyed by schoolId
  */
-const outstandingBySchool = async ({ schoolIds, academicYear = null, classId = null, withRows = false }) => {
+const outstandingBySchool = async ({ schoolIds, academicYear = null, classId = null, withRows = false, onlyStudentIds = null }) => {
   const ids = [...new Set((schoolIds || []).map(String))];
   const out = new Map();
   if (!ids.length) return out;
@@ -254,6 +254,8 @@ const outstandingBySchool = async ({ schoolIds, academicYear = null, classId = n
 
   const students = await Student.find({
     schoolId: { $in: ids }, ...CURRENT_STUDENT, ...(classId ? { classId } : {}),
+    // One family's children (the parent portal): the same figure, a narrower read.
+    ...(Array.isArray(onlyStudentIds) ? { _id: { $in: onlyStudentIds.map(String) } } : {}),
   }).select("_id schoolId studentName name firstName lastName enrollmentNo classId").lean();
 
   const studentIds = students.map((s) => String(s._id));
@@ -320,8 +322,8 @@ const outstandingBySchool = async ({ schoolIds, academicYear = null, classId = n
 };
 
 /** One school's outstanding fees (outstandingBySchool). */
-const outstandingFor = async ({ schoolId, academicYear = null, classId = null, withRows = false }) =>
-  (await outstandingBySchool({ schoolIds: [schoolId], academicYear, classId, withRows })).get(String(schoolId));
+const outstandingFor = async ({ schoolId, academicYear = null, classId = null, withRows = false, onlyStudentIds = null }) =>
+  (await outstandingBySchool({ schoolIds: [schoolId], academicYear, classId, withRows, onlyStudentIds })).get(String(schoolId));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BILLING A NEWCOMER
