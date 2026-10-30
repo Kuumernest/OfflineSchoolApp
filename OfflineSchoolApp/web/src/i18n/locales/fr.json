@@ -577,11 +577,11 @@
     "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
     "dobFuture": "La date de naissance ne peut pas être dans le futur.",
     "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée.",
-    "countRegistered_one": "{{count}} élève inscrit",
+    "countRegistered": "{{count}} élève inscrit",
     "countRegistered_other": "{{count}} élèves inscrits",
-    "countResults_one": "{{count}} résultat",
+    "countResults": "{{count}} résultat",
     "countResults_other": "{{count}} résultats",
-    "countResultsOf_one": "{{count}} résultat sur {{total}} élèves",
+    "countResultsOf": "{{count}} résultat sur {{total}} élèves",
     "countResultsOf_other": "{{count}} résultats sur {{total}} élèves",
     "noneMatch": "Aucun élève ne correspond à ces filtres"
   },
@@ -1082,7 +1082,7 @@
     "draftSaved": "Brouillon enregistré",
     "submitMarks": "Soumettre pour validation",
     "submitted": "Soumis",
-    "marksIncomplete_one": "{{count}} élève n'a pas encore de note : saisissez une note ou marquez-le absent avant de valider.",
+    "marksIncomplete": "{{count}} élève n'a pas encore de note : saisissez une note ou marquez-le absent avant de valider.",
     "marksIncomplete_other": "{{count}} élèves n'ont pas encore de note : saisissez une note ou marquez-les absents avant de valider."
   },
   "examCreate": {
@@ -1186,7 +1186,7 @@
     "printAll_other": "Aperçu des {{count}} bulletins",
     "viewResults": "Voir les résultats",
     "noneMarked": "Aucun élève de cette classe n'a encore de notes pour cet examen.",
-    "noMarksNote_one": "{{count}} élève n'a aucune note pour cet examen et n'aura pas de bulletin :",
+    "noMarksNote": "{{count}} élève n'a aucune note pour cet examen et n'aura pas de bulletin :",
     "noMarksNote_other": "{{count}} élèves n'ont aucune note pour cet examen et n'auront pas de bulletin :"
   },
   "admissions": {
@@ -5730,7 +5730,7 @@
     "message": "Vos modifications sur cette page n'ont pas été enregistrées et seront perdues.",
     "leave": "Quitter",
     "stay": "Rester",
-    "marks_one": "{{count}} marque non enregistrée sera perdue.",
+    "marks": "{{count}} marque non enregistrée sera perdue.",
     "marks_other": "{{count}} marques non enregistrées seront perdues."
   },
   "verifyPage": {

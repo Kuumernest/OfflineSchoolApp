@@ -577,11 +577,11 @@
     "phoneHint": "Saved as +237 and 9 digits.",
     "dobFuture": "The date of birth cannot be in the future.",
     "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved.",
-    "countRegistered_one": "{{count}} student registered",
+    "countRegistered": "{{count}} student registered",
     "countRegistered_other": "{{count}} students registered",
-    "countResults_one": "{{count}} result",
+    "countResults": "{{count}} result",
     "countResults_other": "{{count}} results",
-    "countResultsOf_one": "{{count}} result of {{total}} students",
+    "countResultsOf": "{{count}} result of {{total}} students",
     "countResultsOf_other": "{{count}} results of {{total}} students",
     "noneMatch": "No students match these filters"
   },
@@ -1082,7 +1082,7 @@
     "draftSaved": "Draft saved",
     "submitMarks": "Submit for approval",
     "submitted": "Submitted",
-    "marksIncomplete_one": "{{count}} student has no mark yet: enter a score or mark them absent before approving.",
+    "marksIncomplete": "{{count}} student has no mark yet: enter a score or mark them absent before approving.",
     "marksIncomplete_other": "{{count}} students have no mark yet: enter a score or mark them absent before approving."
   },
   "examCreate": {
@@ -1186,7 +1186,7 @@
     "printAll_other": "Preview All {{count}} Reports",
     "viewResults": "View Results",
     "noneMarked": "No student in this class has marks for this exam yet.",
-    "noMarksNote_one": "{{count}} student has no marks for this exam and gets no card:",
+    "noMarksNote": "{{count}} student has no marks for this exam and gets no card:",
     "noMarksNote_other": "{{count}} students have no marks for this exam and get no card:"
   },
   "admissions": {
@@ -5730,7 +5730,7 @@
     "message": "Your changes on this page have not been saved and will be lost.",
     "leave": "Leave",
     "stay": "Stay",
-    "marks_one": "{{count}} unsaved mark will be lost.",
+    "marks": "{{count}} unsaved mark will be lost.",
     "marks_other": "{{count}} unsaved marks will be lost."
   },
   "verifyPage": {
