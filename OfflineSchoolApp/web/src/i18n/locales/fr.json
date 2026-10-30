@@ -575,7 +575,14 @@
     "phoneInvalid": "Un numéro camerounais a 9 chiffres commençant par 6 ou 2 (ex. 677 12 34 56).",
     "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
     "dobFuture": "La date de naissance ne peut pas être dans le futur.",
-    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée."
+    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée.",
+    "countRegistered": "{{count}} élève inscrit",
+    "countRegistered_other": "{{count}} élèves inscrits",
+    "countResults": "{{count}} résultat",
+    "countResults_other": "{{count}} résultats",
+    "countResultsOf": "{{count}} résultat sur {{total}} élèves",
+    "countResultsOf_other": "{{count}} résultats sur {{total}} élèves",
+    "noneMatch": "Aucun élève ne correspond à ces filtres"
   },
   "teachers": {
     "title": "Enseignants",
@@ -1432,8 +1439,8 @@
       "marksAwaitingApproval_other": "Les notes de {{count}} matières attendent l'approbation",
       "resultsUnpublished": "Les résultats de {{count}} examen sont prêts à publier",
       "resultsUnpublished_other": "Les résultats de {{count}} examens sont prêts à publier",
-      "overdueFees": "{{count}} famille a des frais en retard ({{amount}})",
-      "overdueFees_other": "{{count}} familles ont des frais en retard ({{amount}})"
+      "overdueFees": "{{count}} élève en retard ({{families}}) · {{amount}} échu",
+      "overdueFees_other": "{{count}} élèves en retard ({{families}}) · {{amount}} échus"
     },
     "justNow": "À l'instant",
     "title": "Notifications",
@@ -1452,7 +1459,9 @@
     "filterUnread": "Non lues",
     "filterAlerts": "Alertes",
     "alertCount": "{{count}} alerte",
-    "alertCount_other": "{{count}} alertes"
+    "alertCount_other": "{{count}} alertes",
+    "families": "{{count}} famille",
+    "families_other": "{{count}} familles"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
@@ -2183,7 +2192,14 @@
     "activate": "Impossible d’activer la grille tarifaire",
     "reactivate": "Réactiver",
     "owingCount": "{{count}} en retard",
-    "noClass": "Sans classe"
+    "noClass": "Sans classe",
+    "overdue": "En retard",
+    "overdueOfIt": "dont {{amount}} en retard",
+    "overduePupils": "{{count}} élève en retard ({{families}})",
+    "overduePupils_other": "{{count}} élèves en retard ({{families}})",
+    "overdueCount": "{{count}} en retard",
+    "overdueCount_other": "{{count}} en retard",
+    "noneOverdue": "Rien en retard pour l'instant"
   },
   "chase": {
     "title": "Recouvrement",
@@ -5706,5 +5722,13 @@
     "guardian": "Tuteur",
     "noGuardian": "Aucun contact de tuteur enregistré.",
     "unavailable": "Le résumé n'a pas pu être chargé."
+  },
+  "unsaved": {
+    "title": "Quitter sans enregistrer ?",
+    "message": "Vos modifications sur cette page n'ont pas été enregistrées et seront perdues.",
+    "leave": "Quitter",
+    "stay": "Rester",
+    "marks": "{{count}} marque non enregistrée sera perdue.",
+    "marks_other": "{{count}} marques non enregistrées seront perdues."
   }
 }

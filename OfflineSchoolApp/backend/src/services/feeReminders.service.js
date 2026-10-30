@@ -49,6 +49,8 @@ const Student     = require("../db/models/Student");
 const Notification = require("../db/models/Notification");
 
 const { balancesFor } = require("./fees.service");
+const { endOfDay, planStatus, firstUnpaid } = require("../../../shared/arrears");
+const { arrearsFor } = require("./arrears.service");
 const { displayName } = require("../utils/studentName");
 const notify = require("./notification");
 const School = require("../db/models/School");
@@ -80,12 +82,6 @@ const startOfDay = (d) => {
  * overdue on its own due date, which is the kind of off-by-one a parent
  * notices and a developer does not.
  */
-const endOfDay = (d) => {
-  const x = new Date(d);
-  x.setUTCHours(23, 59, 59, 999);
-  return x;
-};
-
 const daysBetween = (a, b) =>
   Math.floor((startOfDay(a) - startOfDay(b)) / 86_400_000);
 
@@ -105,93 +101,10 @@ const fail = (message, code, status = 400) => {
 // AN AGREED SCHEDULE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Where a family stands against an instalment plan.
- *
- * The one piece of arithmetic both jobs share, and the reason it is a function
- * rather than two similar loops: reminders decide who to write to and late fees
- * decide who to charge, and those two must never disagree about whether a family
- * is keeping to its arrangement.
- *
- * CUMULATIVE, not per instalment. By the third date a family should have paid
- * the first three instalments in total — so somebody who paid double on the
- * first and nothing on the second is exactly on track. Checking instalments one
- * by one would flag them as behind, which is wrong and is precisely the kind of
- * wrong that makes a bursar stop trusting the list.
- *
- * @param {{instalments: Array<{seq:number,amount:number,dueDate:Date}>}} plan
- * @param {number} paid  what the family has actually paid, from the ledger
- * @param {Date}   asOf
- * @returns {{
- *   dueByNow: number, behindBy: number, isBehind: boolean,
- *   nextDue: Date|null, nextAmount: number, missedSince: Date|null, settled: boolean
- * }}
- */
-function planStatus(plan, paid, asOf = new Date()) {
-  const schedule = [...(plan?.instalments ?? [])].sort((a, b) => a.seq - b.seq);
+// planStatus — where a family stands against an instalment plan — lives in
+// shared/arrears.js, so reminders, late fees and the arrears figures share it.
 
-  let dueByNow    = 0;
-  let nextDue     = null;
-  let nextAmount  = 0;
-  let missedSince = null;
-  let running     = 0;
-
-  for (const inst of schedule) {
-    running += inst.amount;
-
-    // Due if its day has ended. endOfDay for the same reason as everywhere
-    // else: an instalment due on the 15th is not late on the 15th.
-    if (endOfDay(inst.dueDate) < asOf) {
-      dueByNow = running;
-      // The earliest date by which the family had fallen short. Walking
-      // forwards means the FIRST shortfall wins, which is the date a reminder
-      // should quote — not the most recent one.
-      if (missedSince === null && paid < running) missedSince = inst.dueDate;
-    } else if (nextDue === null) {
-      nextDue    = inst.dueDate;
-      nextAmount = inst.amount;
-    }
-  }
-
-  const behindBy = Math.max(0, dueByNow - paid);
-
-  return {
-    dueByNow,
-    behindBy,
-    isBehind: behindBy > 0,
-    nextDue,
-    nextAmount,
-    missedSince,
-    /** Every instalment covered, whether or not the dates have passed. */
-    settled: paid >= running,
-  };
-}
-
-/**
- * The first charge a family's payments have not covered.
- *
- * Payments settle the oldest obligation first: charges in due-date order, an
- * undated charge counting as due today (it has no grace period), each net of
- * its waiver. The first one the money runs out on is what is owed now, and its
- * due date (null when undated) is the deadline. Null when every charge given
- * is covered.
- *
- * @param {Array<{amount:number, waivedAmount?:number, dueDate?:Date|null, createdAt?:Date}>} charges
- * @param {number} paid
- * @param {Date}   asOf
- */
-function firstUnpaid(charges, paid, asOf = new Date()) {
-  const at = (c) => (c.dueDate ? new Date(c.dueDate).getTime() : asOf.getTime());
-  const ordered = [...charges].sort((a, b) =>
-    at(a) - at(b) || new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0));
-  let left = paid;
-  for (const c of ordered) {
-    const net = Math.max(0, (c.amount ?? 0) - (c.waivedAmount ?? 0));
-    if (left >= net) { left -= net; continue; }
-    return c;
-  }
-  return null;
-}
+// firstUnpaid — the first charge payments have not covered — is shared/arrears.js.
 
 /**
  * Active plans for a set of students, keyed by student id.
@@ -220,16 +133,15 @@ async function activePlans({ schoolId, studentIds, academicYear = null }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Students with an outstanding balance on a dated charge.
+ * Students who owe, for one academic year, with how much of it is overdue.
  *
- * The balance is per student per year — what a family actually owes — while the
- * due date is per charge. So a student's "deadline" here is the EARLIEST due
- * date among their unpaid charges: that is the one that has already passed, and
- * the one a reminder should quote.
+ * `balance` is everything owed that year; `overdue` the part past its due date.
+ * The date a row quotes is the first unpaid due date that has passed (or, for
+ * a family not yet late, the next one coming) — the one a reminder names.
  *
  * @param {object}  p
  * @param {string}  p.schoolId
- * @param {string} [p.academicYear]
+ * @param {string} [p.academicYear] default: the school's current year
  * @param {string} [p.classId]
  * @param {"overdue"|"dueSoon"|"all"} [p.mode]
  * @param {Date}   [p.asOf] for testing; defaults to now
@@ -240,113 +152,24 @@ async function candidates({
 }) {
   if (!schoolId) throw fail("schoolId is required", "BAD_REQUEST");
 
-  const chargeFilter = {
-    schoolId,
-    deletedAt: null,
-    voidedAt:  null,
-  };
-  if (academicYear) chargeFilter.academicYear = academicYear;
-  if (classId)      chargeFilter.classId      = classId;
-  // One family's children (the parent portal): the same rule, a narrower read.
-  if (Array.isArray(onlyStudentIds)) chargeFilter.studentId = { $in: onlyStudentIds.map(String) };
+  // Who owes, and how much of it is late: the one definition every screen
+  // reads (arrears.service / shared/arrears). This used to be worked out
+  // here on its own, and the bell that read it summed whole balances —
+  // next term's fees included — as if they were overdue.
+  const { rows: owing } = await arrearsFor({ schoolId, academicYear, classId, onlyStudentIds, asOf });
+  if (!owing.length) return [];
 
-  // Read once, used twice below: for the year that bounds undated charges, and
-  // for the channel "reachable" is judged against.
-  const school = await School.findById(schoolId).lean().catch(() => null);
-
-  // The year undated charges are confined to — see the header. With no year
-  // resolvable from either the caller or the school, they stay out entirely
-  // rather than being chased across every year on record.
-  const undatedYear = academicYear || school?.settings?.academicYear || null;
-
-  // Two groups: charges with a due date (which have a deadline) and charges
-  // without one (which have no grace period — they are overdue immediately).
-  const [dated, undated] = await Promise.all([
-    // Dated charges: earliest/latest due date per student.
-    FeeCharge.aggregate([
-      { $match: { ...chargeFilter, dueDate: { $ne: null } } },
-      {
-        $group: {
-          _id:         "$studentId",
-          earliestDue: { $min: "$dueDate" },
-          latestDue:   { $max: "$dueDate" },
-          datedCharges: { $sum: 1 },
-        },
-      },
-    ]),
-    // Undated charges: count per student, no deadline to compute.
-    undatedYear
-      ? FeeCharge.aggregate([
-          { $match: { ...chargeFilter, dueDate: null, academicYear: undatedYear } },
-          {
-            $group: {
-              _id:           "$studentId",
-              undatedCharges: { $sum: 1 },
-            },
-          },
-        ])
-      : [],
-  ]);
-
-  // Merge the two groups into one map keyed by studentId.
-  const merged = new Map();
-  for (const d of dated) {
-    merged.set(String(d._id), {
-      studentId:    String(d._id),
-      earliestDue:  d.earliestDue,
-      latestDue:    d.latestDue,
-      datedCharges: d.datedCharges,
-      undatedCharges: 0,
-    });
-  }
-  for (const u of undated) {
-    const id = String(u._id);
-    if (merged.has(id)) {
-      merged.get(id).undatedCharges = u.undatedCharges;
-    } else {
-      merged.set(id, {
-        studentId:    id,
-        earliestDue:  null,
-        latestDue:    null,
-        datedCharges: 0,
-        undatedCharges: u.undatedCharges,
-      });
-    }
-  }
-
-  if (!merged.size) return [];
-
-  const studentIds = [...merged.keys()];
-
-  const [students, balances, plans, channel] = await Promise.all([
-    Student.find({ _id: { $in: studentIds }, schoolId, deletedAt: null })
+  const ids = owing.map((r) => r.studentId);
+  const [students, school] = await Promise.all([
+    Student.find({ _id: { $in: ids }, schoolId, deletedAt: null })
       .select("_id studentName name firstName lastName enrollmentNo classId " +
               "guardianName guardianPhone guardianEmail email phone")
       .lean(),
-    balancesFor({ schoolId, studentIds, academicYear }),
-    activePlans({ schoolId, studentIds, academicYear }),
-    // How this school sends, so "reachable" below answers the same question
-    // the notification pipeline will ask rather than a more generous one.
-    // Reuses the document already read above.
-    Promise.resolve().then(() => notify.resolveChannel(school)).catch(() => "email"),
+    School.findById(schoolId).lean().catch(() => null),
   ]);
-
-  // Each student's charges, to find the first one their payments do not cover:
-  // every dated charge, and this year's undated ones (as the groups above).
-  const chargeRows = await FeeCharge.find({
-    ...chargeFilter,
-    studentId: { $in: studentIds },
-    $or: [
-      { dueDate: { $ne: null } },
-      ...(undatedYear ? [{ dueDate: null, academicYear: undatedYear }] : []),
-    ],
-  }).select("studentId amount waivedAmount dueDate createdAt").lean();
-  const chargesBy = new Map();
-  for (const c of chargeRows) {
-    const k = String(c.studentId);
-    if (!chargesBy.has(k)) chargesBy.set(k, []);
-    chargesBy.get(k).push(c);
-  }
+  // How this school sends, so "reachable" below answers the same question
+  // the notification pipeline will ask rather than a more generous one.
+  const channel = await Promise.resolve().then(() => notify.resolveChannel(school)).catch(() => "email");
 
   const byId = new Map(students.map((s) => [String(s._id), s]));
   const today = startOfDay(asOf);
@@ -354,64 +177,35 @@ async function candidates({
 
   const rows = [];
 
-  for (const [id, group] of merged) {
-    const student = byId.get(id);
+  for (const r of owing) {
+    const student = byId.get(r.studentId);
     if (!student) continue;
 
-    const totals  = balances.get(id);
-    const balance = totals?.balance ?? 0;
-    if (balance <= 0) continue;
-
-    const plan   = plans.get(id);
-    const status = plan ? planStatus(plan, totals?.paid ?? 0, asOf) : null;
-
-    let due, isOverdue, isDueSoon, hasUndated = group.undatedCharges > 0;
-
-    if (status) {
-      isOverdue = status.isBehind;
-      due       = status.isBehind ? status.missedSince : status.nextDue;
-      if (!due && !hasUndated) continue;
-      isDueSoon = !isOverdue && due && due <= soonCutoff;
-    } else if (group.earliestDue || hasUndated) {
-      // The deadline is the first charge the payments have NOT covered, not
-      // the earliest charge on the account: a family that paid First Term and
-      // owes a Second Term not yet due is not overdue.
-      const first = firstUnpaid(chargesBy.get(id) ?? [], totals?.paid ?? 0, asOf);
-      if (!first) continue; // what is owed sits outside these charges (another year's)
-      if (first.dueDate) {
-        due       = first.dueDate;
-        isOverdue = endOfDay(due) < asOf;
-        isDueSoon = !isOverdue && due <= soonCutoff;
-      } else {
-        // An undated charge is due at once (no grace period). This covers
-        // pre-feature charges and manually created bills.
-        due       = null;
-        isOverdue = true;
-        isDueSoon = false;
-      }
-    } else {
-      continue;
-    }
+    const isOverdue = r.isOverdue;
+    // The date to quote: when they fell behind, else the next one coming.
+    const due       = isOverdue ? r.overdueSince : r.nextDue;
+    const isDueSoon = !isOverdue && Boolean(due) && due <= soonCutoff;
 
     if (mode === "overdue" && !isOverdue) continue;
     if (mode === "dueSoon" && !isDueSoon) continue;
 
-    const totalCharges = group.datedCharges + group.undatedCharges;
-
     rows.push({
-      studentId:    id,
+      studentId:    r.studentId,
       name:         displayName(student) ?? null,
       enrollmentNo: student.enrollmentNo ?? null,
       classId:      student.classId ?? null,
       guardianName: student.guardianName ?? null,
-      balance,
-      charged: totals?.charged ?? 0,
-      paid:    totals?.paid    ?? 0,
-      earliestDue: due,
-      latestDue:   group.latestDue,
-      datedCharges: group.datedCharges,
-      undatedCharges: group.undatedCharges,
-      totalCharges,
+      /** Everything owed this year, due or not. */
+      balance:  r.owed,
+      /** The part of `balance` past its due date. */
+      overdue:  r.overdue,
+      charged:  r.charged,
+      paid:     r.paid,
+      earliestDue: due ?? null,
+      latestDue:   r.latestDue,
+      datedCharges:   r.datedCharges,
+      undatedCharges: r.undatedCharges,
+      totalCharges:   r.datedCharges + r.undatedCharges,
       isOverdue,
       daysOverdue: isOverdue && due ? daysBetween(asOf, due) : (isOverdue && !due ? 1 : 0),
 
@@ -419,23 +213,15 @@ async function candidates({
       // `balance`: what a family owes and what they were meant to have paid by
       // now are two different numbers, and a screen that conflates them cannot
       // explain either.
-      onPlan:       Boolean(status),
-      planBehindBy: status?.behindBy ?? 0,
-      planNextDue:  status?.nextDue ?? null,
-      planDueByNow: status?.dueByNow ?? 0,
+      onPlan:       r.onPlan,
+      planBehindBy: r.plan?.behindBy ?? 0,
+      planNextDue:  r.plan?.nextDue ?? null,
+      planDueByNow: r.plan?.dueByNow ?? 0,
       /**
-       * Whether a message can actually reach this family.
-       *
-       * Reported rather than filtered on, because "we owe 40,000 and have no
-       * phone number for them" is the single most useful line on an arrears
-       * screen — and silently dropping those rows would hide it.
-       *
-       * Asked ON THE CHANNEL THE SCHOOL ACTUALLY USES. It used to be "any
-       * contact detail at all", which is a different question from the one the
-       * notification pipeline asks: a school on email needs an email address,
-       * and a phone number does not substitute. Every family in a school that
-       * records phone numbers and sends by email therefore read as reachable
-       * here and was skipped for want of an address one layer down.
+       * Whether a message can actually reach this family, asked ON THE
+       * CHANNEL THE SCHOOL ACTUALLY USES. Reported rather than filtered on:
+       * "we owe 40,000 and have no phone number for them" is the single most
+       * useful line on an arrears screen.
        */
       reachable: Boolean(notify.resolveRecipient(student, channel).to),
     });

@@ -1,5 +1,7 @@
 // web/src/services/dashboard.service.ts
 import api from "@/lib/axios";
+import { EXAM_STATUSES } from "@/constants/exam.constants";
+import type { ExamStatus } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -25,13 +27,8 @@ export interface SubjectStats {
   total: number;
 }
 
-export interface ExamStats {
-  total:     number;
-  ongoing:   number;
-  completed: number;
-  draft:     number;
-  scheduled: number;
-}
+/** A count for every exam status, and their sum as `total`. */
+export type ExamStats = { total: number } & Record<ExamStatus, number>;
 
 export interface AttendanceStats {
   todayPresent: number;
@@ -242,17 +239,15 @@ export async function fetchSubjectStats(schoolId: string): Promise<SubjectStats>
 export async function fetchExamStats(schoolId: string): Promise<ExamStats> {
   try {
     const { data } = await api.get(`${BASE}/exams/stats${qs({ schoolId })}`);
-    const d = (data as Record<string, unknown>)?.data ?? data;
+    const d = ((data as Record<string, unknown>)?.data ?? data) as Record<string, number>;
+    // Every status the exams page shows, read from the one list of them.
     return {
-      total:     n((d as Record<string, number>).total),
-      ongoing:   n((d as Record<string, number>).ongoing),
-      completed: n((d as Record<string, number>).completed),
-      draft:     n((d as Record<string, number>).draft),
-      scheduled: n((d as Record<string, number>).scheduled),
-    };
+      total: n(d.total),
+      ...Object.fromEntries(EXAM_STATUSES.map((s) => [s, n(d[s])])),
+    } as ExamStats;
   } catch (err) {
     console.warn("[dashboard] fetchExamStats failed:", err);
-    return { total: 0, ongoing: 0, completed: 0, draft: 0, scheduled: 0 };
+    return { total: 0, ...Object.fromEntries(EXAM_STATUSES.map((s) => [s, 0])) } as ExamStats;
   }
 }
 

@@ -374,14 +374,7 @@ export default function DashboardPage() {
           loading={attendanceQ.isLoading}
         />
 
-        <ExamStatusChart
-          stats={{
-            ongoing:   ed?.ongoing   ?? 0,
-            completed: ed?.completed ?? 0,
-            draft:     ed?.draft     ?? 0,
-            total:     ed?.total     ?? 0,
-          }}
-        />
+        <ExamStatusChart stats={ed ?? {}} />
 
         {/* Act: what is unfinished, and where to go next. Both are grids of
             tiles, so they sit at the same width and read as a pair. */}

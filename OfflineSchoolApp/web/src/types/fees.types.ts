@@ -158,10 +158,18 @@ export interface OutstandingRow extends FeeTotals {
   name:         string;
   enrollmentNo: string | null;
   classId:      string | null;
+  /** The part of `balance` past its due date (shared/arrears). */
+  overdue:      number;
+  isOverdue:    boolean;
 }
 
 export interface OutstandingReport {
   count:            number;
+  /** Everything owed this year, due or not. */
   totalOutstanding: number;
+  /** The part of it past its due date — the bell's figure. */
+  overdueTotal:     number;
+  overdueCount:     number;
+  overdueFamilies:  number;
   rows:             OutstandingRow[];
 }

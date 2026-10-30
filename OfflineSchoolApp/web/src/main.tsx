@@ -9,7 +9,8 @@
 //   1. restore the session from localStorage BEFORE the first render, so
 //      ProtectedRoute never flashes the login screen at a signed-in user
 //   2. install the React Query cache
-//   3. install the router
+//   3. install the router (a data router, so a form can hold a navigation
+//      while it asks about unsaved changes — useBlocker needs one)
 //   4. install the toast/confirm portal
 //   5. initialise i18n
 //
@@ -23,7 +24,10 @@ import "@/lib/instrument";
 
 import { StrictMode }        from "react";
 import { createRoot }        from "react-dom/client";
-import { BrowserRouter }     from "react-router-dom";
+import {
+  createBrowserRouter,
+  RouterProvider,
+}                            from "react-router-dom";
 import {
   QueryClient,
   QueryClientProvider,
@@ -96,25 +100,35 @@ useAuthStore.subscribe((state) => {
 const container = document.getElementById("root");
 if (!container) throw new Error('index.html is missing <div id="root">');
 
+// One catch-all route: App keeps its own <Routes> as descendant routes, so
+// every page and link works as it did under <BrowserRouter>. The data router
+// is what makes useBlocker (hooks/useUnsavedChangesGuard) available.
+const router = createBrowserRouter([
+  {
+    path: "*",
+    element: (
+      /*
+        One notification system: components/ui/Toast, the in-house context
+        that also owns the confirm dialogs. react-hot-toast used to be
+        mounted alongside it for the exam hooks; those 19 call sites all
+        turned out to sit inside hooks or components, where useToast()
+        reaches fine, so they now go through the same provider as every
+        other page and the dependency is gone.
+      */
+      <ToastProvider>
+        {/* Desktop only: asks for the school's server once (a browser renders App as is). */}
+        <DesktopServerGate>
+          <App />
+        </DesktopServerGate>
+      </ToastProvider>
+    ),
+  },
+]);
+
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        {/*
-          One notification system: components/ui/Toast, the in-house context
-          that also owns the confirm dialogs. react-hot-toast used to be
-          mounted alongside it for the exam hooks; those 19 call sites all
-          turned out to sit inside hooks or components, where useToast()
-          reaches fine, so they now go through the same provider as every
-          other page and the dependency is gone.
-        */}
-        <ToastProvider>
-          {/* Desktop only: asks for the school's server once (a browser renders App as is). */}
-          <DesktopServerGate>
-            <App />
-          </DesktopServerGate>
-        </ToastProvider>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   </StrictMode>,
 );

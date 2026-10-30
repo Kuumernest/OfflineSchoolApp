@@ -575,7 +575,14 @@
     "phoneInvalid": "A Cameroon number has 9 digits starting with 6 or 2 (e.g. 677 12 34 56).",
     "phoneHint": "Saved as +237 and 9 digits.",
     "dobFuture": "The date of birth cannot be in the future.",
-    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved."
+    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved.",
+    "countRegistered": "{{count}} student registered",
+    "countRegistered_other": "{{count}} students registered",
+    "countResults": "{{count}} result",
+    "countResults_other": "{{count}} results",
+    "countResultsOf": "{{count}} result of {{total}} students",
+    "countResultsOf_other": "{{count}} results of {{total}} students",
+    "noneMatch": "No students match these filters"
   },
   "teachers": {
     "title": "Teachers",
@@ -1432,8 +1439,8 @@
       "marksAwaitingApproval_other": "{{count}} subjects' marks await approval",
       "resultsUnpublished": "{{count}} exam's results are ready to publish",
       "resultsUnpublished_other": "{{count}} exams' results are ready to publish",
-      "overdueFees": "{{count}} family has overdue fees ({{amount}})",
-      "overdueFees_other": "{{count}} families have overdue fees ({{amount}})"
+      "overdueFees": "{{count}} pupil overdue ({{families}}) · {{amount}} past due",
+      "overdueFees_other": "{{count}} pupils overdue ({{families}}) · {{amount}} past due"
     },
     "justNow": "Just now",
     "title": "Notifications",
@@ -1452,7 +1459,9 @@
     "filterUnread": "Unread",
     "filterAlerts": "Alerts",
     "alertCount": "{{count}} alert",
-    "alertCount_other": "{{count}} alerts"
+    "alertCount_other": "{{count}} alerts",
+    "families": "{{count}} family",
+    "families_other": "{{count}} families"
   },
   "applications": {
     "refresh": "Refresh applications",
@@ -2183,7 +2192,14 @@
     "activate": "Could not activate the fee structure",
     "reactivate": "Reactivate",
     "owingCount": "{{count}} owing",
-    "noClass": "No class"
+    "noClass": "No class",
+    "overdue": "Overdue",
+    "overdueOfIt": "{{amount}} of it overdue",
+    "overduePupils": "{{count}} pupil late ({{families}})",
+    "overduePupils_other": "{{count}} pupils late ({{families}})",
+    "overdueCount": "{{count}} overdue",
+    "overdueCount_other": "{{count}} overdue",
+    "noneOverdue": "Nothing overdue yet"
   },
   "chase": {
     "title": "Chasing what is owed",
@@ -5706,5 +5722,13 @@
     "guardian": "Guardian",
     "noGuardian": "No guardian contact recorded.",
     "unavailable": "The summary could not be loaded."
+  },
+  "unsaved": {
+    "title": "Leave without saving?",
+    "message": "Your changes on this page have not been saved and will be lost.",
+    "leave": "Leave",
+    "stay": "Stay",
+    "marks": "{{count}} unsaved mark will be lost.",
+    "marks_other": "{{count}} unsaved marks will be lost."
   }
 }

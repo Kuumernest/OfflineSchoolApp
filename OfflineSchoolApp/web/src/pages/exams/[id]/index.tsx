@@ -30,6 +30,7 @@ import {
   examTypeLabel,
 }                                            from "@/constants/exam.constants";
 import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
+import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
 import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -710,11 +711,14 @@ const ScoreEntryPanel = ({
   examId,
   schoolId,
   onClose,
+  onDirtyChange,
 }: {
   sub:      ExamSubject;
   examId:   string;
   schoolId: string;
+  /** Already guarded by the marks tab: asks first when marks are unsaved. */
   onClose:  () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -732,6 +736,11 @@ const ScoreEntryPanel = ({
   // a blank) instead of a blind alert naming nobody.
   const [invalidIds, setInvalidIds] = useState<Set<string>>(new Set());
   const [formError,  setFormError]  = useState("");
+  // A mark typed since the sheet loaded or was last saved. The marks tab
+  // guards it (it owns which sheet is open), so it is reported up.
+  const [touched,    setTouched]    = useState(false);
+  useEffect(() => { onDirtyChange(touched && !saving); }, [touched, saving, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   // Stable primitive IDs — prevents double useEffect firing
   const subId     = sub._id;
@@ -748,6 +757,7 @@ const ScoreEntryPanel = ({
       setStudents([]);
       setScores({});
       setSaved(false);
+      setTouched(false);
       setInvalidIds(new Set());
       setFormError("");
 
@@ -805,6 +815,7 @@ const ScoreEntryPanel = ({
       [studentId]: { ...(prev[studentId] ?? EMPTY_SCORE), [field]: value },
     }));
     setSaved(false);
+    setTouched(true);
     setFormError("");
     setInvalidIds((prev) => {
       if (!prev.has(studentId)) return prev;
@@ -882,6 +893,7 @@ const ScoreEntryPanel = ({
         { onProgress: (done, total) => setSaveProgress({ done, total }) },
       );
       setSaved(true);
+      setTouched(false);
       setReasonPrompt(null);
       setReasonText("");
     } catch (err) {
@@ -1212,6 +1224,10 @@ const MarksTab = ({
   const { t } = useTranslation();
   const { confirm } = useToast();
   const [openSubjectId, setOpenSubjectId] = useState<string | null>(null);
+  // Unsaved marks in the open sheet. Closing it, opening another subject's
+  // sheet or leaving the page used to drop them without a word; all ask now.
+  const [sheetDirty, setSheetDirty] = useState(false);
+  const { confirmDiscard } = useUnsavedChangesGuard(sheetDirty);
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
 
@@ -1251,8 +1267,14 @@ const MarksTab = ({
   const approve = useApproveSubmission(examId);
   const reject  = useRejectSubmission(examId);
 
-  const toggleSubject = (id: string) =>
-    setOpenSubjectId((prev) => (prev === id ? null : id));
+  const toggleSubject = (id: string) => {
+    void confirmDiscard().then((ok) => {
+      if (ok) setOpenSubjectId((prev) => (prev === id ? null : id));
+    });
+  };
+  const closeSheet = () => {
+    void confirmDiscard().then((ok) => { if (ok) setOpenSubjectId(null); });
+  };
 
   const handleApprove = async (sub: ExamSubject) => {
     const ok = await confirm({
@@ -1512,7 +1534,8 @@ const MarksTab = ({
                   sub={sub}
                   examId={examId}
                   schoolId={schoolId}
-                  onClose={() => setOpenSubjectId(null)}
+                  onClose={closeSheet}
+                  onDirtyChange={setSheetDirty}
                 />
               )}
             </div>
@@ -1886,6 +1909,10 @@ export default function ExamDetailPage() {
 
   const initialTab                = (searchParams.get("tab") as Tab) ?? "details";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  // Derived during render rather than set in an effect: true from the first
+  // render the marks tab is shown on.
+  const [marksVisited, setMarksVisited] = useState(initialTab === "marks");
+  if (activeTab === "marks" && !marksVisited) setMarksVisited(true);
 
   const { data, isLoading, error } = useExamDetail(id ?? "");
   const { data: subData }          = useSubmissions(id ?? "");
@@ -2009,12 +2036,17 @@ export default function ExamDetailPage() {
           />
         )}
 
-        {activeTab === "marks" && (
-          <MarksTab
-            examId={id ?? ""}
-            submissions={submissions}
-            schoolId={schoolId}
-          />
+        {/* Once opened, the marks tab stays mounted and is only hidden: a
+            switch to Details and back used to unmount it and drop a sheet of
+            typed marks without a word. Kept, they are still guarded. */}
+        {(activeTab === "marks" || marksVisited) && (
+          <div hidden={activeTab !== "marks"}>
+            <MarksTab
+              examId={id ?? ""}
+              submissions={submissions}
+              schoolId={schoolId}
+            />
+          </div>
         )}
 
         {activeTab === "results" && (

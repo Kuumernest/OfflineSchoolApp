@@ -1,17 +1,14 @@
 // web/src/components/dashboard/ExamStatusChart.tsx
 import { useTranslation }   from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
-
-interface ExamStats {
-  total:     number;
-  ongoing:   number;
-  completed: number;
-  draft:     number;
-  scheduled?: number;
-}
+import { EXAM_STATUS_META, EXAM_STATUSES } from "@/constants/exam.constants";
+import type { ExamStats }   from "@/services/dashboard.service";
+import { percentShares }    from "@/utils/percentShares";
+import type { ExamStatus }  from "@/types/exam.types";
 
 interface Props {
-  stats: ExamStats;
+  /** Empty while loading: every count reads 0. */
+  stats: Partial<ExamStats>;
 }
 
 /**
@@ -19,25 +16,42 @@ interface Props {
  *
  * This was a 140px donut. A donut asks the eye to compare arc lengths around a
  * curve, which is the hardest comparison to make and the least precise — for
- * four parts of one whole, a stacked bar with the figures written next to the
- * labels is both more accurate and a third of the height, which matters in a
- * side rail.
+ * a handful of parts of one whole, a stacked bar with the figures written next
+ * to the labels is both more accurate and a third of the height, which matters
+ * in a side rail.
+ *
+ * The statuses are the exams page's own list (EXAM_STATUSES), not a copy of
+ * it. The copy named four of six, so a school whose exams were published saw
+ * "Total 2" over a bar of 0% segments.
  *
  * The ramp is one hue getting darker along the exam lifecycle — draft is
- * neutral, and each step towards completed is a step darker. The colours carry
- * the sequence rather than four unrelated hues implying four unrelated things.
+ * neutral, and each step towards published is a step darker; archived drops
+ * back to grey, being out of the cycle. The colours carry the sequence rather
+ * than unrelated hues implying unrelated things.
  */
-const SEGMENTS = [
-  { key: "draft"     as const, labelKey: "examStatus.draft",     bar: "bg-line-strong", dot: "bg-line-strong" },
-  { key: "scheduled" as const, labelKey: "examStatus.scheduled", bar: "bg-primary-200", dot: "bg-primary-200" },
-  { key: "ongoing"   as const, labelKey: "examStatus.ongoing",   bar: "bg-primary-400", dot: "bg-primary-400" },
-  { key: "completed" as const, labelKey: "examStatus.completed", bar: "bg-primary-700", dot: "bg-primary-700" },
-];
+const RAMP: Record<ExamStatus, string> = {
+  draft:     "bg-line-strong",
+  scheduled: "bg-primary-200",
+  ongoing:   "bg-primary-400",
+  completed: "bg-primary-600",
+  published: "bg-primary-900",
+  archived:  "bg-gray-300",
+};
+
+const SEGMENTS = EXAM_STATUSES.map((key) => ({
+  key,
+  labelKey: EXAM_STATUS_META[key].labelKey,
+  bar:      RAMP[key],
+  dot:      RAMP[key],
+}));
 
 export default function ExamStatusChart({ stats }: Props) {
   const { t } = useTranslation();
   const total = stats.total ?? 0;
   const hasAnyExams = total > 0;
+  // Shares of the counted statuses, adding to 100 — never 99 or 101.
+  const values = SEGMENTS.map((seg) => stats[seg.key] ?? 0);
+  const pcts   = percentShares(values);
 
   return (
     <Card>
@@ -60,7 +74,7 @@ export default function ExamStatusChart({ stats }: Props) {
               <div
                 key={seg.key}
                 className={`h-full transition-[width] duration-500 ${seg.bar}`}
-                style={{ width: `${(value / total) * 100}%` }}
+                style={{ width: `${(value / (values.reduce((a, b) => a + b, 0) || 1)) * 100}%` }}
                 title={`${t(seg.labelKey)}: ${value}`}
               />
             );
@@ -69,9 +83,9 @@ export default function ExamStatusChart({ stats }: Props) {
 
       {/* Legend — the numbers live here, where they can be read exactly */}
       <dl className="mt-4 space-y-0">
-        {SEGMENTS.map((seg) => {
-          const value = stats[seg.key] ?? 0;
-          const pct   = hasAnyExams ? Math.round((value / total) * 100) : 0;
+        {SEGMENTS.map((seg, i) => {
+          const value = values[i];
+          const pct   = pcts[i];
 
           return (
             <div

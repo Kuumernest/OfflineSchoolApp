@@ -15,6 +15,10 @@ export const EXAM_STATUS_META: Record<
   archived:  { labelKey: "examStatus.archived",  color: "text-gray-400",   bg: "bg-gray-50",    dot: "bg-gray-300"   },
 };
 
+/** Every exam status, in lifecycle order — what the exams page and the
+ *  dashboard both count, so neither can leave one out. */
+export const EXAM_STATUSES = Object.keys(EXAM_STATUS_META) as ExamStatus[];
+
 // ── Exam Types (simplified) ─────────────────────────────────────────────────
 
 export const EXAM_TYPE_KEYS: Record<ExamType, string> = {
