@@ -62,7 +62,9 @@ const buildClassListHtml = ({ data, variant, labels, printedOn, origin }) => {
     }
     return `<tr>${index}${name}` +
       `<td>${orDash(s.enrollmentNo)}</td>` +
-      `<td class="num">${orDash(s.gender)}</td>` +
+      // A word in the reader's language — "Female", "Non précisé" — not the
+      // stored value; a gender not given reads the same as on every screen.
+      `<td class="num">${esc((s.gender && labels.sexValues?.[s.gender]) || labels.sexUnspecified)}</td>` +
       `<td class="num">${orDash(s.dateOfBirth)}</td></tr>`;
   };
 

@@ -131,7 +131,7 @@ const buildTranscriptHtml = ({ data, labels, printedOn, origin, verify }) => {
       ${renderFacts([
         { label: labels.student,     value: student.name ?? "" },
         { label: labels.admissionNo, value: student.enrollmentNo ?? "" },
-        { label: labels.gender,      value: wordFor(labels.sexValues, student.gender) },
+        { label: labels.gender,      value: wordFor(labels.sexValues, student.gender) || labels.sexUnspecified },
         { label: labels.dateOfBirth, value: dayOf(student.dateOfBirth) },
         { label: labels.status,      value: wordFor(labels.statusValues, student.status) },
       ])}

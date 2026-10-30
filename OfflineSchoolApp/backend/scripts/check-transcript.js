@@ -47,6 +47,9 @@ check("French: Féminin, Admis(e)", [fr.includes("Féminin"), fr.includes("Admis
 check("date of birth DD/MM/YYYY", [en.includes("02/04/2011"), fr.includes("02/04/2011"), en.includes("2011-04-02")], [true, true, false]);
 check("overall average out of twenty", [en.includes("Overall average 13 /20"), fr.includes("Moyenne générale 13 /20")], [true, true]);
 check("the averages column says /20", [en.includes("Average /20"), fr.includes("Moyenne /20")], [true, true]);
+const none = text(buildTranscriptHtml({ data: { ...data, student: { ...data.student, gender: null } },
+  labels: labelsFor("fr"), printedOn: "30/10/2026", verify: null }));
+check("no gender recorded: 'Non précisé', as on every screen", /Sexe Non précisé/.test(none), true);
 check("dayOf: a date, a datetime and nothing", [dayOf("2011-04-02"), dayOf(new Date(2026, 9, 30)), dayOf(null)], ["02/04/2011", "30/10/2026", ""]);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

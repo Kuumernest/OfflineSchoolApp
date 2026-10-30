@@ -104,6 +104,8 @@ const LABELS = {
     studentSignature: "Student's signature",
     emergencyContact: "Emergency contact",
     sexValues:   { male: "Male", female: "Female", other: "Other" },
+    // A gender not given: the same phrase on every screen and document.
+    sexUnspecified: "Not specified",
   },
 
   fr: {
@@ -185,6 +187,7 @@ const LABELS = {
     studentSignature: "Signature de l'élève",
     emergencyContact: "Contact d'urgence",
     sexValues:   { male: "Masculin", female: "Féminin", other: "Autre" },
+    sexUnspecified: "Non précisé",
   },
 };
 

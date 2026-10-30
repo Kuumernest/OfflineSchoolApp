@@ -312,7 +312,8 @@ export default function AddStudentPage() {
             <FormField label={t("common.gender")}>
               <SelectField
                 options={GENDERS.map((g) => ({ value: g.value, label: t(g.labelKey) }))}
-                placeholder={t("common.preferNotToSay")}
+                // Nothing stored when left alone; read everywhere as this.
+                placeholder={t("common.notSpecified")}
                 value={form.gender}
                 onChange={set("gender")}
               />

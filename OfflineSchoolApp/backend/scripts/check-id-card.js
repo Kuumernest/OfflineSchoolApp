@@ -91,7 +91,11 @@ const check = (label, actual, expected) => {
   const long = cards(render("fr", [{ ...pupil, name: LONG, photoUrl: null, guardianName: "Tchoumbou Nkemdirim Évangéline-Marie", gender: null, dateOfBirth: null }]));
   check("a long name: the smallest size band, every character kept", [/value--name n4">/.test(long), long.includes(LONG)], [true, true]);
   check("a missing photo: the framed blank, in French", long.includes('<div class="photo photo--empty">Coller la photo ici</div>'), true);
-  check("missing sex and date of birth print a dash, not a blank", (long.match(/<div class="value value--small">—<\/div>/g) || []).length, 2);
+  // A gender not given reads "Non précisé", as on every screen (2026-10-30); a
+  // missing date of birth is still a dash.
+  check("missing sex reads 'Non précisé'; a missing date of birth a dash",
+    [long.includes('<div class="value value--small">Non précisé</div>'),
+     (long.match(/<div class="value value--small">—<\/div>/g) || []).length], [true, 1]);
   const css = render("en");
   const rule = (sel) => (css.match(new RegExp(`\\n  ${sel.replace(".", "\\.")} \\{[^}]*\\}`)) || [""])[0];
   check("labels, values, the contact line and the signature labels hold to one line (ellipsis), never spilling",
