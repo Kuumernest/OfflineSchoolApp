@@ -18,6 +18,10 @@
  *   getScores       caches the sheet and reads it back from the device, so
  *                   marks waiting to upload come back offline.
  *
+ * Each row shows where its saved mark stands in the queue — pending, or needs
+ * attention — and the sheet carries a banner for each (2026-10-30; the queue
+ * itself, end to end, is check-marks-offline-queue.js).
+ *
  * The screen is checked from its source; the service is run, with the network,
  * the outbox and the device cache stubbed.
  *
@@ -46,10 +50,19 @@ check("saves through ExamService.saveBulkScores", /ExamService\.saveBulkScores\(
 check("loads through ExamService.getScores (the device copy offline)", /ExamService\s*\.getScores\(/.test(code), true);
 check("says so when the sheet was queued rather than sent",
   [/res\?\.queued/.test(code), /savedOfflineTitle/.test(code), /savedOfflineBody/.test(code)], [true, true, true]);
+check("each row shows where its mark stands in the queue (ExamCache.sheetSyncState → MarkInputRow syncState)",
+  [/ExamCache\.sheetSyncState\(/.test(code), /syncState=\{sheetSync\.byStudent\[item\._id\]/.test(code)], [true, true]);
+check("a banner for marks waiting, and one for marks that need attention, with a way to the pending list",
+  [/sheetSync\.pending > 0/.test(code), /sheetSync\.attention > 0/.test(code), /router\.push\("\/sync\/pending"\)/.test(code)], [true, true, true]);
+check("re-read whenever the queue's counts move", /useSyncStatus\(\)/.test(code) && /queueKey\]/.test(code), true);
+const row = fs.readFileSync(path.join(MOBILE, "src/components/MarkInputRow.js"), "utf8");
+check("the row draws the badge from syncState and syncLabels", [/syncState = null/.test(row), /syncLabels\?\.\[syncState\]/.test(row)], [true, true]);
 for (const lang of ["en", "fr"]) {
   const s = JSON.parse(fs.readFileSync(path.join(MOBILE, `src/i18n/locales/${lang}.json`), "utf8")).teacherExamSubjects;
   check(`${lang}: the queued message exists, with its plural`,
     [Boolean(s.savedOfflineTitle), Boolean(s.savedOfflineBody?.one), Boolean(s.savedOfflineBody?.other)], [true, true, true]);
+  check(`${lang}: the row and banner words exist`,
+    [s.rowPending, s.rowAttention, s.reviewPending, s.pendingBanner?.one, s.pendingBanner?.other, s.attentionBanner?.one, s.attentionBanner?.other].every(Boolean), true);
 }
 
 // ── The service, run ─────────────────────────────────────────────────────────

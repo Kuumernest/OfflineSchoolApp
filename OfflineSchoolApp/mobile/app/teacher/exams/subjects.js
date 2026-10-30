@@ -21,6 +21,8 @@ import { getDatabase }  from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
 import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
 import { MarkInputRow }  from "../../../src/components/MarkInputRow";
+import * as ExamCache    from "../../../src/services/examCache.service";
+import { useSyncStatus } from "../../../src/hooks/useSyncStatus";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -385,6 +387,25 @@ function ScoreEntry({
   // Who entered the marks, recorded on the device copy (enteredBy).
   const userId = useAuthStore((s) => String(s.user?._id || s.user?.id || ""));
 
+  // Where each saved mark on this sheet stands in the unsent-changes queue —
+  // the same queue and the same join (ExamCache.sheetSyncState) as the
+  // pending count. Re-read whenever that count moves, so a row turns from
+  // "pending" to plain when the sync uploads it, or to "needs attention" when
+  // the server refuses it.
+  const { stats: queueStats } = useSyncStatus();
+  const queueKey = `${queueStats?.pending}|${queueStats?.retrying}|${queueStats?.failed}|${queueStats?.conflict}`;
+  const [sheetSync, setSheetSync] = useState({ byStudent: {}, pending: 0, attention: 0, reasons: [] });
+  const refreshSheetSync = useCallback(() => {
+    ExamCache.sheetSyncState({ examId, subjectId, classId })
+      .then(setSheetSync)
+      .catch(() => {});
+  }, [examId, subjectId, classId]);
+  useEffect(() => { refreshSheetSync(); }, [refreshSheetSync, queueKey]);
+  const syncLabels = useMemo(() => ({
+    pending:   t("teacherExamSubjects.rowPending"),
+    attention: t("teacherExamSubjects.rowAttention"),
+  }), [t]);
+
   const [isDirty,      setIsDirty]      = useState(false);
   const [search,       setSearch]       = useState("");
   const [draftHandled, setDraftHandled] = useState(false);
@@ -575,6 +596,7 @@ function ScoreEntry({
           draftKey(examId, subjectId)
         ).catch(() => {});
         setIsDirty(false);
+        refreshSheetSync();
         Alert.alert(
           res?.queued
             ? t("teacherExamSubjects.savedOfflineTitle")
@@ -623,7 +645,7 @@ function ScoreEntry({
   }, [
     safeStudents, flush, maxScore,
     examId, classId, subjectId, examSubjectId,
-    schoolId, onSaved, setSaving, t, userId,
+    schoolId, onSaved, setSaving, t, userId, refreshSheetSync,
   ]);
 
   useEffect(() => {
@@ -689,10 +711,12 @@ function ScoreEntry({
         onSubmit={onSubmitRow}
         registerInput={registerInput}
         readPending={readPending}
+        syncState={sheetSync.byStudent[item._id] ?? null}
+        syncLabels={syncLabels}
       />
     );
   }, [
-    scores, generation, maxScore, t,
+    scores, generation, maxScore, t, sheetSync, syncLabels,
     draftChanged, toggleAbsent, flush, onSubmitRow, registerInput, readPending,
   ]);
 
@@ -792,6 +816,35 @@ function ScoreEntry({
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* The sheet's place in the unsent-changes queue. "Needs attention"
+            wins: a refused or conflicting upload stays here, and on the
+            pending-changes screen, until somebody retries or discards it. */}
+        {sheetSync.attention > 0 ? (
+          <View style={se.syncAttention}>
+            <Ionicons name="alert-circle" size={16} color="#B91C1C" />
+            <View style={{ flex: 1 }}>
+              <Text style={se.syncAttentionText}>
+                {t("teacherExamSubjects.attentionBanner", { count: sheetSync.attention })}
+              </Text>
+              {sheetSync.reasons.length > 0 && (
+                <Text style={se.syncReason} numberOfLines={3}>
+                  {sheetSync.reasons.join(" · ")}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => router.push("/sync/pending")} style={se.syncReview}>
+              <Text style={se.syncReviewText}>{t("teacherExamSubjects.reviewPending")}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : sheetSync.pending > 0 ? (
+          <View style={se.syncPending}>
+            <Ionicons name="cloud-upload-outline" size={16} color="#B45309" />
+            <Text style={se.syncPendingText}>
+              {t("teacherExamSubjects.pendingBanner", { count: sheetSync.pending })}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Search */}
         <View style={se.searchWrap}>
@@ -921,6 +974,17 @@ const se = StyleSheet.create({
   info:             { flex: 1 },
   name:             { fontSize: 13, fontWeight: "700", color: C.gray900 },
   sub:              { fontSize: 11, color: C.gray400 },
+  syncPending:      { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginTop: 8,
+                      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                      backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FDE68A" },
+  syncPendingText:  { flex: 1, fontSize: 12, color: "#92400E", fontWeight: "600" },
+  syncAttention:    { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginTop: 8,
+                      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                      backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA" },
+  syncAttentionText:{ fontSize: 12, color: "#991B1B", fontWeight: "700" },
+  syncReason:       { fontSize: 11, color: "#7F1D1D", marginTop: 2 },
+  syncReview:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: "#B91C1C" },
+  syncReviewText:   { fontSize: 12, color: "#FFFFFF", fontWeight: "700" },
   absBtn: {
     paddingHorizontal: 8, paddingVertical: 5,
     borderRadius: 8, borderWidth: 1.5, borderColor: C.gray200,

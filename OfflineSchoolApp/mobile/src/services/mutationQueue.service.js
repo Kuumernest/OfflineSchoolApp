@@ -338,14 +338,14 @@ const backoffFor = (retryCount) =>
  * Entries already marked synced are excluded: they have settled their rows.
  *
  * @param {string} table  e.g. "exam_scores"
- * @returns {Promise<Array<{status: string, payload: object}>>}
+ * @returns {Promise<Array<{id: string, status: string, payload: object, error: string|null, lastStatus: number|null}>>}
 */
 export const outboxRowsForTable = async (table) => {
   const db = await getDatabase();
   await ensureSchema(db);
 
   const rows = await db.getAllAsync(
-    `SELECT status, payload FROM ${TABLE} WHERE status != 'synced'`
+    `SELECT id, status, payload, error, last_status FROM ${TABLE} WHERE status != 'synced'`
   ).catch(() => []);
 
   const out = [];
@@ -353,7 +353,9 @@ export const outboxRowsForTable = async (table) => {
     let payload = null;
     try { payload = JSON.parse(r.payload || "{}"); } catch { continue; }
     if (payload?.__local?.table !== table) continue;
-    out.push({ status: r.status, payload });
+    // error / lastStatus: why a stuck entry stopped, so a screen can say so
+    // next to the rows it carries rather than only on the pending list.
+    out.push({ id: r.id, status: r.status, payload, error: r.error ?? null, lastStatus: r.last_status ?? null });
   }
   return out;
 };
