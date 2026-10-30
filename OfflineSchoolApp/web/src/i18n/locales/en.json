@@ -575,7 +575,14 @@
     "phoneInvalid": "A Cameroon number has 9 digits starting with 6 or 2 (e.g. 677 12 34 56).",
     "phoneHint": "Saved as +237 and 9 digits.",
     "dobFuture": "The date of birth cannot be in the future.",
-    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved."
+    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved.",
+    "countRegistered_one": "{{count}} student registered",
+    "countRegistered_other": "{{count}} students registered",
+    "countResults_one": "{{count}} result",
+    "countResults_other": "{{count}} results",
+    "countResultsOf_one": "{{count}} result of {{total}} students",
+    "countResultsOf_other": "{{count}} results of {{total}} students",
+    "noneMatch": "No students match these filters"
   },
   "teachers": {
     "title": "Teachers",

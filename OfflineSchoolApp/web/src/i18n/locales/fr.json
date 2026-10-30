@@ -575,7 +575,14 @@
     "phoneInvalid": "Un numéro camerounais a 9 chiffres commençant par 6 ou 2 (ex. 677 12 34 56).",
     "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
     "dobFuture": "La date de naissance ne peut pas être dans le futur.",
-    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée."
+    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée.",
+    "countRegistered_one": "{{count}} élève inscrit",
+    "countRegistered_other": "{{count}} élèves inscrits",
+    "countResults_one": "{{count}} résultat",
+    "countResults_other": "{{count}} résultats",
+    "countResultsOf_one": "{{count}} résultat sur {{total}} élèves",
+    "countResultsOf_other": "{{count}} résultats sur {{total}} élèves",
+    "noneMatch": "Aucun élève ne correspond à ces filtres"
   },
   "teachers": {
     "title": "Enseignants",

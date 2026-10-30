@@ -19,6 +19,7 @@ import { SearchInput }     from "@/components/ui/SearchInput";
 import { Select }          from "@/components/ui/Select";
 import { Pagination }      from "@/components/ui/Pagination";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import i18n from "@/i18n";
 import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
@@ -101,29 +102,21 @@ const resolveClassName = (student: Student): string =>
   student.class?.name ?? student.className ?? i18n.t("students.unassignedClass");
 
 /**
- * Returns a human-readable count label that reflects the active filter.
- * "42 students registered"  (when showing all)
- * "18 active students"      (when filtered to approved)
+ * The count under the title.
+ *
+ * It used to print the FILTERED count as "registered", so a search that
+ * matched nobody announced "0 students registered" in a school of forty.
+ * Unfiltered it is the school's total; filtered it is the matches, out of
+ * that total, and never called "registered".
  */
-const countLabel = (total: number, status: string): string => {
-  const n    = total.toLocaleString();
-  const noun = total !== 1 ? "students" : "student";
-
-  switch (status) {
-    case "all":
-    case "":
-      return `${n} ${noun} registered`;
-    case "approved":
-      return `${n} active ${noun}`;
-    case "pending":
-      return `${n} pending ${noun}`;
-    case "suspended":
-      return `${n} suspended ${noun}`;
-    case "rejected":
-      return `${n} rejected ${noun}`;
-    default:
-      return `${n} ${noun}`;
-  }
+const countLabel = (
+  t: TFunction,
+  { shown, schoolTotal, filtered }: { shown: number; schoolTotal: number | null; filtered: boolean },
+): string => {
+  if (!filtered) return t("students.countRegistered", { count: shown });
+  return schoolTotal == null
+    ? t("students.countResults", { count: shown })
+    : t("students.countResultsOf", { count: shown, total: schoolTotal.toLocaleString() });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -318,6 +311,15 @@ export default function StudentsPage() {
     placeholderData: (prev) => prev,
   });
 
+  // The school's own total, whatever the filters: one row is enough to read
+  // it. Under the "students" key, so every enrol and delete refreshes it too.
+  const filtered = Boolean(search || classId || (status && status !== "all"));
+  const schoolTotalQuery = useQuery({
+    queryKey: ["students", schoolId, "", "", "all", "total"],
+    queryFn:  () => fetchStudents({ schoolId, status: "all", page: 1, limit: 1 }),
+    enabled:  !!schoolId && filtered,
+  });
+
   const students: Student[] = studentsQuery.data?.students ?? [];
   const total:    number    = studentsQuery.data?.total    ?? 0;
   const pages:    number    = studentsQuery.data?.pages    ?? 1;
@@ -343,7 +345,11 @@ export default function StudentsPage() {
           </h2>
           {/* ✅ Count label now reflects the active filter honestly */}
           <p className="text-sm text-gray-500 mt-0.5">
-            {countLabel(total, status)}
+            {countLabel(t, {
+              shown:       total,
+              schoolTotal: schoolTotalQuery.data?.total ?? null,
+              filtered,
+            })}
           </p>
         </div>
 
@@ -413,14 +419,14 @@ export default function StudentsPage() {
                 aria-hidden="true"
               />
             }
-            title={t("students.none")}
+            title={filtered ? t("students.noneMatch") : t("students.none")}
             subtitle={
-              search || classId || status !== "all"
+              filtered
                 ? t("students.adjustFilters")
                 : t("students.firstOne")
             }
             action={
-              !search && !classId && status === "all" ? (
+              !filtered ? (
                 <Button
                   icon={<Plus className="w-4 h-4" aria-hidden="true" />}
                   onClick={() => navigate("/students/new")}
