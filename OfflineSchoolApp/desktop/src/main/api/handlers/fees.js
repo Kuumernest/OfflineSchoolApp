@@ -34,6 +34,7 @@
 
 const { displayName } = require("../../../../../shared/studentName");
 const { currentAcademicYearOf, yearKey } = require("../../../../../shared/academicYear");
+const { feePosition } = require("../../../../../shared/arrears");
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
@@ -124,6 +125,61 @@ function outstandingOf(docs, { schoolId, academicYear = null, classId = null }) 
   out.owing  = out.rows.length;
   out.rows.sort((a, b) => b.balance - a.balance);
   return out;
+}
+
+/**
+ * Owed and overdue — the server's arrears.service, on the local copy.
+ *
+ * outstandingOf's rows (what each pupil owes this year), each split by
+ * shared/arrears feePosition into the part past its due date and the part
+ * still to come — the same function the server runs, so a bursar offline
+ * sees the figures the bell shows online.
+ *
+ * Families: guardian access records are not synced to the desktop, so a
+ * late pupil counts as a family of one here; online, siblings on one code
+ * count once.
+ */
+function arrearsOf(docs, { schoolId, academicYear = null, classId = null, asOf = Date.now() }) {
+  const o = outstandingOf(docs, { schoolId, academicYear, classId });
+  const owing = new Set(o.rows.map((r) => r.studentId));
+  const forms = new Set([o.academicYear, o.academicYear.replace("/", "-")]);
+  const inYear = (d) => owing.has(String(d.studentId)) && forms.has(String(d.academicYear));
+
+  const chargesBy = new Map();
+  for (const c of docs.find("feeCharge", { schoolId, deletedAt: null })) {
+    if (c.voidedAt || !inYear(c)) continue;
+    const k = String(c.studentId);
+    if (!chargesBy.has(k)) chargesBy.set(k, []);
+    chargesBy.get(k).push(c);
+  }
+  const planBy = new Map(
+    docs.find("paymentPlan", { schoolId, status: "active", deletedAt: null })
+      .filter(inYear).map((p) => [String(p.studentId), p]),
+  );
+
+  const when = new Date(asOf);
+  const rows = o.rows.map((r) => {
+    const mine = chargesBy.get(r.studentId) ?? [];
+    const dated = mine.filter((c) => c.dueDate);
+    return {
+      ...r,
+      ...feePosition({ charges: mine, paid: r.paid, plan: planBy.get(r.studentId) ?? null, asOf: when }),
+      latestDue: dated.length ? new Date(Math.max(...dated.map((c) => new Date(c.dueDate).getTime()))) : null,
+      datedCharges:   dated.length,
+      undatedCharges: mine.length - dated.length,
+    };
+  });
+  const late = rows.filter((r) => r.isOverdue);
+  return {
+    academicYear: o.academicYear,
+    rows,
+    totals: {
+      owed: o.outstanding, owingStudents: rows.length,
+      overdue: late.reduce((sum, r) => sum + r.overdue, 0),
+      overdueStudents: late.length,
+      overdueFamilies: late.length,
+    },
+  };
 }
 
 /**
@@ -264,14 +320,22 @@ module.exports = [
       const schoolId = query.schoolId ? String(query.schoolId).trim() : null;
       if (!schoolId) return null;
 
-      const o = outstandingOf(docs, {
+      const a = arrearsOf(docs, {
         schoolId, academicYear: query.academicYear || null, classId: query.classId || null,
       });
       return ok({
-        count: o.rows.length,
-        totalOutstanding: o.outstanding,
-        academicYear: o.academicYear,
-        data: o.rows,
+        count: a.rows.length,
+        totalOutstanding: a.totals.owed,
+        overdueTotal:     a.totals.overdue,
+        overdueCount:     a.totals.overdueStudents,
+        overdueFamilies:  a.totals.overdueFamilies,
+        academicYear: a.academicYear,
+        data: a.rows.map((r) => ({
+          studentId: r.studentId, name: r.name, enrollmentNo: r.enrollmentNo, classId: r.classId,
+          charged: r.charged, waived: r.waived, paid: r.paid,
+          balance: r.balance, overdue: r.overdue, isOverdue: r.isOverdue,
+          overdueSince: r.overdueSince, nextDue: r.nextDue, onPlan: r.onPlan,
+        })),
       });
     },
   },
@@ -633,142 +697,54 @@ module.exports.push(
       const school = docs.get("school", schoolId);
       const channel = school?.settings?.notifications?.channel || "sms";
 
-      // All approved students
-      const studentFilter = {
-        schoolId, deletedAt: null, status: "approved",
-        ...(classId ? { classId } : {}),
-      };
-      const students = docs.find("student", studentFilter);
-      const studentMap = new Map(students.map((s) => [String(s._id), s]));
-
-      const balances = balancesMap(docs, schoolId, academicYear);
-
-      // Find dated charges and group by student
-      const chargeFilter = {
-        schoolId, deletedAt: null,
-        ...(academicYear ? { academicYear } : {}),
-      };
-      const allCharges = docs.find("feeCharge", chargeFilter)
-        .filter((c) => c.dueDate && !c.voidedAt);
-
-      const byStudent = new Map();
-      for (const c of allCharges) {
-        const sid = String(c.studentId);
-        if (!byStudent.has(sid)) byStudent.set(sid, []);
-        byStudent.get(sid).push(c);
-      }
-
-      // Active payment plans
-      const plans = docs.find("paymentPlan", {
-        schoolId, status: "active", deletedAt: null,
-        ...(academicYear ? { academicYear } : {}),
-      });
-      const plansByStudent = new Map(plans.map((p) => [String(p.studentId), p]));
-
+      // Who owes and how much of it is late: arrearsOf, the server's
+      // arrears.service on the local copy. This used to call a pupil late when
+      // ANY due date had passed, even one their payments had covered — so a
+      // family that paid First Term and owed a Second Term not yet due was
+      // chased offline and not online.
+      const a = arrearsOf(docs, { schoolId, academicYear, classId, asOf: now });
+      const studentMap = new Map(
+        docs.find("student", { schoolId, deletedAt: null }).map((s) => [String(s._id), s]),
+      );
+      const soonCutoff = now + 14 * DAY_MS;
       const results = [];
 
-      // Group ALL charges (dated and undated) by student
-      const allChargesAll = docs.find("feeCharge", chargeFilter)
-        .filter((c) => !c.voidedAt);
-
-      const byStudentAll = new Map();
-      for (const c of allChargesAll) {
-        const sid = String(c.studentId);
-        if (!byStudentAll.has(sid)) byStudentAll.set(sid, []);
-        byStudentAll.get(sid).push(c);
-      }
-
-      for (const [sid, charges] of byStudentAll) {
-        const bal = balances.get(sid);
-        if (!bal || bal.balance <= 0) continue;
-
-        const student = studentMap.get(sid);
+      for (const r of a.rows) {
+        const student = studentMap.get(r.studentId);
         if (!student) continue;
 
-        const plan = plansByStudent.get(sid);
-        let earliestDue = null;
-        let latestDue = null;
-        let isOverdue = false;
-        let daysOverdue = 0;
-        let onPlan = false;
-        let planBehindBy = 0;
-        let planNextDue = null;
-        let planDueByNow = 0;
+        const isOverdue = r.isOverdue;
+        const due       = isOverdue ? r.overdueSince : r.nextDue;
+        const dueTime   = due ? new Date(due).getTime() : null;
+        const isDueSoon = !isOverdue && dueTime !== null && dueTime <= soonCutoff;
 
-        // Separate dated and undated charges
-        const datedCharges = charges.filter((c) => c.dueDate);
-        const undatedCharges = charges.filter((c) => !c.dueDate);
-        const hasUndated = undatedCharges.length > 0;
-
-        for (const c of datedCharges) {
-          const due = new Date(c.dueDate).getTime();
-          if (!earliestDue || due < earliestDue) earliestDue = due;
-          if (!latestDue || due > latestDue) latestDue = due;
-        }
-
-        if (plan) {
-          onPlan = true;
-          const ps = planStatusLocal(plan, bal.paid, now);
-          planBehindBy = ps.behindBy;
-          planNextDue  = ps.nextDue;
-          planDueByNow = ps.dueByNow;
-
-          if (ps.isBehind) {
-            isOverdue = true;
-            daysOverdue = Math.floor((now - new Date(ps.missedSince).getTime()) / DAY_MS);
-          } else {
-            // On track — use the next instalment date
-            if (ps.nextDue) {
-              const nextTime = new Date(ps.nextDue).getTime();
-              if (endOfDay(nextTime) < now) {
-                isOverdue = true;
-                daysOverdue = Math.floor((now - nextTime) / DAY_MS);
-              }
-            }
-          }
-        } else {
-          // No plan — overdue if any due date has passed
-          if (earliestDue && endOfDay(earliestDue) < now) {
-            isOverdue = true;
-            daysOverdue = Math.floor((now - earliestDue) / DAY_MS);
-          }
-          // Undated charges are immediately overdue
-          if (hasUndated && !isOverdue) {
-            isOverdue = true;
-          }
-        }
-
-        // Mode filter
         if (mode === "overdue" && !isOverdue) continue;
-        if (mode === "dueSoon" && isOverdue) continue;
-        if (mode === "dueSoon" && earliestDue) {
-          const dueSoonCutoff = now + 14 * DAY_MS;
-          if (earliestDue > dueSoonCutoff) continue;
-        }
-
-        const reachable = isReachable(school, student, channel);
+        if (mode === "dueSoon" && !isDueSoon) continue;
 
         results.push({
-          studentId:        sid,
+          studentId:        r.studentId,
           name:             displayName(student) || null,
           enrollmentNo:     student.enrollmentNo ?? null,
           classId:          student.classId ?? null,
           guardianName:     student.guardianName ?? null,
-          balance:          bal.balance,
-          charged:          bal.charged,
-          paid:             bal.paid,
-          earliestDue:      earliestDue ? new Date(earliestDue).toISOString() : null,
-          latestDue:        latestDue ? new Date(latestDue).toISOString() : null,
-          totalCharges:     charges.length,
-          datedCharges:     datedCharges.length,
-          undatedCharges:   undatedCharges.length,
+          balance:          r.balance,
+          overdue:          r.overdue,
+          charged:          r.charged,
+          paid:             r.paid,
+          earliestDue:      dueTime ? new Date(dueTime).toISOString() : null,
+          latestDue:        r.latestDue ? r.latestDue.toISOString() : null,
+          totalCharges:     r.datedCharges + r.undatedCharges,
+          datedCharges:     r.datedCharges,
+          undatedCharges:   r.undatedCharges,
           isOverdue,
-          daysOverdue:      Math.max(0, daysOverdue),
-          onPlan,
-          planBehindBy,
-          planNextDue,
-          planDueByNow,
-          reachable,
+          daysOverdue:      isOverdue
+            ? (dueTime ? Math.max(0, Math.floor((now - dueTime) / DAY_MS)) : 1)
+            : 0,
+          onPlan:           r.onPlan,
+          planBehindBy:     r.plan?.behindBy ?? 0,
+          planNextDue:      r.plan?.nextDue ?? null,
+          planDueByNow:     r.plan?.dueByNow ?? 0,
+          reachable:        isReachable(school, student, channel),
           recentlyReminded: false,  // Notification collection not synced
         });
       }
