@@ -14,8 +14,10 @@
  *   - in English and French, and printed in the school's language whoever
  *     asks (GET /api/documents/id-cards/:classId, School.defaultLanguage);
  *   - a long name steps down a size rather than losing characters; a
- *     missing photo prints the framed blank; every other value is held to
- *     one line (ellipsis) so nothing spills off the 85.6 × 54 mm card.
+ *     missing photo prints the framed blank; the admission number steps
+ *     down a size too and is never cut short ("ETEST-2026-…" finds nobody);
+ *     every other value is held to one line (ellipsis) so nothing spills off
+ *     the 85.6 × 54 mm card.
  *
  * Renders the real renderer, then the real route against an in-memory
  * MongoDB with a synthetic school.
@@ -94,6 +96,15 @@ const check = (label, actual, expected) => {
   const rule = (sel) => (css.match(new RegExp(`\\n  ${sel.replace(".", "\\.")} \\{[^}]*\\}`)) || [""])[0];
   check("labels, values, the contact line and the signature labels hold to one line (ellipsis), never spilling",
     [".label", ".value", ".card__contact", ".sig__label"].map((s) => /white-space: nowrap/.test(rule(s)) && /text-overflow: ellipsis/.test(rule(s))), [true, true, true, true]);
+  const idRule = (css.match(/\n  \.value--id \{[^}]*\}/) || [""])[0];
+  check("the admission number is never ellipsised: it clips nothing and may break, last resort",
+    [/text-overflow: clip/.test(idRule), /white-space: normal/.test(idRule), /overflow-wrap: anywhere/.test(idRule)], [true, true, true]);
+  const idOf = (no) => (cards(render("en", [{ ...pupil, enrollmentNo: no }])).match(/value--id (a\d)">([^<]*)</) || []).slice(1);
+  check("admission numbers step down by length, every character kept",
+    [idOf("SBC-26-0001"), idOf("ETEST-2026-006"), idOf("SYNTHCOL-2026-00042")],
+    [["a1", "SBC-26-0001"], ["a2", "ETEST-2026-006"], ["a3", "SYNTHCOL-2026-00042"]]);
+  check("the signature line's rule is not swallowed by a stray declaration block",
+    /\n  \.sig__space \{[^}]*\}\n  \.sig__line  \{/.test(css), true);
   check("the card is still 85.6 × 54 mm, its overflow hidden", [/\.card \{\s*width: 85\.6mm; height: 54mm;/.test(css), /overflow: hidden;\s*\}\s*\n\s*\.card__inner/.test(css)], [true, true]);
 
   console.log("--- the route prints in the school's language ---");

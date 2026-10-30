@@ -331,7 +331,9 @@ export default function EditStudentPage() {
             <h1 className="truncate text-lg font-semibold text-ink">
               {student.studentName || t("studentEdit.title")}
             </h1>
-            <p className="truncate text-xs text-ink-muted">
+            {/* Wraps rather than truncating: the admission number is what
+                the office reads off this line, and "ETEST-2026-…" is not one. */}
+            <p className="break-words text-xs text-ink-muted">
               {[student.enrollmentNo, student.className]
                 .filter(Boolean).join(" · ") || t("studentEdit.blurb")}
             </p>
