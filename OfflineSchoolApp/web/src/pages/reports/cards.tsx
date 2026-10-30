@@ -119,6 +119,10 @@ export default function ReportCardsPage() {
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [selectedClass,   setSelectedClass]   = useState<ClassOption | null>(null);
   const [students,        setStudents]        = useState<StudentOption[]>([]);
+  // Sequence cards: pupils on the roster with no marks for the chosen exam.
+  // Left out of the picker and the run, and named in a note so the office
+  // knows who is missing rather than wondering.
+  const [noMarks,         setNoMarks]         = useState<StudentOption[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
   const [classLoading,    setClassLoading]    = useState(false);
   const [studentLoading,  setStudentLoading]  = useState(false);
@@ -259,9 +263,10 @@ export default function ReportCardsPage() {
   /**
    * Load the pupils this card can be printed for.
    *
-   * A sequence card comes from the class roster: the exam covers the class, and
-   * a pupil with no marks prints an empty card, which is a legitimate thing to
-   * hand a parent.
+   * A sequence card comes from the class roster, less the pupils with no marks
+   * for the exam: a result, a real score, or a mark of absent or exempt. A
+   * pupil with none used to be listed and printed as an empty card (or a
+   * 404); they are now named in a note under the picker instead.
    *
    * A term or annual card cannot. Its marks are computed — the sequences
    * combined by weight, then the terms — and a pupil the computation has not
@@ -275,13 +280,29 @@ export default function ReportCardsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudentLoading(true);
     setStudents([]);
+    setNoMarks([]);
     setSelectedStudent(null);
 
+    const examId = selectedExam?._id;
     const request = cardType === "sequence"
-      ? api.get("/admin/students", {
-          params: { schoolId, classId: selectedClass._id },
-        }).then((res) =>
-          res.data?.students || (Array.isArray(res.data) ? res.data : []))
+      ? Promise.all([
+          api.get("/admin/students", { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.students || (Array.isArray(res.data) ? res.data : [])) as StudentOption[]),
+          api.get(`/exams/${examId}/scores`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.scores ?? []) as { studentId: string; score: number | null; isAbsent?: boolean; isExempt?: boolean }[]),
+          api.get(`/exams/${examId}/results`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.results ?? []) as { studentId: string }[]),
+        ]).then(([roster, scores, results]) => {
+          const marked = new Set<string>([
+            ...results.map((r) => String(r.studentId)),
+            ...scores
+              .filter((sc) => sc.score != null || sc.isAbsent || sc.isExempt)
+              .map((sc) => String(sc.studentId)),
+          ]);
+          const without = roster.filter((st) => !marked.has(String(st._id)));
+          if (!stale) setNoMarks(without);
+          return roster.filter((st) => marked.has(String(st._id)));
+        })
       : api.get(cardType === "term" ? "/term-results" : "/annual-results", {
           params: {
             schoolId, academicYear, classId: selectedClass._id,
@@ -307,7 +328,7 @@ export default function ReportCardsPage() {
       .catch(() => { if (!stale) setStudents([]); })
       .finally(() => { if (!stale) setStudentLoading(false); });
     return () => { stale = true; };
-  }, [selectedClass, cardType, academicYear, termNumber, schoolId]);
+  }, [selectedClass, cardType, selectedExam, academicYear, termNumber, schoolId]);
 
   // ── Generate ────────────────────────────────────────────
   /**
@@ -901,9 +922,11 @@ export default function ReportCardsPage() {
                  */
                 <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
                   <p className="text-sm font-semibold text-warning">
-                    {cardType === "sequence"
-                      ? t("reportCards.emptyRoster")
-                      : t("reportCards.emptyComputed", { type: typeLabel })}
+                    {cardType !== "sequence"
+                      ? t("reportCards.emptyComputed", { type: typeLabel })
+                      : noMarks.length > 0
+                        ? t("reportCards.noneMarked")
+                        : t("reportCards.emptyRoster")}
                   </p>
                   {cardType !== "sequence" && (
                     <Link
@@ -953,6 +976,17 @@ export default function ReportCardsPage() {
                     );
                   })}
                 </div>
+              )}
+
+              {/* Who is left out, by name: a pupil with no marks for this
+                  exam has no card to print. */}
+              {!studentLoading && cardType === "sequence" && noMarks.length > 0 && (
+                <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  <span className="font-semibold">
+                    {t("reportCards.noMarksNote", { count: noMarks.length })}
+                  </span>{" "}
+                  {noMarks.map((st) => st.studentName || st.name).filter(Boolean).join(", ")}
+                </p>
               )}
             </div>
           )}

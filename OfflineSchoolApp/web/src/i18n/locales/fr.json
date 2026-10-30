@@ -1177,7 +1177,10 @@
     "printOne": "Aperçu et impression du bulletin",
     "printAll": "Aperçu de {{count}} bulletin",
     "printAll_other": "Aperçu des {{count}} bulletins",
-    "viewResults": "Voir les résultats"
+    "viewResults": "Voir les résultats",
+    "noneMarked": "Aucun élève de cette classe n'a encore de notes pour cet examen.",
+    "noMarksNote_one": "{{count}} élève n'a aucune note pour cet examen et n'aura pas de bulletin :",
+    "noMarksNote_other": "{{count}} élèves n'ont aucune note pour cet examen et n'auront pas de bulletin :"
   },
   "admissions": {
     "title": "Admissions",

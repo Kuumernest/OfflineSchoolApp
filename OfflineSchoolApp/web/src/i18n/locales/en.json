@@ -1177,7 +1177,10 @@
     "printOne": "Preview & Print Report Card",
     "printAll": "Preview {{count}} Report",
     "printAll_other": "Preview All {{count}} Reports",
-    "viewResults": "View Results"
+    "viewResults": "View Results",
+    "noneMarked": "No student in this class has marks for this exam yet.",
+    "noMarksNote_one": "{{count}} student has no marks for this exam and gets no card:",
+    "noMarksNote_other": "{{count}} students have no marks for this exam and get no card:"
   },
   "admissions": {
     "title": "Admissions",
