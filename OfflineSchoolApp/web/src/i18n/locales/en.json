@@ -5706,5 +5706,13 @@
     "guardian": "Guardian",
     "noGuardian": "No guardian contact recorded.",
     "unavailable": "The summary could not be loaded."
+  },
+  "unsaved": {
+    "title": "Leave without saving?",
+    "message": "Your changes on this page have not been saved and will be lost.",
+    "leave": "Leave",
+    "stay": "Stay",
+    "marks_one": "{{count}} unsaved mark will be lost.",
+    "marks_other": "{{count}} unsaved marks will be lost."
   }
 }

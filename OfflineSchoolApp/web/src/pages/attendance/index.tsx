@@ -36,6 +36,7 @@ import { Select } from "@/components/ui/Select";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 import {
   fetchRegister,
@@ -190,6 +191,16 @@ export default function AttendancePage() {
 
   const dirtyCount = Object.keys(draft).length;
 
+  // Leaving the page, or switching to another register, used to drop the
+  // draft without a word — "10 unsaved changes", then a click on the sidebar,
+  // and they were gone. Both now ask first.
+  const { confirmDiscard } = useUnsavedChangesGuard(dirtyCount > 0, {
+    message: t("unsaved.marks", { count: dirtyCount }),
+  });
+  const switchRegister = (apply: () => void) => {
+    void confirmDiscard().then((ok) => { if (ok) apply(); });
+  };
+
   // ── Save ───────────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -309,7 +320,7 @@ export default function AttendancePage() {
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setSubject(s)}
+                    onClick={() => switchRegister(() => setSubject(s))}
                     className={cn(
                       "px-3 py-2 text-sm capitalize transition-colors",
                       subject === s
@@ -330,7 +341,7 @@ export default function AttendancePage() {
               <Select
                 options={classOptions}
                 value={classId}
-                onChange={(e) => setClassId(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setClassId(v)); }}
                 className="min-w-44"
               />
             </label>
@@ -353,7 +364,7 @@ export default function AttendancePage() {
                   })),
                 ]}
                 value={periodId}
-                onChange={(e) => setPeriodId(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setPeriodId(v)); }}
                 className="min-w-44"
               />
             </label>
@@ -367,7 +378,7 @@ export default function AttendancePage() {
               <button
                 type="button"
                 aria-label={t("attendance.prevDay")}
-                onClick={() => setDate((d) => shiftDateKey(d, -1))}
+                onClick={() => switchRegister(() => setDate((d) => shiftDateKey(d, -1)))}
                 className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -376,14 +387,14 @@ export default function AttendancePage() {
                 type="date"
                 value={date}
                 max={todayKey()}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setDate(v)); }}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 type="button"
                 aria-label={t("attendance.nextDay")}
                 disabled={isFutureDate(shiftDateKey(date, 1))}
-                onClick={() => setDate((d) => shiftDateKey(d, 1))}
+                onClick={() => switchRegister(() => setDate((d) => shiftDateKey(d, 1)))}
                 className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <ChevronRight className="w-4 h-4" />

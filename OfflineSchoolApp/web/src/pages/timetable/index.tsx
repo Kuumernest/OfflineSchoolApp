@@ -70,6 +70,7 @@ import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -677,6 +678,15 @@ function SlotEditor({
   const [teacherId, setTeacherId] = useState(existing?.teacherId ?? "");
   const [room,      setRoom]      = useState(existing?.room ?? "");
 
+  // A lesson picked but not saved is lost by leaving the page or closing the
+  // editor; both ask first. Not while saving: the editor closes itself then.
+  const dirty =
+    subjectId !== (existing?.subjectId ?? "") ||
+    teacherId !== (existing?.teacherId ?? "") ||
+    room      !== (existing?.room      ?? "");
+  const { confirmDiscard } = useUnsavedChangesGuard(dirty && !saving);
+  const close = () => { void confirmDiscard().then((ok) => { if (ok) onClose(); }); };
+
   /**
    * Only the teachers assigned to this subject IN THIS CLASS.
    *
@@ -718,7 +728,7 @@ function SlotEditor({
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title={`${t(DAY_LABEL_KEYS[target.day])} · ${periodName}`}
     >
       <form
@@ -795,7 +805,7 @@ function SlotEditor({
           ) : <span />}
 
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={close}>
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saving}>

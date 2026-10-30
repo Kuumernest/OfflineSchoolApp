@@ -20,6 +20,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { ArrowLeft, Save, History, Loader2, AlertCircle } from "lucide-react";
 
 import { Card, CardHeader }        from "@/components/ui/Card";
@@ -161,6 +162,9 @@ export default function EditStudentPage() {
     [edits, initial]
   );
 
+  // An edit not saved is lost by leaving; leaving asks first.
+  const { allowNavigation } = useUnsavedChangesGuard(dirty.length > 0);
+
   /*
    * Sent back as baseUpdatedAt so the server can tell that somebody else edited
    * this record between the load and the save. The write still goes through —
@@ -202,6 +206,8 @@ export default function EditStudentPage() {
       void qc.invalidateQueries({ queryKey: ["student", id] });
       void qc.invalidateQueries({ queryKey: ["students"] });
       void qc.invalidateQueries({ queryKey: ["student-history", id] });
+      // Saved: the edits are no longer at risk, so the guard lets this through.
+      allowNavigation();
       navigate(`/students/${id}`);
     },
     onError: (err) =>

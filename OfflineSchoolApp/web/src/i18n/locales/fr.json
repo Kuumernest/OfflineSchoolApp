@@ -5706,5 +5706,13 @@
     "guardian": "Tuteur",
     "noGuardian": "Aucun contact de tuteur enregistré.",
     "unavailable": "Le résumé n'a pas pu être chargé."
+  },
+  "unsaved": {
+    "title": "Quitter sans enregistrer ?",
+    "message": "Vos modifications sur cette page n'ont pas été enregistrées et seront perdues.",
+    "leave": "Quitter",
+    "stay": "Rester",
+    "marks_one": "{{count}} marque non enregistrée sera perdue.",
+    "marks_other": "{{count}} marques non enregistrées seront perdues."
   }
 }

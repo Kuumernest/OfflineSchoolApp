@@ -41,6 +41,7 @@ import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,11 @@ export default function AddStudentPage() {
     onError: (err) =>
       toast({ title: t("students.errEnroll"), message: getErrorMessage(err), kind: "error" }),
   });
+
+  // Typed but not enrolled: leaving asks first. Once enrolled, the form is
+  // the credentials screen and there is nothing left to lose.
+  const typed = (Object.keys(EMPTY) as (keyof FormState)[]).some((k) => form[k] !== EMPTY[k]);
+  useUnsavedChangesGuard(typed && !result && !mutation.isPending);
 
   const set = <K extends keyof FormState>(key: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
