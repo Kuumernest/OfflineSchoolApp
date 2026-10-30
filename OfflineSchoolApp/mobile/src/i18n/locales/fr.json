@@ -4108,7 +4108,18 @@
     "examFallback": "Évaluation",
     "screenTitle": "Matières de l'évaluation",
     "headerSubEntry": "%{exam} · %{class}",
-    "headerSubList": "%{exam} — choisir une matière"
+    "headerSubList": "%{exam} — choisir une matière",
+    "rowPending": "Enregistré sur le téléphone · en attente d'envoi",
+    "rowAttention": "À vérifier",
+    "pendingBanner": {
+      "one": "%{count} note est enregistrée sur ce téléphone et attend d'être envoyée.",
+      "other": "%{count} notes sont enregistrées sur ce téléphone et attendent d'être envoyées."
+    },
+    "attentionBanner": {
+      "one": "%{count} note n'a pas pu être envoyée et doit être vérifiée.",
+      "other": "%{count} notes n'ont pas pu être envoyées et doivent être vérifiées."
+    },
+    "reviewPending": "Vérifier"
   },
   "examResults": {
     "title": "Résultats de l'évaluation",

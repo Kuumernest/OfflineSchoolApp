@@ -4108,7 +4108,18 @@
     "examFallback": "Exam",
     "screenTitle": "Exam Subjects",
     "headerSubEntry": "%{exam} · %{class}",
-    "headerSubList": "%{exam} — select a subject"
+    "headerSubList": "%{exam} — select a subject",
+    "rowPending": "Saved on phone · waiting to upload",
+    "rowAttention": "Needs attention",
+    "pendingBanner": {
+      "one": "%{count} mark is saved on this phone and waiting to upload.",
+      "other": "%{count} marks are saved on this phone and waiting to upload."
+    },
+    "attentionBanner": {
+      "one": "%{count} mark could not be uploaded and needs attention.",
+      "other": "%{count} marks could not be uploaded and need attention."
+    },
+    "reviewPending": "Review"
   },
   "examResults": {
     "title": "Exam Results",

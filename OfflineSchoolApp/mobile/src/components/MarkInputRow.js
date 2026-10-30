@@ -35,10 +35,18 @@ import { Text, TextInput, TouchableOpacity, View } from "react-native";
 
 const identity = (v) => v;
 
+// Module-level, so the memoised row compares the same objects every render.
+const SYNC_PENDING   = { fontSize: 10, fontWeight: "700", color: "#B45309", marginTop: 1 };
+const SYNC_ATTENTION = { fontSize: 10, fontWeight: "700", color: "#B91C1C", marginTop: 1 };
+
 function MarkInputRowInner({
   student, score, isAbsent, generation, maxScore,
   styles, rateColor, neutralColor, placeholderTextColor,
   absLabel, unknownName,
+  // Where this pupil's saved mark stands: "pending" (saved on the phone,
+  // waiting to upload), "attention" (the upload stopped — see the sheet's
+  // banner), or nothing once it has reached the server.
+  syncState = null, syncLabels = null,
   sanitize = identity,
   onDraft, onToggleAbsent, onBlur, onSubmit, registerInput, readPending,
 }) {
@@ -85,6 +93,14 @@ function MarkInputRowInner({
         <Text style={styles.sub}>
           {student.admissionNo ? `#${student.admissionNo}` : student.email || ""}
         </Text>
+        {syncState && syncLabels?.[syncState] ? (
+          <Text
+            style={syncState === "attention" ? SYNC_ATTENTION : SYNC_PENDING}
+            numberOfLines={1}
+          >
+            {syncLabels[syncState]}
+          </Text>
+        ) : null}
       </View>
       <TouchableOpacity
         style={[styles.absBtn, isAbsent && styles.absBtnActive]}
