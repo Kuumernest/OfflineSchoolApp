@@ -145,6 +145,7 @@ never reached production even when set.
 |---|---|
 | `VITE_API_URL` | **yes for Cloudflare Pages**: `https://<api-domain>/api`. Unset, the console calls `/api` on its own origin, which on Pages is not the API. |
 | `VITE_SENTRY_DSN`, `VITE_SENTRY_RELEASE`, `VITE_SENTRY_TRACES_SAMPLE_RATE` | optional (a Sentry DSN is public) |
+| `VITE_ANDROID_APP_URL`, `VITE_IOS_APP_URL` | recommended: the phone-app links on the screen teachers and students get instead of the console. Unset, no link, and the screen says to ask the school office. Android is the release APK (or the Play Store listing later); there is no iOS build yet. See `web/.env.production.example`. |
 
 No client bundle may contain a secret. Checked: no Anthropic, Brevo, JWT or
 private-key material in `web/src`, `web/dist`, `mobile/`, `desktop/src` or

@@ -406,12 +406,21 @@
     "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page."
   },
   "staffOnly": {
-    "title": "Cet espace est réservé au personnel",
-    "body": "Votre compte est un compte élève. Les fonctionnalités élèves se trouvent dans l'application mobile — connectez-vous avec votre matricule.",
     "signOut": "Se déconnecter",
-    "greeting": "Bonjour{{name}} — ce site est réservé au personnel",
-    "explain": "Votre connexion a réussi. Ce site est celui qu'utilisent les enseignants et les administrateurs pour gérer l'établissement ; il n'y a donc rien ici pour un compte élève.",
-    "useApp": "Utilisez plutôt l'application My School On The Move sur votre téléphone. Vos résultats, votre emploi du temps et les communiqués s'y trouvent, et elle fonctionne même sans réseau. Connectez-vous avec le même matricule{{enrollment}} et le même mot de passe."
+    "greeting": "Bonjour{{name}}, votre connexion a réussi.",
+    "teacher": {
+      "title": "Les enseignants utilisent l'application mobile",
+      "explain": "Ce site est réservé à l'administration de l'établissement — le chef d'établissement, les administrateurs et l'intendant. Les notes, l'appel, votre emploi du temps et vos messages se trouvent dans l'application My School On The Move sur votre téléphone.",
+      "useApp": "Installez l'application et connectez-vous avec la même adresse e-mail et le même mot de passe. Elle fonctionne même sans réseau et envoie vos notes dès que vous êtes de nouveau connecté."
+    },
+    "student": {
+      "title": "Les élèves utilisent l'application mobile",
+      "explain": "Ce site est réservé à l'administration de l'établissement — le chef d'établissement, les administrateurs et l'intendant. Vos résultats, votre emploi du temps et les communiqués se trouvent dans l'application My School On The Move sur votre téléphone.",
+      "useApp": "Installez l'application et connectez-vous avec le même matricule{{enrollment}} et le même mot de passe. Elle fonctionne même sans réseau."
+    },
+    "getAndroid": "Télécharger pour Android",
+    "getIos": "Télécharger pour iPhone",
+    "askOffice": "Demandez à l'administration de votre établissement comment installer l'application sur votre téléphone."
   },
   "requireRole": {
     "title": "Cette partie de la console ne vous est pas ouverte",

@@ -1,22 +1,26 @@
 // web/src/components/auth/StaffOnly.tsx
 //
-// The web console is for staff. Every page in it reads from /admin/* or the
-// staff-scoped teacher routes, all of which answer 403 for a student — so a
-// student who signed in here previously got a dashboard of failed requests, an
-// empty timetable, and an "Not authorized" announcements page, with no
-// indication that any of it was expected.
+// The web console is for the school office: the head, the administrators and
+// the bursar. Teachers and students use the phone app.
 //
-// This is deliberately a thin gate rather than a rewrite: the routes still
-// exist, and if a student experience is built for the web later, deleting this
-// component and restoring the "student" role in config/navigation.ts is all it
-// takes to open the console back up.
+// This is the ONE place that decides it. It wraps the dashboard shell inside
+// ProtectedRoute, so every protected URL — /, /students/new, /exams/new, a deep
+// link to an exam — passes through it before any page renders: a teacher gets
+// the screen below, never a flash of the page behind it. No page checks for
+// itself.
 //
-// It wraps the dashboard shell only. /login and /change-password stay reachable
-// for students, because a student may well follow a password-setup link here
-// even though the console itself is not for them.
+// Teachers used to be let in, and met a console built for the office: empty
+// class pickers, raw 403 messages from /admin/* endpoints, dashboard tiles
+// reading zero, and quick actions they cannot perform. Students were already
+// sent away; both now get the same screen, worded for who they are, with the
+// download links (config/mobileApp.ts) and a Sign out button.
+//
+// /login and /change-password stay outside it: a teacher on a temporary
+// password sets it here first, then lands on this screen. The parent portal
+// (/portal) has its own sign-in and never reaches it.
 
 import { Navigate } from "react-router-dom";
-import { GraduationCap, Smartphone, LogOut } from "lucide-react";
+import { GraduationCap, Smartphone, LogOut, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { useTranslation } from "react-i18next";
@@ -24,11 +28,13 @@ import { Card } from "@/components/ui/Card";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth.store";
 import { type UserRole } from "@/types";
+import { MOBILE_APP_LINKS } from "@/config/mobileApp";
 
-// The bursar is staff. This gate answers one question — is the console for
-// this person at all — and which parts of it they get is decided by the rail in
-// config/navigation.ts and by RequireRole on the routes themselves.
-const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar", "teacher"];
+// The office. This gate answers one question — is the console for this person
+// at all — and which parts of it they get is decided by the rail in
+// config/navigation.ts and by RequireRole on the routes themselves. The
+// bursar is office staff and keeps the console; a teacher does not.
+const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar"];
 const STAFF_ROLES = new Set<string>(STAFF);
 
 export default function StaffOnly({ children }: { children: React.ReactNode }) {
@@ -62,47 +68,70 @@ export default function StaffOnly({ children }: { children: React.ReactNode }) {
 
   if (STAFF_ROLES.has(user.role)) return <>{children}</>;
 
+  // Teachers and students: the same screen, worded for each.
+  const who = user.role === "teacher" ? "teacher" : "student";
+  const { android, ios } = MOBILE_APP_LINKS;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
-      <Card className="max-w-md text-center">
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
+      <Card className="w-full max-w-md text-center">
         <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mx-auto">
-          <GraduationCap className="w-6 h-6 text-primary-600" />
+          <GraduationCap className="w-6 h-6 text-primary-600" aria-hidden="true" />
         </div>
 
-        {/*
-          The name is interpolated into the greeting rather than concatenated
-          around it: French puts the comma and the vocative differently, and a
-          sentence assembled from three JSX fragments cannot be reordered by a
-          translator.
-        */}
-        <h1 className="mt-4 text-base font-semibold text-ink">
-          {t("staffOnly.greeting", {
-            name: user.name ? `, ${user.name.split(" ")[0]}` : "",
-          })}
+        {/* The name is interpolated rather than concatenated: French places
+            the comma and the vocative differently. */}
+        <h1 className="mt-4 text-lg font-semibold text-ink">
+          {t(`staffOnly.${who}.title`)}
         </h1>
-        <p className="mt-1.5 text-sm text-ink-muted">
-          {t("staffOnly.explain")}
+        <p className="mt-1 text-sm text-ink-muted">
+          {t("staffOnly.greeting", { name: user.name ? `, ${user.name.split(" ")[0]}` : "" })}
+        </p>
+        <p className="mt-3 text-sm text-ink-body">
+          {t(`staffOnly.${who}.explain`)}
         </p>
 
         <div className="mt-5 flex items-start gap-2.5 px-3 py-3 rounded-lg bg-primary-50/60 border border-primary-200 text-left">
-          <Smartphone className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+          <Smartphone className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" aria-hidden="true" />
           <p className="text-xs text-primary-900">
-            {t("staffOnly.useApp", {
+            {t(`staffOnly.${who}.useApp`, {
               enrollment: user.enrollmentNo ? ` (${user.enrollmentNo})` : "",
             })}
           </p>
         </div>
 
+        {/* Download links from the deployment's configuration; none
+            configured, the screen says where to ask instead. */}
+        {android || ios ? (
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            {android && (
+              <a href={android} target="_blank" rel="noopener noreferrer"
+                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700">
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {t("staffOnly.getAndroid")}
+              </a>
+            )}
+            {ios && (
+              <a href={ios} target="_blank" rel="noopener noreferrer"
+                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700">
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {t("staffOnly.getIos")}
+              </a>
+            )}
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-ink-muted">{t("staffOnly.askOffice")}</p>
+        )}
+
         <Button
           variant="secondary"
-          size="sm"
-          className="mt-5"
+          className="mt-5 w-full sm:w-auto"
           icon={<LogOut className="w-4 h-4" />}
           onClick={logout}
         >
           {t("staffOnly.signOut")}
         </Button>
       </Card>
-    </div>
+    </main>
   );
 }

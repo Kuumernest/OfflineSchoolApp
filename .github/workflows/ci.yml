@@ -108,6 +108,9 @@ jobs:
       # teacher that way, and the Edit Class dialog then showed every form
       # master as unassigned and cleared the real one on save.
       - run: npm run check:normalisers
+      # The console is for the school office: one gate (StaffOnly) in front of
+      # every protected page sends teachers and students to the phone app.
+      - run: npm run check:staffgate
       #
       # `npm run lint` is deliberately NOT wired in yet: it currently reports
       # 35 pre-existing errors (20 react-hooks/set-state-in-effect, 10 unused
