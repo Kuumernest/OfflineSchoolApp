@@ -1449,8 +1449,8 @@
       "marksAwaitingApproval_other": "{{count}} subjects' marks await approval",
       "resultsUnpublished": "{{count}} exam's results are ready to publish",
       "resultsUnpublished_other": "{{count}} exams' results are ready to publish",
-      "overdueFees": "{{count}} family has overdue fees ({{amount}})",
-      "overdueFees_other": "{{count}} families have overdue fees ({{amount}})"
+      "overdueFees": "{{count}} pupil overdue ({{families}}) · {{amount}} past due",
+      "overdueFees_other": "{{count}} pupils overdue ({{families}}) · {{amount}} past due"
     },
     "justNow": "Just now",
     "title": "Notifications",
@@ -1469,7 +1469,9 @@
     "filterUnread": "Unread",
     "filterAlerts": "Alerts",
     "alertCount": "{{count}} alert",
-    "alertCount_other": "{{count}} alerts"
+    "alertCount_other": "{{count}} alerts",
+    "families": "{{count}} family",
+    "families_other": "{{count}} families"
   },
   "applications": {
     "refresh": "Refresh applications",
@@ -2200,7 +2202,14 @@
     "activate": "Could not activate the fee structure",
     "reactivate": "Reactivate",
     "owingCount": "{{count}} owing",
-    "noClass": "No class"
+    "noClass": "No class",
+    "overdue": "Overdue",
+    "overdueOfIt": "{{amount}} of it overdue",
+    "overduePupils": "{{count}} pupil late ({{families}})",
+    "overduePupils_other": "{{count}} pupils late ({{families}})",
+    "overdueCount": "{{count}} overdue",
+    "overdueCount_other": "{{count}} overdue",
+    "noneOverdue": "Nothing overdue yet"
   },
   "chase": {
     "title": "Chasing what is owed",

@@ -278,11 +278,17 @@ export async function fetchOutstanding(
   const body = data as {
     count: number;
     totalOutstanding: number;
+    overdueTotal?:    number;
+    overdueCount?:    number;
+    overdueFamilies?: number;
     data: OutstandingRow[];
   };
   return {
     count:            body.count ?? 0,
     totalOutstanding: body.totalOutstanding ?? 0,
+    overdueTotal:     body.overdueTotal ?? 0,
+    overdueCount:     body.overdueCount ?? 0,
+    overdueFamilies:  body.overdueFamilies ?? 0,
     rows:             body.data ?? [],
   };
 }

@@ -23,8 +23,8 @@ const {
   balanceFor,
   applyStructure,
   voidReplacedCharges,
-  outstandingFor,
 } = require("../services/fees.service");
+const { arrearsFor } = require("../services/arrears.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
 const reminders = require("../services/feeReminders.service");
@@ -1112,19 +1112,28 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
 
   const { academicYear, classId } = req.query;
 
-  // The one outstanding figure (fees.service outstandingFor): the school's
-  // current students, one year — the one asked for, else the school's
-  // current year — and only positive balances.
-  const result = await outstandingFor({
-    schoolId, academicYear: academicYear || null, classId: classId || null, withRows: true,
+  // The one owed / overdue pair (arrears.service): the school's current
+  // students, one year — the one asked for, else the school's current year.
+  // Owed is outstandingFor's figure, unchanged; overdue is the part of it
+  // past its due date, the same figure the bell and Fee reminders show.
+  const result = await arrearsFor({
+    schoolId, academicYear: academicYear || null, classId: classId || null,
   });
-  const rows = result.rows.map(({ student, ...r }) => ({ ...r, name: displayName(student) || null }));
-  const totalOutstanding = result.outstanding;
+  const rows = result.rows.map((r) => ({
+    studentId: r.studentId, enrollmentNo: r.enrollmentNo, classId: r.classId,
+    name: displayName(r.student) || null,
+    charged: r.charged, waived: r.waived, paid: r.paid,
+    balance: r.owed, overdue: r.overdue, isOverdue: r.isOverdue,
+    overdueSince: r.overdueSince, nextDue: r.nextDue, onPlan: r.onPlan,
+  }));
 
   return res.json({
     success: true,
     count:   rows.length,
-    totalOutstanding,
+    totalOutstanding: result.totals.owed,
+    overdueTotal:     result.totals.overdue,
+    overdueCount:     result.totals.overdueStudents,
+    overdueFamilies:  result.totals.overdueFamilies,
     academicYear: result.academicYear,
     data:    rows,
   });
