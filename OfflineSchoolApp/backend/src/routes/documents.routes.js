@@ -11,9 +11,11 @@ const Student       = require("../db/models/Student");
 const Class         = require("../db/models/Class");
 const Enrollment    = require("../db/models/Enrollment");
 const ResultSummary = require("../db/models/ResultSummary");
+const Exam          = require("../db/models/Exam");
+const { averageOutOf20 } = require("../../../shared/reportCard");
 
 const { buildClassListHtml }  = require("../print/classList");
-const { buildTranscriptHtml } = require("../print/transcript");
+const { buildTranscriptHtml, dayOf } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
 const QRCode                  = require("qrcode");
 const gate                    = require("../services/gate.service");
@@ -375,15 +377,25 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     y.outcome   = e.outcome ?? null;
   }
 
+  // Which sequence each result is: a year has one row per sequence, and the
+  // stored term alone printed "Term 1" twice.
+  const examsById = new Map((await Exam.find({
+    _id: { $in: [...new Set(summaries.map((s) => String(s.examId)))] }, schoolId,
+  }).select("_id sequenceNumber term").lean()).map((e) => [String(e._id), e]));
+
   for (const s of summaries) {
     const year = s.academicYear ?? "—";
     const y = ensureYear(year);
     // Falls back to the result's own class for years the history predates.
     if (!y.className) y.className = s.className ?? null;
+    const exam = examsById.get(String(s.examId));
     y.terms.push({
-      term:          s.term ?? null,
+      term:          s.term ?? exam?.term ?? null,
+      sequenceNumber: exam?.sequenceNumber ?? null,
       examId:        s.examId,
-      average:       s.average ?? null,
+      // Out of twenty, as printed: an older sequence result stores GPA points
+      // (shared/reportCard averageOutOf20), and "/20" now follows the figure.
+      average:       averageOutOf20(s.average, "sequence", s.calcVersion),
       percentage:    s.percentage ?? null,
       overallGrade:  s.overallGrade ?? null,
       classPosition: s.classPosition ?? null,
@@ -457,7 +469,7 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
           { label: { en: "Years on record", fr: "Années enregistrées" },
             value: String(data.overall.yearsOnRecord) },
           { label: { en: "Overall average", fr: "Moyenne générale" },
-            value: data.overall.average != null ? String(data.overall.average) : "—" },
+            value: data.overall.average != null ? `${data.overall.average}/20` : "—" },
           ...record.map((y) => {
             const last = y.terms[y.terms.length - 1];
             return {
@@ -480,7 +492,8 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     html: () => buildTranscriptHtml({
       data,
       labels:    labelsFor(lang),
-      printedOn: formatPrintDate(new Date(), lang),
+      // DD/MM/YYYY, like every other date on the transcript.
+      printedOn: dayOf(new Date()),
       origin:    originOf(req),
       verify,
     }),
@@ -569,7 +582,6 @@ router.get("/verifications", officeOnly, asyncHandler(async (req, res) => {
     schoolId, studentId: String(req.query.studentId),
   });
 
-  const Exam = require("../db/models/Exam");
   const examIds = [...new Set(rows.map((r) => r.examId).filter((v) => v && v !== "-"))];
   const exams = examIds.length
     ? await Exam.find({ _id: { $in: examIds } }).select("name term academicYear").lean()
