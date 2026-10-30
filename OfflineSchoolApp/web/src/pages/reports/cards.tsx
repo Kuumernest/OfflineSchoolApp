@@ -19,6 +19,7 @@ import {
   printHtml,
 } from "@/print/document";
 import { isDesktop }      from "@/lib/offline/bridge";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -661,7 +662,10 @@ export default function ReportCardsPage() {
    * rest of the console uses. "Requested", not "printed": the browser does not
    * tell the page whether the dialog was accepted.
    */
-  const handlePrintPreview = async () => {
+  // One print at a time: fetching the issued card takes a moment, and a
+  // second click would print it twice.
+  const printFlight = useSingleFlight();
+  const handlePrintPreview = () => printFlight.run("print", async () => {
     if (!previewCard) return;
     const run = ++printRunRef.current;
     setPreviewMessage("");
@@ -683,7 +687,7 @@ export default function ReportCardsPage() {
       if (printRunRef.current !== run) return;
       setPreviewMessage(t("reportCards.printNotStarted"));
     }
-  };
+  });
 
   return (
     <div className="space-y-6">
@@ -1186,12 +1190,12 @@ export default function ReportCardsPage() {
             <button
               type="button"
               onClick={handlePrintPreview}
-              disabled={!previewCard}
+              disabled={!previewCard || printFlight.busy}
               className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"
             >
-              {t("common.print")}
+              {printFlight.busy ? t("common.preparing") : t("common.print")}
             </button>
           </div>
         </div>

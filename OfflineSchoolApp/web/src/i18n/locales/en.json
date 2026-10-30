@@ -118,7 +118,8 @@
     "unknownError": "Unknown error",
     "notProvided": "Not provided",
     "notSpecified": "Not specified",
-    "send": "Send"
+    "send": "Send",
+    "preparing": "Preparing…"
   },
   "flow": {
     "title": "Results workflow",

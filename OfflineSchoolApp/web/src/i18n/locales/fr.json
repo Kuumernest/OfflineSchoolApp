@@ -118,7 +118,8 @@
     "unknownError": "Erreur inconnue",
     "notProvided": "Non renseigné",
     "notSpecified": "Non précisé",
-    "send": "Envoyer"
+    "send": "Envoyer",
+    "preparing": "Préparation…"
   },
   "flow": {
     "title": "Déroulement des résultats",

@@ -33,6 +33,7 @@ import {
   fetchReceiptHtml,
 } from "@/services/fee.service";
 import { printHtml } from "@/print/document";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 import type { PaymentMethod } from "@/types/fees.types";
 import PaymentPlanPanel from "@/pages/fees/PaymentPlanPanel";
 import { useAttemptId } from "@/hooks/useAttemptId";
@@ -53,7 +54,9 @@ export default function StudentFeeAccountPage() {
   const year         = params.get("year") ?? "";
 
   const [payOpen, setPayOpen] = useState(false);
-  const [printing, setPrinting] = useState<string | null>(null);
+  // One receipt at a time, and "Preparing…" on its row until the print
+  // dialog has it.
+  const receipts = useSingleFlight();
   const [form, setForm] = useState({
     amount:    "",
     method:    "cash" as PaymentMethod,
@@ -115,18 +118,15 @@ export default function StudentFeeAccountPage() {
       toast({ kind: "error", title: t("fees.reverseFailed"), message: getErrorMessage(err) }),
   });
 
-  const printReceipt = async (paymentId: string) => {
-    setPrinting(paymentId);
+  const printReceipt = (paymentId: string) => receipts.run(paymentId, async () => {
     try {
       const lang = i18n?.language?.startsWith("fr") ? "fr" : "en";
       const html = await fetchReceiptHtml(paymentId, schoolId, lang);
-      printHtml(html);
+      await printHtml(html);
     } catch (err) {
       toast({ kind: "error", title: t("fees.receipt"), message: getErrorMessage(err) });
-    } finally {
-      setPrinting(null);
     }
-  };
+  });
 
   // Whole francs only. The server rejects anything else, but catching it here
   // means the bursar is told before the request rather than after.
@@ -318,12 +318,12 @@ export default function StudentFeeAccountPage() {
                         {!isReversal && !isReversed && p.receiptNo && (
                           <button
                             type="button"
-                            disabled={printing === p._id}
+                            disabled={receipts.busy}
                             onClick={() => printReceipt(p._id)}
                             className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-indigo-700 disabled:opacity-50"
                           >
                             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-                            {printing === p._id ? "…" : t("common.print")}
+                            {receipts.busyKey === p._id ? t("common.preparing") : t("common.print")}
                           </button>
                         )}
                         {isReversal ? (

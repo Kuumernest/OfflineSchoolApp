@@ -29,6 +29,7 @@ import {
   fetchClassListHtml, fetchTranscriptHtml, fetchIdCardsHtml,
 } from "@/services/document.service";
 import { printHtml, previewHtml } from "@/print/document";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 /** The three sheets a roster is actually used as. */
 type ClassListVariant = "plain" | "register" | "contacts";
@@ -45,7 +46,10 @@ export default function DocumentsPage() {
   const [variant, setVariant] = useState<ClassListVariant>("plain");
   const [query, setQuery]     = useState("");
   const [studentId, setStudentId] = useState("");
-  const [busy, setBusy]       = useState(false);
+  // One document at a time; the button says so until the tab or the print
+  // dialog has its content.
+  const flight = useSingleFlight();
+  const busy   = flight.busy;
 
   const classesQ = useQuery({
     queryKey: ["classes", schoolId],
@@ -71,8 +75,7 @@ export default function DocumentsPage() {
   }, [studentsQ.data, query]);
 
   /** Fetch the finished sheet, then print it or open it for a look. */
-  const run = async (mode: "print" | "preview") => {
-    setBusy(true);
+  const run = (mode: "print" | "preview") => flight.run(mode, async () => {
     try {
       // The console's language goes with the request: a head reading the app in
       // French should not get an English register.
@@ -83,14 +86,12 @@ export default function DocumentsPage() {
         tab === "idCards"    ? await fetchIdCardsHtml(classId, schoolId, lang) :
                                await fetchTranscriptHtml(studentId, schoolId, lang, mode === "preview");
 
-      if (mode === "print") printHtml(html);
+      if (mode === "print") await printHtml(html);
       else previewHtml(html);
     } catch (err) {
       toast({ kind: "error", title: t("doc.print"), message: getErrorMessage(err) });
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   if (classesQ.isLoading) return <PageSpinner />;
 
@@ -114,17 +115,18 @@ export default function DocumentsPage() {
               variant="secondary"
               icon={<Eye className="h-4 w-4" />}
               disabled={!ready || busy}
+              loading={flight.busyKey === "preview"}
               onClick={() => run("preview")}
             >
-              {t("doc.preview")}
+              {flight.busyKey === "preview" ? t("common.preparing") : t("doc.preview")}
             </Button>
             <Button
               icon={<Printer className="h-4 w-4" />}
-              loading={busy}
-              disabled={!ready}
+              loading={flight.busyKey === "print"}
+              disabled={!ready || busy}
               onClick={() => run("print")}
             >
-              {t("doc.print")}
+              {flight.busyKey === "print" ? t("common.preparing") : t("doc.print")}
             </Button>
           </>
         }
