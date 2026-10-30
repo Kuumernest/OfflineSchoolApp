@@ -612,7 +612,9 @@ function LessonCard({
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
       }}
       className={cn(
-        "group h-14 px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing",
+        // min-h, not h: a long subject or a teacher's full name wraps to a
+        // second line instead of being cut to "Computer Sci…".
+        "group min-h-14 px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing",
         "bg-primary-50 border border-primary-200",
         "hover:border-primary-400 hover:bg-primary-100/70 transition-colors",
         "focus:outline-none focus:ring-2 focus:ring-primary-500",
@@ -621,10 +623,12 @@ function LessonCard({
     >
       <GripVertical className="w-3 h-3 text-primary-300 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-primary-900 truncate leading-tight">
+        <p className="text-xs font-semibold text-primary-900 leading-tight line-clamp-2 [overflow-wrap:anywhere]"
+           title={slot.subject?.name ?? slot.subjectName ?? undefined}>
           {slot.subject?.name ?? slot.subjectName ?? t("timetable.unknownSubject")}
         </p>
-        <p className="text-[11px] text-primary-700/80 truncate">
+        <p className="text-[11px] leading-tight text-primary-700/80 line-clamp-2 [overflow-wrap:anywhere]"
+           title={slot.teacher?.name ?? undefined}>
           {slot.teacher?.name ?? t("timetable.unassigned")}
         </p>
         {slot.room && (
