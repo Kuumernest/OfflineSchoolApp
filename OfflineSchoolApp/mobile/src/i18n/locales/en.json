@@ -4064,6 +4064,11 @@
       "one": "Scores saved for %{count} student.",
       "other": "Scores saved for %{count} students."
     },
+    "savedOfflineTitle": "Saved on this phone",
+    "savedOfflineBody": {
+      "one": "Scores for %{count} student are saved on this phone and will upload automatically when you are back online.",
+      "other": "Scores for %{count} students are saved on this phone and will upload automatically when you are back online."
+    },
     "enterAnotherSubject": "Enter Another Subject",
     "done": "Done",
     "saveFailedTitle": "Save Failed",

@@ -4064,6 +4064,11 @@
       "one": "Notes enregistrées pour %{count} élève.",
       "other": "Notes enregistrées pour %{count} élèves."
     },
+    "savedOfflineTitle": "Enregistré sur ce téléphone",
+    "savedOfflineBody": {
+      "one": "Les notes de %{count} élève sont enregistrées sur ce téléphone et seront envoyées automatiquement dès que vous serez de nouveau connecté.",
+      "other": "Les notes de %{count} élèves sont enregistrées sur ce téléphone et seront envoyées automatiquement dès que vous serez de nouveau connecté."
+    },
     "enterAnotherSubject": "Saisir une autre matière",
     "done": "Terminé",
     "saveFailedTitle": "Enregistrement échoué",

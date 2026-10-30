@@ -15,6 +15,7 @@ import AsyncStorage     from "@react-native-async-storage/async-storage";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import api              from "../../../src/services/api";
+import { ExamService }  from "../../../src/services/exam.service";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
@@ -381,6 +382,8 @@ function ScoreEntry({
   saveRef, saving, setSaving, dirtyRef,
 }) {
   const { t } = useTranslation();
+  // Who entered the marks, recorded on the device copy (enteredBy).
+  const userId = useAuthStore((s) => String(s.user?._id || s.user?.id || ""));
 
   const [isDirty,      setIsDirty]      = useState(false);
   const [search,       setSearch]       = useState("");
@@ -421,15 +424,16 @@ function ScoreEntry({
 
   const safeStudents = Array.isArray(students) ? students : [];
 
+  // Through the exam service, which caches the sheet on the device and reads
+  // it back from there: offline the marks already saved — including ones still
+  // waiting to upload — come back, where this used to show an empty sheet.
   const loadScores = useCallback(async () => {
     if (!examId) return {};
-    const res = await api
-      .get(`/exams/${examId}/scores`, {
-        params: { subjectId, classId, schoolId },
-      })
-      .catch(() => ({ data: { scores: [] } }));
+    const res = await ExamService
+      .getScores({ examId, subjectId, classId, schoolId })
+      .catch(() => ({ scores: [] }));
 
-    const existing = res?.data?.scores || [];
+    const existing = res?.scores || [];
     const map = {};
     for (const s of existing) {
       map[String(s.studentId)] = {
@@ -556,17 +560,28 @@ function ScoreEntry({
     const doSave = async () => {
       try {
         setSaving(true);
-        await api.post(`/exams/${examId}/scores/bulk`, {
-          classId, subjectId, examSubjectId,
-          scores: records, schoolId,
+        // The offline queue, like attendance: written to the device first,
+        // sent now when there is a connection, and otherwise queued on the
+        // outbox and sent by the next sync. This posted straight to the
+        // server, so offline the save failed and the marks lived only in an
+        // unsent draft. A refusal from the server still throws, and the
+        // service undoes the local write.
+        const res = await ExamService.saveBulkScores({
+          examId, classId, subjectId, examSubjectId, schoolId,
+          scores:    records.map((r) => ({ ...r, teacherRemark: null })),
+          enteredBy: userId || null,
         });
         await AsyncStorage.removeItem(
           draftKey(examId, subjectId)
         ).catch(() => {});
         setIsDirty(false);
         Alert.alert(
-          t("teacherExamSubjects.savedTitle"),
-          t("teacherExamSubjects.savedBody", { count: records.length }),
+          res?.queued
+            ? t("teacherExamSubjects.savedOfflineTitle")
+            : t("teacherExamSubjects.savedTitle"),
+          res?.queued
+            ? t("teacherExamSubjects.savedOfflineBody", { count: records.length })
+            : t("teacherExamSubjects.savedBody", { count: records.length }),
           [
             {
               text:    t("teacherExamSubjects.enterAnotherSubject"),
@@ -608,7 +623,7 @@ function ScoreEntry({
   }, [
     safeStudents, flush, maxScore,
     examId, classId, subjectId, examSubjectId,
-    schoolId, onSaved, setSaving, t,
+    schoolId, onSaved, setSaving, t, userId,
   ]);
 
   useEffect(() => {
