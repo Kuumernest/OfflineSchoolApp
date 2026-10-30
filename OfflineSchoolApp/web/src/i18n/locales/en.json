@@ -2571,7 +2571,8 @@
     "payroll": "Payroll",
     "payrollHint": "Payslips actually issued. Drafts are left out.",
     "enrollments": "Class history",
-    "enrollmentsHint": "Which class each student sat in, year by year."
+    "enrollmentsHint": "Which class each student sat in, year by year.",
+    "savedAs": "Saved as {{file}} in your downloads"
   },
   "platform": {
     "title": "Platform",

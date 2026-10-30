@@ -75,14 +75,16 @@ export default function ExportsPage() {
     if (!selected) return;
     setBusy(true);
     try {
-      const rows = await downloadExport(
+      const { rows, fileName } = await downloadExport(
         selected, schoolId, i18n.resolvedLanguage ?? "en", params
       );
       // Said explicitly, because a downloaded file that turns out to be empty
-      // is discovered only after opening it.
+      // is discovered only after opening it — and naming the file tells the
+      // reader what to look for in their downloads.
       toast(
         rows > 0
-          ? { kind: "success", title: t("exp.downloaded", { count: rows }) }
+          ? { kind: "success", title: t("exp.downloaded", { count: rows }),
+              message: t("exp.savedAs", { file: fileName }) }
           : { kind: "warning", title: t("exp.empty") }
       );
     } catch (err) {
@@ -104,7 +106,9 @@ export default function ExportsPage() {
             disabled={!selected}
             onClick={run}
           >
-            {t("exp.download")}
+            {/* A spinner alone on an unchanged label read as nothing
+                happening while the workbook was built. */}
+            {busy ? t("exp.downloading") : t("exp.download")}
           </Button>
         }
       />

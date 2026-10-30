@@ -2571,7 +2571,8 @@
     "payroll": "Paie",
     "payrollHint": "Les bulletins réellement émis. Les brouillons sont exclus.",
     "enrollments": "Historique des classes",
-    "enrollmentsHint": "La classe de chaque élève, année par année."
+    "enrollmentsHint": "La classe de chaque élève, année par année.",
+    "savedAs": "Enregistré sous {{file}} dans vos téléchargements"
   },
   "platform": {
     "title": "Plateforme",
