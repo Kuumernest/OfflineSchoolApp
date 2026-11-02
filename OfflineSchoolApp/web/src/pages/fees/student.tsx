@@ -219,7 +219,7 @@ export default function StudentFeeAccountPage() {
           </p>
           <p
             className={`mt-1.5 font-display text-[22px] leading-none tabular ${
-              balance > 0 ? "text-danger" : "text-success"
+              balance > 0 ? "text-danger-text" : "text-success-text"
             }`}
           >
             {fmt.money(balance)}
@@ -305,7 +305,7 @@ export default function StudentFeeAccountPage() {
                       numeric
                       className={
                         isReversal
-                          ? "text-danger"
+                          ? "text-danger-text"
                           : isReversed
                             ? "text-ink-faint line-through"
                             : "font-medium text-ink"
@@ -320,7 +320,7 @@ export default function StudentFeeAccountPage() {
                             type="button"
                             disabled={receipts.busy}
                             onClick={() => printReceipt(p._id)}
-                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-indigo-700 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-primary-700 disabled:opacity-50"
                           >
                             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
                             {receipts.busyKey === p._id ? t("common.preparing") : t("common.print")}
@@ -334,7 +334,7 @@ export default function StudentFeeAccountPage() {
                           <button
                             type="button"
                             onClick={() => askReverse(p._id, p.amount)}
-                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger-text"
                           >
                             <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
                             {t("fees.reverse")}

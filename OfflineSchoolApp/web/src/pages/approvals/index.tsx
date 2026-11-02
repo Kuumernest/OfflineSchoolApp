@@ -54,9 +54,9 @@ const KIND_ICON: Record<ApprovalKind, typeof Receipt> = {
 };
 
 const STATUS_STYLE: Record<ApprovalStatus, string> = {
-  pending:   "bg-warning-soft text-warning",
-  approved:  "bg-success-soft text-success",
-  rejected:  "bg-danger-soft text-danger",
+  pending:   "bg-warning-soft text-warning-text",
+  approved:  "bg-success-soft text-success-text",
+  rejected:  "bg-danger-soft text-danger-text",
   cancelled: "bg-surface-muted text-ink-faint",
 };
 
@@ -244,7 +244,7 @@ export default function ApprovalsPage() {
                           {/* Approved but never carried out. Loud on purpose:
                               somebody believes this happened and it did not. */}
                           {r.applyError && (
-                            <div className="mt-1 flex items-start gap-1.5 text-xs text-danger">
+                            <div className="mt-1 flex items-start gap-1.5 text-xs text-danger-text">
                               <AlertTriangle
                                 className="mt-0.5 h-3 w-3 shrink-0"
                                 aria-hidden="true"

@@ -447,7 +447,7 @@ export default function EditTeacherPage() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <PageHeader title={t("teachersEdit.title")} onBack={() => navigate("/teachers")} />
         <div className="flex-1 flex items-center justify-center gap-3">
-          <Loader2 size={32} className="animate-spin text-indigo-600" />
+          <Loader2 size={32} className="animate-spin text-primary-600" />
           <span className="text-gray-500 text-sm">{t("teachersEdit.loading")}</span>
         </div>
       </div>
@@ -547,7 +547,7 @@ export default function EditTeacherPage() {
               transition-colors
               ${errors.name
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <User size={16} className="text-gray-400 shrink-0" />
               <input
@@ -579,7 +579,7 @@ export default function EditTeacherPage() {
               transition-colors
               ${errors.email
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <Mail size={16} className="text-gray-400 shrink-0" />
               <input
@@ -608,7 +608,7 @@ export default function EditTeacherPage() {
             <h2 className="text-sm font-bold text-gray-700 flex-1">
               {t("teachersEdit.assigned")}
             </h2>
-            <span className="bg-indigo-50 text-indigo-600 text-xs font-bold
+            <span className="bg-primary-50 text-primary-600 text-xs font-bold
                              px-2.5 py-1 rounded-full">
               {assigned.length}
             </span>
@@ -628,9 +628,9 @@ export default function EditTeacherPage() {
                     key={subject.id || subject.assignmentId}
                     className="flex items-center gap-3 py-3"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center
+                    <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center
                                     justify-center shrink-0">
-                      <BookOpen size={14} className="text-indigo-600" />
+                      <BookOpen size={14} className="text-primary-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">

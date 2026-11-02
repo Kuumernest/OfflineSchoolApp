@@ -167,7 +167,7 @@ export default function TeacherAssignmentDetailPage() {
   if (assignmentsQuery.isLoading || teacherQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("assignments.loading")}</p>
       </div>
     );
@@ -225,7 +225,7 @@ export default function TeacherAssignmentDetailPage() {
       {/* TEACHER PROFILE CARD */}
       {teacher && (
         <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-xl font-bold text-indigo-700">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-100 text-xl font-bold text-primary-700">
             {teacher.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -236,7 +236,7 @@ export default function TeacherAssignmentDetailPage() {
           </div>
           <div className="flex shrink-0 items-center gap-6">
             <div className="text-center">
-              <p className="text-xl font-bold text-indigo-600">
+              <p className="text-xl font-bold text-primary-600">
                 {assignments.length}
               </p>
               <p className="text-xs text-gray-400">{t("academic.subject_other")}</p>
@@ -264,7 +264,7 @@ export default function TeacherAssignmentDetailPage() {
           </p>
           <button
             onClick={handleAssignMore}
-            className="mt-4 flex items-center gap-2 rounded-xl bg-indigo-50 px-5 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+            className="mt-4 flex items-center gap-2 rounded-xl bg-primary-50 px-5 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
           >
             <Plus size={16} />
             {t("assignments.assignSubjects")}
@@ -281,7 +281,7 @@ export default function TeacherAssignmentDetailPage() {
             </h2>
             <button
               onClick={handleAssignMore}
-              className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+              className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800"
             >
               <Plus size={12} />
               {t("common.addMore")}

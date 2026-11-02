@@ -87,7 +87,7 @@ export default function StudentStrengthsPage() {
     <div className="space-y-5">
       <PageHeader title={data?.name ? t("strengths.titleFor", { name: data.name }) : t("strengths.title")} description={t("strengths.blurb")} />
 
-      {strengthsQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning">{t("strengths.unavailable")}</p></Card>}
+      {strengthsQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning-text">{t("strengths.unavailable")}</p></Card>}
 
       {p && (
         <Card>
@@ -287,7 +287,7 @@ function DimensionCard({ d, areas, reviews, studentId, schoolId, isStaff, onChan
       </div>
       <ul className="space-y-0.5 text-xs text-ink-muted">
         {d.evidence.map((e, i) => (
-          <li key={i} className={e.supports ? "" : "text-warning"}>
+          <li key={i} className={e.supports ? "" : "text-warning-text"}>
             {e.evidenceType === "subject_performance" && t("strengths.ev.performance", { s: e.subjectName ?? e.subjectId, n: e.strongObservations, o: e.observations, p: t(`strengths.persistence.${e.persistence}`), c: e.consistency ? t(`strengths.consistency.${e.consistency}`) : "—", avg: e.overallAverage ?? "—" })}
             {e.evidenceType === "subject_decline" && t("strengths.ev.decline", { s: e.subjectName ?? e.subjectId, r: e.recentAverage ?? "—", d: e.delta ?? "—" })}
             {e.evidenceType === "cross_subject_support" && t("strengths.ev.cross", { n: e.subjectIds?.length ?? 0 })}
@@ -395,7 +395,7 @@ function EventList({ label, events, warn }: { label: string; events: LearningEve
   if (!events.length) return null;
   return (
     <div className="mt-1">
-      <p className={warn ? "text-warning" : "text-ink"}>{label} ({events.length})</p>
+      <p className={warn ? "text-warning-text" : "text-ink"}>{label} ({events.length})</p>
       <ul className="list-disc pl-5 text-ink-muted">
         {events.map((e) => <li key={e.eventId}>{t("strengths.integration.event", { family: t(`strengths.integration.family.${e.sourceKind}`, { defaultValue: e.sourceKind }), subject: e.subjectName ?? e.subjectId ?? "—",
           when: e.observedAt ? formatDay(e.observedAt) : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
@@ -889,7 +889,7 @@ function PlanCard({ x, isStaff, skipReasons, fam, day, onAct, onAdapt, onMove, o
           <div>
             <p className="font-medium text-ink-faint">{t("devPlan.observedEvidence")}</p>
             <p className="text-ink">{sr.contract.evidence.independentObservations > 0 ? t("devPlan.evidenceLine", { n: sr.contract.evidence.independentObservations, fam: fam(sr.contract.evidence.families) || "—" }) : t("devPlan.noNewEvidence")}</p>
-            {sr.contradiction && <p className="text-warning">{t("devPlan.contradiction")}</p>}
+            {sr.contradiction && <p className="text-warning-text">{t("devPlan.contradiction")}</p>}
           </div>
           <div>
             <p className="font-medium text-ink-faint">{t("devPlan.systemInterpretation")}</p>
@@ -1066,7 +1066,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
               </span>
             </div>
             {(qs?.contradictions ?? []).length > 0 && (
-              <p className="text-xs text-warning">{t("learning.conflicts")}: {(qs?.contradictions ?? []).map((c) => t(`learning.contradiction.${c.code}`, { defaultValue: c.code })).join("; ")}</p>
+              <p className="text-xs text-warning-text">{t("learning.conflicts")}: {(qs?.contradictions ?? []).map((c) => t(`learning.contradiction.${c.code}`, { defaultValue: c.code })).join("; ")}</p>
             )}
           </Card>
         );
@@ -1148,7 +1148,7 @@ function Explanation({ studentId, schoolId, toast }: { studentId: string; school
   return (
     <Section icon={<MessageSquare className="h-3.5 w-3.5" />} heading={t("explain.heading")} hint={t("explain.hint")}>
       {summaryQ.isLoading && <PageSpinner />}
-      {summaryQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning">{t("explain.summaryUnavailable")}</p></Card>}
+      {summaryQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning-text">{t("explain.summaryUnavailable")}</p></Card>}
       {s && (
         <Card className="space-y-3 text-sm">
           <p className="text-xs text-ink-muted">{t("explain.summaryBlurb", { date: dayOf(s.asOf) })}</p>

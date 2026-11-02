@@ -32,7 +32,7 @@ export default function RecentExams({ exams, loading = false, error }: Props) {
         }
       />
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-sm text-danger-text">{error}</p>}
 
       {loading && !error && (
         <div className="space-y-2">

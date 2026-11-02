@@ -12,7 +12,7 @@ import { Plus, Ban, Receipt } from "lucide-react";
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
 import { Card }             from "@/components/ui/Card";
-import { TILE_TONE }        from "@/config/sections";
+import { CARD_SHELL }       from "@/config/sections";
 import { cn }               from "@/utils/cn";
 import { Button }           from "@/components/ui/Button";
 import { Badge }            from "@/components/ui/Badge";
@@ -168,11 +168,11 @@ export default function ExpensesPage() {
         }
       />
 
-      <div className={cn("rounded-tile p-5 shadow-tile sm:max-w-xs", TILE_TONE.finance.fill)}>
-        <p className="text-sm font-medium">
+      <div className={cn("p-5 sm:max-w-xs", CARD_SHELL)}>
+        <p className="text-sm font-medium text-ink-muted">
           {t("expenses.totalSpent")}
         </p>
-        <p className="mt-3 text-[30px] font-bold leading-none tracking-tight tabular">
+        <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-ink tabular">
           {fmt.money(total)}
         </p>
       </div>
@@ -240,7 +240,7 @@ export default function ExpensesPage() {
                         <button
                           type="button"
                           onClick={() => askVoid(e._id)}
-                          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
+                          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger-text"
                         >
                           <Ban className="h-3.5 w-3.5" aria-hidden="true" />
                           {t("expenses.void")}

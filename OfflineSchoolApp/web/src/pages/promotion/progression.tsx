@@ -157,14 +157,14 @@ export default function ProgressionPage() {
 
       {incomplete > 0 ? (
         <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <div>
             <p className="font-medium">{t("prog.incomplete", { count: incomplete })}</p>
             <p className="text-ink-muted">{t("prog.incompleteHint")}</p>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-card border border-success-line bg-success-soft px-4 py-3 text-sm text-success">
+        <div className="flex items-center gap-2 rounded-card border border-success-line bg-success-soft px-4 py-3 text-sm text-success-text">
           <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
           <p>{t("prog.complete")}</p>
         </div>
@@ -197,14 +197,14 @@ export default function ProgressionPage() {
         </div>
         <p className="mt-3 text-sm text-ink-muted">{t("prog.rule")}</p>
         {yr && !yr.hasStructure && (
-          <p className="mt-2 text-sm text-warning">{t("prog.noStructure")}</p>
+          <p className="mt-2 text-sm text-warning-text">{t("prog.noStructure")}</p>
         )}
         {barsLocked && (
-          <p className="mt-2 text-sm text-warning">{t("prog.draftLocks")}</p>
+          <p className="mt-2 text-sm text-warning-text">{t("prog.draftLocks")}</p>
         )}
         {withoutResults.length > 0 && (
           <div className="mt-3 flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
             <div>
               <p className="font-medium">{t("prog.noResults", { count: withoutResults.length })}</p>
               <p className="text-ink-muted">

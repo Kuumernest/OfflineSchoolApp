@@ -3,7 +3,6 @@ import { useNavigate }      from "react-router-dom";
 import { useTranslation }    from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { QUICK_ACTIONS }    from "@/constants/dashboard.constants";
-import { TILE_TONE }        from "@/config/sections";
 import { cn }               from "@/utils/cn";
 
 /**
@@ -14,10 +13,9 @@ import { cn }               from "@/utils/cn";
  * under each entry. The sidebar is the navigation — a second copy of it on the
  * landing page is not a feature, it is why the page needed scrolling.
  *
- * What is left is only the actions that *start* something. Each is a solid
- * tile in the colour of what it acts on — Add student is teal like every other
- * pupil figure, Create exam burnt orange like the exam tiles — so the colour a
- * person learned on the stat row finds the button too (config/sections.ts).
+ * What is left is only the actions that *start* something. They are white
+ * cards with a blue icon box, all at one weight — except Create exam, the one
+ * filled primary action, so the page has a single obvious next step.
  */
 export default function QuickActions() {
   const { t }    = useTranslation();
@@ -28,22 +26,23 @@ export default function QuickActions() {
       <CardHeader title={t("dashboard.quickActions")} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, tone }) => (
+        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, primary }) => (
           <button
             key={path}
             type="button"
             onClick={() => navigate(path)}
             className={cn(
-              "group flex flex-col items-start gap-3 rounded-tile p-4 text-left shadow-tile",
+              "group flex flex-col items-start gap-3 rounded-card p-4 text-left",
               "transition duration-150 ease-[var(--ease-out-quiet)]",
-              "hover:-translate-y-0.5 hover:shadow-tile-lift",
-              TILE_TONE[tone].fill,
+              primary
+                ? "bg-primary-600 text-white shadow-card hover:bg-primary-700"
+                : "border border-line bg-surface text-ink shadow-card hover:border-line-strong hover:shadow-lift",
             )}
           >
             <span
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-control",
-                TILE_TONE[tone].well,
+                primary ? "bg-white/15 text-white" : "bg-accent-blue-soft text-accent-blue",
               )}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />

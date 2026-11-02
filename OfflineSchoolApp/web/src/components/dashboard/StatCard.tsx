@@ -2,25 +2,28 @@
 import { useNavigate }             from "react-router-dom";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn }                      from "@/utils/cn";
-import { TILE_TONE, type TileTone } from "@/config/sections";
+import { CARD_SHELL, SEMANTIC, iconBox, type Semantic, type TileTone } from "@/config/sections";
 
 interface StatCardProps {
   title:          string;
   value:          string | number;
   subtitle?:      string;
   /**
-   * Tailwind classes for the subtitle, to flag a value needing action. On a
-   * coloured tile a status colour would sit on the fill and fail contrast, so
-   * pass a pill instead — e.g. "rounded-control bg-warning-soft px-1.5 text-warning".
+   * Tailwind classes for the subtitle, to flag a value needing action — e.g.
+   * "rounded-control bg-warning-soft px-1.5 text-warning-text".
    */
   subtitleColor?: string;
   icon:           LucideIcon;
   /**
-   * What the figure is about, by section — students, finance, exams… The tile
-   * fills with that section's colour (config/sections.ts). Omit for a white,
-   * neutral tile.
+   * What the figure counts — students, finance, exams… Picks the icon box's
+   * accent (config/sections.ts). The card itself is always white.
    */
   tone?:          TileTone;
+  /**
+   * Set only when the value means something (a backlog, a fault). The card
+   * then takes that status's light tint instead of white.
+   */
+  semantic?:      Semantic;
   /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
   iconColor?:     string;
   /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
@@ -30,22 +33,10 @@ interface StatCardProps {
 }
 
 /**
- * One metric, as a solid tile in the colour of what it counts.
- *
- * The rule: colour says what the tile is ABOUT, and it is fixed per section —
- * a pupil count is teal, money is mustard, exams burnt orange, attendance
- * olive — on every dashboard, every page and on the mobile app. Someone who
- * has seen the fees tile twice finds it again by colour before reading it. It
- * never says whether a value is good or bad; that stays with the status
- * colours, and only in the subtitle.
- *
- * Inside the tile: a small icon chip, a big bold figure, a smaller label. Text
- * is the section's `-on` colour at full strength (cream on the dark fills,
- * warm ink on mustard and burnt orange) — never faded with opacity, which is
- * what would drop it under 4.5:1.
- *
- * `iconColor` and `iconBg` are still accepted so older call sites compile, but
- * they are ignored.
+ * One metric on a white card. Colour lives only on the icon box, and says
+ * what the card counts; the figure is ink and the label secondary text. A
+ * status tint (`semantic`) is for values that mean something, never for
+ * decoration.
  */
 export default function StatCard({
   title,
@@ -54,12 +45,14 @@ export default function StatCard({
   subtitleColor,
   icon: Icon,
   tone = "neutral",
+  semantic,
   href,
   loading = false,
 }: StatCardProps) {
   const navigate    = useNavigate();
   const interactive = Boolean(href);
-  const t           = TILE_TONE[tone];
+  const sem         = semantic ? SEMANTIC[semantic] : null;
+  const box         = sem ? sem.box : iconBox(tone);
 
   const go = () => { if (href) navigate(href); };
 
@@ -76,39 +69,39 @@ export default function StatCard({
           : undefined
       }
       className={cn(
-        "group relative overflow-hidden rounded-tile p-5 shadow-tile",
-        t.fill,
+        "group relative overflow-hidden p-5",
+        sem ? sem.card : CARD_SHELL,
         "transition duration-150 ease-[var(--ease-out-quiet)]",
-        interactive && "cursor-pointer hover:-translate-y-0.5 hover:shadow-tile-lift"
+        interactive && "cursor-pointer hover:border-line-strong hover:shadow-lift"
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", t.well)}>
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", box)}>
           <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
 
         {interactive && (
           <ArrowUpRight
-            className="h-4 w-4 shrink-0 -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+            className="h-4 w-4 shrink-0 text-ink-faint -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100"
             aria-hidden="true"
           />
         )}
       </div>
 
       {loading ? (
-        <div className={cn("mt-4 h-9 w-16 animate-pulse rounded-control", t.well)} />
+        <div className="mt-4 h-9 w-16 animate-pulse rounded-control bg-canvas" />
       ) : (
-        <p className="mt-4 text-[34px] font-bold leading-none tracking-tight tabular">
+        <p className={cn("mt-4 text-[34px] font-bold leading-none tracking-tight tabular", sem ? sem.text : "text-ink")}>
           {value}
         </p>
       )}
 
-      <p className="mt-2 truncate text-sm font-medium">
+      <p className={cn("mt-2 truncate text-sm font-medium", sem ? sem.text : "text-ink-muted")}>
         {title}
       </p>
 
       {subtitle && (
-        <p className={cn("mt-1 truncate text-xs", subtitleColor)}>
+        <p className={cn("mt-1 truncate text-xs", subtitleColor ?? (sem ? sem.text : "text-ink-faint"))}>
           {subtitle}
         </p>
       )}

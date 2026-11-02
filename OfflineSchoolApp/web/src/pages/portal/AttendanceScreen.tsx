@@ -22,10 +22,10 @@ type DayState = "present" | "absent" | "late" | "partial" | "excused";
 type Day = NonNullable<PortalAttendance["dailySummaries"]>[number];
 
 const STATE: Record<DayState, { icon: React.ReactNode; cell: string; chip: string }> = {
-  present: { icon: <Check className="h-3.5 w-3.5" />,        cell: "bg-success-soft text-success",  chip: "border-success-line bg-success-soft text-success" },
-  absent:  { icon: <X className="h-3.5 w-3.5" />,            cell: "bg-danger-soft text-danger",    chip: "border-danger-line bg-danger-soft text-danger" },
-  late:    { icon: <Clock className="h-3.5 w-3.5" />,        cell: "bg-warning-soft text-warning",  chip: "border-warning-line bg-warning-soft text-warning" },
-  partial: { icon: <CircleDashed className="h-3.5 w-3.5" />, cell: "bg-warning-soft text-warning",  chip: "border-warning-line bg-warning-soft text-warning" },
+  present: { icon: <Check className="h-3.5 w-3.5" />,        cell: "bg-success-soft text-success-text",  chip: "border-success-line bg-success-soft text-success-text" },
+  absent:  { icon: <X className="h-3.5 w-3.5" />,            cell: "bg-danger-soft text-danger-text",    chip: "border-danger-line bg-danger-soft text-danger-text" },
+  late:    { icon: <Clock className="h-3.5 w-3.5" />,        cell: "bg-warning-soft text-warning-text",  chip: "border-warning-line bg-warning-soft text-warning-text" },
+  partial: { icon: <CircleDashed className="h-3.5 w-3.5" />, cell: "bg-warning-soft text-warning-text",  chip: "border-warning-line bg-warning-soft text-warning-text" },
   excused: { icon: <ShieldCheck className="h-3.5 w-3.5" />,  cell: "bg-primary-50 text-primary-700", chip: "border-primary-200 bg-primary-50 text-primary-700" },
 };
 

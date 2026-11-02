@@ -139,11 +139,13 @@ export default function ExamResultsScreen() {
                 <QuickStatCard
                   icon="checkmark-circle"
                   label={t("examResults.passed")}
+                  tone="success"
                   value={stats.passed ?? 0}
                 />
                 <QuickStatCard
                   icon="close-circle"
                   label={t("examResults.failed")}
+                  tone="error"
                   value={stats.failed ?? 0}
                 />
                 <QuickStatCard
@@ -323,9 +325,10 @@ export default function ExamResultsScreen() {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Every figure here is about this exam's results, so all four wear results' colour.
-function QuickStatCard({ icon, label, value }) {
-  return <StatTile kind="results" icon={icon} value={value} label={label} />;
+// Total and pass rate are plain results cards; Passed and Failed keep the
+// status colour that is their meaning.
+function QuickStatCard({ icon, label, value, tone }) {
+  return <StatTile kind="results" tone={tone} icon={icon} value={value} label={label} />;
 }
 
 /** A mark out of twenty, as every analytics figure is printed. */

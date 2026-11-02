@@ -224,7 +224,7 @@ export default function PaymentPlanPanel({
                       type="button"
                       title={t("common.delete")}
                       onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
-                      className="mb-1 rounded-control p-2 text-ink-faint transition-colors hover:bg-canvas hover:text-danger"
+                      className="mb-1 rounded-control p-2 text-ink-faint transition-colors hover:bg-canvas hover:text-danger-text"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -251,8 +251,8 @@ export default function PaymentPlanPanel({
             className={cn(
               "mt-4 flex items-center justify-between rounded-card border px-3 py-2 text-sm",
               matches
-                ? "border-success-line bg-success-soft text-success"
-                : "border-warning-line bg-warning-soft text-warning"
+                ? "border-success-line bg-success-soft text-success-text"
+                : "border-warning-line bg-warning-soft text-warning-text"
             )}
           >
             <span className="flex items-center gap-1.5">
@@ -310,8 +310,8 @@ export default function PaymentPlanPanel({
                 className={cn(
                   "rounded-full px-2 py-0.5 text-xs font-medium",
                   status?.isBehind
-                    ? "bg-danger-soft text-danger"
-                    : "bg-success-soft text-success"
+                    ? "bg-danger-soft text-danger-text"
+                    : "bg-success-soft text-success-text"
                 )}
               >
                 {status?.isBehind
@@ -370,11 +370,11 @@ export default function PaymentPlanPanel({
               <li key={inst.seq} className="flex items-center justify-between gap-3 py-2">
                 <span className="flex items-center gap-2 text-sm">
                   <span className="w-5 text-xs text-ink-faint">{inst.seq}</span>
-                  <span className={cn(overdue && "text-danger")}>
+                  <span className={cn(overdue && "text-danger-text")}>
                     {fmt.dateShort(inst.dueDate)}
                   </span>
                   {covered && (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success-text" aria-hidden="true" />
                   )}
                 </span>
                 <span className="text-sm font-medium tabular text-ink">

@@ -124,7 +124,7 @@ export default function TermResultsPage() {
           <select
             value={academicYear}
             onChange={(e) => { setAcademicYear(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {ACADEMIC_YEARS.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -138,7 +138,7 @@ export default function TermResultsPage() {
           <select
             value={term}
             onChange={(e) => { setTerm(Number(e.target.value) as TermNumber); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {periods.terms.map((te) => (
               <option key={te.number} value={te.number}>
@@ -154,7 +154,7 @@ export default function TermResultsPage() {
           <select
             value={classId}
             onChange={(e) => { setClassId(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             <option value="">{t("termResults.allClasses")}</option>
             {classes.map((c) => (
@@ -268,7 +268,7 @@ export default function TermResultsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-12 text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary-500" />
                 </td>
               </tr>
             ) : results.length === 0 ? (
@@ -315,7 +315,7 @@ export default function TermResultsPage() {
                       {r.termAverage?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                      <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
                         {r.overallRemark ?? "—"}
                       </span>
                     </td>
@@ -384,8 +384,8 @@ function SummaryCard({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-        <Icon className="h-5 w-5 text-indigo-600" />
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+        <Icon className="h-5 w-5 text-primary-600" />
       </div>
       <div>
         <p className="text-xs text-gray-500">{label}</p>

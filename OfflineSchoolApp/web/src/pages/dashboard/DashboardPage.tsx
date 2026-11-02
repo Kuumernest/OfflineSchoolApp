@@ -45,7 +45,7 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger"
+      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text"
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
@@ -86,7 +86,7 @@ function PendingApplications({
         className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         aria-hidden="true"
       />
-      <p className="min-w-0 flex-1 text-sm text-warning">
+      <p className="min-w-0 flex-1 text-sm text-warning-text">
         {/*
           Pluralisation goes through i18next rather than `count !== 1 ? "s" : ""`.
           French pluralises differently — 0 takes the singular — so the English
@@ -95,11 +95,11 @@ function PendingApplications({
         <span className="font-semibold">
           {t("dashboard.pendingApplications", { count })}
         </span>
-        <span className="text-warning/80">
+        <span className="text-warning-text/80">
           {" "}{t("dashboard.awaitingReview")}
         </span>
       </p>
-      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-warning">
+      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-warning-text">
         {t("dashboard.review")}
         <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </span>
@@ -294,7 +294,7 @@ export default function DashboardPage() {
               ? t("dashboard.pendingCount", { count: pendingCount })
               : t("dashboard.activeCount",  { count: sd?.active ?? 0 })
           }
-          subtitleColor={pendingCount > 0 ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning" : undefined}
+          subtitleColor={pendingCount > 0 ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning-text" : undefined}
           icon={GraduationCap}
           tone="students"
           href="/students"
@@ -312,7 +312,7 @@ export default function DashboardPage() {
           value={fmt.number(cd?.total ?? 0)}
           subtitle={t("dashboard.withSubjects", { count: cd?.withSubjects ?? 0 })}
           icon={School}
-          tone="students"
+          tone="classes"
           href="/classes"
         />
         <StatCard
@@ -320,7 +320,7 @@ export default function DashboardPage() {
           value={fmt.number(bd?.total ?? 0)}
           subtitle={t("dashboard.acrossAllClasses")}
           icon={BookOpen}
-          tone="academic"
+          tone="subjects"
           href="/classes?tab=subjects"
         />
         <StatCard

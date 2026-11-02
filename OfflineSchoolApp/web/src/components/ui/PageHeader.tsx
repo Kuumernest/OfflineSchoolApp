@@ -1,7 +1,6 @@
 // web/src/components/ui/PageHeader.tsx
 import { useLocation } from "react-router-dom";
 import { cn }              from "@/utils/cn";
-import { sectionForPath }  from "@/config/sections";
 import { flowStepForPath } from "@/config/resultsFlow";
 import { ResultsFlow }     from "./ResultsFlow";
 
@@ -29,16 +28,7 @@ export function PageHeader({
   meta?:        React.ReactNode;
   className?:   string;
 }) {
-  /*
-   * The colour comes from the route, not from a prop.
-   *
-   * Forty-one pages render this and none of them should have to know what
-   * colour they are — and a page added tomorrow gets the right one without
-   * anybody remembering. See config/sections.ts for why a section has a hue
-   * at all.
-   */
   const { pathname } = useLocation();
-  const section  = sectionForPath(pathname);
   /*
    * Exam → results → report card is five actions across four screens, and
    * every screen used to be silent about the order. Shown here so a page in
@@ -55,12 +45,10 @@ export function PageHeader({
       )}
     >
       <div className="flex min-w-0 gap-3.5">
-        {/* The one element on the page that carries the section's colour. A
-            rule rather than a block: it marks the title without competing
-            with it. */}
+        {/* A thin brand rule: marks the title without competing with it. */}
         <span
           aria-hidden="true"
-          className={cn("mt-1 w-1 shrink-0 self-stretch rounded-full", section.rule)}
+          className="mt-1 w-1 shrink-0 self-stretch rounded-full bg-primary-600"
         />
         <div className="min-w-0">
           <h1 className="font-display text-[28px] leading-[1.15] text-ink">

@@ -1,14 +1,17 @@
 // src/components/portal/theme.js
 //
-// The parent portal's colours and the two ways it says a number. The colours
-// are the ones the portal has always used on the phone; the number helpers are
-// web/src/pages/portal/format.ts, copied because Metro does not reach outside
-// the app folder. Change both together.
+// The parent portal's colours and the two ways it says a number. The brand
+// blue and the neutrals come from the app's theme (src/theme/colors.js) so the
+// portal is the same blue as everything else; the status colours are the
+// portal's own. The number helpers are web/src/pages/portal/format.ts, copied
+// because Metro does not reach outside the app folder. Change both together.
+
+import { COLORS } from "../../theme/colors";
 
 export const C = {
-  primary:     "#3B4996",
-  primaryBg:   "#F0F4FF",
-  primaryLine: "#C9D2F0",
+  primary:     COLORS.primary,
+  primaryBg:   COLORS.primaryLight,
+  primaryLine: COLORS.contextBorder,
   danger:      "#9F2318",
   dangerBg:    "#FDF2F1",
   dangerLine:  "#F2D3CF",
@@ -18,14 +21,14 @@ export const C = {
   warning:     "#96570B",
   warningBg:   "#FDF6EC",
   warningLine: "#F0DCBB",
-  ink:         "#0D1220",
-  inkBody:     "#343D4F",
-  inkMuted:    "#4F5A70",
-  inkFaint:    "#666F84",
-  line:        "#E9EBF0",
-  lineStrong:  "#D5D9E2",
-  surface:     "#FFFFFF",
-  canvas:      "#F4F5F8",
+  ink:         COLORS.text,
+  inkBody:     "#334155",
+  inkMuted:    COLORS.textSecondary,
+  inkFaint:    COLORS.textSubtle,
+  line:        COLORS.border,
+  lineStrong:  "#CBD5E1",
+  surface:     COLORS.surface,
+  canvas:      COLORS.page,
 };
 
 /** The smallest thing a thumb is asked to hit. */

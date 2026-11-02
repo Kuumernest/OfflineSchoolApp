@@ -34,7 +34,7 @@ import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
 import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
 import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { TILE_TONE } from "@/config/sections";
+import { CARD_SHELL, SEMANTIC } from "@/config/sections";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -193,7 +193,7 @@ const SUBMISSION_META: Record<string, {
   color: string; bg: string; labelKey: string; icon: LucideIcon;
 }> = {
   pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: Hourglass },
-  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", labelKey: "examSubmission.awaitingApproval", icon: Inbox },
+  submitted: { color: "text-primary-600", bg: "bg-primary-50", labelKey: "examSubmission.awaitingApproval", icon: Inbox },
   approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: CheckCircle },
   rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: XCircle },
 };
@@ -661,7 +661,7 @@ const DetailsTab = ({
               <div key={group.classId ?? "no-class"} className="space-y-3">
                 {showClassHeads && (
                   <div className="flex items-center gap-2 pt-3 first:pt-0">
-                    <h4 className="text-xs font-semibold text-indigo-700 shrink-0">
+                    <h4 className="text-xs font-semibold text-primary-700 shrink-0">
                       {group.className}
                     </h4>
                     <span className="text-[11px] font-medium text-gray-400 tabular-nums">
@@ -974,13 +974,13 @@ const ScoreEntryPanel = ({
     <div className="border border-gray-200 rounded-xl overflow-hidden mt-3">
 
       {/* Panel header */}
-      <div className="bg-indigo-50 border-b border-indigo-100
+      <div className="bg-primary-50 border-b border-primary-100
                       px-4 py-3 flex items-center justify-between">
         <div>
-          <p className="font-semibold text-indigo-900 text-sm">
+          <p className="font-semibold text-primary-900 text-sm">
             {sub.subjectName} — {t("exams.scoreEntry")}
           </p>
-          <p className="text-xs text-indigo-500 mt-0.5">
+          <p className="text-xs text-primary-500 mt-0.5">
             {t("exams.scoreEntryMeta", {
               max:     maxScore,
               pass:    passMark,
@@ -1033,7 +1033,7 @@ const ScoreEntryPanel = ({
           </button>
           <button
             onClick={onClose}
-            className="text-indigo-400 hover:text-indigo-700
+            className="text-primary-400 hover:text-primary-700
                        text-xl font-bold leading-none px-1"
           >
             ×
@@ -1408,7 +1408,7 @@ const MarksTab = ({
           <div key={group.classId ?? "no-class"} className="space-y-2">
             {showClassHeaders && (
               <div className="flex items-center gap-2 pt-3 first:pt-0">
-                <h3 className="text-xs font-semibold text-indigo-700 shrink-0">
+                <h3 className="text-xs font-semibold text-primary-700 shrink-0">
                   {group.className}
                 </h3>
                 <span className="text-[11px] font-medium text-gray-400 tabular-nums">
@@ -1431,7 +1431,7 @@ const MarksTab = ({
                 className={`bg-white rounded-xl border transition-colors
                   cursor-pointer select-none
                   ${isOpen
-                    ? "border-indigo-300 shadow-sm"
+                    ? "border-primary-300 shadow-sm"
                     : "border-gray-100 hover:border-gray-200"
                   }`}
               >
@@ -1481,7 +1481,7 @@ const MarksTab = ({
                             }}
                             autoFocus
                             className="w-14 px-1.5 py-0.5 text-xs border
-                                       border-indigo-300 rounded-md
+                                       border-primary-300 rounded-md
                                        focus:outline-none"
                           />
                           <button
@@ -1514,7 +1514,7 @@ const MarksTab = ({
                                 setEditingCoeff(sub._id);
                                 setCoeffValue(String(coeffOf(sub)));
                               }}
-                              className="text-indigo-400 hover:text-indigo-600"
+                              className="text-primary-400 hover:text-primary-600"
                               title={t("examCreate.coefficient")}
                             >
                               ✎
@@ -1712,21 +1712,21 @@ const ResultsTab = ({
             ${resultsProcessed
               ? "bg-green-50"
               : currentStep === 2
-                ? "bg-indigo-50"
+                ? "bg-primary-50"
                 : "bg-gray-50 opacity-60"
             }`}>
             <span className="mt-0.5">
               {resultsProcessed
                 ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
-                : <Calculator className="w-5 h-5 text-indigo-600" aria-hidden />}
+                : <Calculator className="w-5 h-5 text-primary-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
-                ${resultsProcessed ? "text-green-800" : "text-indigo-800"}`}>
+                ${resultsProcessed ? "text-green-800" : "text-primary-800"}`}>
                 {t("exams.step2Title")}
               </p>
               <p className={`text-xs mt-0.5
-                ${resultsProcessed ? "text-green-600" : "text-indigo-500"}`}>
+                ${resultsProcessed ? "text-green-600" : "text-primary-500"}`}>
                 {resultsProcessed
                   ? t("exams.step2Done")
                   : t("exams.step2Todo")}
@@ -1748,8 +1748,8 @@ const ResultsTab = ({
                 <button
                   onClick={handleRecalculate}
                   disabled={processResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-white border border-indigo-300 text-indigo-700
-                             text-xs font-bold rounded-lg hover:bg-indigo-50
+                  className="mt-2 px-4 py-1.5 bg-white border border-primary-300 text-primary-700
+                             text-xs font-bold rounded-lg hover:bg-primary-50
                              disabled:opacity-60 transition-colors"
                 >
                   {processResults.isPending ? t("exams.calculating") : t("exams.recalculateResults")}
@@ -1769,7 +1769,7 @@ const ResultsTab = ({
             <span className="mt-0.5">
               {resultsPublished
                 ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
-                : <Megaphone className="w-5 h-5 text-indigo-600" aria-hidden />}
+                : <Megaphone className="w-5 h-5 text-primary-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1816,17 +1816,16 @@ const ResultsTab = ({
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Pupils are teal and the pass rate is a result, so plum — the same
-              tones as everywhere else. Passed and failed are verdicts, so
-              they keep the status tiles rather than borrowing the palette. */}
+          {/* Counts are plain white cards. Passed and failed are verdicts, so
+              they keep their status tints. */}
           {[
-            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  cls: `${TILE_TONE.students.fill} shadow-tile` },
-            { id: "passed",   label: t("results.passed"),         value: stats.passed,         cls: "border border-success-line bg-success-soft text-success" },
-            { id: "failed",   label: t("results.failed"),         value: stats.failed,         cls: "border border-danger-line bg-danger-soft text-danger" },
-            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, cls: `${TILE_TONE.reports.fill} shadow-tile` },
+            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  cls: `${CARD_SHELL} text-ink` },
+            { id: "passed",   label: t("results.passed"),         value: stats.passed,         cls: `${SEMANTIC.success.card} ${SEMANTIC.success.text}` },
+            { id: "failed",   label: t("results.failed"),         value: stats.failed,         cls: `${SEMANTIC.error.card} ${SEMANTIC.error.text}` },
+            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, cls: `${CARD_SHELL} text-ink` },
           ].map((s) => (
             <div key={s.id}
-                 className={`rounded-tile p-5 text-center ${s.cls}`}>
+                 className={`p-5 text-center ${s.cls}`}>
               <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{s.value}</p>
               <p className="text-sm font-medium mt-2">
                 {s.label}

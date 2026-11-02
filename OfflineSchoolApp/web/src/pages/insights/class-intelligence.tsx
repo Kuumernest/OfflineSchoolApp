@@ -165,7 +165,7 @@ export default function ClassIntelligencePage() {
           intelligence. */}
       {classQ.isError && (
         <Card className="ring-warning-line">
-          <p className="text-sm text-warning">{t("classIntel.stale")}</p>
+          <p className="text-sm text-warning-text">{t("classIntel.stale")}</p>
         </Card>
       )}
 
@@ -228,10 +228,10 @@ function StudentCard({ row, onOpen }: { row: ClassStudentRow; onOpen: () => void
       )}
 
       {support.length > 0 && (
-        <GuidanceRow icon={<AlertTriangle className="h-4 w-4 text-danger" />} items={support} />
+        <GuidanceRow icon={<AlertTriangle className="h-4 w-4 text-danger-text" />} items={support} />
       )}
       {strength.length > 0 && (
-        <GuidanceRow icon={<Sparkles className="h-4 w-4 text-success" />} items={strength} />
+        <GuidanceRow icon={<Sparkles className="h-4 w-4 text-success-text" />} items={strength} />
       )}
       {row.guidance.some((g) => g.type === "monitoring") && (
         <div className="flex items-center gap-2 text-xs text-ink-muted">
@@ -566,7 +566,7 @@ function EvidenceComparison({ ev }: { ev: Awaited<ReturnType<typeof fetchOutcome
           {t("evidence.after")}: {ev.after?.average}/{ev.scale}
         </span>
         <span className={cn("tabular font-medium",
-          (ev.change ?? 0) > 0 ? "text-success" : (ev.change ?? 0) < 0 ? "text-danger" : "text-ink-muted")}>
+          (ev.change ?? 0) > 0 ? "text-success-text" : (ev.change ?? 0) < 0 ? "text-danger-text" : "text-ink-muted")}>
           {(ev.change ?? 0) > 0 ? "+" : ""}{ev.change}
         </span>
       </div>

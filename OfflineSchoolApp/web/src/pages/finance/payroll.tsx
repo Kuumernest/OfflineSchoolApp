@@ -149,7 +149,7 @@ export default function PayrollPage() {
           <>
             {run.status === "draft" && (
               <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
                 <p>{t("payroll.draftNotice")}</p>
               </div>
             )}

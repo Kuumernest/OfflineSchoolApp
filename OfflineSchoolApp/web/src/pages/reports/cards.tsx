@@ -702,9 +702,9 @@ export default function ReportCardsPage() {
         </div>
         <Link
           to="/exams/results"
-          className="px-4 py-2 bg-indigo-50 text-indigo-700 border
-                     border-indigo-200 rounded-xl text-sm font-semibold
-                     hover:bg-indigo-100 transition-colors"
+          className="px-4 py-2 bg-primary-50 text-primary-700 border
+                     border-primary-200 rounded-xl text-sm font-semibold
+                     hover:bg-primary-100 transition-colors"
         >
           <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.viewResults")}
         </Link>
@@ -925,7 +925,7 @@ export default function ReportCardsPage() {
                  * unfinished.
                  */
                 <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
-                  <p className="text-sm font-semibold text-warning">
+                  <p className="text-sm font-semibold text-warning-text">
                     {cardType !== "sequence"
                       ? t("reportCards.emptyComputed", { type: typeLabel })
                       : noMarks.length > 0

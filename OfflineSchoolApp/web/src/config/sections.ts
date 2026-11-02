@@ -1,219 +1,75 @@
 // web/src/config/sections.ts
 /**
- * Which part of the school a route belongs to, and what colour that part is.
+ * How the rail is grouped, and which accent a card's icon box takes.
  *
- * ── Why colour is worth a config file ─────────────────────────────────────
+ * ── Colour ────────────────────────────────────────────────────────────────
  *
- * The console has nineteen top-level destinations and every one of them was
- * the same indigo-on-white as every other. Nothing was wrong with any single
- * screen; what was missing was the ability to tell at a glance which screen you
- * were on. Colour is the cheapest wayfinding there is — a person who has opened
- * Fees twice should recognise it from the corner of their eye before reading a
- * word of it.
+ * The console is neutral: white cards, slate text, one brand blue for what is
+ * interactive. Colour appears in two places only:
  *
- * ── The rule this file exists to keep ─────────────────────────────────────
+ *   1. The icon box of a normal stat / module card, tinted by what the card
+ *      counts (CARD_ACCENT). The card itself stays white. The mapping is the
+ *      same as the mobile app's (mobile/src/theme/colors.js, TILE), so a pupil
+ *      count is a blue box on both.
+ *   2. Status (SEMANTIC): warning, error, info, success — a light tint, never
+ *      a solid fill, and only when the value means something.
  *
- * A section hue marks what a thing is ABOUT — people, set work, exams, money —
- * and the same thing wears the same hue on every page and on the mobile app
- * (mobile/src/theme/colors.js). It never marks what a value means. Olive here
- * is Attendance, not "good"; mustard is Fees, not "warning". Status
- * has its own four colours and they are the only ones allowed to carry
- * meaning. Mixing the two is exactly how a colourful interface stops being
- * readable, so the two vocabularies never appear on the same element: sections
- * tint headers, nav icons and stat tiles; status tints badges and banners.
- *
- * ── How a page gets its colour ────────────────────────────────────────────
- *
- * By its path, resolved here, rather than by every page passing a prop. Forty
- * one pages render PageHeader and none of them should have to know what colour
- * it is — and a page added tomorrow inherits the right one for free.
+ * Class strings are written out in full, never composed at runtime: Tailwind
+ * only emits classes it can read in source.
  */
 
-export type SectionKey =
-  | "platform"
-  | "overview"
-  | "students"
-  | "teachers"
-  | "academic"
-  | "attendance"
-  | "finance"
-  | "exams"
-  | "reports"
-  | "comms"
-  | "settings";
-
-export interface Section {
-  key: SectionKey;
-  /** i18n key for the group label shown above the nav block. */
-  labelKey: string;
-  /** English fallback, so a missing translation is never a blank rail. */
-  label: string;
-  /**
-   * Tailwind classes rather than raw variables: the class scanner only emits
-   * what it can see in source, so a colour composed at runtime from a token
-   * name would resolve to nothing. Written out, they are real.
-   */
-  text: string;
-  bg: string;
-  border: string;
-  /** Solid fill for the one element per page that carries the hue. */
-  solid: string;
-  /** The accent rule down the side of a page header. */
-  rule: string;
-  /**
-   * The same hue for the navigation rail, which is near-black.
-   *
-   * A separate value rather than reusing `text`: the section colours are
-   * chosen to pass AA on WHITE, which makes every one of them too dark to see
-   * on the rail. A light tint is the same colour doing the same job against
-   * the opposite background.
-   */
-  navIcon: string;
-}
-
-export const SECTIONS: Record<SectionKey, Section> = {
-  platform: {
-    key: "platform", labelKey: "navGroup.platform", label: "Platform",
-    text: "text-primary-700", bg: "bg-primary-50", border: "border-primary-200",
-    solid: "bg-primary-600", rule: "bg-primary-500",
-    navIcon: "text-primary-300",
-  },
-  overview: {
-    key: "overview", labelKey: "navGroup.overview", label: "Overview",
-    text: "text-primary-700", bg: "bg-primary-50", border: "border-primary-200",
-    solid: "bg-primary-600", rule: "bg-primary-500",
-    navIcon: "text-primary-300",
-  },
-  students: {
-    key: "students", labelKey: "navGroup.people", label: "People",
-    text: "text-sec-students", bg: "bg-sec-students-soft", border: "border-sec-students-line",
-    solid: "bg-sec-students", rule: "bg-sec-students",
-    navIcon: "text-sec-students-nav",
-  },
-  teachers: {
-    key: "teachers", labelKey: "navGroup.people", label: "People",
-    text: "text-sec-teachers", bg: "bg-sec-teachers-soft", border: "border-sec-teachers-line",
-    solid: "bg-sec-teachers", rule: "bg-sec-teachers",
-    navIcon: "text-sec-teachers-nav",
-  },
-  academic: {
-    key: "academic", labelKey: "navGroup.academics", label: "Academics",
-    text: "text-sec-academic", bg: "bg-sec-academic-soft", border: "border-sec-academic-line",
-    solid: "bg-sec-academic", rule: "bg-sec-academic",
-    navIcon: "text-sec-academic-nav",
-  },
-  attendance: {
-    key: "attendance", labelKey: "navGroup.academics", label: "Academics",
-    text: "text-sec-attendance", bg: "bg-sec-attendance-soft", border: "border-sec-attendance-line",
-    solid: "bg-sec-attendance", rule: "bg-sec-attendance",
-    navIcon: "text-sec-attendance-nav",
-  },
-  exams: {
-    key: "exams", labelKey: "navGroup.academics", label: "Academics",
-    text: "text-sec-exams", bg: "bg-sec-exams-soft", border: "border-sec-exams-line",
-    solid: "bg-sec-exams", rule: "bg-sec-exams",
-    navIcon: "text-sec-exams-nav",
-  },
-  finance: {
-    key: "finance", labelKey: "navGroup.money", label: "Money",
-    text: "text-sec-finance", bg: "bg-sec-finance-soft", border: "border-sec-finance-line",
-    solid: "bg-sec-finance", rule: "bg-sec-finance",
-    navIcon: "text-sec-finance-nav",
-  },
-  reports: {
-    key: "reports", labelKey: "navGroup.documents", label: "Documents",
-    text: "text-sec-reports", bg: "bg-sec-reports-soft", border: "border-sec-reports-line",
-    solid: "bg-sec-reports", rule: "bg-sec-reports",
-    navIcon: "text-sec-reports-nav",
-  },
-  comms: {
-    key: "comms", labelKey: "navGroup.communication", label: "Communication",
-    text: "text-sec-comms", bg: "bg-sec-comms-soft", border: "border-sec-comms-line",
-    solid: "bg-sec-comms", rule: "bg-sec-comms",
-    navIcon: "text-sec-comms-nav",
-  },
-  settings: {
-    key: "settings", labelKey: "navGroup.administration", label: "Administration",
-    text: "text-sec-settings", bg: "bg-sec-settings-soft", border: "border-sec-settings-line",
-    solid: "bg-sec-settings", rule: "bg-sec-settings",
-    navIcon: "text-sec-settings-nav",
-  },
-};
-
-/**
- * The tones a tile can take: a section, or `neutral` for a figure that belongs
- * to none (a white tile, as before).
- */
+/** What a card is about. `neutral` is a figure that belongs to no kind. */
 export type TileTone =
-  | "students" | "teachers" | "academic" | "attendance" | "exams"
-  | "finance"  | "reports"  | "comms"    | "settings"   | "neutral";
+  | "students" | "teachers" | "classes"  | "subjects" | "timetable"
+  | "attendance" | "exams"  | "homework" | "reports"  | "finance"
+  | "comms"    | "settings" | "neutral";
 
-/**
- * Whole class strings per tone — never composed at runtime, because Tailwind
- * only emits classes it can read in source. `fill` is the tile, `well` the
- * icon chip on it (a lighter or darker veil of the same fill, never a new hue).
- */
-export const TILE_TONE: Record<TileTone, { fill: string; well: string }> = {
-  students:   { fill: "bg-sec-students-tile text-sec-students-on",     well: "bg-sec-students-on/15" },
-  teachers:   { fill: "bg-sec-teachers-tile text-sec-teachers-on",     well: "bg-sec-teachers-on/15" },
-  academic:   { fill: "bg-sec-academic-tile text-sec-academic-on",     well: "bg-sec-academic-on/15" },
-  attendance: { fill: "bg-sec-attendance-tile text-sec-attendance-on", well: "bg-sec-attendance-on/15" },
-  exams:      { fill: "bg-sec-exams-tile text-sec-exams-on",           well: "bg-sec-exams-on/10" },
-  finance:    { fill: "bg-sec-finance-tile text-sec-finance-on",       well: "bg-sec-finance-on/10" },
-  reports:    { fill: "bg-sec-reports-tile text-sec-reports-on",       well: "bg-sec-reports-on/15" },
-  comms:      { fill: "bg-sec-comms-tile text-sec-comms-on",           well: "bg-sec-comms-on/15" },
-  settings:   { fill: "bg-sec-settings-tile text-sec-settings-on",     well: "bg-sec-settings-on/15" },
-  neutral:    { fill: "border border-line bg-surface text-ink",        well: "bg-canvas text-ink-muted ring-1 ring-inset ring-line" },
+export type Accent = "blue" | "indigo" | "violet" | "slate" | "teal";
+
+/** Icon box classes per accent: a pale box, the accent on the glyph. */
+export const ACCENT_BOX: Record<Accent, string> = {
+  blue:   "bg-accent-blue-soft text-accent-blue",
+  indigo: "bg-accent-indigo-soft text-accent-indigo",
+  violet: "bg-accent-violet-soft text-accent-violet",
+  slate:  "bg-accent-slate-soft text-accent-slate",
+  teal:   "bg-accent-teal-soft text-accent-teal",
 };
 
+/** Which accent each kind takes — the same as mobile. */
+export const CARD_ACCENT: Record<TileTone, Accent> = {
+  students:   "blue",
+  teachers:   "indigo",
+  classes:    "violet",
+  subjects:   "slate",
+  timetable:  "teal",
+  attendance: "teal",
+  exams:      "blue",
+  homework:   "indigo",
+  reports:    "violet",
+  finance:    "teal",
+  comms:      "blue",
+  settings:   "slate",
+  neutral:    "slate",
+};
+
+/** Icon box classes for a kind. */
+export const iconBox = (tone: TileTone): string => ACCENT_BOX[CARD_ACCENT[tone]];
+
+/** The shell every normal card shares: white, a hairline, a faint shadow. */
+export const CARD_SHELL = "rounded-card border border-line bg-surface shadow-card";
+
+export type Semantic = "warning" | "error" | "info" | "success";
+
 /**
- * Path prefix → section, longest prefix first.
- *
- * Order matters and the sort below enforces it rather than trusting this list
- * to stay written in the right order: /exams/results must resolve before
- * /exams, and /messages/audit before /messages.
+ * A card whose value means something. `card` is the tinted shell (words on it
+ * take its -text colour), `box` the icon box on that tint.
  */
-const ROUTE_SECTIONS: Array<[string, SectionKey]> = [
-  ["/platform",       "platform"],
-  ["/dashboard",      "overview"],
-  ["/watchlist",      "overview"],
-  ["/approvals",      "overview"],
-
-  ["/students",       "students"],
-  ["/teachers",       "teachers"],
-
-  // Classes are groups of people, so they are teal like students; the
-  // timetable and its periods are time, so olive like attendance. Grouping in
-  // the rail (NAV_GROUPS) is separate and unchanged — this is colour only.
-  ["/classes",        "students"],
-  ["/subjects",       "academic"],
-  ["/timetable",      "attendance"],
-  ["/periods",        "attendance"],
-  ["/attendance",     "attendance"],
-  ["/exams",          "exams"],
-  ["/promotion",      "exams"],
-
-  ["/fees",           "finance"],
-  ["/finance",        "finance"],
-
-  ["/documents",      "reports"],
-  ["/exports",        "reports"],
-  ["/reports",        "reports"],
-
-  ["/announcements",  "comms"],
-  ["/messages",       "comms"],
-
-  ["/portal-codes",   "settings"],
-  ["/settings",       "settings"],
-].sort((a, b) => b[0].length - a[0].length) as Array<[string, SectionKey]>;
-
-/** The section a path belongs to. Overview is the fallback, never a blank. */
-export function sectionForPath(pathname: string): Section {
-  const hit = ROUTE_SECTIONS.find(
-    ([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-  return SECTIONS[hit ? hit[1] : "overview"];
-}
+export const SEMANTIC: Record<Semantic, { card: string; box: string; text: string }> = {
+  warning: { card: "rounded-card border border-warning-line bg-warning-soft", box: "bg-warning-box text-warning", text: "text-warning-text" },
+  error:   { card: "rounded-card border border-danger-line bg-danger-soft",   box: "bg-danger-box text-danger",   text: "text-danger-text" },
+  info:    { card: "rounded-card border border-info-line bg-info-soft",       box: "bg-info-box text-info",       text: "text-info-text" },
+  success: { card: "rounded-card border border-success-line bg-success-soft", box: "bg-success-box text-success", text: "text-success-text" },
+};
 
 /**
  * The order the rail draws its groups in, and which sections fall under each.

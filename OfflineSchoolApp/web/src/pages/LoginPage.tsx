@@ -1,7 +1,7 @@
 // web/src/pages/LoginPage.tsx
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate }            from "react-router-dom";
-import { useForm }                from "react-hook-form";
+import { useForm, useWatch }      from "react-hook-form";
 import { zodResolver }            from "@hookform/resolvers/zod";
 import { z }                      from "zod";
 import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
@@ -90,25 +90,15 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors },
   } = useForm<LoginForm>({ resolver: zodResolver(loginRules) });
 
-  /*
-   * ACCEPTED — react-hooks/incompatible-library (a warning, not an error).
-   *
-   * react-hook-form's watch() returns a function the React Compiler cannot
-   * memoize safely, so it skips compiling this component. That is a library
-   * limitation rather than a fault here, and the cost is one uncompiled
-   * component. The compiler's caveat — trouble if the value reaches a
-   * memoized child — does not apply: `identifier` is read once, below, to
-   * decide whether the input looks like an email, and is passed to nothing.
-   *
-   * useWatch({ control }) would narrow the re-render to this field and may
-   * satisfy the compiler, but changing how the login form subscribes to its
-   * own input is not a change to make while tidying lint.
-   */
-  const identifier     = watch("identifier", "");
+  // useWatch rather than watch(): the same live value of the field, but a
+  // subscription the React Compiler can work with (watch() made it skip this
+  // component — react-hooks/incompatible-library).
+  // No defaultValues on the form, so the field is undefined until typed in.
+  const identifier     = useWatch({ control, name: "identifier" }) ?? "";
   const looksLikeEmail = identifier.includes("@");
 
   const onSubmit = async (data: LoginForm) => {

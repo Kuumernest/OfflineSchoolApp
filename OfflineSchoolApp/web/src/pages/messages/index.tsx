@@ -128,28 +128,28 @@ function ReadReceipt({
   // Read = blue double check, delivered = gray double check, sent = gray single check.
   if (isRead) {
     return (
-      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5 text-primary-500">
         <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
-              fill="#3B82F6" />
+              fill="currentColor" />
         <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
-              fill="#3B82F6" />
+              fill="currentColor" />
       </svg>
     );
   }
   if (isDelivered) {
     return (
-      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5 text-ink-placeholder">
         <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
-              fill="#9CA3AF" />
+              fill="currentColor" />
         <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
-              fill="#9CA3AF" />
+              fill="currentColor" />
       </svg>
     );
   }
   // Sent (single check).
   return (
-    <svg viewBox="0 0 10 8" width="10" height="8" className="inline-block ml-0.5">
-      <path d="M3.5 7.3L.2 4l-.7.7L3.5 8.7l7-7L9.8 1z" fill="#9CA3AF" />
+    <svg viewBox="0 0 10 8" width="10" height="8" className="inline-block ml-0.5 text-ink-placeholder">
+      <path d="M3.5 7.3L.2 4l-.7.7L3.5 8.7l7-7L9.8 1z" fill="currentColor" />
     </svg>
   );
 }

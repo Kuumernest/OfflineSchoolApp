@@ -28,6 +28,7 @@ import {
   type ApplicationDocument,
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
+import { CARD_SHELL, SEMANTIC, iconBox, type Semantic, type TileTone } from "@/config/sections";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useToast }       from "@/components/ui/Toast";
@@ -168,27 +169,31 @@ function FlashBanner({
   );
 }
 
+/**
+ * A count over the list. White with an accented icon box, unless the count
+ * means something: `semantic` tints it (pending → warning, overdue → error).
+ */
 function SummaryCard({
-  bg,
-  icon,
-  iconColor,
+  icon: Icon,
+  tone,
+  semantic,
   value,
   label,
 }: {
-  bg: string;
-  icon: React.ReactNode;
-  iconColor?: string;
+  icon: React.ElementType;
+  tone: TileTone;
+  semantic?: Semantic | null;
   value: number;
   label: string;
 }) {
+  const sem = semantic ? SEMANTIC[semantic] : null;
   return (
-    <div
-      className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-4 py-4"
-      style={{ backgroundColor: bg }}
-    >
-      <div className={iconColor}>{icon}</div>
-      <span className="text-xl font-bold text-gray-900">{value}</span>
-      <span className="text-xs font-semibold text-gray-500">{label}</span>
+    <div className={cn("flex flex-1 flex-col items-center gap-1 px-4 py-4", sem ? sem.card : CARD_SHELL)}>
+      <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", sem ? sem.box : iconBox(tone))}>
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <span className={cn("text-xl font-bold", sem ? sem.text : "text-ink")}>{value}</span>
+      <span className={cn("text-xs font-semibold", sem ? sem.text : "text-ink-muted")}>{label}</span>
     </div>
   );
 }
@@ -244,7 +249,7 @@ function ApplicationCard({
 
       <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
         <div className="flex items-center gap-1.5">
-          <School className="h-3.5 w-3.5 text-indigo-500" />
+          <School className="h-3.5 w-3.5 text-primary-500" />
           <span>{application.className || application.grade || t("admissions.noClassSelected")}</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -350,18 +355,18 @@ function ClassOption({
       onClick={() => onSelect(classItem)}
       className={cn(
         "flex w-full items-center gap-2 border-b border-gray-100 px-4 py-3 text-left last:border-b-0",
-        isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
+        isSelected ? "bg-primary-50" : "hover:bg-gray-50"
       )}
     >
-      <School className={cn("h-4 w-4", isSelected ? "text-indigo-600" : "text-gray-400")} />
+      <School className={cn("h-4 w-4", isSelected ? "text-primary-600" : "text-gray-400")} />
       <span className={cn(
         "flex-1 text-sm",
-        isSelected ? "font-bold text-indigo-700" : "font-medium text-gray-700"
+        isSelected ? "font-bold text-primary-700" : "font-medium text-gray-700"
       )}>
         {classItem.name}
       </span>
       {isSelected && (
-        <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+        <CheckCircle2 className="h-4 w-4 text-primary-600" />
       )}
     </button>
   );
@@ -428,7 +433,7 @@ function ReviewSheet({
           {/* Student Details */}
           <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
             <div className="mb-4 flex items-center gap-2">
-              <Users className="h-4 w-4 text-indigo-600" />
+              <Users className="h-4 w-4 text-primary-600" />
               <h3 className="text-sm font-bold text-gray-900">{t("admissions.studentDetails")}</h3>
             </div>
 
@@ -439,7 +444,7 @@ function ReviewSheet({
                 value={application.name}
               />
               <DetailRow
-                icon={<Mail className="h-4 w-4 text-indigo-600" />}
+                icon={<Mail className="h-4 w-4 text-primary-600" />}
                 label={t("common.email")}
                 value={application.email || t("admissions.noEmail")}
               />
@@ -449,7 +454,7 @@ function ReviewSheet({
                 value={application.phone}
               />
               <DetailRow
-                icon={<Users className="h-4 w-4 text-indigo-600" />}
+                icon={<Users className="h-4 w-4 text-primary-600" />}
                 label={t("admissions.guardian")}
                 value={application.guardianName}
               />
@@ -459,7 +464,7 @@ function ReviewSheet({
                 value={application.className || application.grade || t("common.notSpecified")}
               />
               <DetailRow
-                icon={<Calendar className="h-4 w-4 text-indigo-600" />}
+                icon={<Calendar className="h-4 w-4 text-primary-600" />}
                 label={t("admissions.appliedOn")}
                 value={formatDate(application.created_at)}
               />
@@ -509,7 +514,7 @@ function ReviewSheet({
           {/* Class assignment */}
           <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
             <div className="mb-4 flex items-center gap-2">
-              <School className="h-4 w-4 text-indigo-600" />
+              <School className="h-4 w-4 text-primary-600" />
               <h3 className="text-sm font-bold text-gray-900">
                 {t("admissions.assignClass")}
               </h3>
@@ -527,7 +532,7 @@ function ReviewSheet({
                   className={cn(
                     "flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors",
                     selectedClass
-                      ? "border-indigo-500 bg-indigo-50"
+                      ? "border-primary-500 bg-primary-50"
                       : "border-gray-200 bg-gray-50 hover:bg-white"
                   )}
                 >
@@ -577,7 +582,7 @@ function ReviewSheet({
               disabled={isBusy}
               rows={3}
               placeholder={t("admissions.rejectionPh")}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-indigo-500 focus:bg-white"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-primary-500 focus:bg-white"
             />
           </section>
 
@@ -880,7 +885,7 @@ export default function AdmissionsPage() {
   if (applicationsQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("admissions.loading")}</p>
       </div>
     );
@@ -935,20 +940,22 @@ export default function AdmissionsPage() {
       {/* Summary */}
       <div className="flex gap-3">
         <SummaryCard
-          bg="#FEF3C7"
-          icon={<UserPlus className="h-5 w-5 text-amber-600" />}
+          icon={UserPlus}
+          tone="students"
+          semantic={applications.length > 0 ? "warning" : null}
           value={applications.length}
           label={t("common.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
-          icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+          icon={AlertCircle}
+          tone="students"
+          semantic={staleCount > 0 ? "error" : null}
           value={staleCount}
           label={`Over ${STALE_DAYS}d`}
         />
         <SummaryCard
-          bg="#EEF2FF"
-          icon={<School className="h-5 w-5 text-indigo-600" />}
+          icon={School}
+          tone="classes"
           value={classes.length}
           label={t("academic.class_other")}
         />

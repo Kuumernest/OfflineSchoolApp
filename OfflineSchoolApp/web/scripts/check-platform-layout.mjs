@@ -62,7 +62,7 @@ check("the modal is bounded by the viewport",
 check("the filter bar starts single-column and grows by breakpoint",
   /grid gap-3 \$\{columns\}/.test(shared.FiltersBar) && /sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5/.test(shared.FiltersBar));
 check("the tile grid starts single-column on a phone and every tile is min-w-0",
-  /grid grid-cols-1 gap-3 min-\[420px\]:grid-cols-2 sm:grid-cols-3/.test(shared.MetricTile) && /"block min-w-0 rounded-(card|tile)/.test(shared.MetricTile));
+  /grid grid-cols-1 gap-3 min-\[420px\]:grid-cols-2 sm:grid-cols-3/.test(shared.MetricTile) && /"block min-w-0 p-5",\s*CARD_SHELL,/.test(shared.MetricTile));
 check("the tile figure never breaks inside a number above phone width",
   /break-normal max-sm:\[overflow-wrap:anywhere\]/.test(shared.MetricTile));
 check("the content column is min-w-0 and the main area scrolls vertically only",

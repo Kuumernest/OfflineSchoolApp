@@ -21,7 +21,7 @@ import { toDisplayUri }           from "../../../src/utils/logoUri";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { hasPermission, hasRole } from "../../../src/utils/authHelpers";
 import { StatTile, ActionTile, TileIcon } from "../../../src/components/Tiles";
-import { PALETTE } from "../../../src/theme/colors";
+import { COLORS, SEMANTIC } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -64,9 +64,11 @@ const QUICK_ACTIONS = [
   // cash at a desk with no signal.
   {
     id:    "collect-fees",
+    // The one primary action on this screen: taking a payment is what the
+    // office does most from a phone.
+    primary: true,
     titleKey: "dashAdmin.qa_collect_fees",
     icon:  "cash-outline",
-    kind:  "fees",
     route: "/admin/fees",
     roles: FINANCE,
     permission: "fees.manage",
@@ -75,7 +77,6 @@ const QUICK_ACTIONS = [
     id:    "print-register",
     titleKey: "dashAdmin.qa_print_register",
     icon:  "print-outline",
-    kind:  "reports",
     route: "/admin/documents",
     roles: ADMIN,
     permission: "documents.print",
@@ -84,7 +85,6 @@ const QUICK_ACTIONS = [
     id:    "gate-scan",
     titleKey: "dashAdmin.qa_gate_scan",
     icon:  "qr-code-outline",
-    kind:  "attendance",
     route: "/admin/gate",
     roles: ADMIN,
     // Delegable, and the tile a small school is most likely to want moved.
@@ -94,7 +94,6 @@ const QUICK_ACTIONS = [
     id:    "record-expense",
     titleKey: "dashAdmin.qa_record_expense",
     icon:  "receipt-outline",
-    kind:  "finance",
     route: "/admin/finance/expenses",
     roles: FINANCE,
     permission: "expenses.manage",
@@ -103,7 +102,6 @@ const QUICK_ACTIONS = [
     id:    "add-student",
     titleKey: "dashAdmin.qa_add_student",
     icon:  "person-add-outline",
-    kind:  "students",
     route: "/admin/students/add",
     roles: ADMIN,
     permission: "students.manage",
@@ -112,7 +110,6 @@ const QUICK_ACTIONS = [
     id:    "add-class",
     titleKey: "dashAdmin.qa_add_class",
     icon:  "add-circle-outline",
-    kind:  "classes",
     route: "/admin/classes/add",
     roles: ADMIN,
   },
@@ -120,7 +117,6 @@ const QUICK_ACTIONS = [
     id:    "add-subject",
     titleKey: "dashAdmin.qa_add_subject",
     icon:  "add-circle-outline",
-    kind:  "subjects",
     route: "/admin/subjects/add",
     roles: ADMIN,
   },
@@ -128,7 +124,6 @@ const QUICK_ACTIONS = [
     id:    "add-teacher",
     titleKey: "dashAdmin.qa_add_teacher",
     icon:  "add-circle-outline",
-    kind:  "teachers",
     route: "/admin/teachers/add",
     roles: ADMIN,
   },
@@ -136,7 +131,6 @@ const QUICK_ACTIONS = [
     id:    "assign-teacher",
     titleKey: "dashAdmin.qa_assign_teacher",
     icon:  "git-branch-outline",
-    kind:  "teachers",
     route: "/admin/assignments",
     roles: ADMIN,
     permission: "teachers.manage",
@@ -145,7 +139,6 @@ const QUICK_ACTIONS = [
     id:    "review-apps",
     titleKey: "dashAdmin.qa_review_apps",
     icon:  "clipboard-outline",
-    kind:  "students",
     route: "/admin/students/applications",
     roles: ADMIN,
     permission: "students.admit",
@@ -154,7 +147,6 @@ const QUICK_ACTIONS = [
     id:    "build-timetable",
     titleKey: "dashAdmin.qa_build_timetable",
     icon:  "time-outline",
-    kind:  "timetable",
     route: "/admin/timetable",
     roles: ADMIN,
     permission: "timetable.manage",
@@ -345,29 +337,29 @@ const ALL_MODULES = [
 
 const STAT_ROWS = [
   [
-    { key: "pendingApplications", labelKey: "dashAdmin.hPending",      icon: "document-text",    kind: "students", alertWhenAny: true },
+    { key: "pendingApplications", labelKey: "dashAdmin.hPending",      icon: "document-text",    kind: "students", toneWhenAny: "warning" },
     { key: "approvedStudents",    labelKey: "dashAdmin.sStudents",     icon: "people-circle",    kind: "students" },
     { key: "totalTeachers",       labelKey: "dashAdmin.sTeachers",     icon: "people",           kind: "teachers" },
-    { key: "unassignedTeachers",  labelKey: "dashAdmin.hUnassigned",   icon: "person-remove",    kind: "teachers", alertWhenAny: true },
+    { key: "unassignedTeachers",  labelKey: "dashAdmin.hUnassigned",   icon: "person-remove",    kind: "teachers", toneWhenAny: "error" },
   ],
   [
     { key: "totalClasses",        labelKey: "dashAdmin.sClasses",      icon: "school",           kind: "classes" },
     { key: "totalSubjects",       labelKey: "dashAdmin.sSubjects",     icon: "book",             kind: "subjects" },
-    { key: "unassignedClassSubjects", labelKey: "dashAdmin.hNoTeacher", icon: "git-branch",       kind: "subjects", alertWhenAny: true },
-    { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        kind: "announcements" },
+    { key: "unassignedClassSubjects", labelKey: "dashAdmin.hNoTeacher", icon: "git-branch",       kind: "subjects", toneWhenAny: "error" },
+    { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        kind: "announcements", toneWhenAny: "info" },
   ],
   [
     { key: "totalPeriods",             labelKey: "dashAdmin.hPeriods",      icon: "time",             kind: "timetable" },
-    { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", kind: "timetable", alertWhenAny: true },
-    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          kind: "timetable", alertWhenAny: true },
-    { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     kind: "classes", alertWhenAny: true },
+    { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", kind: "timetable", toneWhenAny: "error" },
+    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          kind: "timetable", toneWhenAny: "error" },
+    { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     kind: "classes", toneWhenAny: "error" },
   ],
 ];
 
 const ALERT_STYLES = {
-  danger:  { bg: "#FEE2E2", icon: "#DC2626", text: "#991B1B" },
-  warning: { bg: "#FEF3C7", icon: "#D97706", text: "#92400E" },
-  info:    { bg: "#DBEAFE", icon: "#2563EB", text: "#1E40AF" },
+  danger:  { bg: SEMANTIC.error.box, icon: COLORS.danger, text: SEMANTIC.error.text },
+  warning: { bg: SEMANTIC.warning.box, icon: COLORS.warning, text: SEMANTIC.warning.text },
+  info:    { bg: SEMANTIC.info.box, icon: COLORS.info, text: SEMANTIC.info.text },
 };
 
 const MODULES_PREVIEW_COUNT = 7;
@@ -410,7 +402,7 @@ const SchoolBanner = React.memo(({ school }) => {
         />
       ) : (
         <View style={sb.logoFallback}>
-          <Ionicons name="school" size={22} color="#4F46E5" />
+          <Ionicons name="school" size={22} color={COLORS.contextIcon} />
         </View>
       )}
 
@@ -420,7 +412,7 @@ const SchoolBanner = React.memo(({ school }) => {
         </Text>
         {!!location && (
           <Text style={sb.location} numberOfLines={1}>
-            <Ionicons name="location-outline" size={11} color="#6B7280" />
+            <Ionicons name="location-outline" size={11} color={COLORS.textSubtle} />
             {" "}{location}
           </Text>
         )}
@@ -434,11 +426,12 @@ const SchoolBanner = React.memo(({ school }) => {
   );
 });
 
+// The school context bar: a light blue band, the same on every dashboard.
 const sb = StyleSheet.create({
   banner: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   COLORS.contextBg,
     marginHorizontal:  16,
     marginTop:         16,
     marginBottom:      4,
@@ -447,29 +440,29 @@ const sb = StyleSheet.create({
     paddingVertical:   12,
     gap:               12,
     borderWidth:       1,
-    borderColor:       "#C7D2FE",
+    borderColor:       COLORS.contextBorder,
   },
   logo: {
     width:           44,
     height:          44,
     borderRadius:    10,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.surface,
   },
   logoFallback: {
     width:           44,
     height:          44,
     borderRadius:    10,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.surface,
     alignItems:      "center",
     justifyContent:  "center",
     borderWidth:     1,
-    borderColor:     "#C7D2FE",
+    borderColor:     COLORS.contextBorder,
   },
-  schoolName: { fontSize: 14, fontWeight: "700", color: "#1E1B4B" },
-  location:   { fontSize: 11, color: "#6B7280", marginTop: 2 },
+  schoolName: { fontSize: 14, fontWeight: "700", color: COLORS.contextText },
+  location:   { fontSize: 11, color: COLORS.contextText, marginTop: 2 },
   motto: {
     fontSize:   11,
-    color:      "#4F46E5",
+    color:      COLORS.contextText,
     fontStyle:  "italic",
     marginTop:  2,
     fontWeight: "500",
@@ -490,7 +483,7 @@ const StatCard = React.memo(({ item, value }) => {
       icon={item.icon}
       value={value}
       label={t(item.labelKey)}
-      alert={Boolean(item.alertWhenAny) && Number(value) > 0}
+      tone={item.toneWhenAny && Number(value) > 0 ? item.toneWhenAny : undefined}
     />
   );
 });
@@ -516,7 +509,7 @@ const ActionButton = React.memo(({ action, onPress }) => {
   const { t } = useTranslation();
   return (
     <ActionTile
-      kind={action.kind}
+      primary={action.primary}
       icon={action.icon}
       label={t(action.titleKey)}
       style={styles.actionButton}
@@ -538,7 +531,7 @@ const ModuleRow = React.memo(({ module, onPress }) => {
         <Text style={styles.moduleTitle}>{t(module.titleKey)}</Text>
         <Text style={styles.moduleDesc}>{t(module.descKey)}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+      <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
     </TouchableOpacity>
   );
 });
@@ -830,7 +823,7 @@ export default function AdminDashboard() {
   if (loading && !stats) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>{t("dashAdmin.loading")}</Text>
       </View>
     );
@@ -839,7 +832,7 @@ export default function AdminDashboard() {
   // ── Render ────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* ── Header ───────────────────────────────────── */}
       <View style={styles.header}>
@@ -859,7 +852,7 @@ export default function AdminDashboard() {
               onPress={() => router.push("/admin/school-picker")}
               activeOpacity={0.75}
             >
-              <Ionicons name="business-outline" size={14} color="#4F46E5" />
+              <Ionicons name="business-outline" size={14} color={COLORS.primary} />
               <Text style={styles.schoolName} numberOfLines={1}>
                 {t("schoolPick.inSchool", { name: user?.schoolName || "—" })}
               </Text>
@@ -873,7 +866,7 @@ export default function AdminDashboard() {
             activeOpacity={0.75}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="person-circle-outline" size={46} color="#4F46E5" />
+            <Ionicons name="person-circle-outline" size={46} color={COLORS.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -885,8 +878,8 @@ export default function AdminDashboard() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadStats(true, true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
           />
         }
       >
@@ -896,7 +889,7 @@ export default function AdminDashboard() {
         {/* ── Error Banner ──────────────────────────── */}
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={16} color="#991B1B" />
+            <Ionicons name="alert-circle" size={16} color={SEMANTIC.error.text} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadStats(false, true)}
@@ -981,7 +974,7 @@ export default function AdminDashboard() {
               <Ionicons
                 name={showAllModules ? "chevron-up" : "chevron-down"}
                 size={14}
-                color="#4F46E5"
+                color={COLORS.primary}
               />
             </TouchableOpacity>
           )}
@@ -993,7 +986,7 @@ export default function AdminDashboard() {
           onPress={handleLogout}
           activeOpacity={0.75}
         >
-          <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+          <Ionicons name="log-out-outline" size={18} color={COLORS.danger} />
           <Text style={styles.logoutText}>{t("dashAdmin.logout")}</Text>
         </TouchableOpacity>
 
@@ -1008,15 +1001,15 @@ export default function AdminDashboard() {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: PALETTE.pageCream },
+  container:     { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: PALETTE.pageCream,
+    backgroundColor: COLORS.page,
     gap:             10,
   },
-  loadingText:   { color: "#6B7280", fontSize: 14 },
+  loadingText:   { color: COLORS.textSubtle, fontSize: 14 },
   scrollContent: { paddingBottom: 20 },
 
   // ── Header ─────────────────────────────────────────────
@@ -1026,39 +1019,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: COLORS.border,
   },
-  greeting: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  userName: { fontSize: 22, fontWeight: "700", color: PALETTE.inkWarm, marginTop: 2 },
-  subtitle: { fontSize: 13, color: "#4F46E5", fontWeight: "600", marginTop: 2 },
+  greeting: { fontSize: 13, color: COLORS.textSubtle, fontWeight: "500" },
+  userName: { fontSize: 22, fontWeight: "700", color: COLORS.text, marginTop: 2 },
+  subtitle: { fontSize: 13, color: COLORS.primary, fontWeight: "600", marginTop: 2 },
   schoolRow:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-  schoolName:   { flexShrink: 1, fontSize: 13, color: "#111827", fontWeight: "600" },
-  schoolChange: { fontSize: 13, color: "#4F46E5", fontWeight: "700" },
+  schoolName:   { flexShrink: 1, fontSize: 13, color: COLORS.text, fontWeight: "600" },
+  schoolChange: { fontSize: 13, color: COLORS.primary, fontWeight: "700" },
 
   // ── Error banner ───────────────────────────────────────
   errorBanner: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     margin:          16,
     padding:         12,
     borderRadius:    10,
     gap:             8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText: { fontSize: 13, color: COLORS.danger, fontWeight: "700" },
 
   // ── Sections ───────────────────────────────────────────
   section:      { paddingHorizontal: 16, paddingTop: 20 },
   sectionTitle: {
     fontSize:     16,
     fontWeight:   "700",
-    color:        PALETTE.inkWarm,
+    color:        COLORS.text,
     marginBottom: 12,
   },
-  alertBadge: { fontSize: 14, color: "#DC2626", fontWeight: "600" },
+  alertBadge: { fontSize: 14, color: COLORS.danger, fontWeight: "600" },
 
   // ── Stat cards ─────────────────────────────────────────
   statsRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
@@ -1082,19 +1075,19 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     padding:         14,
-    backgroundColor: PALETTE.cream,
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     marginBottom:    8,
     gap:             12,
-    shadowColor:     PALETTE.shadowWarm,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.08,
     shadowRadius:    6,
     shadowOffset:    { width: 0, height: 2 },
     elevation:       1,
   },
   moduleInfo:  { flex: 1 },
-  moduleTitle: { fontSize: 14, fontWeight: "600", color: PALETTE.inkWarm },
-  moduleDesc:  { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  moduleTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  moduleDesc:  { fontSize: 12, color: COLORS.textSubtle, marginTop: 2 },
 
   // ── Show more / less ───────────────────────────────────
   showMoreBtn: {
@@ -1104,7 +1097,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap:             4,
   },
-  showMoreText: { color: "#4F46E5", fontWeight: "600", fontSize: 13 },
+  showMoreText: { color: COLORS.primary, fontWeight: "600", fontSize: 13 },
 
   // ── Logout ─────────────────────────────────────────────
   logout: {
@@ -1112,13 +1105,13 @@ const styles = StyleSheet.create({
     justifyContent:  "center",
     alignItems:      "center",
     padding:         14,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     margin:          16,
     marginTop:       8,
     borderRadius:    12,
     gap:             8,
     borderWidth:     1,
-    borderColor:     "#FECACA",
+    borderColor:     SEMANTIC.error.box,
   },
-  logoutText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
+  logoutText: { color: COLORS.danger, fontWeight: "700", fontSize: 14 },
 });

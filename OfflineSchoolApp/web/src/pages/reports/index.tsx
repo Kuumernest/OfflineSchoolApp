@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardHeader } from "@/components/ui/Card";
-import { TILE_TONE, type TileTone } from "@/config/sections";
+import { CARD_SHELL, iconBox, type TileTone } from "@/config/sections";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -100,7 +100,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
-          tone="students"
+          tone="classes"
           label={t("academic.class_other")}
           value={classes.data?.total}
           loading={classes.isLoading}
@@ -108,7 +108,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
-          tone="academic"
+          tone="subjects"
           label={t("academic.subject_other")}
           value={subjects.data?.total}
           loading={subjects.isLoading}
@@ -184,9 +184,8 @@ export default function ReportsOverviewPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * One school-wide figure, as a solid tile in the colour of what it counts —
- * the same tones as the dashboard (config/sections.ts), so pupils are teal
- * and exams burnt orange here too.
+ * One school-wide figure on a white card; the icon box takes the accent of
+ * what it counts, as on the dashboard (config/sections.ts).
  */
 function StatCard({
   icon: Icon,
@@ -209,11 +208,10 @@ function StatCard({
   failed:   boolean;
 }) {
   const { t } = useTranslation();
-  const tile  = TILE_TONE[tone];
   return (
-    <div className={cn("min-w-0 rounded-tile p-5 shadow-tile", tile.fill)}>
+    <div className={cn("min-w-0 p-5", CARD_SHELL)}>
       <div className="flex items-start justify-between gap-2">
-        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tile.well)}>
+        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", iconBox(tone))}>
           <Icon className="w-[18px] h-[18px]" />
         </div>
         {/* A failed card says so rather than showing a confident zero — "0
@@ -225,14 +223,17 @@ function StatCard({
         {loading ? (
           <Spinner className="w-5 h-5" />
         ) : (
-          <p className="text-[34px] font-bold leading-none tracking-tight tabular-nums">
+          <p className={cn(
+            "text-[34px] font-bold leading-none tracking-tight tabular-nums",
+            failed ? "text-ink-placeholder" : "text-ink",
+          )}>
             {failed || value == null ? "—" : value.toLocaleString()}
             {!failed && value != null && suffix}
           </p>
         )}
-        <p className="mt-2 text-sm font-medium">{label}</p>
+        <p className="mt-2 text-sm font-medium text-ink-muted">{label}</p>
         {detail && !failed && (
-          <p className="text-xs mt-0.5">{detail}</p>
+          <p className="text-xs mt-0.5 text-ink-faint">{detail}</p>
         )}
       </div>
     </div>

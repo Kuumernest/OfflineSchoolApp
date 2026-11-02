@@ -149,7 +149,7 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
               </td>
               <td className="py-3 pl-2 pr-4 text-right align-top sm:pr-2">
                 {s.isAbsent ? <span className="text-ink-muted">{t("portal.resultsScreen.absent")}</span> : (
-                  <span className={cn("font-semibold tabular-nums", s.isPassing ? "text-ink" : "text-danger")}>
+                  <span className={cn("font-semibold tabular-nums", s.isPassing ? "text-ink" : "text-danger-text")}>
                     {mark(s.normalizedMark, i18n.resolvedLanguage)}
                     {!s.isPassing && <span className="sr-only"> ({t("portal.resultsScreen.belowPass")})</span>}
                   </span>

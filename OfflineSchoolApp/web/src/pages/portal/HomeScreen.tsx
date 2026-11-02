@@ -110,7 +110,7 @@ function ChildCard({ child, index, onOpen }: {
         <Tile icon={<CalendarCheck className="h-4 w-4" />} label={t("portal.home.attendanceMonth")} onClick={() => onOpen(child._id, "attendance")}>
           {child.attendance.rate != null ? (
             <>
-              <p className={cn("text-2xl font-semibold tabular-nums", child.attendance.rate >= 90 ? "text-ink" : "text-warning")}>
+              <p className={cn("text-2xl font-semibold tabular-nums", child.attendance.rate >= 90 ? "text-ink" : "text-warning-text")}>
                 {child.attendance.rate}%
               </p>
               <p className="text-sm text-ink-body">{t("portal.home.daysPresent", { present: child.attendance.present, marked: child.attendance.marked })}</p>
@@ -122,9 +122,9 @@ function ChildCard({ child, index, onOpen }: {
         <Tile icon={<Wallet className="h-4 w-4" />} label={t("portal.home.balance")} onClick={() => onOpen(child._id, "fees")}>
           {child.fees == null ? <Skeleton className="h-7 w-24" /> : child.fees.balance > 0 ? (
             <>
-              <p className={cn("text-xl font-semibold tabular-nums", child.fees.isOverdue ? "text-danger" : "text-ink")}>{fmt.money(child.fees.balance)}</p>
+              <p className={cn("text-xl font-semibold tabular-nums", child.fees.isOverdue ? "text-danger-text" : "text-ink")}>{fmt.money(child.fees.balance)}</p>
               {child.fees.isOverdue ? (
-                <span className="mt-1 inline-flex items-center rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger">
+                <span className="mt-1 inline-flex items-center rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger-text">
                   {t("portal.home.overdue")}
                 </span>
               ) : child.fees.dueDate ? (
@@ -132,7 +132,7 @@ function ChildCard({ child, index, onOpen }: {
               ) : null}
             </>
           ) : (
-            <p className="inline-flex items-center rounded-full border border-success-line bg-success-soft px-2 py-0.5 text-sm font-semibold text-success">
+            <p className="inline-flex items-center rounded-full border border-success-line bg-success-soft px-2 py-0.5 text-sm font-semibold text-success-text">
               {t("portal.home.paidUp")}
             </p>
           )}
@@ -176,12 +176,12 @@ function Change({ delta, exam }: { delta: number; exam: string }) {
   const { t, i18n } = useTranslation();
   const abs = on20(Math.abs(delta), i18n.resolvedLanguage);
   if (delta > 0) return (
-    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-success">
+    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-success-text">
       <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />{t("portal.home.up", { delta: abs, exam })}
     </p>
   );
   if (delta < 0) return (
-    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-danger">
+    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-danger-text">
       <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />{t("portal.home.down", { delta: abs, exam })}
     </p>
   );

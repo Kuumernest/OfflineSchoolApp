@@ -34,11 +34,11 @@ export type MsgView = "messages" | "notices" | "news";
  * mislabelled. The same keys and wording as the phone's NOTICE_META.
  */
 const NOTICE_META: Record<string, { icon: React.ReactNode; tone: string; labelKey: string }> = {
-  "gate.arrival":      { icon: <LogIn className="h-4 w-4" />,         tone: "bg-success-soft text-success",   labelKey: "portal.noticeArrival" },
+  "gate.arrival":      { icon: <LogIn className="h-4 w-4" />,         tone: "bg-success-soft text-success-text",   labelKey: "portal.noticeArrival" },
   "gate.departure":    { icon: <LogOut className="h-4 w-4" />,        tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeDeparture" },
-  "attendance.absent": { icon: <AlertCircle className="h-4 w-4" />,   tone: "bg-danger-soft text-danger",     labelKey: "portal.noticeAbsent" },
-  "fee.reminder":      { icon: <Wallet2 className="h-4 w-4" />,       tone: "bg-warning-soft text-warning",   labelKey: "portal.noticeFeeReminder" },
-  "fee.payment":       { icon: <Receipt className="h-4 w-4" />,       tone: "bg-success-soft text-success",   labelKey: "portal.noticePayment" },
+  "attendance.absent": { icon: <AlertCircle className="h-4 w-4" />,   tone: "bg-danger-soft text-danger-text",     labelKey: "portal.noticeAbsent" },
+  "fee.reminder":      { icon: <Wallet2 className="h-4 w-4" />,       tone: "bg-warning-soft text-warning-text",   labelKey: "portal.noticeFeeReminder" },
+  "fee.payment":       { icon: <Receipt className="h-4 w-4" />,       tone: "bg-success-soft text-success-text",   labelKey: "portal.noticePayment" },
   "result.published":  { icon: <GraduationCap className="h-4 w-4" />, tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeResults" },
   "announcement":      { icon: <Megaphone className="h-4 w-4" />,     tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeAnnouncement" },
   // Derived by the server from unread threads, not a row in the queue.
@@ -149,7 +149,7 @@ function Notices({ family, onOpenThread }: { family: PortalStudent[]; onOpenThre
                     {child && <span className="mt-1 block text-xs text-ink-muted">{t("portal.messagesScreen.about", { names: child })}</span>}
                     {/* Only while the school is still trying, or has failed. */}
                     {(n.status === "pending" || n.status === "failed") && (
-                      <span className={cn("mt-1 inline-block rounded-full px-2 text-xs", n.status === "failed" ? "bg-danger-soft text-danger" : "bg-canvas text-ink-muted")}>
+                      <span className={cn("mt-1 inline-block rounded-full px-2 text-xs", n.status === "failed" ? "bg-danger-soft text-danger-text" : "bg-canvas text-ink-muted")}>
                         {t(`portal.noticeStatus_${n.status}`)}
                       </span>
                     )}
@@ -290,7 +290,7 @@ function Conversations() {
           })}
           {!threadQ.isLoading && messages.length === 0 && <p className="py-6 text-center text-sm text-ink-muted">{t("portal.noMessages")}</p>}
         </div>
-        {err && <p role="alert" className="px-4 pt-2 text-xs text-danger">{err}</p>}
+        {err && <p role="alert" className="px-4 pt-2 text-xs text-danger-text">{err}</p>}
         <div className="flex items-end gap-2 border-t border-line p-3">
           <label className="sr-only" htmlFor="portal-draft">{t("portal.writeMessage")}</label>
           <textarea id="portal-draft" value={draft} onChange={(e) => setDraft(e.target.value)}
@@ -311,7 +311,7 @@ function Conversations() {
     return (
       <PortalCard className="overflow-hidden">
         <BackBar title={t("portal.chooseRecipient")} onBack={() => setPicking(false)} />
-        {err && <p role="alert" className="px-4 pt-2 text-xs text-danger">{err}</p>}
+        {err && <p role="alert" className="px-4 pt-2 text-xs text-danger-text">{err}</p>}
         {peopleQ.isLoading ? <div className="p-4"><Skeleton className="h-10 w-full" /></div>
           : (peopleQ.data?.length ?? 0) === 0 ? <EmptyState icon={<MessageSquare className="h-6 w-6" />} title={t("portal.noRecipients")} />
           : (
