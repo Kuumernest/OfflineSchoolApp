@@ -623,3 +623,20 @@ module.exports = [
     },
   },
 ];
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// attendance.routes.js: staffRead = requirePermission("attendance.view");
+// /api/admin/attendance/stats is admin.routes (STAFF_ROLES + dashboard.view).
+// GET /api/attendance/students has no permission on the server — it scopes a
+// student to their own rows, and the handler above declines for students.
+// See readPermissions.js (F6).
+const { guardReads, STAFF_ROLES } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/admin/attendance/stats":           { roles: STAFF_ROLES, permissions: ["dashboard.view"] },
+  "GET /api/attendance/report/overview":       { permissions: ["attendance.view"] },
+  "GET /api/attendance/report/weekly":         { permissions: ["attendance.view"] },
+  "GET /api/attendance/report/class/:classId": { permissions: ["attendance.view"] },
+  "GET /api/attendance/teachers/roster":       { permissions: ["attendance.view"] },
+  "GET /api/attendance/teachers":              { permissions: ["attendance.view"] },
+  "GET /api/attendance/students/roster":       { permissions: ["attendance.view"] },
+}, { ownWrites: ["/api/attendance/"] });

@@ -761,3 +761,18 @@ module.exports.push(
     },
   }
 );
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// fees.routes.js runs router.use(requirePermission("fees.view")) in front of
+// every route, and plans, penalties and reminders each add their own. See
+// readPermissions.js (audit F6): without this, a teacher signed in after a
+// bursar on the same computer read the bursar's mirrored ledgers.
+const { guardReads } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/fees/plans":               { permissions: ["fees.view", "fees.plan"] },
+  "GET /api/fees/structures":          { permissions: ["fees.view"] },
+  "GET /api/fees/outstanding":         { permissions: ["fees.view"] },
+  "GET /api/fees/students/:studentId": { permissions: ["fees.view"] },
+  "GET /api/fees/penalties":           { permissions: ["fees.view", "fees.penalize"] },
+  "GET /api/fees/reminders":           { permissions: ["fees.view", "fees.remind"] },
+}, { ownWrites: ["/api/fees/"] });

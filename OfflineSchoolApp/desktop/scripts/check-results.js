@@ -42,7 +42,10 @@ const { open, documents } = require("../src/main/db/store");
 const db = open(":memory:");
 const ctx = {
   docs: documents(db),
-  session: { userId: "admin-1", schoolId: "S1", role: "school_admin" },
+  // The permissions the server hands a school admin at sign-in (role defaults);
+  // local reads are guarded by them (handlers/readPermissions.js).
+  session: { userId: "admin-1", schoolId: "S1", role: "school_admin",
+             permissions: require("../../backend/src/config/permissions").DEFAULTS_BY_ROLE.school_admin },
   queue: { add: (r) => ({ seq: 1, duplicate: false }) },
 };
 

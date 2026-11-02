@@ -254,3 +254,15 @@ module.exports = [
     },
   },
 ];
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// results.routes.js: readRoles = requirePermission("results.view") on all four.
+// The per-role publication rules inside each handler still apply on top.
+// See readPermissions.js (F6).
+const { guardReads } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/results/:examId":                    { permissions: ["results.view"] },
+  "GET /api/results/:examId/stats":              { permissions: ["results.view"] },
+  "GET /api/results/:examId/rankings":           { permissions: ["results.view"] },
+  "GET /api/results/:examId/student/:studentId": { permissions: ["results.view"] },
+}, { ownWrites: ["/api/exams", "/api/results/"] });

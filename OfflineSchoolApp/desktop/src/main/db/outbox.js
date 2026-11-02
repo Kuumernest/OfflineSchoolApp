@@ -290,6 +290,20 @@ const outbox = (db) => {
       };
     },
 
+    /**
+     * Does this account have a request still waiting (or blocked) under any of
+     * these path prefixes? Read only. Used by the local read guards so that a
+     * permission check never hides a person's OWN unsent changes from them
+     * (api/handlers/readPermissions.js).
+     */
+    hasOwnPending(userId, prefixes = []) {
+      if (!userId || !prefixes.length) return false;
+      const where = prefixes.map(() => "path LIKE ?").join(" OR ");
+      return Boolean(db.prepare(
+        `SELECT 1 FROM outbox WHERE user_id = ? AND (${where}) LIMIT 1`
+      ).get(String(userId), ...prefixes.map((p) => `${p}%`)));
+    },
+
     all() {
       return db.prepare("SELECT * FROM outbox ORDER BY seq").all()
         .map((r) => ({ ...r, seq: Number(r.seq) }));
