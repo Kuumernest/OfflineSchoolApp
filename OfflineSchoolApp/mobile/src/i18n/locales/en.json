@@ -1119,6 +1119,10 @@
       "other": "{{count}} payments waiting to sync"
     },
     "pendingReceipt": "Receipt pending",
+    "provisionalReceipt": "Provisional receipt",
+    "provisionalReceiptHint": "This payment has not reached the school's server yet. The receipt will be marked PROVISIONAL; the official receipt is available once the phone syncs.",
+    "printProvisional": "Provisional receipt",
+    "provisionalRef": "Provisional ref. {{ref}}",
     "recordedOffline": "Saved on this device. It will reach the server on the next sync, and the receipt number arrives with it.",
     "classesLoading": "Loading classes…",
     "classesFailed": "Couldn't load classes",

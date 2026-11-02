@@ -6,6 +6,10 @@
 // queued; the receipt number arrives later, from the server, and the row shows
 // "pending" until it does. The phone never invents a receipt number — two
 // devices offline would both mint the same one.
+//
+// The parent still leaves with paper: a payment not yet confirmed prints a
+// PROVISIONAL receipt (receipt.service.js), identified by a provisional
+// reference from the payment id; once confirmed, the server's official one.
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -16,6 +20,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import FeeService         from "../../../src/services/fee.service";
+import ReceiptService     from "../../../src/services/receipt.service";
+import DocumentService    from "../../../src/services/document.service";
 import { getStudentById } from "../../../src/services/student.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
@@ -44,7 +50,7 @@ const METHODS = ["cash", "mobile_money", "bank", "cheque"];
 
 export default function StudentFeeScreen() {
   const router   = useRouter();
-  const { t }    = useTranslation();
+  const { t, locale } = useTranslation();
   const { studentId, year } = useLocalSearchParams();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
@@ -52,6 +58,7 @@ export default function StudentFeeScreen() {
   const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
+  const [printing, setPrinting] = useState(null);
 
   const [amount,    setAmount]    = useState("");
   const [method,    setMethod]    = useState("cash");
@@ -103,6 +110,41 @@ export default function StudentFeeScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  /** Print or share one payment's receipt — provisional until it has synced. */
+  const sendReceipt = async (paymentId, mode) => {
+    setPrinting(paymentId);
+    try {
+      const { html, provisional, stale } = await ReceiptService.getReceiptForPrint({
+        paymentId, schoolId, lang: locale,
+      });
+      if (mode === "print") await DocumentService.printDocument(html);
+      else {
+        await DocumentService.shareDocument(
+          html, provisional ? t("fees.provisionalReceipt") : t("fees.receipt"),
+        );
+      }
+      if (stale) Alert.alert(t("fees.receipt"), t("doc.offline"));
+    } catch (err) {
+      Alert.alert(t("fees.receipt"), errorText(t, err) || String(err));
+    } finally {
+      setPrinting(null);
+    }
+  };
+
+  /** Ask how, and say first when the paper will be provisional. */
+  const offerReceipt = (p) => {
+    const provisional = !p.isSynced;
+    Alert.alert(
+      provisional ? t("fees.provisionalReceipt") : t("fees.receipt"),
+      provisional ? t("fees.provisionalReceiptHint") : undefined,
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("doc.share"), onPress: () => sendReceipt(p._id, "share") },
+        { text: t("common.print"), onPress: () => sendReceipt(p._id, "print") },
+      ],
+    );
+  };
+
   const submit = async () => {
     // Whole francs only. Checking here means the bursar is told before they
     // hand back change, not after the server rejects it.
@@ -114,7 +156,7 @@ export default function StudentFeeScreen() {
 
     setSaving(true);
     try {
-      await FeeService.recordPayment({
+      const recorded = await FeeService.recordPayment({
         schoolId,
         studentId:    String(studentId),
         academicYear,
@@ -126,7 +168,14 @@ export default function StudentFeeScreen() {
       setReference("");
       await load();
       // Deliberately not "sent" — it is recorded here and will sync later.
-      Alert.alert(t("fees.recorded"), t("fees.recordedOffline"));
+      // A receipt can be handed over now: provisional, clearly marked.
+      Alert.alert(t("fees.recorded"), t("fees.recordedOffline"), [
+        { text: t("common.ok") },
+        {
+          text: t("fees.printProvisional"),
+          onPress: () => offerReceipt({ _id: recorded.id, isSynced: false }),
+        },
+      ]);
     } catch (err) {
       Alert.alert(t("fees.recordFailed"), errorText(t, err));
     } finally {
@@ -273,6 +322,11 @@ export default function StudentFeeScreen() {
                     {/* No receipt number yet means the server has not seen it. */}
                     {p.receiptNo || t("fees.pendingReceipt")}
                   </Text>
+                  {!p.isSynced && ReceiptService.provisionalReference(p._id) && (
+                    <Text style={styles.lineMeta}>
+                      {t("fees.provisionalRef", { ref: ReceiptService.provisionalReference(p._id) })}
+                    </Text>
+                  )}
                   <Text style={styles.lineMeta}>
                     {formatDateShort(p.receivedAt)} · {t(`method.${p.method}`)}
                   </Text>
@@ -285,6 +339,18 @@ export default function StudentFeeScreen() {
                     style={{ marginRight: 6 }}
                   />
                 )}
+                <TouchableOpacity
+                  onPress={() => offerReceipt(p)}
+                  disabled={printing !== null}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={p.isSynced ? t("fees.receipt") : t("fees.provisionalReceipt")}
+                  style={{ marginRight: 6 }}
+                >
+                  {printing === p._id
+                    ? <ActivityIndicator size="small" color={C.primary} />
+                    : <Ionicons name="print-outline" size={16} color={C.primary} />}
+                </TouchableOpacity>
                 <Text
                   style={[
                     styles.lineAmount,

@@ -1119,6 +1119,10 @@
       "other": "{{count}} paiements en attente de synchronisation"
     },
     "pendingReceipt": "Reçu en attente",
+    "provisionalReceipt": "Reçu provisoire",
+    "provisionalReceiptHint": "Ce paiement n'a pas encore atteint le serveur de l'école. Le reçu portera la mention PROVISOIRE ; le reçu officiel sera disponible après la synchronisation du téléphone.",
+    "printProvisional": "Reçu provisoire",
+    "provisionalRef": "Réf. provisoire {{ref}}",
     "recordedOffline": "Enregistré sur cet appareil. Il sera transmis au serveur lors de la prochaine synchronisation, avec le numéro de reçu.",
     "classesLoading": "Chargement des classes…",
     "classesFailed": "Impossible de charger les classes",
