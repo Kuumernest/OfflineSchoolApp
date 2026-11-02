@@ -3575,7 +3575,8 @@
       "RULE_FIXED": "Cette règle est la même pour toutes les écoles et ne peut pas être modifiée.",
       "PROMOTION_RUN_EXISTS": "Une proposition de passage de l'année a été faite à partir de ces résultats. Supprimez d'abord le brouillon, ou annulez la proposition.",
       "CLASS_REQUIRED": "Choisissez une classe : la publication s'annule classe par classe."
-    }
+    },
+    "needsInternet": "Cette action nécessite une connexion Internet. Le reste de l'application continue de fonctionner hors ligne."
   },
   "studentEdit": {
     "title": "Corriger la fiche de l'élève",
@@ -5763,7 +5764,10 @@
   "connection": {
     "offlineTitle": "Vous êtes hors ligne.",
     "unreachableTitle": "Le serveur est injoignable.",
-    "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie."
+    "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie.",
+    "needsInternetTitle": "Cette fonction nécessite une connexion Internet",
+    "needsInternetBody": "Cet ordinateur est hors ligne. Ce qui se fait sur cet écran passe obligatoirement par le serveur : c'est désactivé jusqu'au retour de la connexion. Tout le reste de l'application continue de fonctionner hors ligne.",
+    "needsInternetShort": "Nécessite une connexion Internet"
   },
   "signOutGuard": {
     "title": "Modifications pas encore envoyées",

@@ -117,6 +117,12 @@ try {
   check("with a network error, not the 401", [a.e?.code, b.e?.code], ["ERR_NETWORK", "ERR_NETWORK"]);
   check("which reads as no connection, not a lost session",
     getErrorMessage(a.e), i18n.t("errors.offline"));
+  // The same failure on the desktop says the action needs the internet and the
+  // rest keeps working — the real getErrorMessage, with the bridge present.
+  globalThis.window.school = { isDesktop: true };
+  check("on the desktop it reads as 'this action needs an internet connection'",
+    getErrorMessage(a.e), i18n.t("errors.needsInternet"));
+  delete globalThis.window.school;
   check("the session is kept, in the store and on disk", signedIn(), { store: true, storage: true });
   check("nobody is sent to /login", redirects, []);
   check("no sign-out request was made", calls.filter((c) => c.includes("/auth/logout")).length, 0);

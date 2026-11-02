@@ -14,6 +14,8 @@ import { useExamResults, useExamStats,
          useProcessResults,
          usePublishResults }                 from "@/hooks/useExamResults";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
               ExamSubject,
@@ -1615,6 +1617,9 @@ const ResultsTab = ({
   const { data: statsData }              = useExamStats(examId);
   const processResults                   = useProcessResults();
   const publishResults                   = usePublishResults();
+  // Calculating runs on the server (the desktop does not compute results —
+  // see writes/exams.js): online-only there. Publishing is not; it queues.
+  const net                              = useNeedsInternet();
 
   const results = resultsData?.results ?? [];
   const stats   = statsData?.data;
@@ -1734,7 +1739,8 @@ const ResultsTab = ({
               {!resultsProcessed && currentStep === 2 && (
                 <button
                   onClick={handleProcess}
-                  disabled={processResults.isPending}
+                  disabled={processResults.isPending || net.blocked}
+                  title={net.hint}
                   className="mt-2 px-4 py-1.5 bg-primary-600 text-white
                              text-xs font-bold rounded-lg hover:bg-primary-700
                              disabled:opacity-60 transition-colors"
@@ -1747,7 +1753,8 @@ const ResultsTab = ({
               ) : (
                 <button
                   onClick={handleRecalculate}
-                  disabled={processResults.isPending}
+                  disabled={processResults.isPending || net.blocked}
+                  title={net.hint}
                   className="mt-2 px-4 py-1.5 bg-white border border-primary-300 text-primary-700
                              text-xs font-bold rounded-lg hover:bg-primary-50
                              disabled:opacity-60 transition-colors"
@@ -1755,6 +1762,9 @@ const ResultsTab = ({
                   {processResults.isPending ? t("exams.calculating") : t("exams.recalculateResults")}
                 </button>
               ))}
+              {((!resultsProcessed && currentStep === 2) || (resultsProcessed && !anyPublished)) && (
+                <NeedsInternet className="mt-2 mb-0" />
+              )}
             </div>
           </div>
 

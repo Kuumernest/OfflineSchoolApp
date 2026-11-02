@@ -16,6 +16,8 @@ import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { AnnualResult } from "@/types/exam.types";
 
@@ -57,6 +59,8 @@ export default function AnnualResultsPage() {
   const user      = useUser();
   const isAdmin   = user?.role === "super_admin" || user?.role === "school_admin";
   const needsClass = !isAdmin && !classId;
+  // Computing and publishing run on the server: online-only on the desktop.
+  const net = useNeedsInternet();
   const classesQ  = useQuery({
     queryKey: ["staff-classes", user?.role ?? "", user?.schoolId ?? ""],
     queryFn:  () => fetchStaffClasses(user),
@@ -148,11 +152,11 @@ export default function AnnualResultsPage() {
         </div>
         <button
           onClick={handleCompute}
-          disabled={computeMutation.isPending || needsClass}
-          title={needsClass ? t("annualResults.pickClassToCompute") : undefined}
+          disabled={computeMutation.isPending || needsClass || net.blocked}
+          title={needsClass ? t("annualResults.pickClassToCompute") : net.hint}
           className={cn(
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-            computeMutation.isPending || needsClass
+            computeMutation.isPending || needsClass || net.blocked
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
               : "bg-primary-600 text-white hover:bg-primary-700"
           )}
@@ -166,10 +170,11 @@ export default function AnnualResultsPage() {
         </button>
         {isAdmin && <button
           onClick={handlePublish}
-          disabled={publishMutation.isPending || !results.length}
+          title={net.hint}
+          disabled={publishMutation.isPending || !results.length || net.blocked}
           className={cn(
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-            publishMutation.isPending || !results.length
+            publishMutation.isPending || !results.length || net.blocked
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
               : "bg-emerald-600 text-white hover:bg-emerald-700"
           )}
@@ -187,7 +192,7 @@ export default function AnnualResultsPage() {
           classOptions={classes.map((c) => ({ id: String(c._id), name: c.name }))}
           classId={classId || undefined}
           academicYear={academicYear}
-          disabled={!results.some((r) => r.isPublished)}
+          disabled={!results.some((r) => r.isPublished) || net.blocked}
         />}
       </div>
 
@@ -196,6 +201,8 @@ export default function AnnualResultsPage() {
           from term averages, so a corrected mark makes the term stale first.
           Telling a school to redo the year when it needs to redo one term
           would send it to the wrong screen. */}
+      <NeedsInternet />
+
       {staleCount > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200
                         bg-amber-50 px-4 py-3">
@@ -210,7 +217,7 @@ export default function AnnualResultsPage() {
           </div>
           <button
             onClick={handleCompute}
-            disabled={computeMutation.isPending || needsClass}
+            disabled={computeMutation.isPending || needsClass || net.blocked}
             className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs
                        font-semibold text-white hover:bg-amber-700
                        disabled:opacity-50"

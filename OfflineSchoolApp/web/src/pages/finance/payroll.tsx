@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
 import { getErrorMessage }  from "@/lib/axios";
+import NeedsInternet        from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import {
   fetchRuns, fetchRun, generateRun, confirmRun, reverseRun,
 } from "@/services/finance.service";
@@ -51,6 +53,9 @@ export default function PayrollPage() {
   const schoolId = useUser()?.schoolId ?? "";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Generating, confirming and reversing are computed by the server from
+  // salary scales the desktop does not mirror: online-only there.
+  const net = useNeedsInternet();
   const [genOpen, setGenOpen]       = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
@@ -132,16 +137,18 @@ export default function PayrollPage() {
                 {t("common.back")}
               </Button>
               {run?.status === "draft" && (
-                <Button onClick={() => setConfirmOpen(true)}>{t("payroll.confirmRun")}</Button>
+                <Button disabled={net.blocked} title={net.hint} onClick={() => setConfirmOpen(true)}>{t("payroll.confirmRun")}</Button>
               )}
               {run?.status === "confirmed" && (
-                <Button variant="danger" onClick={() => setReverseOpen(true)}>
+                <Button variant="danger" disabled={net.blocked} title={net.hint} onClick={() => setReverseOpen(true)}>
                   {t("payroll.reverseRun")}
                 </Button>
               )}
             </>
           }
         />
+
+        <NeedsInternet />
 
         {detailQ.isLoading || !run ? (
           <div className="flex justify-center py-12"><Spinner /></div>
@@ -281,11 +288,13 @@ export default function PayrollPage() {
         title={t("payroll.title")}
         description={t("payroll.blurb")}
         actions={
-          <Button icon={<Play className="h-4 w-4" />} onClick={() => setGenOpen(true)}>
+          <Button icon={<Play className="h-4 w-4" />} disabled={net.blocked} title={net.hint} onClick={() => setGenOpen(true)}>
             {t("payroll.generate")}
           </Button>
         }
       />
+
+      <NeedsInternet />
 
       <Card padding={false}>
         {runs.length === 0 ? (

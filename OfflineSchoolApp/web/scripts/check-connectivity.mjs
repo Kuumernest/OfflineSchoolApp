@@ -38,7 +38,7 @@ const load = async (rel) => {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 };
 
-const { createConnectivity, isNoNetworkError } = await load("src/lib/offline/connectivity.ts");
+const { createConnectivity, isNoNetworkError, noResponseMessageKey } = await load("src/lib/offline/connectivity.ts");
 
 const ONLINE = { offline: false, reason: null };
 
@@ -120,6 +120,50 @@ check("and on the sign-in page",
   /<OfflineBanner\b/.test(read("src/pages/LoginPage.tsx")), true);
 check("the banner stays out of the desktop",
   /isDesktop\(\)/.test(read("src/components/offline/OfflineBanner.tsx")), true);
+
+// ── Needs internet: the desktop says something different ────────────────────
+console.log("--- the no-connection message, desktop vs browser ---");
+check("browser, no network: the offline message",
+  noResponseMessageKey({ desktop: false, timedOut: false }), "errors.offline");
+check("desktop, no network: this action needs the internet, the rest works",
+  noResponseMessageKey({ desktop: true, timedOut: false }), "errors.needsInternet");
+check("a timeout is a slow link in both",
+  [noResponseMessageKey({ desktop: false, timedOut: true }), noResponseMessageKey({ desktop: true, timedOut: true })],
+  ["errors.timeout", "errors.timeout"]);
+const en = JSON.parse(read("src/i18n/locales/en.json"));
+const fr = JSON.parse(read("src/i18n/locales/fr.json"));
+for (const k of ["offline", "needsInternet", "timeout"]) {
+  check(`errors.${k} exists in both languages`, [typeof en.errors[k], typeof fr.errors[k]], ["string", "string"]);
+}
+check("the desktop and browser sentences differ", en.errors.needsInternet !== en.errors.offline, true);
+check("getErrorMessage chooses by where it runs",
+  /noResponseMessageKey\(\{\s*desktop:\s*isDesktop\(\)/.test(axiosSrc), true);
+
+console.log("--- the online-only screens say so on an offline desktop ---");
+const hookSrc = read("src/hooks/useNeedsInternet.ts");
+check("blocked only on the desktop, only while offline",
+  /const blocked = offline && isDesktop\(\);/.test(hookSrc), true);
+const SCREENS = [
+  ["src/pages/settings/SettingsPage.tsx", "settings: profile/password, admins, permissions",
+    /<NeedsInternet><ProfileSection \/>[\s\S]*<NeedsInternet><AdminsSection[\s\S]*<NeedsInternet><PermissionsSection/],
+  ["src/pages/exams/[id]/index.tsx", "exam results: calculate / recalculate", /processResults\.isPending \|\| net\.blocked/],
+  ["src/pages/exams/term-results/index.tsx", "term results: compute + publish + unpublish",
+    /needsClass \|\| net\.blocked[\s\S]*!results\.length \|\| net\.blocked[\s\S]*isPublished\) \|\| net\.blocked/],
+  ["src/pages/exams/annual-results/index.tsx", "annual results: compute + publish + unpublish",
+    /needsClass \|\| net\.blocked[\s\S]*!results\.length \|\| net\.blocked[\s\S]*isPublished\) \|\| net\.blocked/],
+  ["src/pages/reports/cards.tsx", "report cards: print / reissue / print preview",
+    /generating \|\| net\.blocked[\s\S]*reissuing \|\| generating \|\| net\.blocked[\s\S]*printFlight\.busy \|\| net\.blocked/],
+  ["src/pages/exports/index.tsx", "exports: download", /!selected \|\| net\.blocked/],
+  ["src/pages/finance/payroll.tsx", "payroll: confirm, reverse, generate",
+    /disabled=\{net\.blocked\}[\s\S]*disabled=\{net\.blocked\}[\s\S]*disabled=\{net\.blocked\}/],
+  ["src/pages/messages/index.tsx", "messages: new conversation and the composer",
+    /disabled=\{net\.blocked\}[\s\S]*<NeedsInternet>[\s\S]*<\/NeedsInternet>/],
+];
+for (const [file, label, re] of SCREENS) {
+  const src = read(file);
+  check(`${label}: gated`, re.test(src), true);
+  check(`${label}: the notice is shown`, /<NeedsInternet\b/.test(src), true);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

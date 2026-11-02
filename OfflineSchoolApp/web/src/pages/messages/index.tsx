@@ -36,6 +36,8 @@ import {
   type ParticipantReadState,
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
@@ -161,6 +163,10 @@ export default function MessagesPage() {
   const user   = useUser();
   const myId   = String(user?._id ?? "");
   const client = useQueryClient();
+  // Messaging goes to the server (the desktop does not queue messages):
+  // online-only there, so the new-conversation button and the composer are
+  // switched off with the reason rather than typed into and refused.
+  const net    = useNeedsInternet();
 
   const [activeId, setActiveId] = useState<string | null>(null);
   // Below md the list and the thread take the whole width in turn: side by
@@ -320,9 +326,11 @@ export default function MessagesPage() {
         </div>
         <button
           onClick={() => setComposing(true)}
+          disabled={net.blocked}
+          title={net.hint}
           className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2
                      text-sm font-semibold text-white transition-colors
-                     hover:bg-primary-700"
+                     hover:bg-primary-700 disabled:opacity-50"
         >
           <Plus size={16} />
           {t("messages.newConversation")}
@@ -592,6 +600,7 @@ export default function MessagesPage() {
                     </div>
                   )}
 
+                  <NeedsInternet>
                   <div className="flex items-end gap-2">
                     <input
                       ref={fileRef}
@@ -643,6 +652,7 @@ export default function MessagesPage() {
                       {t("common.send")}
                     </button>
                   </div>
+                  </NeedsInternet>
                 </div>
               )}
             </>

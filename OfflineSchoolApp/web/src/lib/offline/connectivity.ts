@@ -92,6 +92,23 @@ export const isNoNetworkError = (err: unknown): boolean => {
   return !!e && e.code === "ERR_NETWORK" && !e.response;
 };
 
+/**
+ * The message for a request that got no response, by where the app is running.
+ *
+ *   timed out    the same in both: the link is slow, not missing.
+ *   browser      "No connection" — the web console needs one for everything.
+ *   desktop      only a request the local database could not answer reaches the
+ *                network at all, so the person was doing one of the few things
+ *                that need the server. Saying "no connection, check your
+ *                network" there reads as "the app is broken offline"; the truth
+ *                is that this action needs the internet and the rest keeps
+ *                working.
+ */
+export const noResponseMessageKey = (
+  { desktop, timedOut }: { desktop: boolean; timedOut: boolean },
+): "errors.timeout" | "errors.offline" | "errors.needsInternet" =>
+  timedOut ? "errors.timeout" : desktop ? "errors.needsInternet" : "errors.offline";
+
 /** The one the app uses. */
 export const connectivity = createConnectivity(
   typeof navigator === "undefined" || navigator.onLine !== false,

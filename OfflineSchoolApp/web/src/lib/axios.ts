@@ -4,7 +4,8 @@ import axios            from "axios";
 import i18n             from "@/i18n";
 import { getAuthState } from "@/store/auth.store";
 import { offlineAdapter } from "@/lib/offline/adapter";
-import { connectivity, isNoNetworkError } from "@/lib/offline/connectivity";
+import { connectivity, isNoNetworkError, noResponseMessageKey } from "@/lib/offline/connectivity";
+import { isDesktop } from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INSTANCE
@@ -338,11 +339,14 @@ export const getErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
 
-    // No response at all: offline, DNS, or a cancelled request.
+    // No response at all: offline, DNS, or a cancelled request. Said
+    // differently on the desktop, where only a request that needs the server
+    // gets this far (noResponseMessageKey).
     if (!error.response) {
-      return error.code === "ECONNABORTED" || /timeout/i.test(error.message || "")
-        ? tr("errors.timeout")
-        : tr("errors.offline");
+      return tr(noResponseMessageKey({
+        desktop:  isDesktop(),
+        timedOut: error.code === "ECONNABORTED" || /timeout/i.test(error.message || ""),
+      }));
     }
 
     if (status === 401) return tr("errors.signedOut");

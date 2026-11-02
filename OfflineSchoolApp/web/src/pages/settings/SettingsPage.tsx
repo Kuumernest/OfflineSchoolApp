@@ -12,6 +12,7 @@ import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
 import AcademicStructureSection from "@/pages/settings/AcademicStructureSection";
 import CalculationRulesSection  from "@/pages/settings/CalculationRulesSection";
 import ReportLayoutSection      from "@/pages/settings/ReportLayoutSection";
+import NeedsInternet            from "@/components/offline/NeedsInternet";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
@@ -2239,13 +2240,16 @@ export default function SettingsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
             {activeSection === "school"    && <SchoolSection    schoolId={schoolId} />}
-            {activeSection === "profile"   && <ProfileSection />}
+            {/* Profile (with the password), admins and permissions are
+                online-only: on a desktop that is offline they are shown
+                switched off, with the reason, rather than filled in to fail. */}
+            {activeSection === "profile"   && <NeedsInternet><ProfileSection /></NeedsInternet>}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "academicStructure" && <AcademicStructureSection schoolId={schoolId} />}
             {activeSection === "calculationRules"  && <CalculationRulesSection  schoolId={schoolId} />}
             {activeSection === "reportLayout"      && <ReportLayoutSection      schoolId={schoolId} />}
-            {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
-            {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
+            {activeSection === "admins"    && <NeedsInternet><AdminsSection schoolId={schoolId} currentUserId={currentUserId} /></NeedsInternet>}
+            {activeSection === "permissions" && <NeedsInternet><PermissionsSection schoolId={schoolId} /></NeedsInternet>}
             {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}
             {activeSection === "idcards"   && <IdCardSection    schoolId={schoolId} />}
             {activeSection === "analytics" && <AnalyticsSection schoolId={schoolId} />}
