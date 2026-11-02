@@ -156,13 +156,54 @@ const SCREENS = [
   ["src/pages/exports/index.tsx", "exports: download", /!selected \|\| net\.blocked/],
   ["src/pages/finance/payroll.tsx", "payroll: confirm, reverse, generate",
     /disabled=\{net\.blocked\}[\s\S]*disabled=\{net\.blocked\}[\s\S]*disabled=\{net\.blocked\}/],
-  ["src/pages/messages/index.tsx", "messages: new conversation and the composer",
-    /disabled=\{net\.blocked\}[\s\S]*<NeedsInternet>[\s\S]*<\/NeedsInternet>/],
+  ["src/pages/messages/index.tsx", "messages: new conversation (button and the open dialog), attachment upload",
+    /disabled=\{net\.blocked\}[\s\S]*disabled=\{attaching \|\| sendMutation\.isPending \|\| net\.blocked\}[\s\S]*function NewConversationModal[\s\S]*<NeedsInternet className[\s\S]*disabled=\{opening !== null \|\| net\.blocked\}/],
 ];
 for (const [file, label, re] of SCREENS) {
   const src = read(file);
   check(`${label}: gated`, re.test(src), true);
   check(`${label}: the notice is shown`, /<NeedsInternet\b/.test(src), true);
+}
+
+console.log("--- messages: an existing conversation is written to offline on the desktop ---");
+{
+  const src = read("src/pages/messages/index.tsx");
+  const page = src.slice(0, src.indexOf("function NewConversationModal"));
+  // The desktop queues a send in an existing thread (desktop/src/main/api/
+  // handlers/messages.js), so the composer must not be switched off — only
+  // starting a conversation and uploading a file are.
+  check("the composer is not inside a NeedsInternet", /<NeedsInternet>/.test(page), false);
+  check("the send button is not gated on the connection",
+    /onClick=\{handleSend\}\s*disabled=\{\s*\(!draft\.trim\(\) && pending\.length === 0\) \|\|\s*sendMutation\.isPending\s*\}/.test(page), true);
+  check("offline, the composer says what will happen", /net\.blocked && \([\s\S]*messages\.offlineQueued/.test(page), true);
+  check("each send carries a clientId (the desktop's replay key)",
+    /clientId: attemptIds\.current\.forAttempt\(/.test(page) && /attemptIds\.current\.sent\(\)/.test(page), true);
+  const { clientIds } = await load("src/pages/messages/clientId.ts");
+  const ids = clientIds();
+  const a = ids.forAttempt({ body: "ok" });
+  check("a retry of the same message keeps its id", ids.forAttempt({ body: "ok" }), a);
+  const b = ids.forAttempt({ body: "ok!" });
+  check("an edited message is a new id", b !== a, true);
+  ids.sent();
+  check("once sent, the same text again is a new message", ids.forAttempt({ body: "ok!" }) !== b, true);
+  check("an unsent message is marked and cannot be deleted",
+    [/m\._pending && \(/.test(page), /!m\.isDeleted && m\.seq != null && \(/.test(page)], [true, true]);
+
+  const { threadOrder, newestSeq } = await load("src/pages/messages/order.ts");
+  const thread = [
+    { _id: "u2", seq: null, createdAt: "2026-11-01T10:02:00Z" },
+    { _id: "m2", seq: 2,    createdAt: "2026-11-01T09:00:00Z" },
+    { _id: "u1", seq: null, createdAt: "2026-11-01T10:01:00Z" },
+    { _id: "m1", seq: 1,    createdAt: "2026-11-01T09:30:00Z" },
+  ];
+  check("by seq, unsent last in the order written",
+    [...thread].sort(threadOrder).map((m) => m._id), ["m1", "m2", "u1", "u2"]);
+  check("the read marker never claims an unsent message", newestSeq(thread), 2);
+  check("nothing ordered yet: no read marker", newestSeq([{ seq: null }]), null);
+  for (const [lang, d] of [["en", en], ["fr", fr]]) {
+    check(`${lang}: messages.pendingSend and offlineQueued exist`,
+      [typeof d.messages.pendingSend, typeof d.messages.offlineQueued], ["string", "string"]);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

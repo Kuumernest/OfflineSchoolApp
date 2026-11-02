@@ -35,6 +35,7 @@ import { roleLabel } from "@/utils/roleLabel";
 
 import { cn } from "@/utils/cn";
 import { summariseParticipants, participantName } from "./participants";
+import { threadOrder } from "./order";
 import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export default function MessageAuditPage() {
 
   // ── A single thread, opened deliberately ──────────────────────────────────
   if (opened) {
-    const messages = [...(threadQuery.data ?? [])].sort((a, b) => a.seq - b.seq);
+    const messages = [...(threadQuery.data ?? [])].sort(threadOrder);
 
     return (
       <div className="flex h-full flex-col">

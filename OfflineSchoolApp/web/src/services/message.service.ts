@@ -73,8 +73,13 @@ export interface Attachment {
 export interface Message {
   _id:             string;
   conversationId:  string;
-  /** Server-assigned order. The only key worth sorting by. */
-  seq:             number;
+  /**
+   * Server-assigned order. The only key worth sorting by.
+   *
+   * Null only on the desktop, for a message written offline and still waiting
+   * in its outbox: the server has not ordered it yet, so it is drawn last.
+   */
+  seq:             number | null;
   sender:          { kind: PrincipalKind; id: string; name?: string | null; role?: string | null };
   body:            string | null;
   attachments:     Attachment[];
@@ -85,6 +90,12 @@ export interface Message {
   createdAt:       string;
   editedAt?:       string | null;
   isDeleted?:      boolean;
+  /**
+   * Desktop only: written on this computer while offline and not yet accepted
+   * by the server (desktop/src/main/api/handlers/messages.js). Never sent by
+   * the server, so in a browser it is always absent.
+   */
+  _pending?:       boolean;
 }
 
 /** Per-participant read/delivered state for a conversation. */
@@ -206,7 +217,11 @@ export async function sendMessage(
     body?:        string;
     attachments?: Attachment[];
     replyTo?:     string | null;
-    /** Supply to make a retry idempotent rather than posting twice. */
+    /**
+     * Supply to make a retry idempotent rather than posting twice. The server
+     * uses it as the message's id, which is also what lets the desktop queue a
+     * send offline and replay it safely.
+     */
     clientId?:    string;
   },
 ): Promise<{ message: Message; duplicate: boolean }> {

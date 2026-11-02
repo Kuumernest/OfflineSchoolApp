@@ -3282,6 +3282,8 @@
     "deleteMessage": "Supprimer le message",
     "attach": "Joindre un fichier",
     "writePh": "Écrire un message…",
+    "pendingSend": "En attente d'envoi — il partira au retour de la connexion",
+    "offlineQueued": "Hors ligne — les messages envoyés maintenant attendent sur cet ordinateur et partiront au retour de la connexion. Joindre un fichier nécessite une connexion.",
     "searchPh": "Rechercher un personnel, un élève ou un parent…",
     "noMatch": "Personne ne correspond à ce nom.",
     "nobodyAvailable": "Il n'y a personne avec qui démarrer une conversation.",

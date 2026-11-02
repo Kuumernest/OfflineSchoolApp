@@ -3282,6 +3282,8 @@
     "deleteMessage": "Delete message",
     "attach": "Attach a file",
     "writePh": "Write a message…",
+    "pendingSend": "Waiting to send — it goes when the connection returns",
+    "offlineQueued": "Offline — messages you send now wait on this computer and go when the connection returns. Attaching a file needs a connection.",
     "searchPh": "Search staff, students or parents…",
     "noMatch": "Nobody matches that name.",
     "nobodyAvailable": "There is nobody you can start a conversation with.",
