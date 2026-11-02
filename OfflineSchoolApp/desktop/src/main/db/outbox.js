@@ -235,7 +235,7 @@ const outbox = (db) => {
     unblock(seq) {
       // An entry blocked on a REFUSAL (4xx) goes out under a new
       // Idempotency-Key: the server replays a stored refusal for its key for
-      // 14 days, so retrying under the old one got the same answer back without
+      // 45 days, so retrying under the old one got the same answer back without
       // the request being looked at — after the permission was granted or the
       // data fixed, the change still never landed. A refused request changed
       // nothing, so a new key cannot apply it twice.

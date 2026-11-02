@@ -492,7 +492,7 @@ export const retryFailedUpload = async (queueId) => {
     const db = await getDatabase();
     await ensureUploadQueue(db);
     // A refused upload (4xx) goes out under a NEW key: the server replays a
-    // stored refusal for the old one for 14 days, so it would never be looked
+    // stored refusal for the old one for 45 days, so it would never be looked
     // at again. One that failed for want of an answer keeps its key — the
     // server may have stored it. (mutationQueue retry() says the same.)
     await db.runAsync(

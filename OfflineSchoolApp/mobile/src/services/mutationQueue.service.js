@@ -1132,7 +1132,7 @@ export class MutationQueue {
    *
    * A row the server REFUSED (a 4xx: forbidden, invalid, a conflict) is sent
    * under a NEW Idempotency-Key. The server stores a 4xx answer against the key
-   * and replays it for 14 days, so retrying under the old one got the same
+   * and replays it for 45 days, so retrying under the old one got the same
    * refusal back without the request being looked at again — after the
    * permission was granted or the conflict resolved, the change still never
    * landed. A refused request changed nothing, so a new key cannot apply it
