@@ -5952,7 +5952,9 @@
       "one": "Reconnectez-vous pour envoyer 1 modification en attente",
       "other": "Reconnectez-vous pour envoyer {{count}} modifications en attente"
     },
-    "signInCta": "Se connecter"
+    "signInCta": "Se connecter",
+    "staleNotice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité",
+    "staleWarning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité"
   },
   "svcErr": {
     "titleRequired": "Le titre est obligatoire",

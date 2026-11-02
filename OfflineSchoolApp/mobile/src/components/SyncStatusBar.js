@@ -11,6 +11,9 @@
  *   offline login session  → "Signed in offline — sign in again to upload"
  *   queued work            → "N change(s) waiting to upload"
  *   blocked work           → "N change(s) need attention" (tappable)
+ *   no sync for 21+ days   → "Connect to the internet soon — last synced N
+ *                            days ago…"; from day 30 "Connect now: …"
+ *                            (config/offlinePeriod.js; never blocks anything)
  *   session refused        → "Sign in again to send N unsent changes" [Sign in]
  *                            (the server would not renew the session; the
  *                            queued work is kept for this account)
@@ -33,12 +36,15 @@ import { useSyncProgress } from "../hooks/useSyncProgress";
 import { ProgressBar } from "./ProgressBar";
 import { useTranslation } from "../i18n/useTranslation";
 import { useAuthStore } from "../store/auth.store";
+import { OFFLINE_LIMIT_DAYS } from "../config/offlinePeriod";
 
 const C = {
   offline:  "#6B7280",
   pending:  "#B45309",
   blocked:  "#B91C1C",
   signIn:   "#9A3412",
+  staleNotice:  "#B45309",
+  staleWarning: "#B91C1C",
   syncing:  "#4338CA",
   text:     "#FFFFFF",
   // The strip is a saturated colour, so the track behind the fill has to
@@ -63,7 +69,7 @@ export const SyncStatusBar = ({ style }) => {
   const { t } = useTranslation();
   const router = useRouter();
   const bottomInset = useBottomInset();
-  const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked } = useSyncStatus();
+  const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked, offlineAge } = useSyncStatus();
   const progress = useSyncProgress();
   const needsSignIn = useAuthStore((s) => Boolean(s.user) && s.needsSignIn);
   const signInAgain = useAuthStore((s) => s.signInAgain);
@@ -75,6 +81,7 @@ export const SyncStatusBar = ({ style }) => {
   let icon = "cloud-offline-outline";
   let label = "";
   let tappable = false;
+  let lines = 1;
   let onPress = () => router.push("/sync/pending");
 
   if (needsSignIn) {
@@ -97,6 +104,15 @@ export const SyncStatusBar = ({ style }) => {
     // keys elsewhere in these locale files use and nothing consults.
     label = t("sync.needAttention", { count: blockedCount });
     tappable = true;
+  } else if (offlineAge.level !== "none" && !(progress.visible && isConnected)) {
+    // Long without a sync outranks "offline" and "N waiting": it is the same
+    // fact with a deadline attached. It only informs — nothing is blocked.
+    const warning = offlineAge.level === "warning";
+    tone = warning ? C.staleWarning : C.staleNotice;
+    icon = warning ? "warning-outline" : "time-outline";
+    label = t(warning ? "sync.staleWarning" : "sync.staleNotice",
+      { count: offlineAge.days, limit: OFFLINE_LIMIT_DAYS });
+    lines = 2;
   } else if (isOfflineSession) {
     tone = C.pending;
     icon = "log-in-outline";
@@ -155,7 +171,7 @@ export const SyncStatusBar = ({ style }) => {
             ? <ActivityIndicator size="small" color={C.text} />
             : <Ionicons name={icon} size={15} color={C.text} />}
 
-          <Text style={styles.text} numberOfLines={1}>{label}</Text>
+          <Text style={styles.text} numberOfLines={lines}>{label}</Text>
 
           {needsSignIn ? (
             <View style={styles.cta}>

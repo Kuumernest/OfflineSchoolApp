@@ -366,3 +366,16 @@ index is never touched); a correct one is left alone. The boot then logs
 plain index, second boot).
 
 Unchanged: access tokens 30 days, refresh tokens 90 days.
+
+**Telling the person (one rule, never blocking).** Counted from the last
+*successful* sync with the server: from **day 21** a gentle notice ("Connect
+to the internet soon — this device last synced N days ago; changes older than
+30 days may not be accepted safely"), from **day 30** a stronger warning
+("Connect now: …"). An unknown time (never synced, epoch cursor) shows
+nothing. Nothing is disabled.
+
+- Phone: `mobile/src/config/offlinePeriod.js` (21/30 + `offlineAge()`);
+  `useSyncStatus` reads `SyncManager.getLastSync()` (the server time of the
+  last completed pull, read only) and re-reads it when a run ends;
+  `SyncStatusBar` shows it below sign-in and blocked changes.
+  `mobile/scripts/check-offline-period.js`.

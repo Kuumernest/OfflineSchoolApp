@@ -5952,7 +5952,9 @@
       "one": "Sign in again to send 1 unsent change",
       "other": "Sign in again to send {{count}} unsent changes"
     },
-    "signInCta": "Sign in"
+    "signInCta": "Sign in",
+    "staleNotice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely",
+    "staleWarning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely"
   },
   "svcErr": {
     "titleRequired": "Title is required",
