@@ -9,6 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
+import { useSafeLogout }        from "../../src/hooks/useSafeLogout";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { getDatabase }          from "../../src/db/database";
 import { getSchoolInfo }        from "../../src/services/school.service";
@@ -464,7 +465,7 @@ export default function StudentDashboard() {
 
   // Full user object — for display and callbacks only, NOT used in useEffect deps
   const user   = useAuthStore((st) => st.user);
-  const logout = useAuthStore((st) => st.logout);
+  const safeLogout = useSafeLogout();
 
   const storeProfileCompleted = useAuthStore((s) => s.profileCompleted);
 
@@ -630,10 +631,8 @@ export default function StudentDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/auth/login");
-  };
+  // Warns first when this account has changes not yet sent.
+  const handleLogout = () => safeLogout();
 
   // ── Quick actions ─────────────────────────────────────────────────────────
   const QUICK_ACTIONS = useMemo(() => [

@@ -152,11 +152,29 @@ async function forgetOtherPeoplesMessages(keepUserId) {
   }
 }
 
-/** True while the outbox still holds a change that has not reached the server. */
-async function hasPendingUploads() {
+/**
+ * How many of this account's changes have not reached the server yet — the
+ * outbox rows it owns plus queued file uploads (MutationQueue.getStats().unsent,
+ * the number the sync strip shows). Null when the outbox cannot be read.
+ */
+export async function getUnsentCount() {
   try {
     const { MutationQueue } = require("../services/mutationQueue.service");
-    return (await MutationQueue.pendingKeys("")).length > 0;
+    const stats = await MutationQueue.getStats();
+    return Number(stats?.unsent) || 0;
+  } catch (err) {
+    console.warn("[auth] could not count unsent changes:", err?.message);
+    return null;
+  }
+}
+
+/** True while the outbox still holds a change that has not reached the server. */
+export async function hasPendingUploads() {
+  try {
+    const { MutationQueue } = require("../services/mutationQueue.service");
+    // pendingKeys answers a Set. `.length` on a Set is undefined, and
+    // `undefined > 0` is false — so this said "nothing pending" always.
+    return (await MutationQueue.pendingKeys("")).size > 0;
   } catch (err) {
     // Unknown is treated as pending: switching is the step that cannot be undone.
     console.warn("[auth] could not read the outbox:", err?.message);
@@ -206,8 +224,35 @@ export const useAuthStore = create((set, get) => ({
   profileCompleted: false,
   // The school a super_admin is working inside: { _id, name, code }, or null.
   activeSchool:     null,
+  // The server definitively refused to renew this session (refresh token
+  // expired / revoked, account or school closed). The session is NOT ended:
+  // the person keeps reading what the phone holds, queued work stays in the
+  // outbox under this account, and SyncStatusBar asks them to sign in again.
+  needsSignIn:       false,
+  needsSignInReason: null,
 
   setProfileCompleted: (val) => set({ profileCompleted: val }),
+
+  markNeedsSignIn: (reason = null) => {
+    if (!get().user) return;
+    if (get().needsSignIn && get().needsSignInReason === reason) return;
+    console.log(`🔒 Session needs sign-in (${reason ?? "refused"}) — queued work kept`);
+    set({ needsSignIn: true, needsSignInReason: reason });
+  },
+  clearNeedsSignIn: () => {
+    if (get().needsSignIn) set({ needsSignIn: false, needsSignInReason: null });
+  },
+
+  /**
+   * The "Sign in again" button. Ends this session so the login screen shows
+   * (the layout guard redirects once token is null). The outbox is not
+   * touched: its rows belong to this account and drain after the same person
+   * signs in again on this phone.
+   */
+  signInAgain: async () => {
+    await get().logout();
+    return true;
+  },
 
   // ✅ Set/clear sync error so the UI can warn about stale data
   setSyncError: (msg) => set({ syncError: msg }),
@@ -554,6 +599,8 @@ export const useAuthStore = create((set, get) => ({
         isLoading:        false,   // ← no separate finally needed
         profileCompleted: false,
         error:            null,
+        needsSignIn:       false,
+        needsSignInReason: null,
       });
       return true;
 
@@ -605,7 +652,10 @@ export const useAuthStore = create((set, get) => ({
         body:    JSON.stringify({ refreshToken: currentRefreshToken }),
       });
       if (res.status === 401 || res.status === 403) {
-        await get().logout();
+        // A definitive refusal — but never a silent logout: queued work is
+        // kept and the person is asked to sign in again.
+        const body = await res.json().catch(() => ({}));
+        get().markNeedsSignIn(body?.code ?? `HTTP_${res.status}`);
         return false;
       }
       const data = await res.json();
@@ -617,6 +667,8 @@ export const useAuthStore = create((set, get) => ({
       set({
         token: data.token,
         ...(data.refreshToken ? { refreshTokenValue: data.refreshToken } : {}),
+        needsSignIn:       false,
+        needsSignInReason: null,
       });
       return true;
     } catch (err) {
@@ -715,6 +767,8 @@ export const useAuthStore = create((set, get) => ({
       profileCompleted:  false,
       activeSchool:      null,
       error:             null,
+      needsSignIn:       false,
+      needsSignInReason: null,
     });
 
     return true;

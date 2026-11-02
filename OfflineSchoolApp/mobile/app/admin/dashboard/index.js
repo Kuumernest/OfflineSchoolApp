@@ -12,6 +12,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore }           from "../../../src/store/auth.store";
+import { useSafeLogout }          from "../../../src/hooks/useSafeLogout";
 import { getAdminStats }          from "../../../src/services/adminStats.service";
 import { syncTeacherAssignments } from "../../../src/services/syncAssignments.service";
 import { getSchoolInfo }          from "../../../src/services/school.service";
@@ -544,7 +545,7 @@ export default function AdminDashboard() {
   const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
-  const logout   = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const schoolId = useAuthStore((s) => s.user?.schoolId);
 
   const role = user?.role ?? null;
@@ -662,19 +663,14 @@ export default function AdminDashboard() {
   );
 
   // ── Logout ────────────────────────────────────────────
+  // Warns first when this account has changes not yet sent.
   const handleLogout = useCallback(() => {
-    Alert.alert(t("dashAdmin.logout"), t("dashAdmin.logoutBody"), [
-      { text: t("common.cancel"), style: "cancel" },
-      {
-        text:    t("dashAdmin.logout"),
-        style:   "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/auth/login");
-        },
-      },
-    ]);
-  }, [logout, router, t]);
+    safeLogout({
+      title:        t("dashAdmin.logout"),
+      body:         t("dashAdmin.logoutBody"),
+      confirmLabel: t("dashAdmin.logout"),
+    });
+  }, [safeLogout, t]);
 
   // ── Derived alerts ────────────────────────────────────
   const alerts = useMemo(() => {

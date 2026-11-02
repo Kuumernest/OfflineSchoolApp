@@ -22,6 +22,7 @@ import {
 import { useRouter }            from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
+import { useSafeLogout }        from "../../src/hooks/useSafeLogout";
 import { getTeacherStats }      from "../../src/services/teacherStats.service";
 import { getSchoolInfo }        from "../../src/services/school.service";
 import { isTeacherProfileComplete } from "./profile/setup";
@@ -188,7 +189,7 @@ export default function TeacherDashboard() {
   const router = useRouter();
   const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
 
   // ✅ Primitive string deps — prevents infinite loop from object ref changes
   const teacherId = useAuthStore((s) =>
@@ -385,10 +386,8 @@ export default function TeacherDashboard() {
     catch (err) { console.error(`Nav error ${route}:`, err); }
   }, [router]);
 
-  const handleLogout = useCallback(async () => {
-    try { await logout(); router.replace("/auth/login"); }
-    catch { router.replace("/auth/login"); }
-  }, [logout, router]);
+  // Warns first when this account has changes not yet sent.
+  const handleLogout = useCallback(() => safeLogout(), [safeLogout]);
 
   // ✅ FIX: Use userRef so onRefresh is stable and does NOT re-create when
   //    the user object reference changes — which was causing extra renders.

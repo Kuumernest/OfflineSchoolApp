@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import TeacherProfile from "../../../src/services/teacherProfile.service";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
@@ -283,7 +284,7 @@ const pp = StyleSheet.create({
 export default function TeacherSettingsScreen() {
   const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const userId = String(user?._id || user?.id || "");
 
   const [profile,         setProfile]         = useState(null);
@@ -355,23 +356,15 @@ export default function TeacherSettingsScreen() {
   }, [userId]);
 
   // ── Logout ───────────────────────────────────────────
+  // Warns first when this account has changes not yet sent.
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      t("teacherSettings.logout"),
-      t("teacherSettings.logoutConfirm"),
-      [
-        { text: t("teacherSettings.cancel"), style: "cancel" },
-        {
-          text:  t("teacherSettings.logout"),
-          style: "destructive",
-          onPress: async () => {
-            try { await logout(); } catch { /* ignore */ }
-            router.replace("/auth/login");
-          },
-        },
-      ]
-    );
-  }, [logout, t]);
+    safeLogout({
+      title:        t("teacherSettings.logout"),
+      body:         t("teacherSettings.logoutConfirm"),
+      confirmLabel: t("teacherSettings.logout"),
+      cancelLabel:  t("teacherSettings.cancel"),
+    });
+  }, [safeLogout, t]);
 
   // ── Derived display values ────────────────────────────
   const displayName = profile

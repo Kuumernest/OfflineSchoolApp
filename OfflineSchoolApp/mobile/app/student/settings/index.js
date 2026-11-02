@@ -19,6 +19,7 @@ import {
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import { getDatabase }  from "../../../src/db/database";
 import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
@@ -611,7 +612,7 @@ const cp = StyleSheet.create({
 export default function StudentSettingsScreen() {
   const { t }      = useTranslation();
   const user       = useAuthStore((s) => s.user);
-  const logout     = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const updateUser = useAuthStore((s) => s.updateUser);
   const token      = useAuthStore((s) => s.token);
 
@@ -813,17 +814,14 @@ export default function StudentSettingsScreen() {
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
+  // Warns first when this account has changes not yet sent.
   const handleLogout = () => {
-    Alert.alert(t("studentSettings.logout"), t("studentSettings.logoutConfirm"), [
-      { text: t("studentSettings.cancel"), style: "cancel" },
-      {
-        text: t("studentSettings.logout"), style: "destructive",
-        onPress: async () => {
-          try { await logout(); } catch { /* ignore */ }
-          router.replace("/auth/login");
-        },
-      },
-    ]);
+    safeLogout({
+      title:        t("studentSettings.logout"),
+      body:         t("studentSettings.logoutConfirm"),
+      confirmLabel: t("studentSettings.logout"),
+      cancelLabel:  t("studentSettings.cancel"),
+    });
   };
 
   // ── Derived display values ────────────────────────────────────────────────

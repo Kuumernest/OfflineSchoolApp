@@ -9,8 +9,9 @@
  * Responsibilities:
  *  - Attach Bearer token to every request
  *  - Auto-inject schoolId into /admin/* query params
- *  - Handle 401 auto-logout (with guards for background sync routes)
- *  - Auto-refresh token on 401 before giving up
+ *  - Auto-refresh token on 401. Never logs out: a definitive refusal from
+ *    /auth/refresh marks the session "needs sign-in" (auth.store) and keeps
+ *    the queued work; a network / timeout / 5xx failure changes nothing
  *  - Provide dev-mode request / response logging
  *  - Suppress "No response" error logs for non-final retry attempts
  *    and downgrade one-shot transient blips from error → warn
@@ -19,12 +20,11 @@
  *  #C6    — schoolId read from Zustand store directly (no circular dep)
  *  #PERF  — NetInfo listener replaces per-request NetInfo.fetch()
  *  #CIRC  — auth store loaded lazily to break circular imports
- *  #401   — _loggingOut reset extended to 10 s
  *  #RETRY — mid-retry "No response" logs suppressed; one-shot blips
  *           downgraded from console.error → console.warn
  *  #KEEP  — Connection: keep-alive header added to reduce TCP reconnects
  *  #TMO   — timeout increased to 20 s for Android WiFi radio wake-up
- *  #TREF  — Token refresh on 401 before auto-logout
+ *  #TREF  — Token refresh on 401; no auto-logout (offline P0 #10)
  */
 
 import axios            from "axios";
@@ -306,6 +306,40 @@ let _isRefreshing     = false;
 let _refreshPromise   = null;
 
 /**
+ * How the last refresh ended: "ok", "refused" (the server definitively said
+ * no — this session cannot be renewed, the person must sign in again) or
+ * "transient" (no answer, a timeout, a 5xx: nothing is known about the
+ * session, so it is kept and queued work waits).
+ */
+let _lastRefreshOutcome = null;
+export const getLastRefreshOutcome = () => _lastRefreshOutcome;
+
+/**
+ * True when /auth/refresh answered with a refusal that no retry can change:
+ * 401 (REFRESH_EXPIRED, REFRESH_INVALID, REFRESH_STALE, SCHOOL_INACTIVE,
+ * account not found / deactivated, Mode B's bad bearer) or 403. Anything
+ * without an answer — offline, a timeout, a 5xx — is not a refusal.
+ */
+export const isRefreshRefusal = (err) => {
+  const status = err?.response?.status;
+  return status === 401 || status === 403;
+};
+
+/**
+ * The session cannot be renewed. It is NOT ended here: queued work belongs to
+ * this account and waits in the outbox, and the person is asked to sign in
+ * again (SyncStatusBar) instead of being thrown out mid-task.
+ */
+const markSessionNeedsSignIn = (reason) => {
+  try {
+    const state = getAuthStore()?.getState?.();
+    state?.markNeedsSignIn?.(reason);
+  } catch (e) {
+    if (__DEV__) console.warn("[api] could not mark the session:", e?.message);
+  }
+};
+
+/**
  * Attempts to get a new access token using:
  *   1. The refresh token from the Zustand store
  *   2. The refresh token from SecureStore
@@ -362,6 +396,9 @@ export const refreshAccessToken = async () => {
 
       if (!refreshToken && !currentToken) {
         if (__DEV__) console.warn("[api] No refresh token and no access token — cannot refresh");
+        // Nothing to renew with: only a fresh sign-in can send queued work.
+        _lastRefreshOutcome = "refused";
+        markSessionNeedsSignIn("NO_CREDENTIALS");
         return null;
       }
 
@@ -376,6 +413,7 @@ export const refreshAccessToken = async () => {
 
       if (!newToken) {
         console.warn("[api] Token refresh returned no token");
+        _lastRefreshOutcome = "transient";
         return null;
       }
 
@@ -405,6 +443,8 @@ export const refreshAccessToken = async () => {
         }
       } catch { /* ignore */ }
 
+      _lastRefreshOutcome = "ok";
+      try { getAuthStore()?.getState?.().clearNeedsSignIn?.(); } catch { /* ignore */ }
       return newToken;
 
     } catch (err) {
@@ -413,6 +453,23 @@ export const refreshAccessToken = async () => {
           "[api] Token refresh failed:",
           err.response?.data?.message ?? err.message
         );
+      }
+      const code = err?.response?.data?.code ?? null;
+      if (isRefreshRefusal(err) && code === "PASSWORD_CHANGE_REQUIRED") {
+        // Not a dead session: the password wall (app/_layout.js) handles it.
+        _lastRefreshOutcome = "refused";
+        try {
+          const state = getAuthStore()?.getState?.();
+          if (state?.user && !state.user.mustResetPassword && state.updateUser) {
+            await state.updateUser({ ...state.user, mustResetPassword: true });
+          }
+        } catch { /* ignore */ }
+      } else if (isRefreshRefusal(err)) {
+        _lastRefreshOutcome = "refused";
+        markSessionNeedsSignIn(code ?? `HTTP_${err.response.status}`);
+      } else {
+        // Offline, timed out, 5xx: the session is kept and work stays queued.
+        _lastRefreshOutcome = "transient";
       }
       return null;
     } finally {
@@ -423,13 +480,6 @@ export const refreshAccessToken = async () => {
 
   return _refreshPromise;
 };
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION 9 — 401 GUARD STATE
-// ═════════════════════════════════════════════════════════════════════════════
-
-let _loggingOut       = false;
-const LOGOUT_RESET_MS = 10_000;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 10 — REQUEST INTERCEPTOR
@@ -471,8 +521,8 @@ async function _prepareRequest(config) {
       config.headers.Authorization = `Bearer ${token}`;
     } else if (!config._allowUnauthenticated && !isPublicRoute(config.url ?? "")) {
       // The session is offline-only (token === "offline_mode") or absent.
-      // Firing unauthenticated would 401 and, on a non-sync route, trigger
-      // auto-logout. Reject locally so callers fall back to cached data.
+      // Firing unauthenticated would only 401. Reject locally so callers
+      // fall back to cached data.
       const err            = new Error("Offline session — request not sent");
       err.isOffline       = true;
       err.isOfflineSession = true;
@@ -634,40 +684,23 @@ api.interceptors.response.use(
           return api(originalConfig);
         }
 
-        // Refresh failed — decide whether to logout or just warn
-        if (__DEV__) {
-          console.warn(`[api] ⚠️  Token refresh failed for "${url}"`);
-        }
-      }
-
-      // ── Sync routes: warn and reject, never auto-logout ───────────────────
-      if (isSyncRoute(url)) {
+        // Refresh failed. Nobody is logged out from here any more — this ran
+        // mid-drain and on a dropped radio, and a logout cleared the session
+        // the queued work was waiting for. refreshAccessToken has already
+        // marked "needs sign-in" when the server definitively refused; a
+        // network / timeout / 5xx failure keeps the session as it is.
         if (__DEV__) {
           console.warn(
-            `[api] ⚠️  401 on sync route "${url}" — skipping auto-logout.`
+            `[api] ⚠️  Token refresh failed for "${url}" (${getLastRefreshOutcome() ?? "unknown"})` +
+            (isSyncRoute(url) ? " on a sync route" : "")
           );
         }
-        return Promise.reject(error);
+        error.authRefresh = getLastRefreshOutcome();
       }
 
-      // ── Non-sync routes: auto-logout ──────────────────────────────────────
-      if (!_loggingOut) {
-        _loggingOut = true;
-        try {
-          const store = getAuthStore();
-          if (store?.getState?.().logout) {
-            await store.getState().logout();
-            if (__DEV__) {
-              console.warn("[api] 🔒 401 — user logged out automatically");
-            }
-          }
-        } catch (err) {
-          console.warn("[api] Auto-logout failed:", err.message);
-        } finally {
-          setTimeout(() => { _loggingOut = false; }, LOGOUT_RESET_MS);
-        }
-      }
-
+      // A 401 after a successful refresh is the route's own answer (a wrong
+      // current password, a resource this account may not touch), not a dead
+      // session: it is rejected to the caller like any other error.
       return Promise.reject(error);
     }
 

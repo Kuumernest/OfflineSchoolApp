@@ -5939,7 +5939,13 @@
       "one": "Uploading 1 change…",
       "other": "Uploading {{count}} changes…"
     },
-    "syncing": "Syncing…"
+    "syncing": "Syncing…",
+    "needsSignIn": {
+      "zero": "Your session has ended — sign in again to keep syncing",
+      "one": "Sign in again to send 1 unsent change",
+      "other": "Sign in again to send {{count}} unsent changes"
+    },
+    "signInCta": "Sign in"
   },
   "svcErr": {
     "titleRequired": "Title is required",
@@ -7467,5 +7473,13 @@
     "pendingUploads": "Some changes on this phone have not been uploaded yet. Sync them before changing school, or they would be sent to the wrong school.",
     "openPending": "See pending changes",
     "failed": "Could not change school."
+  },
+  "logoutGuard": {
+    "title": "Changes not yet sent",
+    "body": {
+      "one": "You have 1 change not yet sent. If you sign out, it will be sent next time you sign in on this phone.",
+      "other": "You have {{count}} changes not yet sent. If you sign out, they'll be sent next time you sign in on this phone."
+    },
+    "signOut": "Sign out"
   }
 }

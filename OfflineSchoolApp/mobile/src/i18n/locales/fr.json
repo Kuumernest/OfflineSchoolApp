@@ -5939,7 +5939,13 @@
       "one": "Envoi d'1 modification…",
       "other": "Envoi de {{count}} modifications…"
     },
-    "syncing": "Synchronisation…"
+    "syncing": "Synchronisation…",
+    "needsSignIn": {
+      "zero": "Votre session a pris fin — reconnectez-vous pour continuer la synchronisation",
+      "one": "Reconnectez-vous pour envoyer 1 modification en attente",
+      "other": "Reconnectez-vous pour envoyer {{count}} modifications en attente"
+    },
+    "signInCta": "Se connecter"
   },
   "svcErr": {
     "titleRequired": "Le titre est obligatoire",
@@ -7467,5 +7473,13 @@
     "pendingUploads": "Des modifications de ce téléphone n’ont pas encore été envoyées. Synchronisez-les avant de changer d’établissement, sinon elles seraient envoyées au mauvais établissement.",
     "openPending": "Voir les modifications en attente",
     "failed": "Impossible de changer d’établissement."
+  },
+  "logoutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "body": {
+      "one": "Vous avez 1 modification pas encore envoyée. Si vous vous déconnectez, elle sera envoyée à votre prochaine connexion sur ce téléphone.",
+      "other": "Vous avez {{count}} modifications pas encore envoyées. Si vous vous déconnectez, elles seront envoyées à votre prochaine connexion sur ce téléphone."
+    },
+    "signOut": "Se déconnecter"
   }
 }

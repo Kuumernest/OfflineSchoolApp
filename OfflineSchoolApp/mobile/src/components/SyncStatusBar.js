@@ -11,6 +11,9 @@
  *   offline login session  → "Signed in offline — sign in again to upload"
  *   queued work            → "N change(s) waiting to upload"
  *   blocked work           → "N change(s) need attention" (tappable)
+ *   session refused        → "Sign in again to send N unsent changes" [Sign in]
+ *                            (the server would not renew the session; the
+ *                            queued work is kept for this account)
  *
  * Tapping a blocked state opens the pending-changes screen.
  *
@@ -29,11 +32,13 @@ import { useSyncStatus } from "../hooks/useSyncStatus";
 import { useSyncProgress } from "../hooks/useSyncProgress";
 import { ProgressBar } from "./ProgressBar";
 import { useTranslation } from "../i18n/useTranslation";
+import { useAuthStore } from "../store/auth.store";
 
 const C = {
   offline:  "#6B7280",
   pending:  "#B45309",
   blocked:  "#B91C1C",
+  signIn:   "#9A3412",
   syncing:  "#4338CA",
   text:     "#FFFFFF",
   // The strip is a saturated colour, so the track behind the fill has to
@@ -60,6 +65,8 @@ export const SyncStatusBar = ({ style }) => {
   const bottomInset = useBottomInset();
   const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked } = useSyncStatus();
   const progress = useSyncProgress();
+  const needsSignIn = useAuthStore((s) => Boolean(s.user) && s.needsSignIn);
+  const signInAgain = useAuthStore((s) => s.signInAgain);
 
   const blockedCount = stats.conflict + stats.failed;
   const waitingCount = pendingCount - blockedCount;
@@ -68,8 +75,20 @@ export const SyncStatusBar = ({ style }) => {
   let icon = "cloud-offline-outline";
   let label = "";
   let tappable = false;
+  let onPress = () => router.push("/sync/pending");
 
-  if (hasBlocked) {
+  if (needsSignIn) {
+    // Outranks everything: nothing else on this strip can move until the
+    // person signs in again. The outbox is kept for this account.
+    tone = C.signIn;
+    icon = "log-in-outline";
+    label = t("sync.needsSignIn", { count: pendingCount });
+    tappable = true;
+    onPress = async () => {
+      try { await signInAgain(); } catch { /* the layout guard still redirects */ }
+      router.replace("/auth/login");
+    };
+  } else if (hasBlocked) {
     tone = C.blocked;
     icon = "alert-circle-outline";
     // Was an English sentence assembled here, plural "s" and all, in an app
@@ -97,7 +116,7 @@ export const SyncStatusBar = ({ style }) => {
   // A running sync outranks "N waiting to upload": it is the same work with
   // something concrete to say about it. Blocked rows still win, because they
   // need a person and progress does not.
-  const showProgress = progress.visible && !hasBlocked && !isOfflineSession;
+  const showProgress = progress.visible && !hasBlocked && !isOfflineSession && !needsSignIn;
   if (showProgress && (!tone || tone === C.pending)) tone = C.syncing;
 
   if (!tone) return null;
@@ -112,7 +131,7 @@ export const SyncStatusBar = ({ style }) => {
         style,
       ]}
       {...(tappable
-        ? { onPress: () => router.push("/sync/pending"), activeOpacity: 0.8 }
+        ? { onPress, activeOpacity: 0.8, accessibilityRole: "button" }
         : {})}
     >
       {showProgress ? (
@@ -138,7 +157,13 @@ export const SyncStatusBar = ({ style }) => {
 
           <Text style={styles.text} numberOfLines={1}>{label}</Text>
 
-          {tappable && <Ionicons name="chevron-forward" size={15} color={C.text} />}
+          {needsSignIn ? (
+            <View style={styles.cta}>
+              <Text style={styles.ctaText}>{t("sync.signInCta")}</Text>
+            </View>
+          ) : tappable ? (
+            <Ionicons name="chevron-forward" size={15} color={C.text} />
+          ) : null}
         </>
       )}
     </Wrapper>
@@ -165,6 +190,13 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "600",
   },
+  cta: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  ctaText: { color: C.signIn, fontSize: 12, fontWeight: "700" },
   // flex: 1 so the bar takes the strip's width. The strip is a row, and an
   // unflexed child would collapse to its content and leave the fill a stub.
   progress: { flex: 1, paddingVertical: 2 },
