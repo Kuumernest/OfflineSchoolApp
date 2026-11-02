@@ -43,7 +43,9 @@ import {
   fetchIdCardSettings,
   saveIdCardSettings,
 } from "../../../src/services/settings.service";
-import { errorText } from "../../../src/utils/appError";
+// Settings writes are online-only (owner decision): a failure for want of a
+// connection says so rather than a generic "could not save".
+import { needsInternetFailureText, orNeedsInternet } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -335,7 +337,7 @@ const SchoolSection = ({ schoolId }) => {
     } catch (err) {
       Alert.alert(
         t("adminSettings.errTitle"),
-        err?.response?.data?.message || t("adminSettings.errSaveSettings")
+        orNeedsInternet(t, err, err?.response?.data?.message || t("adminSettings.errSaveSettings"))
       );
     } finally {
       setSaving(false);
@@ -729,8 +731,8 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
       const updated = await updateProfile({ name: name.trim(), email });
       onProfileUpdated?.(updated);
       Alert.alert(t("adminSettings.successTitle"), t("adminSettings.profileSaved"));
-    } catch {
-      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errProfileSave"));
+    } catch (err) {
+      Alert.alert(t("adminSettings.errTitle"), orNeedsInternet(t, err, t("adminSettings.errProfileSave")));
     } finally {
       setSaving(false);
     }
@@ -753,8 +755,8 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
       setConfirmPassword("");
       setShowPwForm(false);
       Alert.alert(t("adminSettings.successTitle"), t("adminSettings.pwChanged"));
-    } catch {
-      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errPwChange"));
+    } catch (err) {
+      Alert.alert(t("adminSettings.errTitle"), orNeedsInternet(t, err, t("adminSettings.errPwChange")));
     } finally {
       setChangingPw(false);
     }
@@ -943,7 +945,7 @@ const IdCardSection = ({ schoolId }) => {
         t("adminSettings.idCardSavedBody")
       );
     } catch (err) {
-      Alert.alert(t("adminSettings.errSaveTitle"), errorText(t, err));
+      Alert.alert(t("adminSettings.errSaveTitle"), needsInternetFailureText(t, err));
     } finally {
       setSaving(false);
     }
@@ -1157,8 +1159,8 @@ const GradingSection = ({ schoolId }) => {
       setSaving(true);
       await saveGradingConfig({ ...config, schoolId });
       Alert.alert(t("adminSettings.successTitle"), t("adminSettings.gradingSaved"));
-    } catch {
-      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errGradingSave"));
+    } catch (err) {
+      Alert.alert(t("adminSettings.errTitle"), orNeedsInternet(t, err, t("adminSettings.errGradingSave")));
     } finally {
       setSaving(false);
     }
@@ -1376,8 +1378,8 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
       setShowModal(false);
       setNewName("");
       setNewEmail("");
-    } catch {
-      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errCreateAdmin"));
+    } catch (err) {
+      Alert.alert(t("adminSettings.errTitle"), orNeedsInternet(t, err, t("adminSettings.errCreateAdmin")));
     } finally {
       setCreating(false);
     }

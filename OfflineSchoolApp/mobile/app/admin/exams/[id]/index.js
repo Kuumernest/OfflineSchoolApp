@@ -18,7 +18,9 @@ import { ExamService }  from "../../../../src/services/exam.service";
 // from the synced classes table instead.
 import { getClassesList } from "../../../../src/services/assignment.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // UUID VALIDATOR
@@ -1291,7 +1293,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                errorText(t, err, "examDetail.statusUpdateFailed")
+                needsInternetErrorText(t, err, "examDetail.statusUpdateFailed")
               );
             }
           },
@@ -1357,7 +1359,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.failedTitle"),
-                errorText(t, err, "examDetail.processFailed")
+                needsInternetErrorText(t, err, "examDetail.processFailed")
               );
             } finally {
               setProcessing(false);
@@ -1384,7 +1386,7 @@ export default function ExamDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("examDetail.failedTitle"),
-        errorText(t, err, "examDetail.unpublishFailed")
+        needsInternetErrorText(t, err, "examDetail.unpublishFailed")
       );
     }
   }, [t, id, schoolId, loadData]);
@@ -1404,7 +1406,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                errorText(t, err, "examDetail.publishFailed")
+                needsInternetErrorText(t, err, "examDetail.publishFailed")
               );
             }
           },
@@ -1424,7 +1426,7 @@ export default function ExamDetailScreen() {
       });
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     }
   }, [id, schoolId, loadData, t]);
 
@@ -1454,7 +1456,7 @@ export default function ExamDetailScreen() {
         );
       }
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     } finally {
       setCoeffSaving(false);
     }
@@ -1479,7 +1481,7 @@ export default function ExamDetailScreen() {
       setRejectModal(null);
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     } finally {
       setRejectLoading(false);
     }

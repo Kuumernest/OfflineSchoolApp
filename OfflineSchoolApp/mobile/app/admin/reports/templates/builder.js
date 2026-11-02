@@ -14,7 +14,8 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation }  from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Templates are kept on the server (online-only): offline failures say so.
+import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -316,7 +317,7 @@ export default function TemplateBuilderScreen() {
       .catch((err) => {
         Alert.alert(
           t("templateBuilder.alerts.errorTitle"),
-          err?.response?.data?.error || errorText(t, err)
+          err?.response?.data?.error || needsInternetFailureText(t, err)
         );
       })
       .finally(() => setLoading(false));
@@ -384,7 +385,7 @@ export default function TemplateBuilderScreen() {
     } catch (err) {
       Alert.alert(
         t("templateBuilder.alerts.saveFailed"),
-        err?.response?.data?.error || errorText(t, err)
+        err?.response?.data?.error || needsInternetFailureText(t, err)
       );
     } finally {
       setSaving(false);

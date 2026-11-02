@@ -102,7 +102,10 @@
     "error": "Error",
     "ok": "OK",
     "male": "Male",
-    "female": "Female"
+    "female": "Female",
+    "needsInternetTitle": "No internet connection",
+    "needsInternet": "This needs an internet connection. Connect and try again.",
+    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected."
   },
   "nav": {
     "dashboard": "Dashboard",

@@ -10,7 +10,9 @@ import { router }      from "expo-router";
 import { Ionicons }    from "@expo/vector-icons";
 import { ExamService } from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -70,7 +72,7 @@ export default function ResultsProcessingCard({
       setProcessData(res);
       if (onProcessed) onProcessed();
     } catch (err) {
-      setProcessError(errorText(t, err, "resultsCard.processingFailed"));
+      setProcessError(needsInternetErrorText(t, err, "resultsCard.processingFailed"));
     } finally {
       setProcessing(false);
     }
@@ -93,7 +95,7 @@ export default function ResultsProcessingCard({
               );
               if (onProcessed) onProcessed();
             } catch (err) {
-              Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+              Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
             } finally {
               setPublishLoading(false);
             }

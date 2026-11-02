@@ -13,7 +13,9 @@ import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { currentLocale }   from "../../../src/i18n";
-import { errorText } from "../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -357,7 +359,7 @@ export default function ExamReportsScreen() {
       setSource(src);
     } catch (err) {
       console.error("[ExamReports] fetchReports error:", err.message);
-      setError(errorText(t, err));
+      setError(needsInternetErrorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);

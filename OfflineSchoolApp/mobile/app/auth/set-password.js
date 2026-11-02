@@ -21,7 +21,7 @@ import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { useSafeLogout } from "../../src/hooks/useSafeLogout";
-import { errorText } from "../../src/utils/appError";
+import { needsInternetFailureText } from "../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS & VALIDATION RULES
@@ -211,9 +211,8 @@ export default function SetPasswordScreen() {
       );
     } catch (err) {
       console.error("set-password error:", err.message);
-      const msg =
-        err?.response?.data?.message ||
-        errorText(t, err, "setPassword.genericError");
+      // Setting a password is online-only: offline, said as such.
+      const msg = needsInternetFailureText(t, err, "setPassword.genericError");
       setError(msg);
     } finally {
       setLoading(false);

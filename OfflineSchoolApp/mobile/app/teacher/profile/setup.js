@@ -26,7 +26,7 @@ import DateField                from "../../../src/components/DateField";
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 import { useTranslation }       from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+import { needsInternetFailureText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -296,12 +296,16 @@ const saveProfile = async (form, userId) => {
   };
 
   // ── API save with retry ───────────────────────────────
+  // Online-only on the server side: nothing queues it. Reported back so the
+  // screen can say "saved on this phone only" instead of pretending.
+  let serverSaved = false;
   try {
     await withRetry(
       () => api.put("/teacher/profile", payload, { timeout: 10_000 }),
       3,
       1_000
     );
+    serverSaved = true;
   } catch (err) {
     console.warn("[profile/setup] API save failed:", err.message);
     // Non-fatal — SQLite save below is the source of truth on device
@@ -347,6 +351,7 @@ const saveProfile = async (form, userId) => {
     console.warn("[profile/setup] SQLite save error:", err.message);
     throw err;
   }
+  return { serverSaved };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -540,7 +545,7 @@ export default function TeacherProfileSetup() {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     try {
       setSaving(true);
-      await saveProfile(form, userId);
+      const { serverSaved } = await saveProfile(form, userId);
 
       const fullName = `${form.firstName} ${form.lastName}`.trim();
 
@@ -549,14 +554,14 @@ export default function TeacherProfileSetup() {
 
       Alert.alert(
         t("profileTeacher.savedTitle"),
-        t("profileTeacher.savedBody"),
+        serverSaved ? t("profileTeacher.savedBody") : t("common.savedOnPhoneOnly"),
         [{
           text: t("profileTeacher.continueBtn"),
           onPress: () => router.replace("/teacher/dashboard"),
         }]
       );
     } catch (err) {
-      Alert.alert(t("profileTeacher.errorTitle"), errorText(t, err, "profileTeacher.saveFailedBody"));
+      Alert.alert(t("profileTeacher.errorTitle"), needsInternetFailureText(t, err, "profileTeacher.saveFailedBody"));
     } finally {
       setSaving(false);
     }

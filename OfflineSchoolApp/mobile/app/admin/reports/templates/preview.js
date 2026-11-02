@@ -59,7 +59,7 @@ export default function TemplatePreviewScreen() {
         setIsRaw(res.isRaw       || false);
       })
       .catch((err) => {
-        setError(err?.response?.data?.error || errorText(t, err));
+        setError(err?.response?.data?.error || needsInternetFailureText(t, err));
       })
       .finally(() => setLoading(false));
   }, [templateId, examId, studentId, t]);
@@ -216,4 +216,5 @@ const s = StyleSheet.create({
   retryBtnText: { fontSize: 14, fontWeight: "600", color: C.white },
 });
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Templates are kept on the server (online-only): offline failures say so.
+import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";

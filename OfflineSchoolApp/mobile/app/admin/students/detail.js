@@ -16,6 +16,8 @@ import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { useNeedsInternet } from "../../../src/hooks/useNeedsInternet";
+import { NeedsInternetNote } from "../../../src/components/NeedsInternetNote";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -324,6 +326,9 @@ export default function StudentDetailScreen() {
   const { studentId }    = useLocalSearchParams();
   const router           = useRouter();
   const { t }            = useTranslation();
+  // Move, suspend, restore and remove write straight to the server (online-
+  // only until they are made offline-capable): disabled offline, and said so.
+  const { isOnline, requireOnline, failureText } = useNeedsInternet();
   const { user }         = useAuthStore();
   const schoolId         = user?.schoolId ?? "";
 
@@ -386,6 +391,7 @@ export default function StudentDetailScreen() {
   }, [t]);
 
   const handleSuspend = useCallback(async () => {
+    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.suspendStudent"),
       t("studentRecord.suspendConfirm", { name: student?.name }),
@@ -411,14 +417,15 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || errorText(t, err, "studentRecord.suspendFailed")
+        failureText(err, "studentRecord.suspendFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t]);
+  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
 
   const handleRestore = useCallback(async () => {
+    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.restoreStudent"),
       t("studentRecord.restoreConfirm", { name: student?.name }),
@@ -444,14 +451,15 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || errorText(t, err, "studentRecord.restoreFailed")
+        failureText(err, "studentRecord.restoreFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t]);
+  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
 
   const handleDelete = useCallback(async () => {
+    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.deleteStudent"),
       t("studentRecord.deleteConfirm", { name: student?.name }),
@@ -476,13 +484,14 @@ export default function StudentDetailScreen() {
       setIsBusy(false);
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || errorText(t, err, "studentRecord.deleteFailed")
+        failureText(err, "studentRecord.deleteFailed")
       );
     }
-  }, [student, studentId, router, withConfirm, t]);
+  }, [student, studentId, router, withConfirm, t, requireOnline, failureText]);
 
   const handleMoveSelect = useCallback(async (cls) => {
     const classId = String(cls._id ?? cls.id);
+    if (!(await requireOnline())) { setShowMovePicker(false); return; }
     const yes = await withConfirm(
       t("studentRecord.moveStudentTitle"),
       t("studentRecord.moveConfirm", { name: student?.name, className: cls.name }),
@@ -508,12 +517,12 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || errorText(t, err, "studentRecord.moveFailed")
+        failureText(err, "studentRecord.moveFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t]);
+  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
 
   // ── Derived ─────────────────────────────────────────────
 
@@ -686,12 +695,14 @@ export default function StudentDetailScreen() {
             })}
           />
 
+          <NeedsInternetNote online={isOnline} />
+
           <ActionButton
             icon="swap-horizontal-outline"
             label={t("studentRecord.moveToClass")}
             description={t("studentRecord.moveDesc")}
             variant="default"
-            disabled={isBusy}
+            disabled={isBusy || !isOnline}
             onPress={() => setShowMovePicker(true)}
           />
 
@@ -701,7 +712,7 @@ export default function StudentDetailScreen() {
               label={t("studentRecord.restoreStudent")}
               description={t("studentRecord.restoreDesc")}
               variant="success"
-              disabled={isBusy}
+              disabled={isBusy || !isOnline}
               onPress={handleRestore}
             />
           ) : (
@@ -710,7 +721,7 @@ export default function StudentDetailScreen() {
               label={t("studentRecord.suspendStudent")}
               description={t("studentRecord.suspendDesc")}
               variant="warning"
-              disabled={isBusy}
+              disabled={isBusy || !isOnline}
               onPress={handleSuspend}
             />
           )}
@@ -720,7 +731,7 @@ export default function StudentDetailScreen() {
             label={t("studentRecord.deleteStudent")}
             description={t("studentRecord.deleteDesc")}
             variant="danger"
-            disabled={isBusy}
+            disabled={isBusy || !isOnline}
             onPress={handleDelete}
           />
         </View>

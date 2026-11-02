@@ -27,6 +27,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 import * as ImagePicker from "expo-image-picker";
 import { errorText } from "../../../src/utils/appError";
+import { needsInternetFailureText, requireOnline } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -307,9 +308,8 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
         [{ text: t("studentSettings.ok"), onPress: onClose }]
       );
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        errorText(t, err, "studentSettings.errChangeFailed");
+      // Changing a password is online-only: offline, said as such.
+      const msg = needsInternetFailureText(t, err, "studentSettings.errChangeFailed");
       setError(msg);
     } finally {
       setSaving(false);
@@ -639,6 +639,8 @@ export default function StudentSettingsScreen() {
   };
 
   const pickPhoto = async () => {
+    // The photo is stored on the server (online-only): asked before picking.
+    if (!(await requireOnline(t))) return;
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
@@ -672,7 +674,7 @@ export default function StudentSettingsScreen() {
       // so it is shown rather than replaced with something generic.
       Alert.alert(
         t("studentSettings.photoSaveFailedTitle"),
-        err?.response?.data?.message || errorText(t, err, "studentSettings.tryAgain")
+        needsInternetFailureText(t, err, "studentSettings.tryAgain")
       );
     } finally {
       setPhotoBusy(false);
@@ -693,7 +695,7 @@ export default function StudentSettingsScreen() {
             await api.delete("/students/photo");
             setPhotoUrl(null);
           } catch (err) {
-            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), errorText(t, err));
+            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), needsInternetFailureText(t, err));
           } finally {
             setPhotoBusy(false);
           }

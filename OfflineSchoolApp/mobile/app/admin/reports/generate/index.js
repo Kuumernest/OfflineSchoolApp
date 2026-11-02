@@ -16,7 +16,9 @@ import * as Sharing     from "expo-sharing";
 
 import { tableExists as _tableExists } from "../../../../src/db/dbHelpers";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../../src/hooks/useNeedsInternet";
 import { ProgressBar } from "../../../../src/components/ProgressBar";
 
 // ─────────────────────────────────────────────────────────
@@ -430,7 +432,7 @@ export default function ReportGeneratorScreen() {
         }
       } catch (err) {
         console.error("[ReportGenerator] load error:", err.message);
-        if (mounted) Alert.alert(t("reportGen.loadError"), errorText(t, err));
+        if (mounted) Alert.alert(t("reportGen.loadError"), needsInternetErrorText(t, err));
       } finally {
         if (mounted) setDataLoading(false);
       }
@@ -539,7 +541,7 @@ export default function ReportGeneratorScreen() {
             const { uri } = await Print.printToFileAsync({ html });
             successful.push({ studentName: student.name, uri });
           } catch (err) {
-            errors.push({ studentName: student.name, error: errorText(t, err) });
+            errors.push({ studentName: student.name, error: needsInternetErrorText(t, err) });
           }
           setProgress(i + 1);
         }
@@ -574,7 +576,7 @@ export default function ReportGeneratorScreen() {
         }
       }
     } catch (err) {
-      Alert.alert(t("reportGen.errTitle"), errorText(t, err));
+      Alert.alert(t("reportGen.errTitle"), needsInternetErrorText(t, err));
     } finally {
       setGenerating(false);
     }
@@ -602,7 +604,7 @@ export default function ReportGeneratorScreen() {
 
       await generateAndPrintPdf(html);
     } catch (err) {
-      Alert.alert(t("reportGen.printError"), errorText(t, err));
+      Alert.alert(t("reportGen.printError"), needsInternetErrorText(t, err));
     }
   }, [selectedStudent, selectedClass, selectedExam, user]);
 

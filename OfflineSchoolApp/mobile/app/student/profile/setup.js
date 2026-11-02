@@ -355,8 +355,12 @@ const saveProfile = async (form, userId) => {
   };
 
   // ── API (best-effort, never blocks local save) ────────
+  // Online-only on the server side: nothing queues it. Reported back so the
+  // screen can say "saved on this phone only" instead of pretending.
+  let serverSaved = false;
   try {
     await api.put("/student/profile", payload, { timeout: 10000 });
+    serverSaved = true;
   } catch (err) {
     if (err?.response?.status !== 404) {
       console.warn("[student/setup] API save failed:", err.message);
@@ -457,6 +461,7 @@ const saveProfile = async (form, userId) => {
     console.warn("[student/setup] SQLite error:", err.message);
     throw err; // Re-throw so handleSubmit can show the error
   }
+  return { serverSaved };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -755,7 +760,7 @@ export default function StudentProfileSetup() {
 
     try {
       setSaving(true);
-      await saveProfile(form, userId);
+      const { serverSaved } = await saveProfile(form, userId);
 
       // Clear skip flag (profile is now complete) and draft
       await clearStudentProfileSkipFlag();
@@ -770,7 +775,7 @@ export default function StudentProfileSetup() {
 
       Alert.alert(
         t("profileStudent.savedTitle"),
-        t("profileStudent.savedBody"),
+        serverSaved ? t("profileStudent.savedBody") : t("common.savedOnPhoneOnly"),
         [{ text: t("profileStudent.continueBtn"), onPress: goToDashboard }]
       );
     } catch (err) {

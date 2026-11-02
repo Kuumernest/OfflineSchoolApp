@@ -300,6 +300,23 @@ const networkError = (config) => {
   check("'Sign in again' ends the session", Boolean(useAuthStore.getState().token), false);
   check("  the queued row is still there, still this teacher's", outbox().filter((r) => r.startsWith("attendance:a3")), ["attendance:a3:pending:t-1"]);
 
+  console.log("\n--- online-only actions say they need a connection ---");
+  const NI = load("src/hooks/useNeedsInternet.js");
+  const tt = (k) => `T:${k}`;
+  const offlineErr = (() => { try { return networkError({}); } catch (e) { return e; } })();
+  const local = Object.assign(new Error("No internet connection"), { isOffline: true });
+  const refusal = httpError(400, { message: "Subject name already exists" }, {});
+  check("no answer from the server → 'needs an internet connection'",
+    [NI.needsInternetFailureText(tt, offlineErr), NI.needsInternetFailureText(tt, local)],
+    ["T:common.needsInternet", "T:common.needsInternet"]);
+  check("  the drop-in for errorText says the same offline",
+    NI.needsInternetErrorText(tt, offlineErr, "x.failed"), "T:common.needsInternet");
+  check("a real refusal keeps the server's own reason", NI.needsInternetFailureText(tt, refusal, "x.failed"),
+    "Subject name already exists");
+  check("  and a screen's own text is kept when it is not about the connection",
+    [NI.orNeedsInternet(tt, refusal, "own"), NI.orNeedsInternet(tt, offlineErr, "own")], ["own", "T:common.needsInternet"]);
+  check("a 401/500 with a response is not 'offline'", [NI.isOfflineError(httpError(500, {}, {})), NI.isOfflineError(null)], [false, false]);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

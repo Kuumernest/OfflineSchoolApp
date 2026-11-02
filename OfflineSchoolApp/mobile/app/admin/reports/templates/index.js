@@ -11,7 +11,8 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Templates are kept on the server (online-only): offline failures say so.
+import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -57,7 +58,7 @@ export default function TemplatesScreen() {
       const data = await TemplateService.getAll(schoolId);
       setTemplates(data);
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || needsInternetFailureText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -80,7 +81,7 @@ export default function TemplatesScreen() {
               await TemplateService.setDefault(id);
               load();
             } catch (err) {
-              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || needsInternetFailureText(t, err));
             }
           },
         },
@@ -108,7 +109,7 @@ export default function TemplatesScreen() {
       }
       load();
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || needsInternetFailureText(t, err));
     } finally {
       setSeeding(false);
     }
@@ -120,7 +121,7 @@ export default function TemplatesScreen() {
       await TemplateService.duplicate(id, schoolId);
       load();
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || needsInternetFailureText(t, err));
     }
   }, [schoolId, load, t]);
 
@@ -146,7 +147,7 @@ export default function TemplatesScreen() {
               await TemplateService.delete(id);
               load();
             } catch (err) {
-              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || needsInternetFailureText(t, err));
             }
           },
         },

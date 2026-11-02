@@ -17,7 +17,9 @@ import { useAuthStore }                 from "../../../src/store/auth.store";
 import { useTranslation }               from "../../../src/i18n/useTranslation";
 import ReportCard                       from "../../admin/components/ReportCard";
 import ExamService                      from "../../../src/services/exam.service";
-import { errorText } from "../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -81,7 +83,7 @@ export default function StudentReportCardScreen() {
       const row = (results ?? []).find((r) => String(r.examId) === String(examId));
       setResult(row ?? null);
     } catch (err) {
-      setError(errorText(t, err));
+      setError(needsInternetErrorText(t, err));
     } finally {
       setLoading(false);
     }
@@ -108,7 +110,7 @@ export default function StudentReportCardScreen() {
 
       await Share.share({ message: msg });
     } catch (err) {
-      Alert.alert(t("results.my.shareFailed"), errorText(t, err));
+      Alert.alert(t("results.my.shareFailed"), needsInternetErrorText(t, err));
     }
   };
 

@@ -102,7 +102,10 @@
     "error": "Erreur",
     "ok": "OK",
     "male": "Masculin",
-    "female": "Féminin"
+    "female": "Féminin",
+    "needsInternetTitle": "Pas de connexion internet",
+    "needsInternet": "Cette action nécessite une connexion internet. Connectez-vous et réessayez.",
+    "savedOnPhoneOnly": "Enregistré sur ce téléphone uniquement. La copie de l'école n'a pas été mise à jour car cela nécessite une connexion internet — enregistrez à nouveau une fois connecté."
   },
   "nav": {
     "dashboard": "Tableau de bord",
