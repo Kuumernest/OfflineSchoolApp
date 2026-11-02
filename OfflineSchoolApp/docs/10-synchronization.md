@@ -17,8 +17,7 @@ throughout.
 | Capability gating | none beyond `authenticate` | per collection, per permission |
 | Push | ordinary REST endpoints via the outbox | ordinary REST endpoints via the outbox |
 
-`POST /api/sync/push` exists, is permission-gated on `sync.push`, and is
-**called by no client**. See [06](06-authentication-authorization.md).
+`POST /api/sync/push` is retired: it answers **410 `SYNC_PUSH_RETIRED`** to any authenticated caller and writes nothing. The `sync.push` permission was removed with it (`RETIRED_KEYS` in `config/permissions.js`); a stored override still naming it is dropped on read and on save (`scripts/check-retired-permissions.js`). See [06](06-authentication-authorization.md).
 
 ---
 

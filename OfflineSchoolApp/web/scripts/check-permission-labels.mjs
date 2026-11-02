@@ -43,6 +43,14 @@ for (const lang of ["en", "fr"]) {
   check("every lock says why", locked.filter((k) => !p.note?.[k]), []);
   check("no note for a permission that does not exist",
     Object.keys(p.note ?? {}).filter((k) => !PERMISSION_DEFS.some((d) => d.key === k)), []);
+  // Nothing left over either: a name or heading for a capability the server
+  // removed (sync.push, with the sync module, went with POST /sync/push).
+  check("no name for a permission that does not exist",
+    Object.keys(p.key ?? {}).filter((k) => !PERMISSION_DEFS.some((d) => d.key === k)), []);
+  check("no heading for a module that does not exist",
+    Object.keys(p.module ?? {}).filter((m) => !modules.includes(m)), []);
+  check("the retired sync.push is labelled nowhere",
+    [p.key?.["sync.push"], p.note?.["sync.push"], p.module?.sync].filter(Boolean), []);
 }
 
 console.log("--- the lookups ---");

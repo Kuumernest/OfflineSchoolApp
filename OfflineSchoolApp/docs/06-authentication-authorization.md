@@ -300,7 +300,6 @@ only the `bursar` and `teacher` columns, and only for the 48 delegable keys.
 | `settings.view` | YES | YES | — | — | — |
 | `settings.manage` | YES | YES | — | — | — |
 | `permissions.manage` | YES | YES | — | — | — |
-| `sync.push` | YES | YES | — | — | — |
 | `platform.schools` | YES | — | — | — | — |
 | `platform.manageSchools` | YES | — | — | — | — |
 | `platform.dashboard` | YES | — | — | — | — |
@@ -318,8 +317,7 @@ Three things in it are worth stating explicitly because they surprise people:
 2. **`teacher` does not hold `dashboard.view`.** The admin dashboard is not a
    teacher screen; teachers read `/api/teacher/*` instead.
 
-3. **`sync.push` is granted only to the two admin roles** — and nothing calls the
-   endpoint it guards. See the dead-code note below.
+3. **There is no `sync.push` any more.** `POST /api/sync/push` is retired: it answers **410 `SYNC_PUSH_RETIRED`** to any authenticated caller and writes nothing. The `sync.push` permission was removed with it (`RETIRED_KEYS` in `config/permissions.js`); a stored override still naming it is dropped on read and on save (`scripts/check-retired-permissions.js`).
 
 ### Guard aliases
 
@@ -440,7 +438,7 @@ flowchart TD
 
 | Item | Classification |
 |---|---|
-| `POST /api/sync/push` with `requirePermission("sync.push")` | **UNUSED / DEAD CODE.** The endpoint, its controller (`pushChanges` → `pushPeriodChanges`, `pushStudentDecisions`) and the permission key are all implemented. `/sync/push` is declared in `mobile/src/services/apiEndpoints.js` and `web/src/services/apiEndpoints.ts` but **invoked by nothing**. Mobile writes replay ordinary REST endpoints through the outbox; desktop uses its own outbox. Verified by searching all four clients for the endpoint and for its payload shape (`studentDecisions`, `changes.periods`). |
+| `POST /api/sync/push` | **RETIRED.** `authenticate` + `syncCtrl.pushRetired`: 410 `SYNC_PUSH_RETIRED` to any authenticated caller, nothing written. The `sync.push` permission is removed (`RETIRED_KEYS`); stored overrides naming it are ignored on read and dropped on save. Mobile writes replay ordinary REST endpoints through the outbox; desktop uses its own outbox. |
 | Duplicate `POST /api/auth/refresh` | **INTENTIONAL FALLTHROUGH**, described above. |
 | No token revocation | **NOT IMPLEMENTED.** Deactivating the account is the revocation mechanism, and it is immediate. |
 | `student` role holds zero permissions | **BY DESIGN** — student access is route-guarded and self-scoped, not permission-gated. |

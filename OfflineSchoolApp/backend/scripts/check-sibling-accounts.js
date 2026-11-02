@@ -144,7 +144,14 @@ const SRC = path.join(__dirname, "..", "src");
       method: "POST", headers: { Authorization: `Bearer ${teaToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ schoolId: S, changes: {} }),
     });
-    check("  a caller who never held sync.push keeps the 403 it always got", teaRes.status, 403);
+    // The sync.push permission is removed (config/permissions.js RETIRED_KEYS):
+    // the route is no longer a capability, so every authenticated caller gets
+    // the same 410 and nothing is written for any of them.
+    check("  a teacher gets the same 410 (sync.push no longer exists to refuse them)",
+      [teaRes.status, (await teaRes.json())?.code], [410, "SYNC_PUSH_RETIRED"]);
+    check("  and still nothing is written", (await M("Student").findById("dan").lean())?.status, "pending");
+    const anon = await fetch(`${API}/sync/push`, { method: "POST" });
+    check("  an unauthenticated caller is still refused at authenticate", anon.status, 401);
 
     // ── a pending pupil whose own account already exists ────────────────────
     //
