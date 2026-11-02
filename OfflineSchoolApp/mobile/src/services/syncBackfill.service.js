@@ -28,7 +28,9 @@
  */
 
 import { getDatabase } from "../db/database";
-import { MutationQueue, registerReconciler, mapId } from "./mutationQueue.service";
+import {
+  MutationQueue, registerReconciler, mapId, outboxRowsForTable,
+} from "./mutationQueue.service";
 import { API } from "./apiEndpoints";
 import { getCurrentAuth, hasRole } from "../utils/authHelpers";
 import { canonicalDay, VALID_DAYS } from "../utils/timetableMappers";
@@ -993,6 +995,17 @@ const tableExists = async (db, table) => {
   return !!row;
 };
 
+/** Ids of `table` rows that an unsent outbox mutation names in __local. */
+const coveredIds = async (table) => {
+  let entries = [];
+  try { entries = await outboxRowsForTable(table); } catch { entries = []; }
+  const ids = new Set();
+  for (const e of entries) {
+    for (const id of e.payload?.__local?.ids ?? []) ids.add(String(id));
+  }
+  return ids;
+};
+
 const enqueueSpec = async (db, spec, ctx) => {
   if (!roleAllows(spec)) return 0;
   if (!(await tableExists(db, spec.table))) return 0;
@@ -1005,6 +1018,13 @@ const enqueueSpec = async (db, spec, ctx) => {
 
   // One query instead of one per row.
   const queued = await MutationQueue.pendingKeys(`${spec.key}:`);
+  // Rows a queued mutation already carries, whatever its key. The services
+  // enqueue under their own keys — attendance:class:<school>:<class>:…, a
+  // class edit as class-update:<id> — and name the rows they cover in
+  // __local.ids. Matching only `${spec.key}:${id}` missed every one of them,
+  // so the sweep queued a second copy: each register was POSTed twice.
+  // Receipts are separate mutations on the same rows and are not covered.
+  const covered = spec.silent ? new Set() : await coveredIds(spec.table);
 
   let n = 0;
   for (const row of rows) {
@@ -1014,6 +1034,7 @@ const enqueueSpec = async (db, spec, ctx) => {
 
     const entityKey = `${spec.key}:${localId}`;
     if (queued.has(entityKey)) continue;   // already waiting its turn
+    if (covered.has(String(localId))) continue;
 
     try {
       const extra = spec.hydrate ? await spec.hydrate(db, row) : {};
