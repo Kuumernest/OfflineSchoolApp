@@ -159,12 +159,6 @@ export default function PupilExplorationsScreen() {
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
 
-  const Chip = ({ on, label, onPress, disabled }) => (
-    <TouchableOpacity onPress={onPress} disabled={disabled} style={[styles.chip, on && styles.chipOn, disabled && styles.off]}>
-      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
@@ -301,6 +295,13 @@ export default function PupilExplorationsScreen() {
     </View>
   );
 }
+
+// Outside the screen so it keeps one identity across renders.
+const Chip = ({ on, label, onPress, disabled }) => (
+  <TouchableOpacity onPress={onPress} disabled={disabled} style={[styles.chip, on && styles.chipOn, disabled && styles.off]}>
+    <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+  </TouchableOpacity>
+);
 
 const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: C.gray50 },

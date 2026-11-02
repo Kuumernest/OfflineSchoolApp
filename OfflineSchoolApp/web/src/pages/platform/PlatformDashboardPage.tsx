@@ -97,10 +97,10 @@ export default function PlatformDashboardPage() {
             pair("absent",  n(totals.attendance.absent)),
             pair("excused", n(totals.attendance.excused)),
           ) : undefined} />
-        <MetricTile tone="academic" icon={ClipboardList} loading={loading}
+        <MetricTile tone="reports" icon={ClipboardList} loading={loading}
           label={d("results")} value={n(totals?.academics.results)}
           hint={totals ? pair("published", n(totals.academics.published)) : undefined} />
-        <MetricTile tone="academic" icon={BarChart3} loading={loading}
+        <MetricTile tone="reports" icon={BarChart3} loading={loading}
           label={d("average")}
           value={totals?.academics.average == null ? "—" : fmt.decimal(totals.academics.average, 1)}
           hint={d("academicsHint")} />
@@ -120,11 +120,11 @@ export default function PlatformDashboardPage() {
             pair("charged", money(totals.fees.charged)),
             pair("waived",  money(totals.fees.waived)),
           ) : undefined} />
-        <MetricTile tone="attendance" icon={Wallet} loading={loading}
+        <MetricTile tone="finance" icon={Wallet} loading={loading}
           label={d("paid")} value={money(totals?.fees.paid)} />
-        <MetricTile tone="reports" icon={CircleDollarSign} loading={loading}
+        <MetricTile tone="finance" icon={CircleDollarSign} loading={loading}
           label={d("balance")} value={money(totals?.fees.balance)} />
-        <MetricTile tone="schools" icon={Percent} loading={loading}
+        <MetricTile tone="finance" icon={Percent} loading={loading}
           label={d("collectionRate")} value={pctText(totals?.fees.collectionRate)} />
       </MetricGrid>
 

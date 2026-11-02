@@ -34,7 +34,7 @@ export function Card({
         // its content. Without it a table inside the card sets the column's
         // minimum width, and on a phone the whole page grows to fit the table.
         "min-w-0 rounded-card border border-line shadow-card",
-        "bg-gradient-to-b from-surface to-[#fcfcfe]",
+        "bg-gradient-to-b from-surface to-surface-muted",
         padding && "p-5",
         className
       )}

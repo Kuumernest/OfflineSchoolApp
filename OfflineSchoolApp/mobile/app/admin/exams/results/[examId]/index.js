@@ -21,6 +21,7 @@ import { Ionicons }                     from "@expo/vector-icons";
 import { useResultsStore }   from "../../../../../src/store/results.store";
 import { useAuthStore }      from "../../../../../src/store/auth.store";
 import { useTranslation }    from "../../../../../src/i18n/useTranslation";
+import { StatTile } from "../../../../../src/components/Tiles";
 import ResultsProcessingCard from "../../../components/ResultsProcessingCard";
 import RankingsTable         from "../../../components/RankingsTable";
 
@@ -134,25 +135,21 @@ export default function ExamResultsScreen() {
                   icon="people"
                   label={t("common.total")}
                   value={stats.totalStudents ?? 0}
-                  color={COLORS.primary}
                 />
                 <QuickStatCard
                   icon="checkmark-circle"
                   label={t("examResults.passed")}
                   value={stats.passed ?? 0}
-                  color={COLORS.success}
                 />
                 <QuickStatCard
                   icon="close-circle"
                   label={t("examResults.failed")}
                   value={stats.failed ?? 0}
-                  color={COLORS.error}
                 />
                 <QuickStatCard
                   icon="trending-up"
                   label={t("examResults.passPct")}
                   value={`${stats.passRate ?? 0}%`}
-                  color={COLORS.warning}
                 />
               </View>
             )}
@@ -326,16 +323,9 @@ export default function ExamResultsScreen() {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function QuickStatCard({ icon, label, value, color }) {
-  return (
-    <View style={styles.statCard}>
-      <View style={[styles.statIconBg, { backgroundColor: color + "18" }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
-      <Text style={styles.statCardValue}>{value}</Text>
-      <Text style={styles.statCardLabel}>{label}</Text>
-    </View>
-  );
+// Every figure here is about this exam's results, so all four wear results' colour.
+function QuickStatCard({ icon, label, value }) {
+  return <StatTile kind="results" icon={icon} value={value} label={label} />;
 }
 
 /** A mark out of twenty, as every analytics figure is printed. */
@@ -567,27 +557,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap:            8,
   },
-  statCard: {
-    flex:            1,
-    backgroundColor: COLORS.white,
-    borderRadius:    12,
-    padding:         12,
-    alignItems:      "center",
-    elevation:       1,
-    shadowColor:     "#000",
-    shadowOpacity:   0.04,
-    shadowRadius:    4,
-  },
-  statIconBg: {
-    width:          32,
-    height:         32,
-    borderRadius:   8,
-    justifyContent: "center",
-    alignItems:     "center",
-    marginBottom:   6,
-  },
-  statCardValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
-  statCardLabel: { fontSize: 11, color: COLORS.gray500, marginTop: 2 },
 
   // Stats section
   statsSection: {

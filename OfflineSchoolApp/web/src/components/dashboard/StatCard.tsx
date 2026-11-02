@@ -2,34 +2,50 @@
 import { useNavigate }             from "react-router-dom";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn }                      from "@/utils/cn";
+import { TILE_TONE, type TileTone } from "@/config/sections";
 
 interface StatCardProps {
   title:          string;
   value:          string | number;
   subtitle?:      string;
-  /** Tailwind text-colour class. Use it only to flag a value needing action. */
+  /**
+   * Tailwind classes for the subtitle, to flag a value needing action. On a
+   * coloured tile a status colour would sit on the fill and fail contrast, so
+   * pass a pill instead — e.g. "rounded-control bg-warning-soft px-1.5 text-warning".
+   */
   subtitleColor?: string;
   icon:           LucideIcon;
-  /** @deprecated Kept for call-site compatibility; the icon is neutral now. */
+  /**
+   * What the figure is about, by section — students, finance, exams… The tile
+   * fills with that section's colour (config/sections.ts). Omit for a white,
+   * neutral tile.
+   */
+  tone?:          TileTone;
+  /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
   iconColor?:     string;
-  /** @deprecated Kept for call-site compatibility; the icon is neutral now. */
+  /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
   iconBg?:        string;
   href?:          string;
   loading?:       boolean;
 }
 
 /**
- * One metric.
+ * One metric, as a solid tile in the colour of what it counts.
  *
- * What makes a tile look expensive is not decoration — it is that every
- * element does a different job at a different weight: a recessed icon well, a
- * small-caps label, the figure in the display serif, a subtitle that stays out
- * of the way. Four ranks inside one small box, and nothing competing.
+ * The rule: colour says what the tile is ABOUT, and it is fixed per section —
+ * a pupil count is teal, money is mustard, exams burnt orange, attendance
+ * olive — on every dashboard, every page and on the mobile app. Someone who
+ * has seen the fees tile twice finds it again by colour before reading it. It
+ * never says whether a value is good or bad; that stays with the status
+ * colours, and only in the subtitle.
  *
- * `iconColor` and `iconBg` are still accepted so the exam and report pages keep
- * compiling, but they are ignored: six tiles in six unrelated hues implied a
- * colour code that meant nothing. Colour appears here only via `subtitleColor`,
- * and only when something needs attention.
+ * Inside the tile: a small icon chip, a big bold figure, a smaller label. Text
+ * is the section's `-on` colour at full strength (cream on the dark fills,
+ * warm ink on mustard and burnt orange) — never faded with opacity, which is
+ * what would drop it under 4.5:1.
+ *
+ * `iconColor` and `iconBg` are still accepted so older call sites compile, but
+ * they are ignored.
  */
 export default function StatCard({
   title,
@@ -37,11 +53,13 @@ export default function StatCard({
   subtitle,
   subtitleColor,
   icon: Icon,
+  tone = "neutral",
   href,
   loading = false,
 }: StatCardProps) {
   const navigate    = useNavigate();
   const interactive = Boolean(href);
+  const t           = TILE_TONE[tone];
 
   const go = () => { if (href) navigate(href); };
 
@@ -58,57 +76,39 @@ export default function StatCard({
           : undefined
       }
       className={cn(
-        "group relative overflow-hidden rounded-card border border-line p-4 shadow-card",
-        // A gradient of barely two percent. You do not read it as a gradient —
-        // you read a surface lit from above instead of a flat fill.
-        "bg-gradient-to-b from-surface to-[#fcfcfe]",
+        "group relative overflow-hidden rounded-tile p-5 shadow-tile",
+        t.fill,
         "transition duration-150 ease-[var(--ease-out-quiet)]",
-        interactive &&
-          "cursor-pointer hover:-translate-y-px hover:border-line-strong hover:shadow-lift"
+        interactive && "cursor-pointer hover:-translate-y-0.5 hover:shadow-tile-lift"
       )}
     >
-      {/*
-        A hairline of accent along the top edge, drawn only on hover. The tile
-        acknowledges the cursor without moving any colour underneath the
-        content, which is what keeps a grid of six from flickering as you
-        sweep across it.
-      */}
-      {interactive && (
-        <span
-          className="absolute inset-x-0 top-0 h-px origin-left scale-x-0 bg-primary-600 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:scale-x-100 group-hover:opacity-100"
-          aria-hidden="true"
-        />
-      )}
-
       <div className="flex items-start justify-between gap-2">
-        {/* A recessed well, not a coloured chip: the icon labels the tile, it
-            is not the subject of it. */}
-        <span className="flex h-8 w-8 items-center justify-center rounded-control bg-canvas text-ink-muted ring-1 ring-inset ring-line transition-colors group-hover:text-ink-body">
-          <Icon className="h-4 w-4" aria-hidden="true" />
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", t.well)}>
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
 
         {interactive && (
           <ArrowUpRight
-            className="h-3.5 w-3.5 shrink-0 -translate-x-0.5 translate-y-0.5 text-ink-faint opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100"
+            className="h-4 w-4 shrink-0 -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100"
             aria-hidden="true"
           />
         )}
       </div>
 
-      <p className="mt-3 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-        {title}
-      </p>
-
       {loading ? (
-        <div className="mt-1.5 h-8 w-16 animate-pulse rounded-control bg-canvas" />
+        <div className={cn("mt-4 h-9 w-16 animate-pulse rounded-control", t.well)} />
       ) : (
-        <p className="mt-1 font-display text-[32px] leading-none text-ink tabular">
+        <p className="mt-4 text-[34px] font-bold leading-none tracking-tight tabular">
           {value}
         </p>
       )}
 
+      <p className="mt-2 truncate text-sm font-medium">
+        {title}
+      </p>
+
       {subtitle && (
-        <p className={cn("mt-1.5 truncate text-xs", subtitleColor ?? "text-ink-faint")}>
+        <p className={cn("mt-1 truncate text-xs", subtitleColor)}>
           {subtitle}
         </p>
       )}

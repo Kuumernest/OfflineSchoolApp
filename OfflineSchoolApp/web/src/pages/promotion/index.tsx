@@ -29,6 +29,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { cn }              from "@/utils/cn";
+import { TILE_TONE }        from "@/config/sections";
 import { getErrorMessage } from "@/lib/axios";
 import {
   fetchRuns, fetchRun, generateRun, setDecision,
@@ -255,19 +256,25 @@ export default function PromotionPage() {
                 ["promo.graduated",  run.counts.graduated],
                 ["promo.unassigned", run.counts.unassigned],
               ] as const).map(([key, value]) => (
-                <Card key={key}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                    {t(key)}
-                  </p>
-                  <p
-                    className={cn(
-                      "mt-2 font-display text-[26px] leading-none tabular",
-                      key === "promo.unassigned" && value > 0 ? "text-danger" : "text-ink"
-                    )}
-                  >
+                // Promotion is decided from exam results, so its counts wear
+                // the exams colour; a pupil left unassigned is a problem, and
+                // a problem leaves the palette for the danger tile.
+                <div
+                  key={key}
+                  className={cn(
+                    "min-w-0 rounded-tile p-5",
+                    key === "promo.unassigned" && value > 0
+                      ? "border border-danger-line bg-danger-soft text-danger"
+                      : cn("shadow-tile", TILE_TONE.exams.fill)
+                  )}
+                >
+                  <p className="text-[28px] font-bold leading-none tracking-tight tabular">
                     {value}
                   </p>
-                </Card>
+                  <p className="mt-2 text-sm font-medium">
+                    {t(key)}
+                  </p>
+                </div>
               ))}
             </div>
 

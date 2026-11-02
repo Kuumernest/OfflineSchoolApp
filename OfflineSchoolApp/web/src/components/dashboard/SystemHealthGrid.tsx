@@ -6,6 +6,7 @@ import {
   HEALTH_METRIC_ROWS,
   type HealthMetric,
 } from "@/constants/dashboard.constants";
+import { TILE_TONE } from "@/config/sections";
 import { cn } from "@/utils/cn";
 
 // Flatten the grouped rows into one list; the grid handles wrapping.
@@ -20,8 +21,12 @@ const METRICS: HealthMetric[] = HEALTH_METRIC_ROWS.flat();
  * timetable conflict, an unassigned teacher) were invisible among the twelve
  * that were merely counts.
  *
- * Now it is a quiet list where only a problem is coloured. If nothing is wrong,
- * nothing is red, and the panel reads as "fine" in one glance.
+ * Each reading is a tile in the colour of what it counts — people teal, the
+ * timetable olive, subjects terracotta — the same colours as the stat row and
+ * the quick actions, so the panel is a map of the school rather than a wall
+ * of grey. A problem leaves the palette altogether: it turns into the pale
+ * danger tile with red text, so "needs action" is never confused with "this
+ * is about the timetable". If nothing is wrong, nothing is red.
  */
 export default function SystemHealthGrid({
   stats,
@@ -73,7 +78,7 @@ export default function SystemHealthGrid({
         live, since it can carry a tinted surface and border that a table row
         cannot without striping the whole grid.
       */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {METRICS.map((metric) => {
           const Icon    = metric.icon;
           const value   = s[metric.key] ?? 0;
@@ -83,46 +88,38 @@ export default function SystemHealthGrid({
             <div
               key={metric.key}
               className={cn(
-                "rounded-control border p-3.5 transition-colors",
+                "rounded-tile p-4 transition-colors",
                 isAlert
-                  ? "border-danger-line bg-danger-soft"
-                  : "border-line bg-gradient-to-b from-surface to-[#fcfcfe]"
+                  ? "border border-danger-line bg-danger-soft text-danger"
+                  : cn(TILE_TONE[metric.tone].fill, "shadow-tile")
               )}
             >
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-control ring-1 ring-inset",
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-control",
                     isAlert
-                      ? "bg-surface text-danger ring-danger-line"
-                      : "bg-canvas text-ink-muted ring-line"
+                      ? "bg-surface ring-1 ring-inset ring-danger-line"
+                      : TILE_TONE[metric.tone].well
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
 
-                <p
-                  className={cn(
-                    "text-2xl font-semibold leading-none tabular",
-                    isAlert ? "text-danger" : "text-ink"
-                  )}
-                >
+                <p className="text-[28px] font-bold leading-none tabular">
                   {value}
                 </p>
               </div>
 
               <p
-                className={cn(
-                  "mt-2.5 text-sm leading-snug",
-                  isAlert ? "font-medium text-danger" : "text-ink-muted"
-                )}
+                className="mt-3 text-sm font-medium leading-snug"
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
               {/* B4: the pairs, then how many distinct subjects they are. */}
               {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
-                <p className="text-xs text-ink-muted">
+                <p className="text-xs">
                   {t("health.distinctSubjects", { count: stats.distinctSubjects })}
                 </p>
               )}

@@ -294,8 +294,9 @@ export default function DashboardPage() {
               ? t("dashboard.pendingCount", { count: pendingCount })
               : t("dashboard.activeCount",  { count: sd?.active ?? 0 })
           }
-          subtitleColor={pendingCount > 0 ? "text-warning font-medium" : undefined}
+          subtitleColor={pendingCount > 0 ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning" : undefined}
           icon={GraduationCap}
+          tone="students"
           href="/students"
         />
         <StatCard
@@ -303,6 +304,7 @@ export default function DashboardPage() {
           value={fmt.number(td?.total ?? 0)}
           subtitle={t("dashboard.activeCount", { count: td?.active ?? 0 })}
           icon={Users}
+          tone="teachers"
           href="/teachers"
         />
         <StatCard
@@ -310,6 +312,7 @@ export default function DashboardPage() {
           value={fmt.number(cd?.total ?? 0)}
           subtitle={t("dashboard.withSubjects", { count: cd?.withSubjects ?? 0 })}
           icon={School}
+          tone="students"
           href="/classes"
         />
         <StatCard
@@ -317,6 +320,7 @@ export default function DashboardPage() {
           value={fmt.number(bd?.total ?? 0)}
           subtitle={t("dashboard.acrossAllClasses")}
           icon={BookOpen}
+          tone="academic"
           href="/classes?tab=subjects"
         />
         <StatCard
@@ -324,6 +328,7 @@ export default function DashboardPage() {
           value={fmt.number(ed?.total ?? 0)}
           subtitle={t("dashboard.ongoingCount", { count: ed?.ongoing ?? 0 })}
           icon={FileText}
+          tone="exams"
           href="/exams"
         />
         <StatCard
@@ -331,6 +336,7 @@ export default function DashboardPage() {
           value={ad?.rate == null ? "–" : `${fmt.number(ad.rate)}%`}
           subtitle={t("dashboard.presentToday", { count: ad?.todayPresent ?? 0 })}
           icon={CheckSquare}
+          tone="attendance"
           href="/attendance"
         />
       </div>

@@ -29,36 +29,38 @@ import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { toDisplayUri }        from "../../src/utils/logoUri";
 import { useTranslation }      from "../../src/i18n/useTranslation";
 import { reminderMessageKey, reminderRoute } from "../../src/utils/attendanceReminders";
+import { StatTile, ActionTile, TileIcon } from "../../src/components/Tiles";
+import { PALETTE }             from "../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
 const buildQuickActions = (t) => [
-  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams"                     },
-  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        color: "#DC2626", route: "/teacher/exams?filter=pending-marks" },
-  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", color: "#7C3AED", route: "/teacher/content/upload-notes"       },
-  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes/create"             },
-  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     color: "#D97706", route: "/teacher/homework/create"            },
-  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      color: "#DB2777", route: "/teacher/attendance"                 },
-  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements/create"       },
-  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                           },
+  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        kind: "exams",    route: "/teacher/exams"                     },
+  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        kind: "marks",    route: "/teacher/exams?filter=pending-marks" },
+  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", kind: "content",  route: "/teacher/content/upload-notes"       },
+  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   kind: "quizzes",  route: "/teacher/quizzes/create"             },
+  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     kind: "homework", route: "/teacher/homework/create"            },
+  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      kind: "attendance", route: "/teacher/attendance"                 },
+  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     kind: "announcements", route: "/teacher/announcements/create"       },
+  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   kind: "messages", route: "/messages"                           },
 ];
 
 const buildModules = (t) => [
-  { id: "exams",         title: t("teacherHome.modExamsTitle"),         icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams",         description: t("teacherHome.modExamsDesc"),         badge: "marks"         },
-  { id: "subjects",      title: t("teacherHome.modSubjectsTitle"),      icon: "book-outline",          color: "#7C3AED", route: "/teacher/subjects",      description: t("teacherHome.modSubjectsDesc")                              },
-  { id: "content",       title: t("teacherHome.modContentTitle"),       icon: "folder-outline",        color: "#059669", route: "/teacher/content",       description: t("teacherHome.modContentDesc")                               },
-  { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
-  { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        color: "#D97706", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
-  { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     color: "#059669", route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
+  { id: "exams",         title: t("teacherHome.modExamsTitle"),         icon: "trophy-outline",        kind: "exams",    route: "/teacher/exams",         description: t("teacherHome.modExamsDesc"),         badge: "marks"         },
+  { id: "subjects",      title: t("teacherHome.modSubjectsTitle"),      icon: "book-outline",          kind: "subjects", route: "/teacher/subjects",      description: t("teacherHome.modSubjectsDesc")                              },
+  { id: "content",       title: t("teacherHome.modContentTitle"),       icon: "folder-outline",        kind: "content",  route: "/teacher/content",       description: t("teacherHome.modContentDesc")                               },
+  { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   kind: "quizzes",  route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
+  { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        kind: "homework", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
+  { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     kind: "results",  route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
   // Reading the guidance needs a connection; recording what you decided to do
   // about it does not — the writer goes through the outbox like every other
   // mutation on this handset.
-  { id: "intelligence",  title: t("teacherHome.modIntelligenceTitle"),  icon: "bulb-outline",          color: "#4F46E5", route: "/teacher/intelligence",  description: t("teacherHome.modIntelligenceDesc")                          },
-  { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      color: "#DB2777", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
-  { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          color: "#2563EB", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
-  { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
+  { id: "intelligence",  title: t("teacherHome.modIntelligenceTitle"),  icon: "bulb-outline",          kind: "intelligence", route: "/teacher/intelligence",  description: t("teacherHome.modIntelligenceDesc")                          },
+  { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      kind: "attendance", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
+  { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          kind: "timetable", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
+  { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     kind: "announcements", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
 ];
 
 const ALERT_STYLES = {
@@ -580,91 +582,35 @@ export default function TeacherDashboard() {
           <Text style={styles.sectionTitle}>{t("teacherHome.sectionOverview")}</Text>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
-              <Ionicons name="book"   size={20} color="#4F46E5" />
-              <Text style={styles.statNumber}>{stats?.assignedSubjects ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statSubjects")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#EDE9FE" }]}>
-              <Ionicons name="school" size={20} color="#7C3AED" />
-              <Text style={styles.statNumber}>{stats?.assignedClasses  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statClasses")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
-              <Ionicons name="people" size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.totalStudents    ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statStudents")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="time"   size={20} color="#D97706" />
-              <Text style={styles.statNumber}>{stats?.todayClassCount  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statToday")}</Text>
-            </View>
+            <StatTile kind="subjects"  icon="book"   value={stats?.assignedSubjects ?? 0} label={t("teacherHome.statSubjects")} />
+            <StatTile kind="classes"   icon="school" value={stats?.assignedClasses  ?? 0} label={t("teacherHome.statClasses")} />
+            <StatTile kind="students"  icon="people" value={stats?.totalStudents    ?? 0} label={t("teacherHome.statStudents")} />
+            <StatTile kind="timetable" icon="time"   value={stats?.todayClassCount  ?? 0} label={t("teacherHome.statToday")} />
           </View>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
-              <Ionicons name="trophy" size={20} color="#4F46E5" />
-              <Text style={styles.statNumber}>{stats?.activeExams      ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statActiveExams")}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.statCard,
-                { backgroundColor: (stats?.pendingMarksEntry ?? 0) > 0 ? "#FEE2E2" : "#F0FDF4" },
-              ]}
+            <StatTile kind="exams" icon="trophy" value={stats?.activeExams ?? 0} label={t("teacherHome.statActiveExams")} />
+            <StatTile
+              kind="marks"
+              icon="create"
+              value={stats?.pendingMarksEntry ?? 0}
+              label={t("teacherHome.statPendingMarks")}
+              alert={(stats?.pendingMarksEntry ?? 0) > 0}
               onPress={() =>
                 (stats?.pendingMarksEntry ?? 0) > 0 &&
                 handleNav("/teacher/exams?filter=pending-marks")
               }
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="create"
-                size={20}
-                color={(stats?.pendingMarksEntry ?? 0) > 0 ? "#DC2626" : "#059669"}
-              />
-              <Text style={[
-                styles.statNumber,
-                { color: (stats?.pendingMarksEntry ?? 0) > 0 ? "#DC2626" : "#111827" },
-              ]}>
-                {stats?.pendingMarksEntry ?? 0}
-              </Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statPendingMarks")}</Text>
-            </TouchableOpacity>
-            <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="time"             size={20} color="#D97706" />
-              <Text style={styles.statNumber}>{stats?.submittedMarks   ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statSubmitted")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
-              <Ionicons name="checkmark-circle" size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.approvedMarks    ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statApproved")}</Text>
-            </View>
+            />
+            <StatTile kind="marks" icon="time"             value={stats?.submittedMarks ?? 0} label={t("teacherHome.statSubmitted")} />
+            <StatTile kind="marks" icon="checkmark-circle" value={stats?.approvedMarks  ?? 0} label={t("teacherHome.statApproved")} />
           </View>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#F0FDF4" }]}>
-              <Ionicons name="folder"       size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.contentUploads  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statContent")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#DBEAFE" }]}>
-              <Ionicons name="help-circle"  size={20} color="#2563EB" />
-              <Text style={styles.statNumber}>{stats?.activeQuizzes   ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statQuizzes")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FFF1F2" }]}>
-              <Ionicons name="create"       size={20} color="#DB2777" />
-              <Text style={styles.statNumber}>{stats?.activeHomework  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statHomework")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FEE2E2" }]}>
-              <Ionicons name="alert-circle" size={20} color="#DC2626" />
-              <Text style={styles.statNumber}>{stats?.pendingGrading  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statToGrade")}</Text>
-            </View>
+            <StatTile kind="content"  icon="folder"       value={stats?.contentUploads ?? 0} label={t("teacherHome.statContent")} />
+            <StatTile kind="quizzes"  icon="help-circle"  value={stats?.activeQuizzes  ?? 0} label={t("teacherHome.statQuizzes")} />
+            <StatTile kind="homework" icon="create"       value={stats?.activeHomework ?? 0} label={t("teacherHome.statHomework")} />
+            <StatTile kind="homework" icon="alert-circle" value={stats?.pendingGrading ?? 0} label={t("teacherHome.statToGrade")}
+              alert={(stats?.pendingGrading ?? 0) > 0} />
           </View>
 
           <TouchableOpacity
@@ -831,17 +777,14 @@ export default function TeacherDashboard() {
           <Text style={styles.sectionTitle}>{t("teacherHome.sectionQuickActions")}</Text>
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
-              <TouchableOpacity
+              <ActionTile
                 key={action.id}
+                kind={action.kind}
+                icon={action.icon}
+                label={action.title}
                 style={styles.actionButton}
                 onPress={() => handleNav(action.route)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconContainer, { backgroundColor: action.color + "18" }]}>
-                  <Ionicons name={action.icon} size={22} color={action.color} />
-                </View>
-                <Text style={styles.actionTitle}>{action.title}</Text>
-              </TouchableOpacity>
+              />
             ))}
           </View>
         </View>
@@ -868,8 +811,8 @@ export default function TeacherDashboard() {
                 activeOpacity={0.7}
                 onPress={() => handleNav(mod.route)}
               >
-                <View style={[styles.moduleIcon, { backgroundColor: mod.color + "18" }]}>
-                  <Ionicons name={mod.icon} size={20} color={mod.color} />
+                <View style={styles.moduleIcon}>
+                  <TileIcon kind={mod.kind} icon={mod.icon} />
                 </View>
                 <View style={styles.moduleInfo}>
                   <Text style={styles.moduleTitle}>{mod.title}</Text>
@@ -881,7 +824,7 @@ export default function TeacherDashboard() {
                   <TouchableOpacity
                     style={[
                       styles.moduleBadge,
-                      mod.badge === "announcements" && { backgroundColor: "#7C3AED" },
+                      mod.badge === "announcements" && { backgroundColor: PALETTE.tileSlateBlue },
                     ]}
                     onPress={(e) => { e.stopPropagation?.(); handleNav(badgeRoute); }}
                   >
@@ -924,8 +867,8 @@ export default function TeacherDashboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:      { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
+  container:     { flex: 1, backgroundColor: PALETTE.pageCream },
+  centered:      { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: PALETTE.pageCream },
   loadingText:   { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
   scrollContent: { paddingTop: 8 },
 
@@ -940,7 +883,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
   },
   greeting:  { fontSize: 14, color: "#6B7280", fontWeight: "500" },
-  userName:  { fontSize: 24, fontWeight: "700", color: "#111827", marginTop: 2 },
+  userName:  { fontSize: 24, fontWeight: "700", color: PALETTE.inkWarm, marginTop: 2 },
   subtitle:  { fontSize: 13, color: "#4F46E5", fontWeight: "600", marginTop: 2 },
   headerActions:        { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 12 },
   profileIncompleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center" },
@@ -1015,7 +958,7 @@ const styles = StyleSheet.create({
   retryText:   { fontSize: 13, color: "#DC2626", fontWeight: "700" },
 
   section:         { paddingHorizontal: 20, marginBottom: 24, marginTop: 12 },
-  sectionTitle:    { fontSize: 18, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  sectionTitle:    { fontSize: 18, fontWeight: "700", color: PALETTE.inkWarm, marginBottom: 12 },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   sectionIcon:     { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   scheduleSummary: { flex: 1, fontSize: 11, color: "#9CA3AF", textAlign: "right", fontWeight: "500" },
@@ -1033,9 +976,6 @@ const styles = StyleSheet.create({
   announcementAllClear:    { fontSize: 12, color: "#059669", fontWeight: "600" },
 
   statsRow:   { flexDirection: "row", gap: 8, marginBottom: 8 },
-  statCard:   { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 6, alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 6 },
-  statLabel:  { fontSize: 10, color: "#6B7280", marginTop: 2, fontWeight: "500", textAlign: "center" },
 
   alertCountBadge: { backgroundColor: "#DC2626", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1, minWidth: 20, alignItems: "center" },
   alertCountText:  { color: "#FFF", fontSize: 11, fontWeight: "700" },
@@ -1067,14 +1007,12 @@ const styles = StyleSheet.create({
   currentBadgeText:    { color: "#FFF", fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
 
   actionsGrid:   { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  actionButton:  { width: "31.5%", backgroundColor: "#FFF", borderRadius: 14, paddingVertical: 14, alignItems: "center", shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 2 },
-  iconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  actionTitle:   { fontSize: 11, fontWeight: "600", color: "#374151", textAlign: "center", paddingHorizontal: 4 },
+  actionButton:  { width: "31.5%" },
 
-  moduleCard:      { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 12, padding: 14, marginBottom: 8, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
-  moduleIcon:      { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  moduleCard:      { flexDirection: "row", alignItems: "center", backgroundColor: PALETTE.cream, borderRadius: 16, padding: 14, marginBottom: 8, shadowColor: PALETTE.shadowWarm, shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  moduleIcon:      { marginRight: 12 },
   moduleInfo:      { flex: 1 },
-  moduleTitle:     { fontSize: 15, fontWeight: "600", color: "#111827" },
+  moduleTitle:     { fontSize: 15, fontWeight: "600", color: PALETTE.inkWarm },
   moduleDesc:      { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
   moduleBadge:     { backgroundColor: "#DC2626", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, minWidth: 22, alignItems: "center" },
   moduleBadgeText: { color: "#FFF", fontSize: 11, fontWeight: "700" },

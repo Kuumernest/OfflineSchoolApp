@@ -12,6 +12,8 @@ import { Plus, Ban, Receipt } from "lucide-react";
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
 import { Card }             from "@/components/ui/Card";
+import { TILE_TONE }        from "@/config/sections";
+import { cn }               from "@/utils/cn";
 import { Button }           from "@/components/ui/Button";
 import { Badge }            from "@/components/ui/Badge";
 import { Modal }            from "@/components/ui/Modal";
@@ -166,14 +168,14 @@ export default function ExpensesPage() {
         }
       />
 
-      <Card className="sm:max-w-xs">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+      <div className={cn("rounded-tile p-5 shadow-tile sm:max-w-xs", TILE_TONE.finance.fill)}>
+        <p className="text-sm font-medium">
           {t("expenses.totalSpent")}
         </p>
-        <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+        <p className="mt-3 text-[30px] font-bold leading-none tracking-tight tabular">
           {fmt.money(total)}
         </p>
-      </Card>
+      </div>
 
       <Card padding={false}>
         {rows.length === 0 ? (

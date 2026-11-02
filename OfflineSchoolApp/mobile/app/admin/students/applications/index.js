@@ -33,6 +33,7 @@ import { StudentApplicationsService } from "../../../../src/services/studentAppl
 import { StudentService }             from "../../../../src/services/student.service";
 import { ClassService }               from "../../../../src/services/class.service";
 import { useTranslation }             from "../../../../src/i18n/useTranslation";
+import { StatTile } from "../../../../src/components/Tiles";
 import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,12 +261,9 @@ const safeResultField = (result, key) => {
 // SUB-COMPONENTS  (unchanged — kept exactly as original)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SummaryCard = React.memo(({ bg, icon, iconColor, value, label }) => (
-  <View style={[styles.summaryCard, { backgroundColor: bg }]}>
-    <Ionicons name={icon} size={20} color={iconColor} />
-    <Text style={styles.summaryNumber}>{value}</Text>
-    <Text style={styles.summaryLabel}>{label}</Text>
-  </View>
+// Applications are pupils-to-be: students' teal. Stale ones carry the alert dot.
+const SummaryCard = React.memo(({ icon, value, label, alert = false }) => (
+  <StatTile kind="students" icon={icon} value={value} label={label} alert={alert} />
 ));
 
 const ApplicationCard = React.memo(({ application, onReview }) => {
@@ -838,23 +836,18 @@ export default function StudentApplicationsScreen() {
       {/* ── Summary cards ── */}
       <View style={styles.summaryRow}>
         <SummaryCard
-          bg="#FEF3C7"
           icon="person-add-outline"
-          iconColor="#D97706"
           value={applications.length}
           label={t("appsReview.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
           icon="alert-circle-outline"
-          iconColor="#DC2626"
+          alert={staleCount > 0}
           value={staleCount}
           label={t("appsReview.overDays", { days: STALE_DAYS })}
         />
         <SummaryCard
-          bg="#EEF2FF"
           icon="school-outline"
-          iconColor="#4F46E5"
           value={classes.length}
           label={t("appsReview.classes")}
         />
@@ -1282,21 +1275,6 @@ const styles = StyleSheet.create({
     gap:               8,
     marginTop:         20,
     marginBottom:      8,
-  },
-  summaryCard: {
-    flex:              1,
-    borderRadius:      14,
-    paddingVertical:   14,
-    paddingHorizontal: 6,
-    alignItems:        "center",
-    gap:               4,
-  },
-  summaryNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  summaryLabel:  {
-    fontSize:   10,
-    color:      "#6B7280",
-    fontWeight: "600",
-    textAlign:  "center",
   },
 
   scrollContent: { paddingTop: 12, paddingBottom: 40 },

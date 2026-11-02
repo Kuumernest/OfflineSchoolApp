@@ -28,8 +28,10 @@ import {
   getClassesList,
   deleteAssignment,
   backfillTeacherNames,   // ✅ import the backfill so existing rows get names
-} from "../../../src/services/assignment.service";
+} from "../../../src/services/assignment.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -360,10 +362,10 @@ export default function AssignmentsIndex() {
   const statCards = useMemo(
     () => {
       return [
-      { icon: "git-branch",       color: "#4F46E5", bg: "#EEF2FF", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
-      { icon: "checkmark-circle", color: "#059669", bg: "#ECFDF5", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
-      { icon: "alert-circle",     color: "#D97706", bg: "#FEF3C7", value: stats.unassignedTeachers, labelKey: "assignList.unassigned"  },
-      { icon: "school",           color: "#7C3AED", bg: "#EDE9FE", value: stats.totalClasses,       labelKey: "assignList.classes"     },
+      { icon: "git-branch",       kind: "teachers", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
+      { icon: "checkmark-circle", kind: "teachers", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
+      { icon: "alert-circle",     kind: "teachers", value: stats.unassignedTeachers, labelKey: "assignList.unassigned", alertWhenAny: true },
+      { icon: "school",           kind: "classes",  value: stats.totalClasses,       labelKey: "assignList.classes"     },
     ];
     },
     [stats]
@@ -732,11 +734,8 @@ export default function AssignmentsIndex() {
         {/* ── Stats ── */}
         <View style={styles.statsContainer}>
           {statCards.map((s) => (
-            <View key={s.label} style={[styles.statCard, { backgroundColor: s.bg }]}>
-              <Ionicons name={s.icon} size={20} color={s.color} />
-              <Text style={styles.statNumber}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
+            <StatTile key={s.label} kind={s.kind} icon={s.icon} value={s.value} label={s.label}
+              alert={Boolean(s.alertWhenAny) && Number(s.value) > 0} />
           ))}
         </View>
 
@@ -877,16 +876,6 @@ const styles = StyleSheet.create({
     gap:               8,
     marginTop:         20,
   },
-  statCard: {
-    flex:              1,
-    borderRadius:      14,
-    paddingVertical:   14,
-    paddingHorizontal: 6,
-    alignItems:        "center",
-    gap:               4,
-  },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel:  { fontSize: 10, color: "#6B7280", fontWeight: "500", textAlign: "center" },
 
   searchContainer: {
     flexDirection:     "row",

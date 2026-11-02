@@ -13,8 +13,10 @@
  *
  * ── The rule this file exists to keep ─────────────────────────────────────
  *
- * A section hue marks WHERE you are. It never marks what something means.
- * Green here is Attendance, not "good"; amber is Fees, not "warning". Status
+ * A section hue marks what a thing is ABOUT — people, set work, exams, money —
+ * and the same thing wears the same hue on every page and on the mobile app
+ * (mobile/src/theme/colors.js). It never marks what a value means. Olive here
+ * is Attendance, not "good"; mustard is Fees, not "warning". Status
  * has its own four colours and they are the only ones allowed to carry
  * meaning. Mixing the two is exactly how a colourful interface stops being
  * readable, so the two vocabularies never appear on the same element: sections
@@ -86,56 +88,82 @@ export const SECTIONS: Record<SectionKey, Section> = {
     key: "students", labelKey: "navGroup.people", label: "People",
     text: "text-sec-students", bg: "bg-sec-students-soft", border: "border-sec-students-line",
     solid: "bg-sec-students", rule: "bg-sec-students",
-    navIcon: "text-teal-300",
+    navIcon: "text-sec-students-nav",
   },
   teachers: {
     key: "teachers", labelKey: "navGroup.people", label: "People",
     text: "text-sec-teachers", bg: "bg-sec-teachers-soft", border: "border-sec-teachers-line",
     solid: "bg-sec-teachers", rule: "bg-sec-teachers",
-    navIcon: "text-sky-300",
+    navIcon: "text-sec-teachers-nav",
   },
   academic: {
     key: "academic", labelKey: "navGroup.academics", label: "Academics",
     text: "text-sec-academic", bg: "bg-sec-academic-soft", border: "border-sec-academic-line",
     solid: "bg-sec-academic", rule: "bg-sec-academic",
-    navIcon: "text-violet-300",
+    navIcon: "text-sec-academic-nav",
   },
   attendance: {
     key: "attendance", labelKey: "navGroup.academics", label: "Academics",
     text: "text-sec-attendance", bg: "bg-sec-attendance-soft", border: "border-sec-attendance-line",
     solid: "bg-sec-attendance", rule: "bg-sec-attendance",
-    navIcon: "text-emerald-300",
+    navIcon: "text-sec-attendance-nav",
   },
   exams: {
     key: "exams", labelKey: "navGroup.academics", label: "Academics",
     text: "text-sec-exams", bg: "bg-sec-exams-soft", border: "border-sec-exams-line",
     solid: "bg-sec-exams", rule: "bg-sec-exams",
-    navIcon: "text-indigo-300",
+    navIcon: "text-sec-exams-nav",
   },
   finance: {
     key: "finance", labelKey: "navGroup.money", label: "Money",
     text: "text-sec-finance", bg: "bg-sec-finance-soft", border: "border-sec-finance-line",
     solid: "bg-sec-finance", rule: "bg-sec-finance",
-    navIcon: "text-amber-300",
+    navIcon: "text-sec-finance-nav",
   },
   reports: {
     key: "reports", labelKey: "navGroup.documents", label: "Documents",
     text: "text-sec-reports", bg: "bg-sec-reports-soft", border: "border-sec-reports-line",
     solid: "bg-sec-reports", rule: "bg-sec-reports",
-    navIcon: "text-rose-300",
+    navIcon: "text-sec-reports-nav",
   },
   comms: {
     key: "comms", labelKey: "navGroup.communication", label: "Communication",
     text: "text-sec-comms", bg: "bg-sec-comms-soft", border: "border-sec-comms-line",
     solid: "bg-sec-comms", rule: "bg-sec-comms",
-    navIcon: "text-fuchsia-300",
+    navIcon: "text-sec-comms-nav",
   },
   settings: {
     key: "settings", labelKey: "navGroup.administration", label: "Administration",
     text: "text-sec-settings", bg: "bg-sec-settings-soft", border: "border-sec-settings-line",
     solid: "bg-sec-settings", rule: "bg-sec-settings",
-    navIcon: "text-slate-300",
+    navIcon: "text-sec-settings-nav",
   },
+};
+
+/**
+ * The tones a tile can take: a section, or `neutral` for a figure that belongs
+ * to none (a white tile, as before).
+ */
+export type TileTone =
+  | "students" | "teachers" | "academic" | "attendance" | "exams"
+  | "finance"  | "reports"  | "comms"    | "settings"   | "neutral";
+
+/**
+ * Whole class strings per tone — never composed at runtime, because Tailwind
+ * only emits classes it can read in source. `fill` is the tile, `well` the
+ * icon chip on it (a lighter or darker veil of the same fill, never a new hue).
+ */
+export const TILE_TONE: Record<TileTone, { fill: string; well: string }> = {
+  students:   { fill: "bg-sec-students-tile text-sec-students-on",     well: "bg-sec-students-on/15" },
+  teachers:   { fill: "bg-sec-teachers-tile text-sec-teachers-on",     well: "bg-sec-teachers-on/15" },
+  academic:   { fill: "bg-sec-academic-tile text-sec-academic-on",     well: "bg-sec-academic-on/15" },
+  attendance: { fill: "bg-sec-attendance-tile text-sec-attendance-on", well: "bg-sec-attendance-on/15" },
+  exams:      { fill: "bg-sec-exams-tile text-sec-exams-on",           well: "bg-sec-exams-on/10" },
+  finance:    { fill: "bg-sec-finance-tile text-sec-finance-on",       well: "bg-sec-finance-on/10" },
+  reports:    { fill: "bg-sec-reports-tile text-sec-reports-on",       well: "bg-sec-reports-on/15" },
+  comms:      { fill: "bg-sec-comms-tile text-sec-comms-on",           well: "bg-sec-comms-on/15" },
+  settings:   { fill: "bg-sec-settings-tile text-sec-settings-on",     well: "bg-sec-settings-on/15" },
+  neutral:    { fill: "border border-line bg-surface text-ink",        well: "bg-canvas text-ink-muted ring-1 ring-inset ring-line" },
 };
 
 /**
@@ -154,10 +182,13 @@ const ROUTE_SECTIONS: Array<[string, SectionKey]> = [
   ["/students",       "students"],
   ["/teachers",       "teachers"],
 
-  ["/classes",        "academic"],
+  // Classes are groups of people, so they are teal like students; the
+  // timetable and its periods are time, so olive like attendance. Grouping in
+  // the rail (NAV_GROUPS) is separate and unchanged — this is colour only.
+  ["/classes",        "students"],
   ["/subjects",       "academic"],
-  ["/timetable",      "academic"],
-  ["/periods",        "academic"],
+  ["/timetable",      "attendance"],
+  ["/periods",        "attendance"],
   ["/attendance",     "attendance"],
   ["/exams",          "exams"],
   ["/promotion",      "exams"],
