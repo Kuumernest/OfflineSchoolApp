@@ -6606,13 +6606,13 @@ const main = async () => {
    */
   await FinSalaryPayment.collection.insertMany([
     { _id: "fin-slip-rev-orig", schoolId: SCHOOL, userId: "t1", runId: "fin-run-2",
-      periodMonth: "2026-11", gross: 120000, totalDeductions: 20000, net: 100000,
-      status: "reversed", paidAt: new Date("2026-11-05T00:00:00.000Z"),
+      periodMonth: "2025-11", gross: 120000, totalDeductions: 20000, net: 100000,
+      status: "reversed", paidAt: new Date("2025-11-05T00:00:00.000Z"),
       deletedAt: null, updatedAt: new Date() },
     { _id: "fin-slip-rev", schoolId: SCHOOL, userId: "t1", runId: null,
-      periodMonth: "2026-11", gross: -120000, totalDeductions: -20000, net: -100000,
+      periodMonth: "2025-11", gross: -120000, totalDeductions: -20000, net: -100000,
       status: "paid", reversesId: "fin-slip-rev-orig",
-      paidAt: new Date("2026-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
+      paidAt: new Date("2025-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
   ]);
   await finMirror();
 
@@ -6623,7 +6623,12 @@ const main = async () => {
 
   // The reversal pair IS in the monthly series, on both sides, at zero. A
   // handler that dropped either half would report a month that never happened.
-  const finNov = finReport().months.find((m) => m.month === "2026-11");
+  //
+  // In a month that is never "now". This was 2026-11, which was the future
+  // when it was written; from 1 November 2026 it is the current month, and the
+  // expenses this run records through the write routes (stamped now) land in
+  // it too, so the month summed to their 121,999 instead of 0.
+  const finNov = finReport().months.find((m) => m.month === "2025-11");
   check("november exists in the series and cancels", finNov && finNov.expenditure, 0);
 
   // The endpoint's $ifNull, which is not the same as leaving the label out.
