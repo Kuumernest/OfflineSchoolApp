@@ -299,7 +299,7 @@ flowchart TD
    conflict to the outbox.
 
 **Retrying a refused change (2026-10-18).** A 4xx answer is stored against its
-key and replayed for 14 days, so retrying a refused change under the same key
+key and replayed for the key's life (then 14 days, now 45), so retrying a refused change under the same key
 got the same refusal back — after a permission was granted or data fixed, the
 change never landed. Now a retry of a REFUSED entry (4xx) goes out under a
 **new** key: desktop `outbox.unblock`, phone `MutationQueue.retry` /

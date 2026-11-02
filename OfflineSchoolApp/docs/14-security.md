@@ -71,7 +71,7 @@ invariant maintained by discipline and check suites, not by the storage layer.
 
 | Layer | Mechanism |
 |---|---|
-| Header | `Idempotency-Key`, scoped `(key, userId)`, 14-day TTL |
+| Header | `Idempotency-Key`, scoped `(key, userId)`, 45-day TTL (above the 30-day supported offline period) |
 | In-flight | `409 IDEMPOTENCY_IN_PROGRESS` + `Retry-After: 2` |
 | Server error | key **deleted** on 5xx so a genuine retry is possible |
 | Derived ids | attendance and scores compute `_id` from the natural key |

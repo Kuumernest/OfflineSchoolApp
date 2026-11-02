@@ -50,7 +50,7 @@ enforcing the natural key.
 | `FeePayment` | `{schoolId, receiptNo}` | `unique` + `partialFilterExpression: {receiptNo: {$type:"string"}}` | receipt number is null until issued |
 | `SalaryPayment` | `{schoolId, userId, periodMonth, runId}` | `unique` + `partialFilterExpression: {deletedAt: null}` | plus a second unique index on `payslipNo` |
 | `Student` | `{gateToken}` | `unique` + `partialFilterExpression: {gateToken: {$type:"string"}}` | |
-| `IdempotencyKey` | `{key, userId}` | `unique` | plus a TTL index, 14 days |
+| `IdempotencyKey` | `{key, userId}` | `unique` | plus a TTL index, 45 days (set on existing databases at boot by `ensureIdempotencyTtl`) |
 
 ### `sparse` versus `partialFilterExpression` — a real distinction here
 
@@ -152,7 +152,7 @@ behaviour, not an oversight. See [13-financial-workflows.md](13-financial-workfl
 
 | Model | Purpose | Synced to devices? |
 |---|---|---|
-| `IdempotencyKey` | Replay protection. TTL 14 days. | No |
+| `IdempotencyKey` | Replay protection. TTL 45 days. | No |
 | `SyncLog` | A record of device syncs. | No |
 | `SyncOverwrite` | One admin's edit replaced another's. | No — it is an instruction *to* a device |
 | `ResultChangeLog` | Audit trail of mark changes. | No |

@@ -9,7 +9,7 @@ const IdempotencyKey = require("../src/db/models/IdempotencyKey");
  * A record stays "processing" when its request never completed through
  * res.json: the process died mid-handler, or the handler answered with
  * res.send/res.end/a stream. Before this it stayed so for the key's whole
- * 14-day life, and every retry of that queued change — mobile and desktop
+ * 45-day life, and every retry of that queued change — mobile and desktop
  * outboxes reuse one key per change — was told "in progress" until the TTL.
  *
  * Longer than the longest a request may run (server.timeout, 10 minutes in
@@ -20,7 +20,7 @@ const STALE_PROCESSING_MS = 11 * 60 * 1000;
 
 /*
  * Fields never kept in a stored response. The body is replayed to the same
- * user for 14 days, and is readable by anyone with database access for as
+ * user for 45 days, and is readable by anyone with database access for as
  * long: a temporary password (staff creation, approvals) is a credential.
  * A replay answers without it; the admin resets the password if the first
  * answer was lost.
