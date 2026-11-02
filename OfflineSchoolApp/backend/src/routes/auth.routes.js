@@ -5,7 +5,7 @@ const express  = require("express");
 const router   = express.Router();
 const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
-const rateLimit = require("express-rate-limit");
+const { failedAttemptsLimiter } = require("../utils/loginRateLimit");
 const User     = require("../db/models/User");
 const { passwordPolicyError } = require("../utils/passwordPolicy");
 const { isSchoolClosedFor } = require("../utils/schoolContext");
@@ -20,20 +20,33 @@ const { normalizeRole } = require("../config/roles");
 // RATE LIMITING — brute-force protection on login
 // ─────────────────────────────────────────────────────────────────────────────
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,                  // 10 attempts per window per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many login attempts. Please try again after 15 minutes." },
-  // Use the default keyGenerator which handles IPv6 correctly
-  //
-  // The verification harness signs in dozens of times from 127.0.0.1 in a few
-  // seconds, which is indistinguishable from the attack this exists to stop.
-  // Only an explicit environment opt-out lifts it, and only scripts/ sets that
-  // — production never does, so the protection there is unchanged.
-  skip: () => process.env.DISABLE_LOGIN_RATE_LIMIT === "1",
-});
+// Failures only, keyed by the account being guessed — see
+// utils/loginRateLimit.js for why. It used to be 10 requests per IP with
+// successful sign-ins counted, so a school behind one NAT address locked
+// itself out signing back in after an outage.
+//
+// The identifier is normalised the way the handler below reads it (email
+// lowercased, admission number uppercased, both trimmed), so retyping it in
+// another case is the same account and not a fresh budget.
+const loginIdentifier = (req) => {
+  const { email, enrollmentNo } = req.body ?? {};
+  if (typeof email === "string" && email.trim()) return `e:${email.trim().toLowerCase()}`;
+  if (typeof enrollmentNo === "string" && enrollmentNo.trim()) return `n:${enrollmentNo.trim().toUpperCase()}`;
+  return "";
+};
+
+const LIMITED = { success: false, message: "Too many login attempts. Please try again after 15 minutes." };
+
+// Ten wrong passwords for one account from one address.
+const accountLoginLimiter = failedAttemptsLimiter({ max: 10, identify: loginIdentifier, message: LIMITED });
+
+// A hundred wrong passwords from one address, over any accounts: the ceiling
+// on spraying a common password across the staff list. Loose on purpose —
+// it is shared by everyone behind the school's address, and only their typos
+// count against it.
+const addressLoginLimiter = failedAttemptsLimiter({ max: 100, message: LIMITED });
+
+const loginLimiter = [addressLoginLimiter, accountLoginLimiter];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
