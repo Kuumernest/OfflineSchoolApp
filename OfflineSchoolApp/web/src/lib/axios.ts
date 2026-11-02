@@ -169,7 +169,9 @@ api.interceptors.request.use(
 //   2. If a refresh is already in-flight, queue the request.
 //   3. Otherwise attempt a token refresh via the store.
 //   4. On success replay all queued requests with the new token.
-//   5. On failure clear auth and redirect to /login.
+//   5. If the server REFUSED the refresh, clear auth and redirect to /login.
+//   6. If it could not be reached, keep the session; the requests fail with
+//      the connection message.
 // ─────────────────────────────────────────────────────────────────────────────
 
 api.interceptors.response.use(
@@ -228,13 +230,10 @@ api.interceptors.response.use(
       _isRefreshing          = true;
 
       try {
-        const success = await getAuthState().refreshSession();
+        const result = await getAuthState().refreshSession();
+        const newToken = getAuthState().token;
 
-        if (success) {
-          const newToken = getAuthState().token;
-
-          if (!newToken) throw new Error("Token missing after successful refresh");
-
+        if (result.outcome === "refreshed" && newToken) {
           processQueue(null, newToken);
 
           // Replay the original request with the fresh token
@@ -242,13 +241,24 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
 
-        // refreshSession returned false — it already called logout() internally
-        throw new Error("Token refresh returned false");
+        // ── The server could not be asked: keep the session ────────────────
+        // No connection, a timeout or a server fault while renewing says
+        // nothing about whether this person may stay signed in, so they stay.
+        // This request and everything queued behind it fail with the refresh's
+        // own error — a network error reads as "no connection" (getErrorMessage),
+        // not "your session has ended" — and the next request tries again.
+        if (result.outcome === "unreachable") {
+          processQueue(result.error, null);
+          return Promise.reject(result.error);
+        }
 
-      } catch (refreshErr) {
-        processQueue(refreshErr, null);
-
-        // Ensure auth state is clean (logout is idempotent)
+        // ── Refused: the session is over ───────────────────────────────────
+        // refreshSession has already signed out; repeated here because a
+        // "refreshed" with no token is no session either (logout is idempotent).
+        const reason = result.outcome === "refused"
+          ? result.error
+          : new Error("Token missing after successful refresh");
+        processQueue(reason, null);
         try { getAuthState().logout(); } catch { /* ignore */ }
 
         if (
@@ -258,7 +268,12 @@ api.interceptors.response.use(
           window.location.replace("/login");
         }
 
-        return Promise.reject(refreshErr);
+        return Promise.reject(reason);
+      } catch (unexpected) {
+        // refreshSession does not throw; if something here ever does, the
+        // queue must still be settled or every request held in it hangs.
+        processQueue(unexpected, null);
+        return Promise.reject(unexpected);
       } finally {
         _isRefreshing = false;
       }
