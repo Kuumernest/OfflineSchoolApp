@@ -347,12 +347,24 @@ const SPECS = [
     skip: (row) => !row.teacherId,
   },
 
+  /**
+   * Questions and quizzes are ObjectId-keyed on the server, which keeps the
+   * device's id only as client_id; the reconciler swaps the local id for the
+   * server's. So the id says which request a dirty row needs: a local id has
+   * never been created (POST), a server id has, and is being edited (PUT).
+   *
+   * Both used to be POSTed whatever the row was. An edit to a synced quiz
+   * went out as a create carrying id=<server id>; the server, matching
+   * client_id, found nothing and made a SECOND quiz, and the original never
+   * changed. Publishing was an edit like any other, so it never landed.
+   */
   {
     key: "question",
     table: "questions",
     where: `${IS_DIRTY} AND ${NOT_DELETED}`,
-    endpoint: () => API.quiz.questions,
-    method: "POST",
+    method:   (row) => (isServerId(row.id) ? "PUT" : "POST"),
+    endpoint: (row) => (isServerId(row.id) ? API.quiz.question(row.id) : API.quiz.questions),
+    guardEdits: true,
     reconcile: "question",
     payload: (row, { schoolId }) => ({
       id:            row.id,
@@ -390,10 +402,20 @@ const SPECS = [
     key: "quiz",
     table: "quizzes",
     where: `${IS_DIRTY} AND ${NOT_DELETED}`,
-    endpoint: () => API.quiz.list,
-    method: "POST",
+    method:   (row) => (isServerId(row.id) ? "PUT" : "POST"),
+    endpoint: (row) => (isServerId(row.id) ? API.quiz.detail(row.id) : API.quiz.list),
+    guardEdits: true,
     reconcile: "quiz",
-    resolve: ["class_id", "subject_id"],
+    // questions[].question_id: a question written offline is queued (and
+    // re-id'd) ahead of the quiz that uses it.
+    resolve: ["class_id", "subject_id", "questions[].question_id"],
+    // POST /quiz/quizzes always creates a draft. A quiz published before it
+    // was ever sent is published by a PUT queued right behind its create;
+    // the id map points it at the id the create is given.
+    followUp: (row) =>
+      !isServerId(row.id) && row.is_published === 1
+        ? { key: "quiz-publish", method: "PUT", endpoint: API.quiz.detail(row.id), payload: { is_published: true } }
+        : null,
     payload: (row, { schoolId }) => ({
       id: row.id, schoolId: row.schoolId || schoolId,
       title: row.title, description: row.description || null,
@@ -583,8 +605,29 @@ const DELETE_SPECS = [
   { key: "subject",    table: "subjects",            endpoint: API.admin.subjects.list,    adminOnly: true },
   { key: "teacher",    table: "users",               endpoint: API.admin.teachers.list,    adminOnly: true, extraWhere: "role = 'teacher'" },
   { key: "assignment", table: "teacher_assignments", endpoint: API.admin.assignments.list, adminOnly: true },
-  { key: "quiz",       table: "quizzes",             endpoint: API.quiz.list },
-  { key: "question",   table: "questions",           endpoint: API.quiz.questions },
+  // A quiz or question still under its local id was never created upstream
+  // (the create's reconciler swaps in the server id). Deleting it used to
+  // send DELETE /quiz/quizzes/<uuid>, which the ObjectId-keyed route cannot
+  // even look up; now it is simply removed here.
+  { key: "quiz",       table: "quizzes",             endpoint: API.quiz.list,
+    dropUnsent: async (db, row) => {
+      if (isServerId(row.id)) return false;
+      await MutationQueue.cancelUnsent(`quiz-publish:${row.id}`);
+      for (const t of ["quiz_questions", "quiz_analytics"]) {
+        await db.runAsync(`DELETE FROM ${t} WHERE quiz_id = ?`, [row.id]).catch(() => {});
+      }
+      await db.runAsync("DELETE FROM quizzes WHERE id = ?", [row.id]);
+      return true;
+    } },
+  { key: "question",   table: "questions",           endpoint: API.quiz.questions,
+    dropUnsent: async (db, row) => {
+      if (isServerId(row.id)) return false;
+      for (const t of ["question_options", "quiz_questions", "question_analytics"]) {
+        await db.runAsync(`DELETE FROM ${t} WHERE question_id = ?`, [row.id]).catch(() => {});
+      }
+      await db.runAsync("DELETE FROM questions WHERE id = ?", [row.id]);
+      return true;
+    } },
   { key: "exam",       table: "exams",               endpoint: "/exams",                   adminOnly: true },
 ];
 
@@ -711,26 +754,35 @@ export const registerReconcilers = () => {
     }
   });
 
+  // Clean only if nothing was edited since the request was built (args.since,
+  // see guardEdits). An edit made while the create was in flight leaves the
+  // row dirty under its new server id, and the next sweep PUTs it.
+  const CLEAN_IF_UNEDITED = "CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END";
+
   registerReconciler("question", async ({ response, args }) => {
     const serverId = serverIdFrom(response, "question", "data");
     const localId  = args.localId;
     if (!localId) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
+    // Without a snapshot (a row queued by an older build) it is marked clean,
+    // as before.
+    const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
+    const cleanParams = args.since === undefined ? [] : [args.since];
 
     if (serverId && serverId !== localId) {
       await mapId(localId, serverId, "questions");
       const { withFkOff, withTransaction } = require("../db/dbHelpers");
       await withFkOff(db, async () => {
         await withTransaction(db, async () => {
-          await db.runAsync("UPDATE questions SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [serverId, ts, localId]);
+          await db.runAsync(`UPDATE questions SET id = ?, _synced = ${clean}, _synced_at = ? WHERE id = ?`, [serverId, ...cleanParams, ts, localId]);
           for (const t of ["question_options", "quiz_questions", "attempt_answers", "question_analytics"]) {
             await db.runAsync(`UPDATE ${t} SET question_id = ? WHERE question_id = ?`, [serverId, localId]).catch(() => {});
           }
         });
       }).catch((err) => console.warn("[backfill] question reconcile:", err.message));
     } else {
-      await db.runAsync("UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]).catch(() => {});
+      await db.runAsync(`UPDATE questions SET _synced = ${clean}, _synced_at = ? WHERE id = ?`, [...cleanParams, ts, localId]).catch(() => {});
     }
   });
 
@@ -740,20 +792,22 @@ export const registerReconcilers = () => {
     if (!localId) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
+    const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
+    const cleanParams = args.since === undefined ? [] : [args.since];
 
     if (serverId && serverId !== localId) {
       await mapId(localId, serverId, "quizzes");
       const { withFkOff, withTransaction } = require("../db/dbHelpers");
       await withFkOff(db, async () => {
         await withTransaction(db, async () => {
-          await db.runAsync("UPDATE quizzes SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [serverId, ts, localId]);
+          await db.runAsync(`UPDATE quizzes SET id = ?, _synced = ${clean}, _synced_at = ? WHERE id = ?`, [serverId, ...cleanParams, ts, localId]);
           for (const t of ["quiz_questions", "quiz_attempts", "quiz_analytics"]) {
             await db.runAsync(`UPDATE ${t} SET quiz_id = ? WHERE quiz_id = ?`, [serverId, localId]).catch(() => {});
           }
         });
       }).catch((err) => console.warn("[backfill] quiz reconcile:", err.message));
     } else {
-      await db.runAsync("UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]).catch(() => {});
+      await db.runAsync(`UPDATE quizzes SET _synced = ${clean}, _synced_at = ? WHERE id = ?`, [...cleanParams, ts, localId]).catch(() => {});
     }
   });
 
@@ -1048,6 +1102,10 @@ const enqueueSpec = async (db, spec, ctx) => {
 
     try {
       const extra = spec.hydrate ? await spec.hydrate(db, row) : {};
+      // guardEdits: the row's updated_at as sent. An edit made while this
+      // mutation waits (or is in flight) changes it, and then the success
+      // must not mark the row clean — the later edit is still unsent.
+      const since = spec.guardEdits ? { since: row.updated_at ?? null } : {};
       const payload = {
         ...spec.payload(row, ctx),
         ...extra,
@@ -1055,10 +1113,10 @@ const enqueueSpec = async (db, spec, ctx) => {
         // specs whose reconciler owns the flag (periods uses `dirty`) opt out.
         ...(spec.silent || spec.noLocalFlag
           ? {}
-          : { __local: { table: spec.table, ids: [localId], idColumn: idCol } }),
+          : { __local: { table: spec.table, ids: [localId], idColumn: idCol, ...since } }),
         ...(spec.resolve ? { __resolve: spec.resolve } : {}),
         ...(spec.reconcile
-          ? { __reconcile: { kind: spec.reconcile, localId, table: spec.table, ...(spec.reconcileArgs ?? {}) } }
+          ? { __reconcile: { kind: spec.reconcile, localId, table: spec.table, ...since, ...(spec.reconcileArgs ?? {}) } }
           : {}),
       };
 
@@ -1070,6 +1128,19 @@ const enqueueSpec = async (db, spec, ctx) => {
         silent:   !!spec.silent,
       });
       n++;
+
+      // A second request the first one cannot carry, queued right behind it
+      // so the same drain sends both, in order.
+      const follow = spec.followUp?.(row);
+      if (follow) {
+        await MutationQueue.enqueue({
+          entityKey: `${follow.key}:${localId}`,
+          method:    follow.method,
+          endpoint:  follow.endpoint,
+          payload:   follow.payload,
+        });
+        n++;
+      }
     } catch (err) {
       console.warn(`[backfill] ${spec.key} ${localId}:`, err.message);
     }
@@ -1096,6 +1167,15 @@ const enqueueDeletes = async (db, spec) => {
   for (const row of rows) {
     const entityKey = `${spec.key}-delete:${row.id}`;
     if (queued.has(entityKey)) continue;
+    // Created on this phone and never sent: there is nothing upstream to
+    // delete. The create is cancelled and the row dropped, nothing sent.
+    if (spec.dropUnsent) {
+      const state = await MutationQueue.createState(`${spec.key}:${row.id}`);
+      if ((state === "unsent" || state === "none") && (await spec.dropUnsent(db, row))) {
+        await MutationQueue.cancelUnsent(`${spec.key}:${row.id}`);
+        continue;
+      }
+    }
     await MutationQueue.enqueue({
       entityKey,
       method: "DELETE",
