@@ -553,30 +553,42 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
   let emailAttached = false;
   let notice        = null;
 
-  if (emailRaw) {
-    const existing = await User.findOne({ email: emailRaw.toLowerCase().trim() });
+  const emailClean = emailRaw ? emailRaw.toLowerCase().trim() : "";
+
+  // The pupil's OWN login first, found by their record (student.userId) and
+  // never by the address. Siblings share the parent's email, so "the account
+  // with this email" may be a brother's or sister's: looking it up first both
+  // missed this pupil's own account when a sibling's came back instead (a
+  // second login was minted and theirs orphaned) and is the shape of lookup
+  // that let /sync/push take over a sibling's account.
+  if (student?.userId) {
+    const own = await User.findOne({ _id: String(student.userId), role: "student" });
+    if (own) {
+      own.name              = displayName;
+      own.isActive          = true;
+      own.schoolId          = schoolId;
+      own.password          = tempPassword;
+      own.mustResetPassword = true;
+      userAccount   = own;
+      emailAttached = Boolean(emailClean) && String(own.email ?? "").toLowerCase() === emailClean;
+    }
+  }
+
+  // Otherwise, only to word the notice: whose account already carries this
+  // address. It is never reused, renamed or re-passworded from here.
+  if (!userAccount && emailClean) {
+    const existing = await User.findOne({ email: emailClean });
 
     if (existing) {
-      const isOwnAccount =
-        student?.userId && String(existing._id) === String(student.userId);
-
-      if (isOwnAccount) {
-        existing.name              = displayName;
-        existing.isActive          = true;
-        existing.schoolId          = schoolId;
-        existing.password          = tempPassword;
-        existing.mustResetPassword = true;
-        userAccount   = existing;
-        emailAttached = true;
-      } else if (existing.role === "student") {
+      if (existing.role === "student") {
         const sibling = await Student.findOne({ userId: existing._id })
           .select("name firstName lastName studentName").lean().catch(() => null);
         const siblingName = sibling
           ? resolveDisplayName(sibling)
           : existing.name || "another student";
         notice =
-          `The application email (${emailRaw}) is already used by ` +
-          `${siblingName}. A separate account has been created for ${displayName} — ` +
+          `The application email (${emailRaw}) is also the contact for ` +
+          `${siblingName}. ${displayName} has their own account — ` +
           `they will log in using their enrollment number.`;
       } else {
         notice =

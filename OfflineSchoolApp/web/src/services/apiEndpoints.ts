@@ -128,7 +128,6 @@ export const API = {
 
   sync: {
     pull: "/sync/pull",
-    push: "/sync/push",
   },
 
   announcements: {

@@ -1,13 +1,7 @@
 // backend/controllers/sync.controller.js
 "use strict";
 
-const crypto  = require("crypto");
-const mongoose = require("mongoose");
-
-const bcrypt         = require("bcryptjs");
-const { v4: uuidv4 } = require("uuid");
-
-const Class             = require("../db/models/Class");
+const Class            = require("../db/models/Class");
 const User              = require("../db/models/User");
 const Subject           = require("../db/models/Subject");
 const Period            = require("../db/models/Period");
@@ -22,9 +16,6 @@ try {
 } catch {
   console.warn("[sync] ⚠️  Student model not found — students will be omitted from pull");
 }
-
-// One generator for every admission path (services/admissionNumber.service.js).
-const { nextAdmissionNo } = require("../services/admissionNumber.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -334,371 +325,38 @@ exports.pullChanges = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUSH — PERIODS
+// PUSH — retired
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * POST /sync/periods
+ * POST /sync/push — 410 Gone.
  *
- * Accepts an array of period change operations (create / update / delete).
- * Client-supplied _id values are validated; dangerous fields are stripped.
+ * It wrote period definitions and student approve/reject decisions from a
+ * device, and both were wrong in ways that mattered:
+ *
+ *   - an approval found the pupil's login by User.findOne({ email, role:
+ *     "student" }). Siblings share the parent's email, so approving the second
+ *     child renamed the FIRST child's account, reset its password and gave it
+ *     the second child's admission number — an account takeover inside a family;
+ *   - a period create discarded the client's UUID (only an ObjectId was kept),
+ *     so the device's row and the server's never matched up again;
+ *   - the wrapper answered success: true whatever the sub-handlers reported.
+ *
+ * No client calls it. The phone drains its outbox through the real routes
+ * (PUT /admin/students/:id/approve, the periods routes) and pulls with GET
+ * /sync/pull; the desktop pulls GET /sync/changes and replays the same real
+ * routes. The web and mobile endpoint maps only held the constant.
+ *
+ * The route stays so that anything old still holding it is told plainly what
+ * happened instead of meeting a 404 that reads like a deployment fault.
+ * Nothing in the body is read and nothing is written.
  */
-exports.pushPeriodChanges = async (req, res) => {
-  try {
-    const { schoolId, changes } = req.body;
-
-    if (!schoolId) {
-      return res.status(400).json({ success: false, message: "schoolId is required" });
-    }
-
-    if (!mayUseSchool(req, schoolId)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    const results = { created: [], updated: [], failed: [] };
-
-    if (!changes?.periods?.length) {
-      return res.json({ success: true, results, serverTime: new Date().toISOString() });
-    }
-
-    for (const item of changes.periods) {
-      const { _id, operation, data } = item;
-
-      try {
-        if (operation === "create") {
-          // ── Strip fields the client must not control ──────────────────
-          const {
-            _id:      clientId,
-            schoolId: _s,
-            assignedBy: _a,
-            ...safeData
-          } = data || {};
-
-          // Accept the client id only if it is a valid ObjectId
-          const isValidId = mongoose.isValidObjectId(clientId);
-          const docId     = isValidId
-            ? clientId
-            : new mongoose.Types.ObjectId();
-
-          const existing = await Period.findOne({
-            schoolId,
-            _id: docId,
-            ...NOT_DELETED,
-          });
-
-          if (existing) {
-            results.updated.push({ _id: existing._id, status: "exists" });
-            continue;
-          }
-
-          const created = await Period.create({
-            ...safeData,
-            _id:        docId,
-            schoolId,
-            assignedBy: req.user?._id,
-          });
-          results.created.push(created._id);
-
-        } else if (operation === "update") {
-          const { schoolId: _s, assignedBy: _a, ...safeData } = data || {};
-
-          const updated = await Period.findOneAndUpdate(
-            { _id, schoolId, ...NOT_DELETED },
-            { ...safeData, $inc: { version: 1 } },
-            { returnDocument: 'after', timestamps: true }
-          );
-
-          if (updated) results.updated.push(_id);
-          else         results.failed.push({ _id, reason: "Not found" });
-
-        } else if (operation === "delete") {
-          await Period.findOneAndUpdate(
-            { _id, schoolId },
-            { deletedAt: new Date() },
-            { timestamps: true }
-          );
-          results.updated.push(_id);
-
-        } else {
-          results.failed.push({ _id, reason: `Unknown operation: ${operation}` });
-        }
-
-      } catch (itemErr) {
-        console.error("[sync] Period item failed:", itemErr);
-        results.failed.push({ _id: item._id, reason: itemErr.message });
-      }
-    }
-
-    console.log(
-      `📤 Period push — created: ${results.created.length}, ` +
-      `updated: ${results.updated.length}, failed: ${results.failed.length}`
-    );
-
-    return res.json({ success: true, results, serverTime: new Date().toISOString() });
-
-  } catch (err) {
-    console.error("[sync] pushPeriodChanges error:", err);
-    return res.status(500).json({ success: false, message: "Failed to process period sync" });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PUSH — STUDENT DECISIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /sync/student-decisions
- *
- * Approves or rejects pending student registrations.
- * On approval a linked User account is created (or updated) atomically
- * inside a Mongoose session so a failed student.save() cannot leave an
- * orphaned User document.
- *
- * A random temporary password is generated (NOT the enrollment number)
- * and returned once in the response so the admin can communicate it.
- */
-exports.pushStudentDecisions = async (req, res) => {
-  try {
-    if (!Student) {
-      return res.status(501).json({
-        success: false,
-        message: "Student model is not available on this server",
-      });
-    }
-
-    const { schoolId, changes } = req.body;
-
-    if (!schoolId) {
-      return res.status(400).json({ success: false, message: "schoolId is required" });
-    }
-
-    if (!mayUseSchool(req, schoolId)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    const results = { synced: [], failed: [] };
-
-    if (!changes?.studentDecisions?.length) {
-      return res.json({ success: true, results, serverTime: new Date().toISOString() });
-    }
-
-    for (const decision of changes.studentDecisions) {
-      const { studentId, status, classId, reason } = decision;
-
-      // ── Basic payload validation ────────────────────────────────────────
-      if (!studentId || !["approved", "rejected"].includes(status)) {
-        results.failed.push({ studentId, reason: "Invalid decision payload" });
-        continue;
-      }
-
-      const session = await mongoose.startSession();
-      session.startTransaction();
-
-      try {
-        const student = await Student.findOne({ _id: studentId, schoolId }).session(session);
-
-        if (!student) {
-          await session.abortTransaction();
-          results.failed.push({ studentId, reason: "Not found" });
-          continue;
-        }
-
-        if (student.status !== "pending") {
-          await session.abortTransaction();
-          results.synced.push({
-            studentId,
-            status:  student.status,
-            note:    "Already reviewed on server",
-          });
-          continue;
-        }
-
-        // ── APPROVE ────────────────────────────────────────────────────────
-        if (status === "approved") {
-          if (!classId) {
-            await session.abortTransaction();
-            results.failed.push({ studentId, reason: "classId is required for approval" });
-            continue;
-          }
-
-          // Resolve display name and email
-          const displayName =
-            [student.firstName, student.lastName].filter(Boolean).join(" ").trim()
-            || student.name || "Student";
-
-          const email =
-            (student.email || student.studentEmail || student.parentEmail || "")
-              .toLowerCase()
-              .trim() || undefined;
-
-          // Resolve or generate enrollment number
-          let enrollmentNo =
-            student.admissionNo || student.enrollmentNo || null;
-
-          if (!enrollmentNo) {
-            enrollmentNo = await nextAdmissionNo(schoolId);
-          }
-
-          // Generate a cryptographically random temporary password
-          const tempPassword = crypto.randomBytes(16).toString("hex");
-          const hashedPass   = await bcrypt.hash(tempPassword, 12);
-
-          // Upsert the linked User document inside the transaction
-          let userDoc = email
-            ? await User.findOne({ email, role: "student" }).session(session)
-            : null;
-
-          if (userDoc) {
-            userDoc.name             = displayName;
-            userDoc.isActive         = true;
-            userDoc.schoolId         = schoolId;
-            userDoc.enrollmentNo     = enrollmentNo;
-            userDoc.mustResetPassword= true;
-            // Rotate password on re-approval so stale credentials are invalidated
-            userDoc.password         = hashedPass;
-            await userDoc.save({ session });
-          } else {
-            [userDoc] = await User.create(
-              [{
-                _id:              uuidv4(),
-                name:             displayName,
-                email,
-                role:             "student",
-                schoolId,
-                isActive:         true,
-                enrollmentNo,
-                password:         hashedPass,
-                mustResetPassword: true,
-              }],
-              { session }
-            );
-          }
-
-          // Update the Student document atomically in the same session
-          student.status       = "approved";
-          student.classId      = classId;
-          student.userId       = userDoc._id;
-          student.admissionNo  = enrollmentNo;
-          student.enrollmentNo = enrollmentNo;
-          student.reviewedAt   = new Date();
-          student.approvedAt   = new Date();
-          await student.save({ session });
-
-          await session.commitTransaction();
-
-          // Approved into a class is joining its fees, as on every other
-          // approve route. After the commit: billing never throws and must
-          // not decide whether the approval stands.
-          await require("../services/fees.service").applyActiveStructuresForStudent({
-            schoolId,
-            student:  { _id: student._id, classId },
-            raisedBy: req.user?._id ? String(req.user._id) : null,
-          });
-
-          // tempPassword is intentionally surfaced once so the admin
-          // can communicate initial credentials to the student.
-          results.synced.push({
-            studentId,
-            status:       "approved",
-            enrollmentNo,
-            tempPassword,           // present only at approval time
-          });
-
-        // ── REJECT ─────────────────────────────────────────────────────────
-        } else if (status === "rejected") {
-          student.status          = "rejected";
-          student.rejectionReason = reason?.trim() || null;
-          student.isActive        = false;
-          student.reviewedAt      = new Date();
-          student.rejectedAt      = new Date();
-          await student.save({ session });
-
-          await session.commitTransaction();
-          results.synced.push({ studentId, status: "rejected" });
-        }
-
-      } catch (decisionErr) {
-        await session.abortTransaction();
-        console.error("[sync] Student decision failed:", decisionErr);
-        results.failed.push({ studentId, reason: decisionErr.message });
-      } finally {
-        session.endSession();
-      }
-    }
-
-    console.log(
-      `📤 Student decisions — synced: ${results.synced.length}, failed: ${results.failed.length}`
-    );
-
-    return res.json({ success: true, results, serverTime: new Date().toISOString() });
-
-  } catch (err) {
-    console.error("[sync] pushStudentDecisions error:", err);
-    return res.status(500).json({ success: false, message: "Failed to process student decisions" });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LEGACY PUSH (backwards-compat wrapper)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /sync/push
- *
- * Retained for older clients that POST both periods and studentDecisions
- * in a single request.  Delegates to the focused handlers above and merges
- * their results so the response shape is unchanged.
- */
-exports.pushChanges = async (req, res) => {
-  // Synthesise sub-requests that share the same body/user context
-  const makeSubReq = (extraBody) => ({
-    ...req,
-    body: { ...req.body, ...extraBody },
+exports.pushRetired = (_req, res) =>
+  res.status(410).json({
+    success: false,
+    code:    "SYNC_PUSH_RETIRED",
+    message:
+      "POST /sync/push has been retired. Send each change to its own route " +
+      "(e.g. PUT /api/admin/students/:id/approve, the periods routes) and pull " +
+      "with GET /api/sync/pull or GET /api/sync/changes.",
   });
-
-  const periodResults  = { created: [], updated: [], failed: [] };
-  const studentResults = { synced: [],  failed:  []            };
-
-  // Collect period results via the focused handler ─────────────────────────
-  if (req.body?.changes?.periods?.length) {
-    await new Promise((resolve) => {
-      const fakeRes = {
-        status: () => fakeRes,
-        json:   (payload) => {
-          if (payload?.results) Object.assign(periodResults, payload.results);
-          resolve();
-        },
-      };
-      exports.pushPeriodChanges(makeSubReq({}), fakeRes);
-    });
-  }
-
-  // Collect student results via the focused handler ────────────────────────
-  if (req.body?.changes?.studentDecisions?.length) {
-    await new Promise((resolve) => {
-      const fakeRes = {
-        status: () => fakeRes,
-        json:   (payload) => {
-          if (payload?.results) Object.assign(studentResults, payload.results);
-          resolve();
-        },
-      };
-      exports.pushStudentDecisions(makeSubReq({}), fakeRes);
-    });
-  }
-
-  console.log(
-    `📤 Push (legacy) — ` +
-    `periods: created ${periodResults.created.length}, updated ${periodResults.updated.length}, failed ${periodResults.failed.length} | ` +
-    `students: synced ${studentResults.synced.length}, failed ${studentResults.failed.length}`
-  );
-
-  return res.json({
-    success: true,
-    results: {
-      periods:  periodResults,
-      students: studentResults,
-    },
-    serverTime: new Date().toISOString(),
-  });
-};
