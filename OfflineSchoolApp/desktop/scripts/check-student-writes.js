@@ -192,6 +192,36 @@ check("safe-path delete answers the endpoint's shape",
   [safeDelete.status, safeDelete.data.data.studentId],
   [200, "p3"]);
 
+// ── siblings share the parent's email (CLAUDE.md) ────────────────────────────
+// One guardian, several children: a pupil email that is really the parent's is
+// normal data. The edit used to DECLINE (fall through to the network) when
+// another pupil already carried the address, so offline the correction just
+// did not happen — and online the server refused it with a 409.
+rows.student.push(
+  { _id: "sib1", schoolId: "S1", status: "approved", isActive: true, classId: "c1", userId: "us1",
+    studentName: "Eve Bate", email: "bate@example.test", guardianEmail: "bate@example.test" },
+  { _id: "sib2", schoolId: "S1", status: "approved", isActive: true, classId: "c1", userId: "us2",
+    studentName: "Fay Bate", email: null, guardianEmail: "bate@example.test" },
+  { _id: "sib3", schoolId: "S1", status: "approved", isActive: true, classId: "c2", userId: "us3",
+    studentName: "Gus Bate", email: "gus@example.test", guardianEmail: "bate@example.test" },
+);
+const pupilRow = (id) => rows.student.find((r) => r._id === id);
+const sibEdit = call("PATCH", "/api/students/sib2", { email: "Bate@Example.test" });
+check("offline: a sibling given the parent's shared email is answered locally, not declined",
+  [sibEdit !== null, sibEdit?.status, sibEdit?.data?.changed, pupilRow("sib2").email],
+  [true, 200, ["email"], "bate@example.test"]);
+const queuedSib = [];
+const realAdd = ctx.queue.add;
+ctx.queue.add = (r) => { queuedSib.push(r); return realAdd(r); };
+const sibEdit3 = call("PATCH", "/api/students/sib3", { email: "bate@example.test" });
+ctx.queue.add = realAdd;
+check("offline: and the third child too — three children, one address",
+  [sibEdit3 !== null, ["sib1", "sib2", "sib3"].map((id) => pupilRow(id).email)],
+  [true, ["bate@example.test", "bate@example.test", "bate@example.test"]]);
+check("offline: the queued request carries the shared email to the server",
+  [queuedSib[0]?.method, queuedSib[0]?.path, queuedSib[0]?.body?.email],
+  ["PATCH", "/api/students/sib3", "bate@example.test"]);
+
 console.log(failed === 0 ? "\nALL PASS" : `\n${failed} FAILURE(S)`);
 if (failed !== 0) process.exit(1);
 

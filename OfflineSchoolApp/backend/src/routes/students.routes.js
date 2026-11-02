@@ -414,13 +414,21 @@ const resolveStudentRecord = async (userId, schoolId) => {
   student = await Student.findOne({ _id: userId, schoolId }).lean();
   if (student) return student;
 
+  // Last resort, for a legacy account never linked by userId: the record that
+  // carries this account's email. Only when that is unambiguous. Siblings
+  // share the parent's address, so "the first pupil with this email" could be
+  // a brother or sister — and this resolver feeds the pupil's own profile
+  // EDIT as well as every read. A record already linked to another account is
+  // that account's, never this one's.
   const user = await User.findById(userId).select("email").lean();
   if (user?.email) {
-    student = await Student.findOne({
+    const matches = await Student.find({
       email: user.email.toLowerCase(),
       schoolId,
-    }).lean();
-    if (student) return student;
+      deletedAt: null,
+    }).limit(2).lean();
+    const only = matches.length === 1 ? matches[0] : null;
+    if (only && (!only.userId || String(only.userId) === String(userId))) return only;
   }
 
   return null;
@@ -2646,21 +2654,13 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     });
   }
 
-  // ── Guard the one uniqueness this route can breach ────────────────────────
+  // No "another pupil already uses that email" check, on purpose.
   //
-  // email is unique per school for a student. Caught here with a readable
-  // message rather than as an E11000 the client would show raw.
-  if (changed.email) {
-    const clash = await Student.findOne({
-      schoolId,
-      email:     changed.email,
-      _id:       { $ne: student._id },
-      deletedAt: null,
-    }).select("_id").lean();
-    if (clash) {
-      return sendError(res, 409, "Another student in this school already uses that email address");
-    }
-  }
+  // A pupil's email is very often the parent's, and one parent has several
+  // children here (CLAUDE.md: one guardian, many children). Nothing needs it
+  // unique: a pupil signs in with their own admission number, Student.email
+  // carries no unique index, and the User model lets student accounts share an
+  // address. Refusing it here blocked the second child's correction with a 409.
 
   const nameBefore = resolveDisplayName(student);
 

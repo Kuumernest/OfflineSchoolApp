@@ -3634,8 +3634,10 @@ router.put("/settings/profile", requirePermission("settings.manage"), asyncHandl
     if (!isValidEmail(emailClean)) {
       return sendError(res, 400, "A valid email is required");
     }
+    // Staff addresses only, as claimStaffEmail: a pupil account may carry it
+    // because this member of staff is also a parent at the school.
     const taken = await User.findOne({
-      email: emailClean, _id: { $ne: userId },
+      email: emailClean, _id: { $ne: userId }, role: { $ne: ROLES.STUDENT },
     }).lean();
     if (taken) return sendError(res, 409, "Email already in use");
     updates.email = emailClean;

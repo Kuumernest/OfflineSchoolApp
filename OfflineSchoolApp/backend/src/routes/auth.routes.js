@@ -190,7 +190,12 @@ router.post("/login", loginLimiter, async (req, res) => {
     if (isStaffLogin) {
       const cleanEmail = email.toLowerCase().trim();
 
-      user = await User.findOne({ email: cleanEmail, isActive: true }).select("+password");
+      // Staff accounts only. A pupil's login can carry the parent's address,
+      // and a parent may also work here: without the role clause findOne could
+      // pick the child's account and the teacher could not sign in at all.
+      user = await User.findOne({
+        email: cleanEmail, isActive: true, role: { $ne: "student" },
+      }).select("+password");
 
       if (!user) {
         // Spend what a real comparison would have spent — see DUMMY_HASH.
