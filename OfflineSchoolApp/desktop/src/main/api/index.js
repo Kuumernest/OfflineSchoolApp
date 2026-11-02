@@ -38,6 +38,8 @@ const reads = [
   ...require("./handlers/students"),
   ...require("./handlers/timetable"),
   ...require("./handlers/fees"),
+  // A provisional receipt for a payment still in the queue (handlers/receipts.js).
+  ...require("./handlers/receipts"),
   ...require("./handlers/school"),
   ...require("./handlers/finance"),
   ...require("./handlers/payroll"),

@@ -698,6 +698,17 @@ const PARTIAL = [
       "stays online-only; sending one already uploaded queues like text.",
   },
   // REMOVED: PATCH /exams/:id/status — now fully handled offline including "published"
+  {
+    endpoint: "GET /fees/receipt/:id",
+    except:   "a payment the server has confirmed — its official receipt is the server's",
+    because:
+      "Answered here only while the payment's create is still in the outbox, as a " +
+      "receipt marked PROVISIONAL (handlers/receipts.js; the owner's decision that " +
+      "provisional receipts may be printed before sync). Once the server has accepted " +
+      "the payment, the official receipt is rendered by the server from its own record, " +
+      "unmarked — a confirmed receipt printed from the mirror would be indistinguishable " +
+      "from the official one while possibly disagreeing with it.",
+  },
 ];
 
 /**
