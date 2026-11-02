@@ -3422,6 +3422,10 @@
     "settingsDesc": "Configuration du système"
   },
   "sync": {
+    "heldOtherAccount": "1 de ces modifications a été mise en file par un autre compte sur cet ordinateur. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOtherAccount_other": "{{count}} de ces modifications ont été mises en file par un autre compte sur cet ordinateur. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOwnerless": "1 modification a été mise en file par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée ici et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+    "heldOwnerless_other": "{{count}} modifications ont été mises en file par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées ici et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent.",
     "saveCopy": "Enregistrer une copie",
     "copySaved": "Enregistré dans {{path}}",
     "copyFailed": "La copie n'a pas pu être enregistrée.",

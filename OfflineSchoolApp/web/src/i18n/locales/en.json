@@ -3422,6 +3422,10 @@
     "settingsDesc": "System configuration"
   },
   "sync": {
+    "heldOtherAccount": "1 of these was queued by another account on this computer. It is sent when that person signs in here again — not under your name.",
+    "heldOtherAccount_other": "{{count}} of these were queued by another account on this computer. They are sent when that person signs in here again — not under your name.",
+    "heldOwnerless": "1 was queued by an older version of the app that did not record who made it. It is kept here and is not sent under any account until someone decides whose it is.",
+    "heldOwnerless_other": "{{count}} were queued by an older version of the app that did not record who made them. They are kept here and are not sent under any account until someone decides whose they are.",
     "saveCopy": "Save a copy",
     "copySaved": "Saved to {{path}}",
     "copyFailed": "The copy could not be saved.",

@@ -105,6 +105,16 @@ export default function SyncIndicator() {
 
   const blocked = outbox?.blocked ?? 0;
   const waiting = outbox?.pending ?? 0;
+  // Of those, the requests this account will NOT send: queued by another
+  // account on this computer (sent when that person signs in here), or by
+  // nobody — before the queue recorded who (sent by no account). Said, not
+  // acted on: see docs/40-per-user-local-data.md. `ownerless` comes from the
+  // queue's summary and `mine` from the session; the rest is arithmetic, so a
+  // main process older than either reports 0.
+  const ownerless = (outbox as (OutboxSummary & { ownerless?: number }) | null)?.ownerless ?? 0;
+  const otherAccounts = outbox?.mine === undefined
+    ? 0
+    : Math.max(0, waiting + blocked - outbox.mine - ownerless);
   const offline = status?.phase === "offline";
   // The server answered, but with a fault or a refusal of the whole pull. Shown
   // like offline: it was reported as "idle" before, so it showed nothing.
@@ -180,6 +190,8 @@ export default function SyncIndicator() {
               )}
               {signedOut && <p className="mb-1 font-semibold text-danger-text">{t("sync.signInAgainBody")}</p>}
               {waiting > 0 && <p>{t("sync.waitingBody", { count: waiting })}</p>}
+              {otherAccounts > 0 && <p className="mt-1 text-blue-800">{t("sync.heldOtherAccount", { count: otherAccounts })}</p>}
+              {ownerless > 0 && <p className="mt-1 text-blue-800">{t("sync.heldOwnerless", { count: ownerless })}</p>}
               {offline && <p className="mt-1 text-amber-700">{t("sync.offlineBody")}</p>}
               {errored && (
                 <p className="mt-1 text-amber-700">
