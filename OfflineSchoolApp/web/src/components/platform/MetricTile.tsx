@@ -15,37 +15,24 @@
 //   2. The label and the hint truncate with a title attribute, so a long
 //      French label costs one line, not a taller row.
 //
-// The hue says what family a figure belongs to — people, attendance, results,
-// money — and is the same hue the section rail and page headers use for that
-// family (config/sections.ts), so the tiles agree with the rest of the shell.
+// The tile is a solid fill in the colour of the family a figure belongs to —
+// people teal, attendance olive, results plum, money mustard — the same hue
+// the section rail, page headers and school dashboards use for that family
+// (config/sections.ts), so a fee figure is mustard wherever it appears. Text
+// on it is the section's `-on` colour at full strength, never faded.
 import { Link }               from "react-router-dom";
 import { Info, type LucideIcon } from "lucide-react";
 import { cn }                 from "@/utils/cn";
+import { TILE_TONE, type TileTone as SectionTone } from "@/config/sections";
 
-export type TileTone =
-  | "schools" | "students" | "teachers" | "attendance"
-  | "academic" | "exams" | "finance" | "reports" | "neutral";
+/** A section tone, or `schools` for the platform's own count of schools. */
+export type TileTone = SectionTone | "schools";
 
-// Whole class strings, never composed: Tailwind only emits what it can read.
-const TONES: Record<TileTone, { surface: string; well: string }> = {
-  schools:    { surface: "border-primary-200 from-surface to-primary-50",
-                well:    "bg-primary-100 text-primary-700" },
-  students:   { surface: "border-sec-students-line from-surface to-sec-students-soft",
-                well:    "bg-sec-students-soft text-sec-students" },
-  teachers:   { surface: "border-sec-teachers-line from-surface to-sec-teachers-soft",
-                well:    "bg-sec-teachers-soft text-sec-teachers" },
-  attendance: { surface: "border-sec-attendance-line from-surface to-sec-attendance-soft",
-                well:    "bg-sec-attendance-soft text-sec-attendance" },
-  academic:   { surface: "border-sec-academic-line from-surface to-sec-academic-soft",
-                well:    "bg-sec-academic-soft text-sec-academic" },
-  exams:      { surface: "border-sec-exams-line from-surface to-sec-exams-soft",
-                well:    "bg-sec-exams-soft text-sec-exams" },
-  finance:    { surface: "border-sec-finance-line from-surface to-sec-finance-soft",
-                well:    "bg-sec-finance-soft text-sec-finance" },
-  reports:    { surface: "border-sec-reports-line from-surface to-sec-reports-soft",
-                well:    "bg-sec-reports-soft text-sec-reports" },
-  neutral:    { surface: "border-line from-surface to-[#fcfcfe]",
-                well:    "bg-canvas text-ink-muted ring-1 ring-inset ring-line" },
+// The platform's school count belongs to no section of a school, so it takes
+// the quiet warm neutral rather than borrowing a section's colour.
+const TONES: Record<TileTone, { fill: string; well: string }> = {
+  ...TILE_TONE,
+  schools: TILE_TONE.settings,
 };
 
 // The size follows the length: "70" can be large, "FCFA 10,065,000" cannot be
@@ -83,23 +70,23 @@ export function MetricTile({
     <div className="flex min-w-0 items-start gap-3.5">
       <span
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-control",
           t.well,
         )}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink-muted" title={label}>{label}</p>
+        <p className="truncate text-sm font-medium" title={label}>{label}</p>
         {loading ? (
-          <div className="mt-2 h-7 w-20 animate-pulse rounded-control bg-line/70" aria-hidden="true" />
+          <div className={cn("mt-2 h-7 w-20 animate-pulse rounded-control", t.well)} aria-hidden="true" />
         ) : (
           <p
             className={cn(
               // break-normal: an amount wraps at the space after its currency,
               // never inside its digits. Only on a phone, where two tiles
               // share 360px, may a figure break anywhere rather than spill.
-              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-semibold leading-tight tracking-tight text-ink tabular",
+              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-bold leading-tight tracking-tight tabular",
               sizeFor(text),
             )}
           >
@@ -107,17 +94,17 @@ export function MetricTile({
           </p>
         )}
         {hint ? (
-          <p className="mt-1 truncate text-xs text-ink-faint" title={hint}>{hint}</p>
+          <p className="mt-1 truncate text-xs" title={hint}>{hint}</p>
         ) : null}
       </div>
     </div>
   );
 
   const shell = cn(
-    "block min-w-0 rounded-card border bg-gradient-to-br p-4 shadow-card",
+    "block min-w-0 rounded-tile p-5 shadow-tile",
     "transition duration-150 ease-[var(--ease-out-quiet)]",
-    t.surface,
-    href && "hover:-translate-y-px hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+    t.fill,
+    href && "hover:-translate-y-0.5 hover:shadow-tile-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
     className,
   );
 

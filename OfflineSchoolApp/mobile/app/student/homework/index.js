@@ -36,6 +36,7 @@ import {
 } from "../../../src/services/student.service";
 
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
 import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────
@@ -770,15 +771,12 @@ export default function StudentHomeworkScreen() {
       {/* Stats row */}
       <View style={styles.statsRow}>
         {[
-          { label: t("common.total"),     value: stats.total,     color: "#4F46E5", bg: "#EEF2FF" },
-          { label: t("studentHome.hwPending"),   value: stats.pending,   color: "#D97706", bg: "#FEF3C7" },
-          { label: t("studentHome.hwSubmitted"), value: stats.submitted, color: "#059669", bg: "#ECFDF5" },
-          { label: t("studentHw.graded"),    value: stats.graded,    color: "#7C3AED", bg: "#F5F3FF" },
+          { label: t("common.total"),     value: stats.total, },
+          { label: t("studentHome.hwPending"),   value: stats.pending, },
+          { label: t("studentHome.hwSubmitted"), value: stats.submitted, },
+          { label: t("studentHw.graded"),    value: stats.graded, },
         ].map((s) => (
-          <View key={s.label} style={[styles.statCard, { backgroundColor: s.bg }]}>
-            <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
+          <StatTile key={s.label} kind="homework" value={s.value} label={s.label} />
         ))}
       </View>
 
@@ -1020,12 +1018,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
   },
-  statCard: {
-    flex: 1, borderRadius: 10,
-    paddingVertical: 10, alignItems: "center", gap: 2,
-  },
-  statValue: { fontSize: 18, fontWeight: "800" },
-  statLabel: { fontSize: 10, color: "#6B7280", fontWeight: "500" },
   searchBar: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#FFF",

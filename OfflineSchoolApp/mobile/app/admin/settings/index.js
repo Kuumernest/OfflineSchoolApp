@@ -342,7 +342,9 @@ const SchoolSection = ({ schoolId }) => {
     }
   };
 
-  const LogoContent = () => {
+  // Called as a function, not rendered as {renderLogo()}: a component defined
+  // in here would remount the logo image on every keystroke in this form.
+  const renderLogo = () => {
     if (logoStatus === "loading") {
       return (
         <View style={sc.logoPlaceholder}>
@@ -392,7 +394,7 @@ const SchoolSection = ({ schoolId }) => {
         <Text style={styles.cardTitle}>{t("adminSettings.schoolLogo")}</Text>
         <View style={sc.logoRow}>
           <TouchableOpacity style={sc.logoBox} onPress={pickLogo} activeOpacity={0.8}>
-            <LogoContent />
+            {renderLogo()}
           </TouchableOpacity>
           <View style={sc.logoActions}>
             <TouchableOpacity style={sc.logoBtn} onPress={pickLogo} activeOpacity={0.8}>

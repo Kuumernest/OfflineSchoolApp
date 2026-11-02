@@ -75,13 +75,11 @@ const formatDate = (dateStr, t) => {
 
 const isExpired = (d) => d && new Date(d) < new Date();
 
-function StatCard({ icon, label, value, color }) {
+// All announcements, so all slate; unread and urgent carry the alert dot.
+function StatCard({ icon, label, value, alert = false }) {
   return (
-    <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <Ionicons name={icon} size={18} color={color} />
-      <Text style={styles.statValue}>{value ?? 0}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <StatTile kind="announcements" icon={icon} value={value ?? 0} label={label}
+      alert={alert} style={styles.statCard} />
   );
 }
 
@@ -257,19 +255,18 @@ export default function AdminAnnouncementsScreen() {
             icon="mail-unread-outline"
             label={t("annAdmin.filterUnread")}
             value={stats.unread}
-            color="#DC2626"
+            alert={(stats.unread ?? 0) > 0}
           />
           <StatCard
             icon="warning-outline"
             label={t("annAdmin.filterUrgent")}
             value={stats.urgentUnack}
-            color="#EA580C"
+            alert={(stats.urgentUnack ?? 0) > 0}
           />
           <StatCard
             icon="pin-outline"
             label={t("annAdmin.pinned")}
             value={stats.pinned}
-            color="#4F46E5"
           />
           <TouchableOpacity
             onPress={() => setActiveFilter("from_teachers")}
@@ -279,14 +276,12 @@ export default function AdminAnnouncementsScreen() {
               icon="people-outline"
               label={t("annAdmin.filterFromTeachers")}
               value={stats.fromTeachers}
-              color="#0891B2"
             />
           </TouchableOpacity>
           <StatCard
             icon="list-outline"
             label={t("common.total")}
             value={stats.total}
-            color="#059669"
           />
         </ScrollView>
       )}
@@ -661,28 +656,8 @@ const styles = StyleSheet.create({
     paddingVertical:   12,
     gap:               10,
   },
-  statCard: {
-    backgroundColor: "#FFF",
-    borderRadius:    12,
-    padding:         12,
-    width:           100,
-    alignItems:      "center",
-    borderLeftWidth: 3,
-    borderWidth:     1,
-    borderColor:     "#F3F4F6",
-  },
-  statValue: {
-    fontSize:   20,
-    fontWeight: "800",
-    color:      "#111827",
-    marginTop:  4,
-  },
-  statLabel: {
-    fontSize:   11,
-    color:      "#6B7280",
-    marginTop:  2,
-    textAlign:  "center",
-  },
+  // Fixed width in a horizontal scroller, so the tile's flex: 1 is cancelled.
+  statCard: { flex: 0, width: 100 },
 
   filterBanner: {
     flexDirection:     "row",
@@ -904,4 +879,5 @@ const styles = StyleSheet.create({
   clearFilterText: { color: "#4F46E5", fontWeight: "600", fontSize: 13 },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
 import { errorText } from "../../../src/utils/appError";

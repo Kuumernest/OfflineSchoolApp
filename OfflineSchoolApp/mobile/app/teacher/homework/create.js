@@ -52,6 +52,18 @@ const dueToInput = (iso) => {
   return endOfDay ? date : `${date} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
+// Lives outside the screen on purpose. Defined inside, each keystroke made a
+// new Field type, React remounted the TextInput under it, and the keyboard
+// closed after one character.
+const Field = ({ label, error, children, hint }) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+    {children}
+    {hint && !error ? <Text style={styles.hint}>{hint}</Text> : null}
+    {error ? <Text style={styles.error}>{error}</Text> : null}
+  </View>
+);
+
 export default function TeacherHomeworkCreateScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -174,15 +186,6 @@ export default function TeacherHomeworkCreateScreen() {
       </View>
     );
   }
-
-  const Field = ({ label, error, children, hint }) => (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      {children}
-      {hint && !error ? <Text style={styles.hint}>{hint}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-    </View>
-  );
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>

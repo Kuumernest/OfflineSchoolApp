@@ -228,6 +228,7 @@ export default function BursarDashboardPage() {
           value={fmt.money(arrears?.billed ?? 0)}
           subtitle={t("bursarDashboard.expectedNote")}
           icon={Wallet}
+          tone="finance"
         />
         <StatCard
           title={t("bursarDashboard.collected")}
@@ -243,15 +244,19 @@ export default function BursarDashboardPage() {
               : t("bursarDashboard.rate", { rate: arrears.collectionRate })
           }
           icon={TrendingUp}
+          tone="finance"
         />
         <StatCard
           title={t("bursarDashboard.outstanding")}
           value={fmt.money(arrears?.outstanding ?? 0)}
           subtitle={t("bursarDashboard.owingStudents", { count: owingCount })}
           subtitleColor={
-            (arrears?.outstanding ?? 0) > 0 ? "text-warning" : undefined
+            (arrears?.outstanding ?? 0) > 0
+              ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning"
+              : undefined
           }
           icon={TrendingDown}
+          tone="finance"
           href="/fees"
         />
         <StatCard
@@ -259,6 +264,7 @@ export default function BursarDashboardPage() {
           value={fmt.money(arrears?.waived ?? 0)}
           subtitle={t("bursarDashboard.waivedNote")}
           icon={Users}
+          tone="finance"
         />
       </div>
 

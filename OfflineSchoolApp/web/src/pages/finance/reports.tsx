@@ -15,6 +15,7 @@ import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
+import { TILE_TONE }    from "@/config/sections";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input } from "@/components/ui/FormField";
 import {
@@ -157,37 +158,37 @@ export default function FinanceReportsPage() {
 
       {/* Headline */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
+        <div className={cn("min-w-0 rounded-tile p-5 shadow-tile", TILE_TONE.finance.fill)}>
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-success" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <TrendingUp className="h-4 w-4" aria-hidden="true" />
+            <p className="text-sm font-medium">
               {t("finrep.income")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[28px] leading-none text-ink tabular">
+          <p className="mt-3 text-[28px] font-bold leading-none tracking-tight tabular">
             {fmt.money(income)}
           </p>
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-xs">
             {t("finrep.paymentCount", { count: summary?.income.count ?? 0 })}
           </p>
-        </Card>
+        </div>
 
-        <Card>
+        <div className={cn("min-w-0 rounded-tile p-5 shadow-tile", TILE_TONE.finance.fill)}>
           <div className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4 text-danger" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <TrendingDown className="h-4 w-4" aria-hidden="true" />
+            <p className="text-sm font-medium">
               {t("finrep.expenditure")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[28px] leading-none text-ink tabular">
+          <p className="mt-3 text-[28px] font-bold leading-none tracking-tight tabular">
             {fmt.money(expenditure)}
           </p>
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-xs">
             {t("expenses.title")} {fmt.money(summary?.expenditure.expenses ?? 0)}
             {" · "}
             {t("finrep.payrollLine")} {fmt.money(summary?.expenditure.payroll ?? 0)}
           </p>
-        </Card>
+        </div>
 
         <Card>
           <div className="flex items-center gap-2">

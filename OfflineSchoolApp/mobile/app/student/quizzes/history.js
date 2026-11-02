@@ -21,6 +21,7 @@ import { Ionicons }         from "@expo/vector-icons";
 import { useAuthStore }     from "../../../src/store/auth.store";
 import { getUserAttempts }  from "../../../src/services/quiz.service";
 import { useTranslation }   from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -310,20 +311,12 @@ export default function QuizHistoryScreen() {
       {attempts.length > 0 && (
         <View style={styles.statsRow}>
           {[
-            { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total,                                              color: "#4F46E5", bg: "#EEF2FF" },
-            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed,                                             color: "#059669", bg: "#ECFDF5" },
-            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed,                                             color: "#DC2626", bg: "#FEE2E2" },
-            { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—",          color: "#D97706", bg: "#FEF3C7" },
+            { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total },
+            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed },
+            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed },
+            { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—" },
           ].map((s) => (
-            <View
-              key={s.key}
-              style={[styles.statCard, { backgroundColor: s.bg }]}
-            >
-              <Text style={[styles.statValue, { color: s.color }]}>
-                {s.value}
-              </Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
+            <StatTile key={s.key} kind="quizzes" value={s.value} label={s.label} />
           ))}
         </View>
       )}
@@ -419,12 +412,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
   },
-  statCard: {
-    flex: 1, borderRadius: 10,
-    paddingVertical: 10, alignItems: "center", gap: 2,
-  },
-  statValue: { fontSize: 16, fontWeight: "800" },
-  statLabel: { fontSize: 9, color: "#6B7280", fontWeight: "500" },
 
   filterRow: {
     flexDirection: "row",

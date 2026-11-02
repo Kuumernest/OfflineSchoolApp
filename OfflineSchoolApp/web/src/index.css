@@ -62,18 +62,22 @@
      touched — which is the only honest way to fix five hundred call sites.
 
      The pale end keeps its job as surfaces and lines and barely moves; it is
-     the text end that had to change. */
-  --color-gray-50:  #f6f7fa;
-  --color-gray-100: #eceef4;
-  --color-gray-200: #dfe2eb;
-  --color-gray-300: #c3c9d6;
-  --color-gray-400: #6d768c;   /* was #9ca3af (2.79:1) → 5.28:1 */
-  --color-gray-500: #545e75;   /* was #6b7280 (4.83:1) → 7.24:1 */
-  --color-gray-600: #3f485c;
-  --color-gray-700: #2c3446;
-  --color-gray-800: #1a2132;
-  --color-gray-900: #0d1220;
-  --color-gray-950: #070a13;
+     the text end that had to change.
+
+     Warm, not slate. The canvas is cream (#FAF6EF) and the ink a warm brown,
+     so the ramp carries a little brown too — a blue-grey line on cream reads
+     as a smudge. Text steps re-measured on white / the cream canvas. */
+  --color-gray-50:  #f7f3ec;
+  --color-gray-100: #f1ebe1;
+  --color-gray-200: #e6ded1;
+  --color-gray-300: #cfc5b6;
+  --color-gray-400: #75685b;   /* was #9ca3af (2.79:1) → 5.40:1 white, 5.01:1 canvas */
+  --color-gray-500: #5e5246;   /* was #6b7280 (4.83:1) → 7.58:1 white, 7.03:1 canvas */
+  --color-gray-600: #4a4036;
+  --color-gray-700: #372e25;
+  --color-gray-800: #241c14;
+  --color-gray-900: #16100a;
+  --color-gray-950: #0c0805;
 
   /* ── Accent ────────────────────────────────────────────────────────────────
      ONE hue carries interaction: primary buttons, the active nav item, focus
@@ -99,83 +103,166 @@
   --color-primary-900: #2f2b7f;
   --color-primary-950: #1e1b4b;
 
+  /* ── Palette ───────────────────────────────────────────────────────────────
+     The warm, earthy set the tiles are painted from. Named here once and never
+     written as a hex in a component — components ask for a section's tile
+     (`bg-sec-finance-tile`), and the section points at one of these.
+
+     Mirrors mobile/src/theme/colors.js (Metro cannot read this file), so
+     change both together. Contrast, measured (WCAG; 4.5:1 for body text),
+     with cream text #FFFBF5 or ink #2B2118 on the fill:
+
+       cream on teal 4.98 · plum 7.47 · slate 6.85 · terracotta-deep 4.85
+                olive-deep 4.91 · taupe 6.15
+       ink   on mustard 7.18 · burnt orange 4.97
+
+     Terracotta (#C8553D, 4.35 with white) and olive (#6B8E4E, 3.75) miss 4.5,
+     so their tiles fill with the nearest deeper shade of the same hue; the
+     brand values stay for accents and borders that carry no text. */
+  --color-tile-teal:            #1F7A74;
+  --color-tile-terracotta:      #C8553D;
+  --color-tile-terracotta-deep: #BB4C35;
+  --color-tile-burnt-orange:    #D9772B;
+  --color-tile-mustard:         #E0A526;
+  --color-tile-olive:           #6B8E4E;
+  --color-tile-olive-deep:      #5A7741;
+  --color-tile-plum:            #7B3F61;
+  --color-tile-slate-blue:      #3D5A80;   /* communication only — use sparingly */
+  --color-tile-taupe:           #6B5D51;   /* settings: a quiet warm neutral */
+
+  --color-page-cream: #FAF6EF;
+  --color-ink-warm:   #2B2118;
+  --color-cream:      #FFFBF5;              /* text on a dark tile */
+
   /* ── Section colour ────────────────────────────────────────────────────────
      One accent for actions is correct and was also the whole palette, so every
      area of a 44-entry app looked identical to every other. Colour is the
      cheapest wayfinding there is: a person who has seen the fees screen twice
      should recognise it from the corner of their eye before reading a word.
 
-     So each section of the navigation carries a hue, used on its nav icon, its
-     page header and its stat tiles — and nowhere else. It marks WHERE you are.
-     It never marks what something means: that is what status colour is for,
-     and mixing the two is how a colourful interface stops being readable.
+     So each section carries a hue, used on its nav icon, its page header and
+     its stat tiles. It marks WHAT a thing is about — people, set work, exams,
+     money — and the same thing is the same colour on every page and on the
+     mobile app. It never marks what a value means: that is what status colour
+     is for, and mixing the two is how a colourful interface stops being
+     readable.
 
-     `-soft` is the tint a card or tile sits on; `-line` its border; the base is
-     text and icon weight, all of them AA on white. */
-  --color-sec-students:      #0f766e;   /* teal    */
-  --color-sec-students-soft: #eaf6f4;
-  --color-sec-students-line: #b9dedb;
+       people (students, teachers, classes)   teal
+       set work (subjects, homework, content) terracotta
+       exams & marks                          burnt orange
+       results, reports, intelligence         plum
+       attendance & timetable                 olive
+       fees, finance, payroll                 mustard
+       announcements, messages                slate blue
+       settings                               warm taupe
 
-  --color-sec-teachers:      #0369a1;   /* sky     */
-  --color-sec-teachers-soft: #eaf4fb;
-  --color-sec-teachers-line: #b6dbf0;
+     Five tokens per section, each with one job:
+       base   text and icon weight on white or cream. The brand mustard (2.19),
+              burnt orange (3.17), olive and terracotta fail as text, so the
+              base is the nearest deep shade of the same hue that passes.
+       -soft  the tint an icon well or header sits on; base clears 4.5 on it.
+       -line  its border.
+       -tile  the solid fill of a stat / quick-action tile.
+       -on    text and icons on that fill.
+       -nav   the same hue for the near-black rail (≥6:1 on it).
 
-  --color-sec-academic:      #6d28d9;   /* violet  */
-  --color-sec-academic-soft: #f2edfd;
-  --color-sec-academic-line: #d9c9f7;
+     Measured base contrast — white / cream canvas / own soft:
+       students 5.71/5.30/4.91 · academic 5.61/5.20/4.85 · exams 5.46/5.07/4.84
+       finance 5.37/4.98/4.87 · attendance 5.57/5.17/4.90 · reports 7.70/7.15/6.51
+       comms 7.06/6.56/6.0 · settings 5.61/5.21/4.86 */
+  --color-sec-students:      #1D726C;
+  --color-sec-students-soft: #EBEFE9;
+  --color-sec-students-line: #BCD4CE;
+  --color-sec-students-tile: var(--color-tile-teal);
+  --color-sec-students-on:   var(--color-cream);
+  --color-sec-students-nav:  #2AA79F;
 
-  --color-sec-exams:         #4f46e5;   /* indigo  */
-  --color-sec-exams-soft:    #eef1ff;
-  --color-sec-exams-line:    #c9d0fb;
+  /* Teachers are people too: the same teal, so a staff count and a pupil count
+     read as one family. Kept as its own key so a page can ask for it by name. */
+  --color-sec-teachers:      #1D726C;
+  --color-sec-teachers-soft: #EBEFE9;
+  --color-sec-teachers-line: #BCD4CE;
+  --color-sec-teachers-tile: var(--color-tile-teal);
+  --color-sec-teachers-on:   var(--color-cream);
+  --color-sec-teachers-nav:  #2AA79F;
 
-  --color-sec-finance:       #a16207;   /* amber   */
-  --color-sec-finance-soft:  #fdf6e7;
-  --color-sec-finance-line:  #f0dfb4;
+  --color-sec-academic:      #AE4731;   /* terracotta, deepened for text */
+  --color-sec-academic-soft: #FAECE4;
+  --color-sec-academic-line: #EFC9BE;
+  --color-sec-academic-tile: var(--color-tile-terracotta-deep);
+  --color-sec-academic-on:   var(--color-cream);
+  --color-sec-academic-nav:  #D67F6D;
 
-  --color-sec-attendance:    #15803d;   /* green   */
-  --color-sec-attendance-soft: #edf7f0;
-  --color-sec-attendance-line: #bfe3ca;
+  --color-sec-exams:         #A0561D;   /* burnt orange, deepened for text */
+  --color-sec-exams-soft:    #FCEFE3;
+  --color-sec-exams-line:    #F4D3B8;
+  --color-sec-exams-tile:    var(--color-tile-burnt-orange);
+  --color-sec-exams-on:      var(--color-ink-warm);
+  --color-sec-exams-nav:     #DB7F38;
 
-  --color-sec-reports:       #be123c;   /* rose    */
-  --color-sec-reports-soft:  #fdeef2;
-  --color-sec-reports-line:  #f7c9d5;
+  --color-sec-finance:       #8A6414;   /* mustard, deepened for text */
+  --color-sec-finance-soft:  #FCF3E2;
+  --color-sec-finance-line:  #F6E1B7;
+  --color-sec-finance-tile:  var(--color-tile-mustard);
+  --color-sec-finance-on:    var(--color-ink-warm);
+  --color-sec-finance-nav:   var(--color-tile-mustard);
 
-  --color-sec-comms:         #a21caf;   /* fuchsia */
-  --color-sec-comms-soft:    #fbeefb;
-  --color-sec-comms-line:    #efc7ee;
+  --color-sec-attendance:      #55703E;   /* olive, deepened for text */
+  --color-sec-attendance-soft: #F2F1E6;
+  --color-sec-attendance-line: #D3DAC3;
+  --color-sec-attendance-tile: var(--color-tile-olive-deep);
+  --color-sec-attendance-on:   var(--color-cream);
+  --color-sec-attendance-nav:  #7AA259;
 
-  --color-sec-settings:      #475569;   /* slate   */
-  --color-sec-settings-soft: #f1f3f7;
-  --color-sec-settings-line: #d3d9e3;
+  --color-sec-reports:       #7B3F61;   /* plum */
+  --color-sec-reports-soft:  #F3EAE8;
+  --color-sec-reports-line:  #D7C3C9;
+  --color-sec-reports-tile:  var(--color-tile-plum);
+  --color-sec-reports-on:    var(--color-cream);
+  --color-sec-reports-nav:   #C084A6;
+
+  --color-sec-comms:         #3D5A80;   /* slate blue */
+  --color-sec-comms-soft:    #ECEFF3;
+  --color-sec-comms-line:    #C5CBD2;
+  --color-sec-comms-tile:    var(--color-tile-slate-blue);
+  --color-sec-comms-on:      var(--color-cream);
+  --color-sec-comms-nav:     #7A98C0;
+
+  --color-sec-settings:      #746558;   /* warm taupe — kept quiet */
+  --color-sec-settings-soft: #F3EEE7;
+  --color-sec-settings-line: #D7D0C7;
+  --color-sec-settings-tile: var(--color-tile-taupe);
+  --color-sec-settings-on:   var(--color-cream);
+  --color-sec-settings-nav:  #A39385;
 
   /* ── Surfaces ──────────────────────────────────────────────────────────────
-     A faintly cool canvas under pure-white cards. The gap between them is
-     small on purpose: enough that a card lifts, not so much that the page
-     reads as grey. */
-  --color-canvas:        #f4f5f8;
+     A warm cream canvas under pure-white cards. The gap between them is small
+     on purpose: enough that a card lifts, not so much that the page reads as
+     beige. */
+  --color-canvas:        #FAF6EF;
   --color-surface:       #ffffff;
-  --color-surface-muted: #fafbfc;
+  --color-surface-muted: #FDFAF5;
 
   /* ── Lines ─────────────────────────────────────────────────────────────────
-     Finer and cooler than stock grey. Borders are the most repeated element in
-     a dense UI, so a line that is a shade too dark makes every screen look
-     ruled rather than composed. */
-  --color-line:        #e9ebf0;
-  --color-line-strong: #d5d9e2;
+     Fine and warm. Borders are the most repeated element in a dense UI, so a
+     line that is a shade too dark makes every screen look ruled rather than
+     composed — and a cool grey line on cream reads as dirt. */
+  --color-line:        #EDE6DA;
+  --color-line-strong: #DCD2C3;
 
   /* ── Ink ───────────────────────────────────────────────────────────────────
-     Four steps, each with a job. The darkest is a blue-black, not #000 — pure
-     black on white glares, and the slight hue ties the text to the accent.
+     Four steps, each with a job. The darkest is a warm brown-black, not #000 —
+     pure black on cream glares, and the warmth ties the text to the palette.
 
-     Every step clears WCAG AA (4.5:1) against all three surfaces, checked, not
-     assumed. The faintest step is deliberately less faint than it wants to be:
-     it carries timestamps, placeholders and the header meta line, which are
-     real content. A pale grey there looks refined in a mockup and is unreadable
-     on a laptop at an angle — measured 2.59:1 before this was corrected. */
-  --color-ink:       #0d1220;  /* headings, table values      — 18.68:1 */
-  --color-ink-body:  #343d4f;  /* body copy                   — 10.90:1 */
-  --color-ink-muted: #4f5a70;  /* labels, secondary text      —  6.93:1 */
-  --color-ink-faint: #666f84;  /* placeholders, timestamps    —  5.03:1 */
+     Every step clears WCAG AA (4.5:1) against the cream canvas, white and the
+     muted surface, measured, not assumed (figures are on the canvas; white is
+     higher). The faintest step is deliberately less faint than it wants to
+     be: it carries timestamps, placeholders and the header meta line, which
+     are real content. */
+  --color-ink:       #2B2118;  /* headings, table values      — 14.62:1 */
+  --color-ink-body:  #463A2F;  /* body copy                   — 10.22:1 */
+  --color-ink-muted: #5C5045;  /* labels, secondary text      —  7.25:1 */
+  --color-ink-faint: #6B5F53;  /* placeholders, timestamps    —  5.76:1 */
 
   /* ── Navigation rail ───────────────────────────────────────────────────────
      Near-black with a blue cast, so the rail reads as a solid architectural
@@ -213,13 +300,16 @@
      them, which is what stops a dense layout looking like a pile of pills. */
   --radius-control: 0.5rem;    /* buttons, inputs, badges */
   --radius-card:    0.75rem;   /* cards, panels, dropdowns */
+  /* Stat, quick-action and module tiles: a solid block of colour wants a
+     softer corner than a white panel, or it reads as a warning sticker. */
+  --radius-tile:    1.125rem;  /* 18px */
 
   /* ── Elevation ─────────────────────────────────────────────────────────────
      Two-part shadows: a tight contact shadow that seats the element, plus a
      wide diffuse one for the light. A single blurred drop shadow is the tell
      of a cheap interface — real objects cast both.
 
-     Tinted with the ink hue rather than black, so shadows sit in the palette
+     Tinted with the warm ink hue rather than black, so shadows sit in the palette
      instead of greying it. */
   /* The leading `inset` line is a 1px highlight along the top edge — the
      difference between a rectangle and something with a surface, the same
@@ -228,18 +318,27 @@
      Tailwind's class scanner stops at the comma in `[box-shadow:a,b]`, so
      that version silently emitted nothing. */
   --shadow-card:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-                  0 1px 1px 0 rgb(13 18 32 / 0.03),
-                  0 2px 6px -2px rgb(13 18 32 / 0.05);
+                  0 1px 1px 0 rgb(43 33 24 / 0.03),
+                  0 2px 6px -2px rgb(43 33 24 / 0.05);
 
   /* Hover/active lift for an interactive card. */
   --shadow-lift:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-                  0 1px 2px 0 rgb(13 18 32 / 0.04),
-                  0 6px 16px -6px rgb(13 18 32 / 0.10);
+                  0 1px 2px 0 rgb(43 33 24 / 0.04),
+                  0 6px 16px -6px rgb(43 33 24 / 0.10);
 
   /* Genuinely floating: dropdowns, modals, toasts. */
-  --shadow-raise: 0 1px 2px 0 rgb(13 18 32 / 0.04),
-                  0 4px 12px -4px rgb(13 18 32 / 0.06),
-                  0 16px 40px -12px rgb(13 18 32 / 0.14);
+  --shadow-raise: 0 1px 2px 0 rgb(43 33 24 / 0.04),
+                  0 4px 12px -4px rgb(43 33 24 / 0.06),
+                  0 16px 40px -12px rgb(43 33 24 / 0.14);
+
+  /* A coloured tile's own shadow: warm brown (#6B3E1F, the mobile
+     shadowWarm), not grey, so a lifted block of colour reads as lit paper
+     rather than sitting on a grey smudge. No inset highlight — on a solid
+     fill it shows as a pale seam. */
+  --shadow-tile:      0 1px 2px 0 rgb(107 62 31 / 0.10),
+                      0 6px 16px -8px rgb(107 62 31 / 0.24);
+  --shadow-tile-lift: 0 2px 4px 0 rgb(107 62 31 / 0.10),
+                      0 12px 24px -10px rgb(107 62 31 / 0.32);
 
   /* Motion: a gentle deceleration, and durations short enough to feel
      immediate. Anything past ~200ms on a hover reads as lag, not polish. */
@@ -330,14 +429,14 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: #d5d9e2;
+    background-color: var(--color-line-strong);
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #b4bac7;
+    background-color: var(--color-gray-300);
   }
 }
 

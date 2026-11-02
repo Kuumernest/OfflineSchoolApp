@@ -15,6 +15,8 @@ import { Wallet, ArrowUpRight, Search } from "lucide-react";
 import { useUser }             from "@/store/auth.store";
 import { PageHeader }          from "@/components/ui/PageHeader";
 import { Card }                from "@/components/ui/Card";
+import { TILE_TONE }           from "@/config/sections";
+import { cn }                  from "@/utils/cn";
 import { Button }              from "@/components/ui/Button";
 import { Select }              from "@/components/ui/Select";
 import { SearchInput }         from "@/components/ui/SearchInput";
@@ -144,25 +146,25 @@ export default function FeesPage() {
 
       {/* The headline figure, before the detail. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="sm:col-span-1">
+        <div className={cn("min-w-0 rounded-tile p-5 shadow-tile sm:col-span-1", TILE_TONE.finance.fill)}>
           <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-ink-faint" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <Wallet className="h-4 w-4" aria-hidden="true" />
+            <p className="text-sm font-medium">
               {t("fees.totalOutstanding")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+          <p className="mt-3 text-[30px] font-bold leading-none tracking-tight tabular">
             {fmt.money(report?.totalOutstanding ?? 0)}
           </p>
-          <p className="mt-1.5 text-xs text-ink-muted">
+          <p className="mt-2 text-xs">
             {t("fees.studentsOwing", { count: report?.count ?? 0 })}
           </p>
           {/* Owed is everything unpaid; overdue the part past its due date —
               the figure the bell shows, from the same helper. */}
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 text-xs">
             {(report?.overdueCount ?? 0) > 0 ? (
               <>
-                <span className="font-semibold text-danger tabular">
+                <span className="rounded-control bg-danger-soft px-1.5 font-semibold text-danger tabular">
                   {t("fees.overdueOfIt", { amount: fmt.money(report?.overdueTotal ?? 0) })}
                 </span>
                 {" · "}
@@ -177,7 +179,7 @@ export default function FeesPage() {
               t("fees.noneOverdue")
             )}
           </p>
-        </Card>
+        </div>
 
         <Card className="sm:col-span-2">
           <div className="flex flex-wrap items-end gap-3">

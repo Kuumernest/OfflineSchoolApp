@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardHeader } from "@/components/ui/Card";
+import { TILE_TONE, type TileTone } from "@/config/sections";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -73,6 +74,7 @@ export default function ReportsOverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <StatCard
           icon={Users}
+          tone="students"
           label={t("academic.student_other")}
           value={students.data?.total}
           detail={
@@ -85,6 +87,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={School}
+          tone="teachers"
           label={t("academic.teacher_other")}
           value={teachers.data?.total}
           detail={
@@ -97,6 +100,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
+          tone="students"
           label={t("academic.class_other")}
           value={classes.data?.total}
           loading={classes.isLoading}
@@ -104,6 +108,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
+          tone="academic"
           label={t("academic.subject_other")}
           value={subjects.data?.total}
           loading={subjects.isLoading}
@@ -111,6 +116,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={FileText}
+          tone="exams"
           label={t("nav.exams")}
           value={exams.data?.total}
           detail={
@@ -123,6 +129,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={ClipboardCheck}
+          tone="attendance"
           label={t("reports.presentToday")}
           value={attendance.data?.students.rate}
           suffix="%"
@@ -176,8 +183,14 @@ export default function ReportsOverviewPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * One school-wide figure, as a solid tile in the colour of what it counts —
+ * the same tones as the dashboard (config/sections.ts), so pupils are teal
+ * and exams burnt orange here too.
+ */
 function StatCard({
   icon: Icon,
+  tone,
   label,
   value,
   suffix,
@@ -186,6 +199,7 @@ function StatCard({
   failed,
 }: {
   icon:     React.ComponentType<{ className?: string }>;
+  tone:     TileTone;
   label:    string;
   /** null: nothing to report — "—" (C3: a day nobody marked). */
   value?:   number | null;
@@ -195,35 +209,33 @@ function StatCard({
   failed:   boolean;
 }) {
   const { t } = useTranslation();
+  const tile  = TILE_TONE[tone];
   return (
-    <Card>
+    <div className={cn("min-w-0 rounded-tile p-5 shadow-tile", tile.fill)}>
       <div className="flex items-start justify-between gap-2">
-        <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
-          <Icon className="w-4 h-4 text-primary-600" />
+        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tile.well)}>
+          <Icon className="w-[18px] h-[18px]" />
         </div>
         {/* A failed card says so rather than showing a confident zero — "0
             students" and "we couldn't ask" are very different facts. */}
         {failed && <Badge label={t("common.unavailable")} variant="default" />}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         {loading ? (
           <Spinner className="w-5 h-5" />
         ) : (
-          <p className={cn(
-            "text-2xl font-semibold leading-none tabular-nums",
-            failed ? "text-gray-300" : "text-gray-900",
-          )}>
+          <p className="text-[34px] font-bold leading-none tracking-tight tabular-nums">
             {failed || value == null ? "—" : value.toLocaleString()}
             {!failed && value != null && suffix}
           </p>
         )}
-        <p className="mt-1.5 text-xs text-gray-500">{label}</p>
+        <p className="mt-2 text-sm font-medium">{label}</p>
         {detail && !failed && (
-          <p className="text-[11px] text-gray-400 mt-0.5">{detail}</p>
+          <p className="text-xs mt-0.5">{detail}</p>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 

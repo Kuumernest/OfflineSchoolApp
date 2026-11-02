@@ -28,6 +28,8 @@ import {
 import { isStudentProfileComplete } from "./profile/setup";
 import { toDisplayUri }             from "../../src/utils/logoUri";
 import { useTranslation }           from "../../src/i18n/useTranslation";
+import { StatTile, ActionTile }     from "../../src/components/Tiles";
+import { PALETTE }                  from "../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -428,16 +430,6 @@ const sb = StyleSheet.create({
 // SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const StatCard = ({ icon, value, label, bg, color }) => (
-  <View style={[s.statCard, { backgroundColor: bg }]}>
-    <View style={[s.statIconBg, { backgroundColor: color + "20" }]}>
-      <Ionicons name={icon} size={20} color={color} />
-    </View>
-    <Text style={[s.statValue, { color }]}>{value ?? "—"}</Text>
-    <Text style={s.statLabel}>{label}</Text>
-  </View>
-);
-
 const SectionHead = ({ title, action, onAction }) => (
   <View style={s.sectionHeader}>
     <Text style={s.sectionTitle}>{title}</Text>
@@ -644,16 +636,16 @@ export default function StudentDashboard() {
 
   // ── Quick actions ─────────────────────────────────────────────────────────
   const QUICK_ACTIONS = useMemo(() => [
-    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          color: "#7C3AED", route: "/student/timetable"       },
-    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   color: "#4F46E5", route: "/student/quizzes"         },
-    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", color: "#059669", route: "/student/homework"        },
-    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          color: "#D97706", route: "/student/subjects"        },
-    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      color: "#DC2626", route: "/student/attendance"      },
-    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
-    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
-    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
-    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        color: "#0D9488", route: "/student/fees"            },
-    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
+    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          kind: "timetable", route: "/student/timetable"       },
+    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   kind: "quizzes", route: "/student/quizzes"         },
+    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", kind: "homework", route: "/student/homework"        },
+    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          kind: "subjects", route: "/student/subjects"        },
+    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      kind: "attendance", route: "/student/attendance"      },
+    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     kind: "announcements", route: "/student/announcements"   },
+    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   kind: "messages", route: "/messages"                },
+    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        kind: "results", route: "/student/results"         },
+    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        kind: "fees", route: "/student/fees"            },
+    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      kind: "settings", route: "/student/settings"        },
   ], [t]);
 
   // ── Loading screen ────────────────────────────────────────────────────────
@@ -772,7 +764,8 @@ export default function StudentDashboard() {
 
         {/* Stats row */}
         <View style={s.statsRow}>
-          <StatCard
+          <StatTile
+            kind="attendance"
             icon="calendar"
             value={
               attendance.stats?.percentage != null
@@ -782,22 +775,19 @@ export default function StudentDashboard() {
                   : "—"
             }
             label={t("studentHome.statAttendance")}
-            bg="#EEF2FF"
-            color="#4F46E5"
           />
-          <StatCard
+          <StatTile
+            kind="homework"
             icon="document-text"
             value={homeworkStats.pending > 0 ? `${homeworkStats.pending}` : homeworkStats.total}
             label={homeworkStats.pending > 0 ? t("studentHome.statHwPending") : t("studentHome.statHomework")}
-            bg={homeworkStats.urgent > 0 ? "#FEE2E2" : "#ECFDF5"}
-            color={homeworkStats.urgent > 0 ? "#DC2626" : "#059669"}
+            alert={homeworkStats.urgent > 0}
           />
-          <StatCard
+          <StatTile
+            kind="results"
             icon="trophy"
             value={quizStats.avgScore != null ? `${quizStats.avgScore}%` : "—"}
             label={t("studentHome.statAvgScore")}
-            bg="#FFFBEB"
-            color="#D97706"
           />
         </View>
 
@@ -955,24 +945,15 @@ export default function StudentDashboard() {
               const badgeNum = hwBadge ? homeworkStats.pending
                              : annBadge ? unreadAnnouncements : 0;
               return (
-                <TouchableOpacity
+                <ActionTile
                   key={a.id}
+                  kind={a.kind}
+                  icon={a.icon}
+                  label={a.title}
+                  badge={badgeNum}
                   style={s.actionBtn}
                   onPress={() => router.push(a.route)}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.actionIconWrap}>
-                    <View style={[s.actionIconBg, { backgroundColor: a.color + "15" }]}>
-                      <Ionicons name={a.icon} size={22} color={a.color} />
-                    </View>
-                    {badgeNum > 0 && (
-                      <View style={s.actionBadge}>
-                        <Text style={s.actionBadgeText}>{badgeNum > 9 ? "9+" : badgeNum}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={s.actionTitle}>{a.title}</Text>
-                </TouchableOpacity>
+                />
               );
             })}
           </View>
@@ -1298,7 +1279,7 @@ export default function StudentDashboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: PALETTE.pageCream },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center" },
   loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
 
@@ -1310,7 +1291,7 @@ const s = StyleSheet.create({
     gap: 8,
   },
   greeting: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  userName:  { fontSize: 22, fontWeight: "700", color: "#111827", marginTop: 2 },
+  userName:  { fontSize: 22, fontWeight: "700", color: PALETTE.inkWarm, marginTop: 2 },
 
   profileIncompleteBtn: {
     width: 32, height: 32, borderRadius: 16,
@@ -1364,22 +1345,12 @@ const s = StyleSheet.create({
   statsRow: {
     flexDirection: "row", paddingHorizontal: 20, gap: 10, marginBottom: 20,
   },
-  statCard: {
-    flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8, alignItems: "center",
-  },
-  statIconBg: {
-    width: 32, height: 32, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", marginBottom: 6,
-  },
-  statValue: { fontSize: 19, fontWeight: "800" },
-  statLabel: { fontSize: 10, fontWeight: "600", color: "#6B7280", marginTop: 2 },
-
   section:       { paddingHorizontal: 20, marginBottom: 20 },
   sectionHeader: {
     flexDirection: "row", justifyContent: "space-between",
     alignItems: "center", marginBottom: 12,
   },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+  sectionTitle: { fontSize: 17, fontWeight: "700", color: PALETTE.inkWarm },
   seeAll:       { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
 
   emptyCard: {
@@ -1433,25 +1404,8 @@ const s = StyleSheet.create({
   ttBadgeText: { fontSize: 10, fontWeight: "700", color: "#6B7280" },
 
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  actionBtn: {
-    width: "23%", backgroundColor: "#FFF", borderRadius: 14, paddingVertical: 12,
-    alignItems: "center",
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
-  },
-  actionIconWrap: { position: "relative", marginBottom: 6 },
-  actionIconBg: {
-    width: 42, height: 42, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
-  },
-  actionBadge: {
-    position: "absolute", top: -4, right: -4,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: "#DC2626",
-    alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  actionBadgeText: { fontSize: 10, fontWeight: "800", color: "#FFF" },
-  actionTitle:     { fontSize: 10, fontWeight: "600", color: "#374151", textAlign: "center" },
+  // Four to a row is narrow: a tighter inside so "Announcements" still fits.
+  actionBtn: { width: "23%", paddingHorizontal: 6, minHeight: 84 },
 
   hwCard: {
     flexDirection: "row", alignItems: "center",

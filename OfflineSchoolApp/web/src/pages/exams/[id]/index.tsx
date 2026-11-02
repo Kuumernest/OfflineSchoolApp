@@ -34,6 +34,7 @@ import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
 import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
 import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { TILE_TONE } from "@/config/sections";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -1815,17 +1816,19 @@ const ResultsTab = ({
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Pupils are teal and the pass rate is a result, so plum — the same
+              tones as everywhere else. Passed and failed are verdicts, so
+              they keep the status tiles rather than borrowing the palette. */}
           {[
-            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  color: "text-primary-600" },
-            { id: "passed",   label: t("results.passed"),         value: stats.passed,         color: "text-green-600"   },
-            { id: "failed",   label: t("results.failed"),         value: stats.failed,         color: "text-red-600"     },
-            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, color: "text-amber-600"   },
+            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  cls: `${TILE_TONE.students.fill} shadow-tile` },
+            { id: "passed",   label: t("results.passed"),         value: stats.passed,         cls: "border border-success-line bg-success-soft text-success" },
+            { id: "failed",   label: t("results.failed"),         value: stats.failed,         cls: "border border-danger-line bg-danger-soft text-danger" },
+            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, cls: `${TILE_TONE.reports.fill} shadow-tile` },
           ].map((s) => (
             <div key={s.id}
-                 className="bg-white rounded-xl border border-gray-100
-                            p-4 text-center">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-500 font-medium mt-1">
+                 className={`rounded-tile p-5 text-center ${s.cls}`}>
+              <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{s.value}</p>
+              <p className="text-sm font-medium mt-2">
                 {s.label}
               </p>
             </div>

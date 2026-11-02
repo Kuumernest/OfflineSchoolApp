@@ -22,6 +22,8 @@ import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
+import { TILE_TONE, type TileTone } from "@/config/sections";
+import { cn }                 from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
 import { formatDay } from "../../../../shared/dateFormat.js";
@@ -149,13 +151,14 @@ const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
 const StatCard = ({
-  label, value, sub, icon: Icon, color, onClick, highlight,
+  label, value, sub, icon: Icon, tone, onClick, highlight,
 }: {
   label:      string;
   value:      number | string;
   sub?:       string;
   icon:       React.ElementType;
-  color:      string;
+  /** What the figure is about: exams burnt orange, results plum. */
+  tone:       TileTone;
   onClick?:   () => void;
   highlight?: boolean;
 }) => (
@@ -177,25 +180,28 @@ const StatCard = ({
    */
   <button
     onClick={onClick}
-    className={`bg-white rounded-xl p-4 flex flex-col gap-2 shadow-sm
-      border transition-all text-left w-full
-      ${highlight
-        ? "border-primary-300 ring-2 ring-primary-100"
-        : "border-gray-100 hover:shadow-md hover:border-gray-200"
-      }`}
+    aria-pressed={highlight}
+    className={cn(
+      "rounded-tile p-4 flex flex-col gap-2 shadow-tile text-left w-full",
+      "transition duration-150 ease-[var(--ease-out-quiet)] hover:-translate-y-0.5 hover:shadow-tile-lift",
+      TILE_TONE[tone].fill,
+      // The filter in force: a ring in the interaction accent, offset off the
+      // fill so it reads on every tone.
+      highlight && "ring-2 ring-primary-600 ring-offset-2 ring-offset-canvas",
+    )}
   >
     <div className="flex items-center gap-3">
-      <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${color}`}>
+      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", TILE_TONE[tone].well)}>
         <Icon className="w-5 h-5" />
       </div>
       {/* tabular-nums so the counts line up across the seven cards. */}
-      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums">{value}</p>
+      <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{value}</p>
     </div>
     <div className="min-w-0">
-      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
+      <p className="text-xs font-semibold leading-tight">
         {label}
       </p>
-      {sub && <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{sub}</p>}
+      {sub && <p className="text-[11px] mt-0.5 leading-tight">{sub}</p>}
     </div>
   </button>
 );
@@ -1356,44 +1362,44 @@ export default function ExamsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <StatCard
             label={t("common.total")}     value={d.total}
-            icon={FileText}   color="bg-gray-100 text-gray-600"
+            icon={FileText}   tone="exams"
             highlight={statusFilter === "all"}
             onClick={() => setStatusFilter("all")}
           />
           <StatCard
             label={t("examStatus.draft")}     value={d.draft}
-            icon={FileText}   color="bg-gray-100 text-gray-400"
+            icon={FileText}   tone="exams"
             highlight={statusFilter === "draft"}
             onClick={() => setStatusFilter("draft")}
           />
           <StatCard
             label={t("examStatus.scheduled")} value={d.scheduled}
-            icon={Clock}      color="bg-indigo-50 text-indigo-600"
+            icon={Clock}      tone="exams"
             highlight={statusFilter === "scheduled"}
             onClick={() => setStatusFilter("scheduled")}
           />
           <StatCard
             label={t("examStatus.ongoing")}   value={d.ongoing}
-            icon={AlertCircle}color="bg-amber-50 text-amber-600"
+            icon={AlertCircle}tone="exams"
             highlight={statusFilter === "ongoing"}
             onClick={() => setStatusFilter("ongoing")}
           />
           <StatCard
             label={t("examStatus.completed")} value={d.completed}
-            icon={CheckCircle}color="bg-green-50 text-green-600"
+            icon={CheckCircle}tone="exams"
             highlight={statusFilter === "completed"}
             onClick={() => setStatusFilter("completed")}
           />
           <StatCard
             label={t("results.published")} value={d.published}
-            icon={TrendingUp} color="bg-purple-50 text-purple-600"
+            icon={TrendingUp} tone="reports"
             highlight={statusFilter === "published"}
             onClick={() => setStatusFilter("published")}
           />
           <StatCard
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
-            icon={BookOpen}   color="bg-teal-50 text-teal-600"
+            icon={BookOpen}   tone="reports"
             sub={dashData?.dashboard?.results?.passRateScope
               ? t("exams.passRateScope", {
                   year: dashData.dashboard.results.passRateScope.academicYear,
