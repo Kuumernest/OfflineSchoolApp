@@ -458,6 +458,7 @@ const SPECS = [
       row._operation === "create" ? "POST" : row._operation === "update" ? "PUT" : "DELETE",
     endpoint: (row) =>
       row._operation === "create" ? "/announcements" : `/announcements/${row.id}`,
+    guardEdits: true,
     reconcile: "announcement",
     payload: (row) => ({
       id:            row.id,
@@ -813,9 +814,25 @@ export const registerReconcilers = () => {
 
   registerReconciler("announcement", async ({ args }) => {
     const db = await getDatabase();
+    const ts = new Date().toISOString();
+    if (args.since === undefined) {
+      await db.runAsync(
+        `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
+        [ts, args.localId]
+      ).catch(() => {});
+      return;
+    }
+    // Edited while this was in flight: the server now HAS the row (whatever
+    // this was), so what is left is an update — or the delete, if that was
+    // the edit — and the row stays dirty for the next sweep.
     await db.runAsync(
-      `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
-      [new Date().toISOString(), args.localId]
+      `UPDATE announcements
+          SET _synced_at = ?,
+              _operation = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN NULL
+                                WHEN _operation = 'delete' THEN 'delete' ELSE 'update' END,
+              _synced    = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END
+        WHERE id = ?`,
+      [ts, args.since, args.since, args.localId]
     ).catch(() => {});
   });
 
