@@ -37,6 +37,8 @@ import { ProgressBar } from "./ProgressBar";
 import { useTranslation } from "../i18n/useTranslation";
 import { useAuthStore } from "../store/auth.store";
 import { OFFLINE_LIMIT_DAYS } from "../config/offlinePeriod";
+import { getDatabase } from "../db/database";
+import { countHeldChanges } from "../db/heldChanges";
 
 const C = {
   offline:  "#6B7280",
@@ -73,6 +75,19 @@ export const SyncStatusBar = ({ style }) => {
   const progress = useSyncProgress();
   const needsSignIn = useAuthStore((s) => Boolean(s.user) && s.needsSignIn);
   const signInAgain = useAuthStore((s) => s.signInAgain);
+
+  // Queued by another account, or by nobody (docs/40-per-user-local-data.md).
+  // Shown only when nothing else is, and read-only: the pending screen says
+  // what they are. Re-counted whenever the queue's stats change.
+  const [heldCount, setHeldCount] = React.useState(0);
+  React.useEffect(() => {
+    let live = true;
+    getDatabase()
+      .then((db) => countHeldChanges(db))
+      .then((h) => { if (live) setHeldCount(h.otherAccounts + h.ownerlessQueued); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [stats]);
 
   const blockedCount = stats.conflict + stats.failed;
   const waitingCount = pendingCount - blockedCount;
@@ -127,6 +142,11 @@ export const SyncStatusBar = ({ style }) => {
     tone = C.pending;
     icon = "cloud-upload-outline";
     label = t("sync.uploading", { count: waitingCount });
+  } else if (heldCount > 0) {
+    tone = C.offline;
+    icon = "people-outline";
+    label = t("sync.heldElsewhere", { count: heldCount });
+    tappable = true;
   }
 
   // A running sync outranks "N waiting to upload": it is the same work with
