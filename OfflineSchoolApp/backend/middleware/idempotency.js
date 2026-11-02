@@ -30,6 +30,16 @@ const NOT_STORED = new Set(["tempPassword"]);
 function withoutSecrets(value) {
   if (Array.isArray(value)) return value.map(withoutSecrets);
   if (!value || typeof value !== "object" || value instanceof Date) return value;
+  // A live mongoose document (the quiz routes answer with Question.create's
+  // result, not a lean object) is a graph with cycles: walking its own keys
+  // recursed until the stack overflowed, AFTER the write had committed. The
+  // request answered 500, the key stayed "processing", and every retry from
+  // the phone's outbox was told IDEMPOTENCY_IN_PROGRESS for eleven minutes.
+  // Stored as what res.json sends — its toJSON() — like an ObjectId.
+  if (typeof value.toJSON === "function") {
+    const plain = value.toJSON();
+    if (plain !== value) return withoutSecrets(plain);
+  }
   const out = {};
   for (const [k, v] of Object.entries(value)) {
     if (!NOT_STORED.has(k)) out[k] = withoutSecrets(v);
