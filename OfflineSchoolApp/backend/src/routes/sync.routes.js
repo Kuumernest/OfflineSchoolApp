@@ -6,6 +6,7 @@ const router     = express.Router();
 const syncCtrl   = require("../controllers/sync.controller");
 const feedCtrl   = require("../controllers/syncFeed.controller");
 const { authenticate } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 
 /**
  * The offline engine.
@@ -49,9 +50,10 @@ router.get( "/changes", authenticate, feedCtrl.changes);
 
 router.get( "/pull", authenticate, syncCtrl.pullChanges);
 // Retired: 410 Gone with code SYNC_PUSH_RETIRED (see pushRetired). Kept as a
-// route so an old client gets that answer rather than a 404. Authenticated so
-// it answers only callers who could ever have used it; no permission check,
-// because there is nothing left to authorise.
-router.post("/push", authenticate, syncCtrl.pushRetired);
+// route so an old client gets that answer rather than a 404. Still behind the
+// same guard it always had (authenticate + sync.push, admin-only and locked),
+// so it answers the retirement only to callers who could ever have used it;
+// everybody else keeps the 403 they always got. Nothing is written either way.
+router.post("/push", authenticate, requirePermission("sync.push"), syncCtrl.pushRetired);
 
 module.exports = router;

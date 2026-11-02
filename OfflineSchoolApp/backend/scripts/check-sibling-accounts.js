@@ -137,6 +137,14 @@ const SRC = path.join(__dirname, "..", "src");
     check("  and A's login is still untouched", await loginOf("ama"), amaBefore);
     r = await call("GET", "/sync/push");
     check("  (the route is still there for POST only)", r.status, 404);
+    await M("User").create({ _id: "tea", name: "Teacher", email: "tea@ht.example.test",
+      password: "check-only-password", role: "teacher", schoolId: S, isActive: true });
+    const teaToken = jwt.sign({ id: "tea", role: "teacher", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const teaRes = await fetch(`${API}/sync/push`, {
+      method: "POST", headers: { Authorization: `Bearer ${teaToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ schoolId: S, changes: {} }),
+    });
+    check("  a caller who never held sync.push keeps the 403 it always got", teaRes.status, 403);
 
     // ── a pending pupil whose own account already exists ────────────────────
     //
