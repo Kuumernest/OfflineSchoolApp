@@ -164,7 +164,6 @@ const SYNC_ROUTES = [
   "/admin/stats",
   "/users/me",
   "/sync/pull",
-  "/sync/push",
   "/quiz/sync",
   "/school/info",
   "/admin/school-info",
