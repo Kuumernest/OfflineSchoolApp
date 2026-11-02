@@ -247,6 +247,13 @@ const SPECS = [
     skip: (row) => !(row.subjectId || row.subject_id),
   },
 
+  /**
+   * periods.service records what a dirty row needs in `operation`: 'create'
+   * for one this device made (the server has never seen it), otherwise an
+   * edit of one it has. This always POSTed, so every offline edit of an
+   * existing period created a second period instead. POST /admin/periods
+   * mints its own id; the reconciler adopts it.
+   */
   {
     key: "period",
     table: "periods",
@@ -256,8 +263,10 @@ const SPECS = [
     // generic flag-clearing is skipped and its reconciler does it.
     noLocalFlag: true,
     where: "dirty = 1 AND (deletedat IS NULL OR deletedat = '')",
-    endpoint: () => API.admin.periods.list,
-    method: "POST",
+    method:   (row) => (row.operation === "create" ? "POST" : "PUT"),
+    endpoint: (row) =>
+      row.operation === "create" ? API.admin.periods.list : API.admin.periods.detail(row.id),
+    guardEdits: true,
     reconcile: "period",
     payload: (row, { schoolId }) => ({
       id:        row.id,
@@ -724,7 +733,44 @@ export const registerReconcilers = () => {
     }
   });
 
-  registerReconciler("period", async ({ args }) => {
+  registerReconciler("period", async ({ response, args }) => {
+    const db = await getDatabase();
+    const localId = args.localId;
+    if (!localId) return;
+    // Edited while this was in flight: still dirty, and no longer a create —
+    // the server has the row now — so the next sweep PUTs the edit.
+    const guarded = args.since !== undefined;
+    const settle = guarded
+      ? `dirty = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 0 ELSE 1 END,
+         operation = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN NULL ELSE 'update' END`
+      : "dirty = 0, operation = NULL";
+    const settleParams = guarded ? [args.since, args.since] : [];
+
+    // POST /admin/periods answers { data: period } under an id it chose.
+    const created  = response?.data?.data;
+    const serverId = created?._id || created?.id ? String(created._id || created.id) : null;
+
+    if (serverId && serverId !== String(localId)) {
+      await mapId(localId, serverId, "periods");
+      const pulled = await db.getFirstAsync("SELECT id FROM periods WHERE id = ?", [serverId]).catch(() => null);
+      if (pulled) {
+        // The server's copy already arrived by a pull: keep it, drop ours.
+        await db.runAsync("DELETE FROM periods WHERE id = ?", [localId]).catch(() => {});
+      } else {
+        await db.runAsync(
+          `UPDATE periods SET id = ?, ${settle} WHERE id = ?`, [serverId, ...settleParams, localId]
+        ).catch(() => {});
+      }
+      // Slots placed in this period while it only had the local id.
+      await db.runAsync("UPDATE timetable SET period_id = ? WHERE period_id = ?", [serverId, localId]).catch(() => {});
+      await db.runAsync("UPDATE timetable_slots SET periodId = ? WHERE periodId = ?", [serverId, localId]).catch(() => {});
+      return;
+    }
+
+    await db.runAsync(`UPDATE periods SET ${settle} WHERE id = ?`, [...settleParams, localId]).catch(() => {});
+  });
+
+  registerReconciler("periodDelete", async ({ args }) => {
     const db = await getDatabase();
     await db.runAsync(
       "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [args.localId]
@@ -1249,6 +1295,50 @@ const enqueueTimetableDeletes = async (db) => {
 };
 
 /**
+ * Period deletes. periods marks pending work with `dirty` and the delete with
+ * `deletedat`, so the generic sweep (deleted_at + _synced) never saw them,
+ * and the period spec filters deleted rows out: a period deleted offline was
+ * never deleted upstream. A period this device created and never sent is
+ * dropped locally instead — periods.service does that at delete time; this
+ * catches one whose create is still only queued.
+ */
+const enqueuePeriodDeletes = async (db) => {
+  if (!isAdmin()) return 0;
+  if (!(await tableExists(db, "periods"))) return 0;
+
+  const rows = await db.getAllAsync(
+    `SELECT id, operation FROM periods
+     WHERE dirty = 1 AND deletedat IS NOT NULL AND deletedat != ''`
+  ).catch(() => []);
+  if (!rows?.length) return 0;
+
+  const queued = await MutationQueue.pendingKeys("period-delete:");
+  let n = 0;
+
+  for (const row of rows) {
+    if (!row.id) continue;
+    const state = await MutationQueue.createState(`period:${row.id}`);
+    if (row.operation === "create" && (state === "unsent" || state === "none")) {
+      await MutationQueue.cancelUnsent(`period:${row.id}`);
+      await db.runAsync("DELETE FROM periods WHERE id = ?", [row.id]).catch(() => {});
+      continue;
+    }
+
+    const entityKey = `period-delete:${row.id}`;
+    if (queued.has(entityKey)) continue;
+
+    await MutationQueue.enqueue({
+      entityKey,
+      method: "DELETE",
+      endpoint: API.admin.periods.detail(row.id),
+      payload: { __reconcile: { kind: "periodDelete", localId: row.id } },
+    });
+    n++;
+  }
+  return n;
+};
+
+/**
  * Moves content deletes that older builds parked in `upload_queue` onto the
  * outbox. They are JSON mutations and never belonged in the binary-upload
  * table; content.service now enqueues them directly.
@@ -1316,6 +1406,9 @@ export const backfillOutbox = async () => {
 
   const ttDeletes = await enqueueTimetableDeletes(db).catch(() => 0);
   if (ttDeletes) { byKey["timetable-delete"] = ttDeletes; total += ttDeletes; }
+
+  const periodDeletes = await enqueuePeriodDeletes(db).catch(() => 0);
+  if (periodDeletes) { byKey["period-delete"] = periodDeletes; total += periodDeletes; }
 
   if (total) console.log(`[backfill] Queued ${total} mutation(s):`, byKey);
   return { total, byKey };

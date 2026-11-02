@@ -460,6 +460,25 @@ export const PeriodsService = {
     }
 
     const now = new Date().toISOString();
+
+    // Created on this device and never sent: there is nothing upstream to
+    // delete, so the row (and its queued create, if the sweep had queued it)
+    // simply goes and nothing is sent. Otherwise the create would still go
+    // out and the delete be lost — offline, 'delete' overwrote 'create' and
+    // the sync had no way to tell the server never had it.
+    const local = await db.getFirstAsync(
+      `SELECT operation, dirty FROM ${TABLE} WHERE id = ?`, [id]
+    ).catch(() => null);
+    if (local?.dirty && local.operation === "create") {
+      const { MutationQueue } = require("./mutationQueue.service");
+      const state = await MutationQueue.createState(`period:${id}`);
+      if (state === "unsent" || state === "none") {
+        await MutationQueue.cancelUnsent(`period:${id}`);
+        await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+        return true;
+      }
+    }
+
     const net = await NetInfo.fetch();
 
     if (net.isConnected) {
@@ -488,6 +507,7 @@ export const PeriodsService = {
     }
 
     // ── Offline soft-delete — will be pushed by SyncManager ─────────────────
+    // (the backfill's period-delete sweep sends DELETE /admin/periods/:id)
     await db.runAsync(
       `UPDATE ${TABLE}
        SET deletedat = ?, updated_at = ?, dirty = 1, _synced = 0, operation = 'delete'
