@@ -51,6 +51,12 @@ export interface SyncStatus {
   /** The last pull stopped at the page ceiling; the next cycle continues it. */
   morePending?: boolean;
   lastCycleAt: string | null;
+  /**
+   * The last pull the server answered, for this server and school; survives a
+   * restart. Drives the 21/30-day notice (config/offlinePeriod.ts). Absent from
+   * a main process older than this field.
+   */
+  lastSyncedAt?: string | null;
   lastError:   string | null;
   pushed:      number;
   pulled:      number;

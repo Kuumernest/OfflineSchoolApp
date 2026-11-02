@@ -3449,6 +3449,10 @@
     "signInAgainAction": "Se reconnecter",
     "signInAgainShort": "Reconnexion requise"
   },
+  "offlinePeriod": {
+    "notice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité.",
+    "warning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité."
+  },
   "initialSync": {
     "loadingTitle": "Téléchargement des données de votre établissement sur cet ordinateur…",
     "loadingBody": "La première fois peut prendre quelques minutes, et environ une minute de plus si le serveur était en veille. Les listes restent vides jusqu'à la fin.",

@@ -3449,6 +3449,10 @@
     "signInAgainAction": "Sign in again",
     "signInAgainShort": "Sign in again"
   },
+  "offlinePeriod": {
+    "notice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely.",
+    "warning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely."
+  },
   "initialSync": {
     "loadingTitle": "Downloading your school's data to this computer…",
     "loadingBody": "The first time can take a few minutes, and about a minute longer if the server was asleep. Lists stay empty until it finishes.",

@@ -379,3 +379,10 @@ nothing. Nothing is disabled.
   last completed pull, read only) and re-reads it when a run ends;
   `SyncStatusBar` shows it below sign-in and blocked changes.
   `mobile/scripts/check-offline-period.js`.
+- Desktop: the engine (`desktop/src/main/sync/engine.js`) publishes
+  `lastSyncedAt` — the last pull the server answered, per server and school,
+  kept in `meta` across restarts (a failed cycle sets `lastCycleAt`, not this)
+  — over the existing `sync:status` bridge. `web/src/config/offlinePeriod.ts`
+  holds 21/30; `InitialSyncBanner`, once the first sync is done, shows the
+  notice/warning and re-evaluates hourly. `desktop/scripts/check-initial-sync.js`,
+  `web/scripts/check-offline-period.mjs`.

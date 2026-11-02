@@ -150,6 +150,44 @@ const main = async () => {
   api.setToken("B");
   check("B is still done", eng.status().initialSync, "done");
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // The 30-day offline period: the window warns from day 21 since the last
+  // SUCCESSFUL sync (web/src/config/offlinePeriod.ts), so the engine has to
+  // say when that was — not when it last tried.
+  console.log("--- the last successful sync is published, kept, and per school ---");
+  const syncedB = eng.status().lastSyncedAt;
+  check("B has a last-synced time", typeof syncedB === "string" && !Number.isNaN(Date.parse(syncedB)), true);
+  check("  and it is recent", Date.now() - Date.parse(syncedB) < 60_000, true);
+
+  session = { userId: "root", role: "super_admin", schoolId: "C" };
+  api.setToken("root");
+  check("C never synced successfully: no time", eng.status().lastSyncedAt, null);
+
+  session = { userId: "u-b", role: "school_admin", schoolId: "B" };
+  api.setToken("B");
+  st.fault = true;
+  await new Promise((r) => setTimeout(r, 5));
+  await eng.cycle();
+  check("a failed cycle sets lastCycleAt but not lastSyncedAt",
+    [eng.status().phase, eng.status().lastCycleAt !== syncedB, eng.status().lastSyncedAt], ["error", true, syncedB]);
+  st.fault = false;
+
+  let pushed = null;
+  const eng2 = engine({
+    docs, queue, state, client: api, feedCollections: ["student"],
+    currentUser: () => session?.userId ?? null,
+    schoolId:    () => (session?.role === "super_admin" ? session.schoolId : null),
+    scope:       () => (session?.schoolId ? `${api.serverUrl()}|${session.schoolId}` : null),
+    marks:       meta,
+    onChange:    (s) => { pushed = s; },
+  });
+  check("a restart still knows it (kept in meta)", eng2.status().lastSyncedAt, syncedB);
+  await new Promise((r) => setTimeout(r, 5));
+  await eng2.cycle();
+  check("a successful cycle moves it forward", Date.parse(eng2.status().lastSyncedAt) > Date.parse(syncedB), true);
+  check("  and the status pushed to the window carries it", pushed?.lastSyncedAt, eng2.status().lastSyncedAt);
+  eng2.stop();
+
   eng.stop();
   db.close();
   await new Promise((r) => server.close(r));

@@ -74,6 +74,8 @@ const engine = ({
     // "pending" before that. See initialSync() below.
     initialSync: "pending",
     lastCycleAt: null,
+    // Last SUCCESSFUL pull for this server and school (see lastSyncedAt()).
+    lastSyncedAt: null,
     lastError:   null,
     pushed:      0,
     pulled:      0,
@@ -117,8 +119,33 @@ const engine = ({
     console.log(`[sync] new scope ${current}: starting the pull from the beginning`);
   };
 
+  /**
+   * When this machine last completed a pull from the server, for the current
+   * server and school — the clock the 30-day offline period runs on (the
+   * window warns from day 21, web/src/config/offlinePeriod.ts).
+   *
+   * lastCycleAt is not it: a cycle that failed sets that too. Kept in marks so
+   * it survives a restart (a machine offline for three weeks is restarted many
+   * times in between), and tied to the scope so another school's sync never
+   * counts. Null when unknown.
+   */
+  let lastSyncedMemo = null; // { scope, at } when there are no marks
+  const lastSyncedAt = () => {
+    const current = scope();
+    if (!marks) return lastSyncedMemo && lastSyncedMemo.scope === current ? lastSyncedMemo.at : null;
+    if (!current || marks.get("lastSyncedFor") !== current) return null;
+    return marks.get("lastSyncedAt") || null;
+  };
+  const markSynced = (at) => {
+    const current = scope();
+    if (!marks) { lastSyncedMemo = { scope: current, at }; return; }
+    if (!current) return;
+    marks.set("lastSyncedFor", current);
+    marks.set("lastSyncedAt", at);
+  };
+
   const publish = (next) => {
-    status = { ...status, ...next, initialSync: initialSync() };
+    status = { ...status, ...next, initialSync: initialSync(), lastSyncedAt: lastSyncedAt() };
     onChange(status);
   };
 
@@ -375,6 +402,10 @@ const engine = ({
       // (see scheduleNext) rather than declared finished.
       if (pulledResult.complete && marks && scope()) marks.set("initialSyncFor", scope());
 
+      // The server answered every page asked for: this is a successful sync,
+      // whether or not more pages remain or a write is blocked.
+      markSynced(new Date().toISOString());
+
       console.log(
         `[sync] pulled ${pulledResult.pulled} row(s) in ${pulledResult.pages} page(s), ${pullMs} ms` +
         (pulledResult.complete ? "" : " — more to come") +
@@ -452,7 +483,7 @@ const engine = ({
       clearTimeout(timer);
     },
 
-    status: () => ({ ...status, initialSync: initialSync() }),
+    status: () => ({ ...status, initialSync: initialSync(), lastSyncedAt: lastSyncedAt() }),
   };
 };
 
