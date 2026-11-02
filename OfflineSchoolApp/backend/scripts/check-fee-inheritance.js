@@ -189,8 +189,12 @@ const main = async () => {
     /billStudentForClass\(/.test(between(students, 'router.patch("/:id/restore"', 'router.patch("/:id/move"')), true);
   check("/students/:id/move voids the old class",
     /leavingOtherClasses: true/.test(between(students, 'router.patch("/:id/move"', 'router.get("/:id"')), true);
-  check("the sync push approval bills",
-    /applyActiveStructuresForStudent\(/.test(src("controllers/sync.controller.js")), true);
+  // POST /sync/push no longer approves anybody (retired: 410, see
+  // check-sibling-accounts.js), so there is no unbilled approval path left in
+  // it — pinned so one is not quietly brought back.
+  check("the sync push no longer approves (retired, so no unbilled path)",
+    [/pushStudentDecisions|status\s*=\s*"approved"/.test(src("controllers/sync.controller.js")),
+     /SYNC_PUSH_RETIRED/.test(src("controllers/sync.controller.js"))], [false, true]);
   check("promotion commits do not bill (the bursar applies next year's structures)",
     /applyActiveStructuresForStudent|billStudentForClass|applyStructure/.test(src("services/promotion.service.js")), false);
 
