@@ -87,6 +87,7 @@ try {
   const { useAuthStore } = await vite.ssrLoadModule("/src/store/auth.store.ts");
   const { default: api, getErrorMessage } = await vite.ssrLoadModule("/src/lib/axios.ts");
   const { default: i18n } = await vite.ssrLoadModule("/src/i18n/index.ts");
+  const { connectivity } = await vite.ssrLoadModule("/src/lib/offline/connectivity.ts");
   await i18n.changeLanguage("en");
 
   const USER = { _id: "u1", name: "Bursar", role: "bursar", schoolId: "s1", permissions: [] };
@@ -120,6 +121,7 @@ try {
   check("nobody is sent to /login", redirects, []);
   check("no sign-out request was made", calls.filter((c) => c.includes("/auth/logout")).length, 0);
   check("the refresh was asked once for both", calls.filter((c) => c.includes("/auth/refresh")).length, 1);
+  check("the offline banner's state now says unreachable", connectivity.get(), { offline: true, reason: "request" });
 
   console.log("--- a timeout, a server fault, a page that is not ours ---");
   for (const [label, behaviour] of [
@@ -144,6 +146,7 @@ try {
   const again = await settle(api.get("/students"));
   check("the retry renews and the request succeeds", [again.ok, again.v?.data?.ok], [true, true]);
   check("with the new token stored", localStorage.getItem("token"), "fresh");
+  check("and the server answering clears the offline state", connectivity.get(), { offline: false, reason: null });
 
   // ── 2. The server refuses ─────────────────────────────────────────────────
   console.log("--- the server refuses the session ---");
@@ -163,6 +166,19 @@ try {
     check(`${label}: signed out`, [s.isAuthenticated, s.token, localStorage.getItem("token")], [false, null, null]);
     check(`${label}: sent to /login`, redirects.includes("/login"), true);
   }
+
+  // ── Signing in with no connection ─────────────────────────────────────────
+  console.log("--- signing in offline ---");
+  useAuthStore.getState().logout();
+  const realAdapter = axios.defaults.adapter;
+  axios.defaults.adapter = async (config) => {
+    if (String(config.url).includes("/auth/login")) throw new AxiosError("Network Error", "ERR_NETWORK", config, {});
+    return realAdapter(config);
+  };
+  await useAuthStore.getState().login({ email: "a@b.c", password: "x" }).catch(() => {});
+  check("the sign-in error is the offline sentence, not axios's 'Network Error'",
+    useAuthStore.getState().error, i18n.t("errors.offline"));
+  axios.defaults.adapter = realAdapter;
 
   // ── 3. The ordinary renewal still works ───────────────────────────────────
   console.log("--- a successful refresh replays the queue ---");

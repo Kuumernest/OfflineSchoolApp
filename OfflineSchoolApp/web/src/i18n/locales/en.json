@@ -5754,5 +5754,10 @@
   "verifyPage": {
     "opening": "Opening the verification page…",
     "continue": "Continue"
+  },
+  "connection": {
+    "offlineTitle": "You're offline.",
+    "unreachableTitle": "The server can't be reached.",
+    "browserBody": "The web console needs an internet connection — changes can't be saved until you reconnect."
   }
 }

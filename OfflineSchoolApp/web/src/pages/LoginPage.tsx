@@ -10,6 +10,7 @@ import { useAuthStore, useMustResetPassword } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 import { desktop } from "@/lib/offline/bridge";
 import { CHANGE_SERVER_EVENT } from "@/components/offline/DesktopServerGate";
+import OfflineBanner from "@/components/offline/OfflineBanner";
 // The 0.22 MB JPEG the phone uses, not the 2.61 MB PNG this pointed at.
 // A login page is the one screen every user loads before anything is
 // cached, over the same school connection the rest of the app now
@@ -121,6 +122,9 @@ export default function LoginPage() {
     >
       {/* Dark overlay so the white text and logo stay readable on the photo */}
       <div className="absolute inset-0 bg-primary-900/70 pointer-events-none" aria-hidden="true" />
+      {/* Above the card, not inside it: offline, signing in cannot work, and
+          that is worth knowing before the password is typed. */}
+      <OfflineBanner className="absolute inset-x-0 top-0 z-10" />
       <div className="relative w-full max-w-md">
 
         {/* Logo */}

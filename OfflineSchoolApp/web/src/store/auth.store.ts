@@ -1,6 +1,6 @@
 // web/src/store/auth.store.ts
 import { create } from "zustand";
-import api, { TIMEOUTS } from "@/lib/axios";
+import api, { TIMEOUTS, getErrorMessage } from "@/lib/axios";
 import { desktop } from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -354,7 +354,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         error:           null,
       });
     } catch (err) {
-      const message = extractErrorMessage(err);
+      // With no response there is no server message to show, and axios's own
+      // ("Network Error") is not a sentence for a person; getErrorMessage says
+      // "no connection" or "too slow" in their language.
+      const message = (err as { response?: unknown } | null)?.response
+        ? extractErrorMessage(err)
+        : getErrorMessage(err);
       set({ isLoading: false, error: message, isAuthenticated: false });
       throw err;
     }

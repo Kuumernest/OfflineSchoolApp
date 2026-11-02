@@ -4,6 +4,7 @@ import axios            from "axios";
 import i18n             from "@/i18n";
 import { getAuthState } from "@/store/auth.store";
 import { offlineAdapter } from "@/lib/offline/adapter";
+import { connectivity, isNoNetworkError } from "@/lib/offline/connectivity";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INSTANCE
@@ -180,9 +181,19 @@ api.interceptors.response.use(
     if (meta?.startedAt && !meta.servedLocally) {
       recordSuccess(Date.now() - meta.startedAt, meta.budget);
     }
+    // The server answered: whatever the offline banner believed, it is
+    // reachable. A desktop's local answer says nothing about the network.
+    if (!meta?.servedLocally) connectivity.reached();
     return res;
   },
   async (err) => {
+    // Same evidence from a failure: a response of any status means the server
+    // is there; no response at all (ERR_NETWORK) means it is not — which is how
+    // a link that is up with no internet behind it shows the banner, where
+    // navigator.onLine would say all is well.
+    if (err?.response && !err.config?.metadata?.servedLocally) connectivity.reached();
+    else if (isNoNetworkError(err)) connectivity.unreachable();
+
     // ECONNABORTED is how axios reports its own timeout firing. Only that
     // counts: a 500 or a 404 says nothing about how fast the link is, and
     // feeding those in would raise every budget because of a server fault.

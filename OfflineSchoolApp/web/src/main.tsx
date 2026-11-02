@@ -38,6 +38,7 @@ import App                   from "@/App";
 import DesktopServerGate from "./components/offline/DesktopServerGate";
 import { ToastProvider }     from "@/components/ui/Toast";
 import { useAuthStore }      from "@/store/auth.store";
+import { startConnectivityWatch } from "@/lib/offline/connectivityWatch";
 
 // Imported for the side effect of calling i18n.init(). It must run before the
 // first render, or useTranslation() on the very first paint returns raw keys.
@@ -57,11 +58,34 @@ useAuthStore.getState().initAuth();
 // mostly slow-moving data (classes, subjects, periods), so refetching on every
 // window focus produced a burst of requests each time an admin alt-tabbed
 // back. Mutations invalidate explicitly, which is more precise than polling.
+//
+// networkMode "always", in both builds, for different reasons.
+//
+// The default ("online") consults the browser's online flag and, while it says
+// offline, does not run the request at all: the query sits paused on its
+// spinner forever, and a mutation is held in memory — the button stays busy,
+// nothing is said, and a reload loses it.
+//
+//   Browser   the console is online-only by decision. A save made offline has
+//             to fail at once with the offline message (getErrorMessage) so the
+//             person knows it was not saved, rather than appear to be in
+//             progress. Queries likewise reach their error state instead of
+//             spinning; the offline banner says why, and refetchOnReconnect
+//             reloads them when the connection returns.
+//
+//   Desktop   most requests never touch the network — the offline adapter
+//             answers reads and queues writes locally. Pausing them because the
+//             OS reports no network would switch off exactly the screens that
+//             are meant to keep working offline. The ones that do go out fail
+//             with the needs-internet message.
 // ─────────────────────────────────────────────────────────────────────────────
+
+startConnectivityWatch();
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode:          "always",
       staleTime:            60_000,
       gcTime:               5 * 60_000,
       refetchOnWindowFocus: false,
@@ -75,6 +99,7 @@ const queryClient = new QueryClient({
       },
     },
     mutations: {
+      networkMode: "always",
       retry: false,
     },
   },

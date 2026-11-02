@@ -5754,5 +5754,10 @@
   "verifyPage": {
     "opening": "Ouverture de la page de vérification…",
     "continue": "Continuer"
+  },
+  "connection": {
+    "offlineTitle": "Vous êtes hors ligne.",
+    "unreachableTitle": "Le serveur est injoignable.",
+    "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie."
   }
 }
