@@ -31,7 +31,9 @@ import {
   recordPayment,
   reversePayment,
   fetchReceiptHtml,
+  fetchUnconfirmedPaymentIds,
 } from "@/services/fee.service";
+import { isDesktop } from "@/lib/offline/bridge";
 import { printHtml } from "@/print/document";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
 import type { PaymentMethod } from "@/types/fees.types";
@@ -70,6 +72,18 @@ export default function StudentFeeAccountPage() {
     enabled:  !!schoolId && !!studentId,
   });
 
+  // On the desktop, the payments the server has not confirmed yet: their
+  // receipt prints PROVISIONAL, and the row says so before anyone presses
+  // Print. Polled, because the sync that confirms them happens in the
+  // background; in a browser this is always empty and never runs.
+  const unconfirmedQ = useQuery({
+    queryKey: ["fees", "unconfirmed", studentId],
+    queryFn:  fetchUnconfirmedPaymentIds,
+    enabled:  isDesktop(),
+    refetchInterval: 5000,
+  });
+  const unconfirmed = useMemo(() => new Set(unconfirmedQ.data ?? []), [unconfirmedQ.data]);
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["fees"] });
   };
@@ -93,11 +107,18 @@ export default function StudentFeeAccountPage() {
       };
       return recordPayment({ _id: attemptId(payload), ...payload });
     },
-    onSuccess: ({ payment }) => {
+    onSuccess: async ({ payment }) => {
+      // Recorded on this desktop and not yet on the server: the receipt that
+      // can be printed now is provisional, and the bursar should know before
+      // handing it over.
+      const pending = isDesktop()
+        && (await fetchUnconfirmedPaymentIds().catch(() => [] as string[])).includes(payment._id);
       toast({
         kind:    "success",
         title:   t("fees.recorded"),
-        message: payment.receiptNo ?? undefined,
+        message: pending
+          ? t("fees.recordedProvisional", { receiptNo: payment.receiptNo ?? "" })
+          : payment.receiptNo ?? undefined,
       });
       setPayOpen(false);
       setForm({ amount: "", method: "cash", reference: "", note: "" });
@@ -295,9 +316,17 @@ export default function StudentFeeAccountPage() {
               {account?.payments.map((p) => {
                 const isReversal = Boolean(p.reversesId);
                 const isReversed = Boolean(p.reversedById);
+                const provisional = unconfirmed.has(p._id);
                 return (
                   <Tr key={p._id}>
-                    <Td className="font-medium text-ink">{p.receiptNo ?? "—"}</Td>
+                    <Td className="font-medium text-ink">
+                      {p.receiptNo ?? "—"}
+                      {provisional && (
+                        <span className="ml-2 align-middle" title={t("fees.provisionalHint")}>
+                          <Badge variant="warning">{t("fees.provisional")}</Badge>
+                        </span>
+                      )}
+                    </Td>
                     <Td className="text-ink-muted">{fmt.dateShort(p.receivedAt)}</Td>
                     <Td className="text-ink-muted">{t(`method.${p.method}`)}</Td>
                     <Td className="text-ink-muted">{p.reference ?? "—"}</Td>
@@ -323,7 +352,9 @@ export default function StudentFeeAccountPage() {
                             className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-primary-700 disabled:opacity-50"
                           >
                             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-                            {receipts.busyKey === p._id ? t("common.preparing") : t("common.print")}
+                            {receipts.busyKey === p._id
+                              ? t("common.preparing")
+                              : provisional ? t("fees.printProvisional") : t("common.print")}
                           </button>
                         )}
                         {isReversal ? (
