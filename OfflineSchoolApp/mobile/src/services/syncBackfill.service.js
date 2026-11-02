@@ -166,6 +166,14 @@ const SPECS = [
     }),
   },
 
+  /**
+   * A dirty class nothing has queued — the safety net, since ClassService
+   * queues its own create, edit, toggle and delete. Classes keep the id the
+   * device chose, and POST /admin/classes answers a repeat with the row it
+   * already holds, so for a class the server has this is a harmless replay
+   * that settles the flag; for one it lacks, it is the create, carrying every
+   * field the form took (it used to send only id, name and level).
+   */
   {
     key: "class",
     table: "classes",
@@ -178,6 +186,8 @@ const SPECS = [
       id:       row.id,
       name:     row.name,
       level:    row.level || null,
+      section:  row.section || "",
+      ...(row.classTeacherId ? { classTeacherId: row.classTeacherId } : {}),
       schoolId: row.schoolId || row.school_id || schoolId,
     }),
   },

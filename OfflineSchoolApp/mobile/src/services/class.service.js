@@ -423,11 +423,20 @@ export const ClassService = {
       ).catch(() => {});
     }
 
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return localId;
-
-    try {
-      const response = await api.post(API.admin.classes.list, {
+    // Queued, not sent — online or not.
+    //
+    // Offline this used to return straight after the INSERT with nothing
+    // queued, leaving only the dirty flag; and the sync then cleared every
+    // dirty class flag (markOrphanedRecordsAsSynced) before the backfill
+    // could see it. The class never reached the server. One path now: the
+    // outbox sends it when it can, under the id this device chose (POST
+    // /admin/classes keeps a client id, and answers a repeat with the row it
+    // holds), and retries until it lands.
+    await MutationQueue.enqueue({
+      entityKey: `class:${localId}`,
+      method:    "POST",
+      endpoint:  API.admin.classes.list,
+      payload:   {
         id: localId, name: trimmed,
         level:   trimmedLevel,
         section: trimmedSection,
@@ -435,45 +444,10 @@ export const ClassService = {
         // Only sent when set: the server resolves the teacher's name from
         // their User row, and an absent field creates a teacherless class.
         ...(classTeacher?.id ? { classTeacherId: classTeacher.id } : {}),
-      });
-
-      const raw =
-        response.data?.class?._id || response.data?.class?.id ||
-        response.data?.data?._id  || response.data?.data?.id  ||
-        response.data?.serverId   || response.data?._id       ||
-        response.data?.id         || null;
-
-      const finalId = raw ? String(raw) : localId;
-
-      if (finalId !== localId) {
-        await reconcileClassId(db, localId, finalId);
-      } else {
-        await db.runAsync(
-          `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
-          [now, localId]
-        );
-      }
-
-      return finalId;
-    } catch (err) {
-      if (err?.response?.status === 409) {
-        const body = err.response.data;
-        const raw  = body?.serverId || body?.class?._id || body?.class?.id || body?._id || body?.id || null;
-
-        if (raw) {
-          const finalId = String(raw);
-          await reconcileClassId(db, localId, finalId);
-          return finalId;
-        }
-
-        await db.runAsync(
-          `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
-          [now, localId]
-        );
-      } else {
-        console.warn(`[ClassService] Server push failed: ${err.message}`);
-      }
-    }
+        __local:     { table: TABLE, ids: [localId] },
+        __reconcile: { kind: "class", localId, table: TABLE },
+      },
+    });
 
     return localId;
   },
@@ -579,8 +553,13 @@ export const ClassService = {
         ...(touchesTeacher
           ? { classTeacherId: classTeacher?.id ?? "" }
           : {}),
-        __local: { table: TABLE, id },
+        // `ids`, a list: the queue reads __local.ids. This said `id`, so the
+        // flag was never cleared and the next sync POSTed the class again.
+        __local: { table: TABLE, ids: [id] },
       },
+      // Two edits before a sync: the second names only what IT changed, so
+      // replacing the first payload would drop the first edit's fields.
+      merge: true,
     });
 
     return true;
@@ -613,32 +592,23 @@ export const ClassService = {
       [newActive, now, id]
     );
 
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return { _id: id, id, isActive: newActiveBool };
+    // Queued as the state it should END in, not as a toggle.
+    //
+    // Offline this returned without queueing anything, so the change lived
+    // only in the dirty flag — which the backfill turned into a create of a
+    // class the server already had (a no-op), and the toggle was lost. Online
+    // it PATCHed /admin/classes/:id/toggle-active, a route the server has
+    // never had, so it was lost there too. PUT /admin/classes/:id takes
+    // isActive. An absolute value also coalesces safely: toggling twice
+    // before a sync sends the final state once, never "flip" twice.
+    await MutationQueue.enqueue({
+      entityKey: `class-active:${id}`,
+      method:    "PUT",
+      endpoint:  API.admin.classes.detail(id),
+      payload:   { isActive: newActiveBool, __local: { table: TABLE, ids: [id] } },
+    });
 
-    try {
-      const response = await api.patch(
-        API.admin.classes.toggleActive
-          ? API.admin.classes.toggleActive(id)
-          : `/admin/classes/${id}/toggle-active`
-      );
-
-      const raw = response.data?.class ?? response.data?.data ?? response.data;
-      const serverActive =
-        raw?.isActive  !== undefined ? Boolean(raw.isActive)  :
-        raw?.is_active !== undefined ? Boolean(Number(raw.is_active)) :
-        newActiveBool;
-
-      await db.runAsync(
-        `UPDATE ${TABLE} SET is_active = ?, _synced = 1, _synced_at = ? WHERE id = ?`,
-        [serverActive ? 1 : 0, now, id]
-      );
-
-      return { _id: id, id, isActive: serverActive };
-    } catch (err) {
-      console.warn(`[ClassService] toggleActive push failed: ${err.message}`);
-      return { _id: id, id, isActive: newActiveBool };
-    }
+    return { _id: id, id, isActive: newActiveBool };
   },
 
   async delete(id) {
@@ -669,6 +639,27 @@ export const ClassService = {
         "svcErr.classHasStudents",
         "Cannot delete a class that has students enrolled. Move or remove students first."
       );
+    }
+
+    // A class this phone created and never sent is simply undone: its queued
+    // create (and anything queued behind it) is cancelled and the rows go,
+    // with nothing sent — online or not, since the create would otherwise
+    // still go out after the delete.
+    if ((await MutationQueue.createState(`class:${id}`)) === "unsent") {
+      for (const key of [`class:${id}`, `class-update:${id}`, `class-active:${id}`]) {
+        await MutationQueue.cancelUnsent(key);
+      }
+      await withFkOff(db, async () => {
+        const subjects = await db.getAllAsync(
+          `SELECT id FROM subjects WHERE class_id = ? OR classId = ?`, [id, id]
+        ).catch(() => []);
+        for (const s of subjects ?? []) {
+          await MutationQueue.cancelUnsent(`subject:${s.id}`);
+          await db.runAsync(`DELETE FROM subjects WHERE id = ?`, [s.id]).catch(() => {});
+        }
+        await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+      });
+      return { deletedSubjects: 0 };
     }
 
     const now = new Date().toISOString();
@@ -728,7 +719,21 @@ export const ClassService = {
       }
     }
 
-    // Offline path
+    // Offline path — deleted on the server through the outbox. Before, only
+    // the dirty flag recorded it, and the sync cleared that flag
+    // (markOrphanedRecordsAsSynced) before anything read it. Queued here
+    // rather than left to the backfill because a create still in flight
+    // would, on landing, mark this row synced and so hide the delete.
+    await MutationQueue.enqueue({
+      entityKey: `class-delete:${id}`,
+      method:    "DELETE",
+      endpoint:  API.admin.classes.detail(id),
+      payload:   {
+        __local:     { table: TABLE, ids: [id] },
+        __reconcile: { kind: "softDelete", table: TABLE, localId: id },
+      },
+    });
+
     await withFkOff(db, async () => {
       await db.runAsync(
         `UPDATE subjects SET deleted_at = ?, updated_at = ?, _synced = 0

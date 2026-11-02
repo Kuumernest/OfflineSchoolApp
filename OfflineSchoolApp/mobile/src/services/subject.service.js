@@ -16,6 +16,7 @@ import { isAuthenticated, getCurrentAuth } from "../utils/authHelpers";
 import { fetchWithFallback }               from "../utils/syncHelpers";
 import { API }                             from "./apiEndpoints";
 import api                                 from "./api";
+import { MutationQueue }                   from "./mutationQueue.service";
 
 const TABLE = "subjects";
 
@@ -275,6 +276,19 @@ export const getSubjectsForClasses = async (classIds) => {
   return rows ?? [];
 };
 
+/**
+ * Written locally and queued, online or not.
+ *
+ * This used to POST first without an id and fall back to a local row when
+ * the request failed. Offline that local row was only marked dirty, and the
+ * sync cleared every dirty subject flag (markOrphanedRecordsAsSynced) before
+ * the backfill could queue it — the subject never reached the server. And a
+ * POST that landed but lost its answer left a second, local copy behind.
+ * Now the subject carries the id this device chose (POST /admin/subjects
+ * keeps a client id and answers a repeat with the row it holds), and the
+ * outbox sends it once its class exists upstream: the class is queued
+ * first, and the id map rewrites classId if it was ever re-issued.
+ */
 export const createSubject = async ({ name, classId, code, schoolId }) => {
   if (!name?.trim()) throw new Error("[subjects] name is required");
   if (!classId)      throw new Error("[subjects] classId is required");
@@ -283,26 +297,6 @@ export const createSubject = async ({ name, classId, code, schoolId }) => {
   await ensureSchema(db);
   const auth           = getCurrentAuth();
   const resolvedSchool = schoolId ?? auth.schoolId;
-
-  if (isAuthenticated()) {
-    try {
-      const response = await api.post(API.admin.subjects.list, {
-        name: name.trim(), classId,
-        code: code?.trim() || null,
-        schoolId: resolvedSchool,
-      });
-
-      const raw        = response.data?.subject || response.data?.data || response.data;
-      const normalised = normaliseServerSubject(raw, resolvedSchool);
-
-      if (normalised) {
-        await persistSubjectsLocally(db, [normalised]);
-        return normalised;
-      }
-    } catch (err) {
-      console.warn("[subjects] Server create failed, creating locally:", err.message);
-    }
-  }
 
   const localId = generateLocalId();
   const now     = new Date().toISOString();
@@ -323,29 +317,66 @@ export const createSubject = async ({ name, classId, code, schoolId }) => {
   };
 
   await persistSubjectsLocally(db, [subject]);
+
+  await MutationQueue.enqueue({
+    entityKey: `subject:${localId}`,
+    method:    "POST",
+    endpoint:  API.admin.subjects.list,
+    payload:   {
+      id:       localId,
+      name:     subject.name,
+      code:     subject.code || "",
+      classId,
+      schoolId: resolvedSchool,
+      __resolve:   ["classId"],
+      __local:     { table: TABLE, ids: [localId] },
+      __reconcile: { kind: "subject", localId, table: TABLE },
+    },
+  });
+
   return subject;
 };
 
+/**
+ * Removed locally and queued.
+ *
+ * A subject this phone created and never sent is undone instead: its queued
+ * create is cancelled and the row goes, with nothing sent. Otherwise the
+ * DELETE goes through the outbox. This used to call the server directly
+ * when signed in (offline: a failed request and a warning) and then mark the
+ * row dirty either way, so a delete the server had already taken was sent a
+ * second time, and an offline one was lost when the sync cleared the flag.
+ */
 export const deleteSubject = async (id) => {
   if (!id) throw new Error("[subjects] id is required");
 
   const db  = await getDatabase();
+  await ensureSchema(db);
   const now = new Date().toISOString();
 
-  if (isAuthenticated() && !id.startsWith("local_")) {
-    try {
-      await api.delete(API.admin.subjects.detail(id));
-    } catch (err) {
-      console.warn("[subjects] Server delete failed:", err.message);
-    }
+  if ((await MutationQueue.createState(`subject:${id}`)) === "unsent") {
+    await MutationQueue.cancelUnsent(`subject:${id}`);
+    const result = await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+    return (result?.changes ?? 0) > 0;
   }
 
   const result = await db.runAsync(
     `UPDATE ${TABLE} SET deleted_at = ?, _synced = 0, updated_at = ? WHERE id = ? AND ${NOT_DELETED}`,
     [now, now, id]
   );
+  if ((result?.changes ?? 0) === 0) return false;
 
-  return (result?.changes ?? 0) > 0;
+  await MutationQueue.enqueue({
+    entityKey: `subject-delete:${id}`,
+    method:    "DELETE",
+    endpoint:  API.admin.subjects.detail(id),
+    payload:   {
+      __local:     { table: TABLE, ids: [id] },
+      __reconcile: { kind: "softDelete", table: TABLE, localId: id },
+    },
+  });
+
+  return true;
 };
 
 export const SubjectService = {

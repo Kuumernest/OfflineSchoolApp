@@ -1187,7 +1187,15 @@ class SyncManagerClass {
       if (this._isUnauthenticated()) { console.log("[SyncManager] User logged out — aborting"); return; }
 
       if (!this.isStudent()) {
-        await this.markOrphanedRecordsAsSynced();
+        // markOrphanedRecordsAsSynced used to run here: it set _synced = 1 on
+        // EVERY dirty class and subject, before the backfill below could
+        // queue them — so a class or subject created, edited, toggled or
+        // deleted offline was silently dropped. Its repair (stale dirty flags
+        // on rows the server already has, being re-sent every sync) is now
+        // done by the send itself: classes and subjects are POSTed under
+        // their own id, the server answers a repeat with the row it holds,
+        // and the reconciler clears the flag. Name collisions are mapped by
+        // repairClassIds below.
 
         // Class-ID repair needs /admin/classes, so it belongs here rather than
         // in the student branch it used to sit in — where it could only 403.
@@ -1400,27 +1408,6 @@ class SyncManagerClass {
         console.warn("[SyncManager] clearStaleSubjectsAndRepull failed:", err.message);
       }
     });
-  }
-
-  async markOrphanedRecordsAsSynced() {
-    const db = await getDatabase();
-    const ts = new Date().toISOString();
-    try {
-      const classR = await db.runAsync(
-        "UPDATE classes  SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
-      const subjectR = await db.runAsync(
-        "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
-
-      const cc = classR?.changes   ?? 0;
-      const sc = subjectR?.changes ?? 0;
-      if (cc > 0 || sc > 0) {
-        console.log(`[SyncManager] Orphaned records marked synced — classes: ${cc}, subjects: ${sc}`);
-      }
-    } catch (err) {
-      console.warn("[SyncManager] markOrphanedRecordsAsSynced failed:", err.message);
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
