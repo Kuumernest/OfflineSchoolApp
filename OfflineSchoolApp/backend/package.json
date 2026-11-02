@@ -105,6 +105,7 @@
     "check:interventions": "node scripts/check-interventions.js",
     "check:teacher": "node scripts/check-teacher-intelligence.js",
     "check:shared": "node scripts/check-shared-intelligence.js",
+    "check:receipts": "node scripts/check-receipt-template.js",
     "check:calibration": "node scripts/check-calibration.js",
     "check:calibration-export": "node scripts/check-calibration-export.js",
     "check:access": "node scripts/check-intelligence-access.js",

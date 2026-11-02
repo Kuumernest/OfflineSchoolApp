@@ -92,10 +92,56 @@ const isServerReceipt = (value) =>
 const formatDeviceReceipt = (academicYear, deviceCode, seq) =>
   `RCT-${academicYear}-${String(deviceCode).toUpperCase()}-${String(seq).padStart(4, "0")}`;
 
+/** Was this issued by a device, whatever its year? */
+const isDeviceReceipt = (value) =>
+  typeof value === "string" && DEVICE_RECEIPT.test(value.trim());
+
+/**
+ * The reference a PROVISIONAL receipt carries, from the payment's own id.
+ *
+ * A payment taken with no connection is printed before the server has seen it
+ * (the owner's decision: provisional receipts may be printed before sync,
+ * clearly marked). The phone issues no receipt number at all — two phones
+ * offline would mint the same one — so its provisional paper needs something
+ * else to tie it to the official receipt that follows.
+ *
+ * The payment id is that thing: the client chooses it, the server keeps it as
+ * the row's _id, and so the official receipt can print the same reference and
+ * say which provisional paper it replaces. Eight hex characters is enough to
+ * tell one family's payments apart on paper; the id itself is what the
+ * database is indexed by.
+ *
+ * @param   {unknown} id  the payment's _id
+ * @returns {string|null} e.g. "P-1A2B3C4D"
+ */
+const provisionalReference = (id) => {
+  const hex = String(id ?? "").replace(/[^0-9a-fA-F]/g, "").slice(0, 8).toUpperCase();
+  return hex.length === 8 ? `P-${hex}` : null;
+};
+
+/**
+ * Which provisional reference an OFFICIAL receipt should say it replaces.
+ *
+ * Only for a payment taken on a device (source "mobile" or "desktop") whose
+ * official number is not the device's own. The desktop issues a device number
+ * and the server keeps it, so its provisional and official papers already carry
+ * the same number and need no cross-reference. The phone issues none, so its
+ * provisional paper carries the reference and the official one names it.
+ */
+const replacedProvisionalReference = (payment) => {
+  if (!payment) return null;
+  if (payment.source !== "mobile" && payment.source !== "desktop") return null;
+  if (isDeviceReceipt(payment.receiptNo)) return null;
+  return provisionalReference(payment._id);
+};
+
 module.exports = {
   DEVICE_RECEIPT,
+  replacedProvisionalReference,
   SERVER_RECEIPT,
   parseDeviceReceipt,
   isServerReceipt,
+  isDeviceReceipt,
   formatDeviceReceipt,
+  provisionalReference,
 };
