@@ -263,8 +263,15 @@ const registerHandlers = () => {
    * as it always did — so an endpoint that has no local handler yet behaves
    * today the way it behaves in a browser.
    */
-  ipcMain.handle("api:request", (_e, req) => {
-    const result = localApi.handle(req, { docs, meta: metaBag, queue, session, state: syncState });
+  ipcMain.handle("api:request", async (_e, req) => {
+    // Awaited: the messaging handlers ask the server first (handlers/messages.js).
+    // `server` and `offline` are for them — the copy they keep is scoped to
+    // this account, and answers only when the server cannot.
+    const result = await localApi.handle(req, {
+      docs, meta: metaBag, queue, session, state: syncState,
+      server:  api,
+      offline: () => sync?.status().phase === "offline",
+    });
 
     // Something was queued: try to send it immediately rather than waiting for
     // the interval. Online this makes an offline-capable write indistinguishable

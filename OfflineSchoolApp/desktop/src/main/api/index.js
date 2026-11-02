@@ -54,6 +54,9 @@ const reads = [
   // Student intelligence, computed locally by shared/intelligence — the same
   // functions the server calls, over this machine's mirrored rows.
   ...require("./handlers/intelligence"),
+  // Messaging: a read-through cache of what the server showed this account,
+  // and sends queued when it cannot be reached. Asynchronous — see the file.
+  ...require("./handlers/messages"),
 ];
 
 /**
@@ -131,6 +134,15 @@ const handle = (req, ctx) => {
       // body it would rather the server validated — and that has to fall through
       // to the network rather than return a subtly different answer.
       if (!result) return null;
+
+      // An asynchronous read (handlers/messages.js asks the server first) fails
+      // the same way a synchronous one does: to the network, said out loud.
+      if (entry.kind === "read" && typeof result.then === "function") {
+        return result.catch((err) => {
+          console.error(`[api] ${method} ${path} failed locally: ${err.message}`);
+          return null;
+        });
+      }
 
       if (entry.kind === "read") return result;
 
