@@ -3439,7 +3439,12 @@
     "discard": "Discard",
     "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
     "syncNow": "Check now",
-    "lastChecked": "Last checked at {{time}}"
+    "lastChecked": "Last checked at {{time}}",
+    "signInAgainTitle": "Sign in again to send {{count}} unsent change(s)",
+    "signInAgainTitleNone": "Sign in again to keep this computer in sync",
+    "signInAgainBody": "The server ended this computer's session, so nothing is being sent. Everything recorded here stays on this computer and is sent once you sign in again.",
+    "signInAgainAction": "Sign in again",
+    "signInAgainShort": "Sign in again"
   },
   "initialSync": {
     "loadingTitle": "Downloading your school's data to this computer…",

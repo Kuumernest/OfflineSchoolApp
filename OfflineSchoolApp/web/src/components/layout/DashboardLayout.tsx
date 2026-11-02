@@ -7,6 +7,7 @@ import TopBar                    from "@/components/layout/TopBar";
 import SchoolContextBar          from "@/components/layout/SchoolContextBar";
 import InitialSyncBanner         from "@/components/offline/InitialSyncBanner";
 import OfflineBanner             from "@/components/offline/OfflineBanner";
+import SignInAgainBanner         from "@/components/offline/SignInAgainBanner";
 import { useActiveSchool, useUser } from "@/store/auth.store";
 import { NAV_ITEMS }             from "@/config/navigation";
 import { useQuery }              from "@tanstack/react-query";
@@ -81,6 +82,7 @@ export default function DashboardLayout() {
         <OfflineBanner />
         <TopBar onMenuClick={toggleSidebar} title={title} />
         <SchoolContextBar />
+        <SignInAgainBanner />
         <InitialSyncBanner />
 
         {/*

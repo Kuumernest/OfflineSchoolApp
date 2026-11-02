@@ -541,12 +541,23 @@ const main = async () => {
 
   await eng.cycle();
   check("the phase says so", eng.status().phase, "unauthenticated");
+  // The window shows "sign in again" on this, and only on this.
+  check("and that the server refused the session", eng.status().sessionRejected, true);
   // Nothing is wrong with the request, so marking it blocked would be a lie
   // that a person then has to unblock by hand once they sign in again.
   check("the queued write is untouched", queue.summary().blocked, 0);
   check("and still waiting", queue.summary().pending, 1);
 
   st.unauthorized = false;
+
+  // Signing in again hands over a token the server accepts; the refusal must
+  // not outlive the session it was about.
+  await eng.cycle();
+  check("a cycle the server accepts clears the refusal",
+    [eng.status().phase === "unauthenticated", eng.status().sessionRejected], [false, false]);
+  check("and sends what was held", queue.summary().pending, 0);
+  // Something waiting again, for the offline case below.
+  queue.add({ method: "post", path: "/api/fees/reminders", body: {}, idemKey: "rem-3" });
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and an unreachable server is offline, not broken ---");
@@ -563,6 +574,8 @@ const main = async () => {
   api.setToken(null);
   await eng.cycle();
   check("no session is its own state", eng.status().phase, "unauthenticated");
+  // Signed out, or not told yet: nothing for a person to do, so no prompt.
+  check("and not a refusal", eng.status().sessionRejected, false);
 
   eng.stop();
   db.close();

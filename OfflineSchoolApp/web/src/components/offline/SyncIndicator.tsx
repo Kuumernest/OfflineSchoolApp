@@ -29,7 +29,7 @@
 // One check, at the top.
 
 import { useCallback, useEffect, useState } from "react";
-import { CloudOff, RefreshCw, AlertTriangle, Check, X } from "lucide-react";
+import { CloudOff, RefreshCw, AlertTriangle, Check, LogIn, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
 
@@ -110,16 +110,21 @@ export default function SyncIndicator() {
   // like offline: it was reported as "idle" before, so it showed nothing.
   const errored = status?.phase === "error";
   const syncing = status?.phase === "pushing" || status?.phase === "pulling";
+  // The server refused this machine's token: nothing goes until somebody signs
+  // in again. Not a calm "N waiting" — the queue is not draining and will not
+  // on its own. SignInAgainBanner carries the action; this says it in the bar.
+  const signedOut = status?.phase === "unauthenticated" && status.sessionRejected === true;
 
   // Nothing worth saying. See the note above about always-present indicators.
-  if (!blocked && !waiting && !offline && !errored && !syncing) return null;
+  if (!blocked && !waiting && !offline && !errored && !syncing && !signedOut) return null;
 
   const tone =
-    blocked ? "danger" :
+    blocked || signedOut ? "danger" :
     offline || errored ? "warning" :
     "muted";
 
   const label =
+    signedOut ? t("sync.signInAgainShort") :
     blocked ? t("sync.blocked", { count: blocked }) :
     offline ? t("sync.offline") :
     errored ? t("sync.error") :
@@ -127,6 +132,7 @@ export default function SyncIndicator() {
     t("sync.waiting", { count: waiting });
 
   const Icon =
+    signedOut ? LogIn :
     blocked ? AlertTriangle :
     offline ? CloudOff :
     errored ? AlertTriangle :
@@ -172,6 +178,7 @@ export default function SyncIndicator() {
                   {t("sync.allSent")}
                 </p>
               )}
+              {signedOut && <p className="mb-1 font-semibold text-danger-text">{t("sync.signInAgainBody")}</p>}
               {waiting > 0 && <p>{t("sync.waitingBody", { count: waiting })}</p>}
               {offline && <p className="mt-1 text-amber-700">{t("sync.offlineBody")}</p>}
               {errored && (

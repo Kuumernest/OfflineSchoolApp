@@ -3439,7 +3439,12 @@
     "discard": "Abandonner",
     "discardConfirm": "Abandonner cette modification ? Ce qui a été enregistré sur cet ordinateur sera supprimé et jamais envoyé.",
     "syncNow": "Vérifier maintenant",
-    "lastChecked": "Dernière vérification à {{time}}"
+    "lastChecked": "Dernière vérification à {{time}}",
+    "signInAgainTitle": "Reconnectez-vous pour envoyer {{count}} modification(s) non envoyée(s)",
+    "signInAgainTitleNone": "Reconnectez-vous pour que cet ordinateur reste synchronisé",
+    "signInAgainBody": "Le serveur a mis fin à la session de cet ordinateur : plus rien n'est envoyé. Tout ce qui a été enregistré ici reste sur cet ordinateur et sera envoyé dès que vous vous reconnecterez.",
+    "signInAgainAction": "Se reconnecter",
+    "signInAgainShort": "Reconnexion requise"
   },
   "initialSync": {
     "loadingTitle": "Téléchargement des données de votre établissement sur cet ordinateur…",

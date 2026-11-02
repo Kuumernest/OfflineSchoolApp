@@ -298,9 +298,23 @@ const registerHandlers = () => {
   // has to agree with it and inside reach of the parity harness.
 
   // ── The state of the queue, for the UI to show ──────────────────────────
-  ipcMain.handle("outbox:summary", () => queue.summary());
+  /**
+   * The summary, plus how many of the waiting rows belong to whoever is signed
+   * in. The window needs that number in two places — "sign in again to send N"
+   * and "you have N changes not yet sent" before signing out — and in both it
+   * is this person's rows that matter: another account's queue is sent when
+   * THEY sign in (the engine sends only the signed-in account's requests).
+   */
+  const summaryForSession = () => ({
+    ...queue.summary(),
+    mine: session?.userId
+      ? db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE user_id = ?").get(String(session.userId))?.n ?? 0
+      : 0,
+  });
+
+  ipcMain.handle("outbox:summary", () => summaryForSession());
   ipcMain.handle("outbox:list",    () => queue.all());
-  ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return queue.summary(); });
+  ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return summaryForSession(); });
   /**
    * Save a copy of a blocked entry before it is discarded (unsentCopy.js).
    * The person chooses where; nothing is written without the dialog.
@@ -330,7 +344,7 @@ const registerHandlers = () => {
     for (const extra of undo?.extraDocs ?? []) {
       if (extra?.collection && extra?.docId) docs.forget(extra.collection, extra.docId);
     }
-    return queue.summary();
+    return summaryForSession();
   });
 
   // ── Sync bookkeeping ────────────────────────────────────────────────────

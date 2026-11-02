@@ -77,6 +77,11 @@ const engine = ({
     lastError:   null,
     pushed:      0,
     pulled:      0,
+    // "unauthenticated" means two different things: nobody has handed this
+    // machine a token (signed out, or the window has not said yet), or the
+    // server answered 401 to the one it holds. Only the second needs a person
+    // to sign in again, and the window has no other way to tell them apart.
+    sessionRejected: false,
   };
 
   /**
@@ -337,19 +342,21 @@ const engine = ({
 
     try {
       if (!client.hasToken()) {
-        publish({ phase: "unauthenticated", lastError: null });
+        publish({ phase: "unauthenticated", lastError: null, sessionRejected: false });
         return status;
       }
       if (!client.serverUrl()) {
-        publish({ phase: "unauthenticated", lastError: "No server address configured" });
+        publish({ phase: "unauthenticated", lastError: "No server address configured", sessionRejected: false });
         return status;
       }
 
-      publish({ phase: "pushing" });
+      // A cycle with a token starts with no verdict on it: a new token handed
+      // over after signing in again must not inherit the old one's refusal.
+      publish({ phase: "pushing", sessionRejected: false });
       const pushed = await push();
 
       if (pushed.stopped === "unauthenticated") {
-        publish({ phase: "unauthenticated", pushed: pushed.sent });
+        publish({ phase: "unauthenticated", pushed: pushed.sent, sessionRejected: true });
         return status;
       }
 
@@ -398,6 +405,7 @@ const engine = ({
       );
       publish({
         phase:     offline ? "offline" : err.status === 401 ? "unauthenticated" : "error",
+        sessionRejected: !offline && err.status === 401,
         lastError: err.message,
         lastCycleAt: new Date().toISOString(),
       });
