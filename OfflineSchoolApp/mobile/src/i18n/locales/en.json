@@ -5356,6 +5356,14 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 change on this phone was saved by another account. It is sent when that person signs in here again — not under your name.",
+      "other": "{{count}} changes on this phone were saved by another account. They are sent when that person signs in here again — not under your name."
+    },
+    "heldOwnerless": {
+      "one": "1 change was saved by an older version of the app that did not record who made it. It is kept on this phone and is not sent under any account until someone decides whose it is.",
+      "other": "{{count}} changes were saved by an older version of the app that did not record who made them. They are kept on this phone and are not sent under any account until someone decides whose they are."
+    },
     "listTitle": "Sync Overwrites",
     "listBlurb": "Edits replaced by other admins",
     "loading": "Loading overwrites…",
@@ -5932,6 +5940,10 @@
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 change on this phone is not yours to send",
+      "other": "{{count}} changes on this phone are not yours to send"
+    },
     "offlineSession": "Signed in offline — sign in again while connected to upload",
     "needAttention": {
       "one": "1 change needs attention",

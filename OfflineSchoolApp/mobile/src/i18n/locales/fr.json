@@ -5356,6 +5356,14 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 modification sur ce téléphone a été enregistrée par un autre compte. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+      "other": "{{count}} modifications sur ce téléphone ont été enregistrées par un autre compte. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom."
+    },
+    "heldOwnerless": {
+      "one": "1 modification a été enregistrée par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée sur ce téléphone et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+      "other": "{{count}} modifications ont été enregistrées par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées sur ce téléphone et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent."
+    },
     "listTitle": "Modifications écrasées",
     "listBlurb": "Vos modifications remplacées par d’autres administrateurs",
     "loading": "Chargement…",
@@ -5932,6 +5940,10 @@
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 modification sur ce téléphone n’est pas à vous d’envoyer",
+      "other": "{{count}} modifications sur ce téléphone ne sont pas à vous d’envoyer"
+    },
     "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer",
     "needAttention": {
       "one": "1 modification requiert votre attention",
