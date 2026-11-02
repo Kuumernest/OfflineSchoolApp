@@ -5764,5 +5764,9 @@
     "offlineTitle": "Vous êtes hors ligne.",
     "unreachableTitle": "Le serveur est injoignable.",
     "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie."
+  },
+  "signOutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "message": "Vous avez {{count}} modification(s) pas encore envoyée(s). Elles seront envoyées la prochaine fois que vous vous connecterez sur cet ordinateur."
   }
 }

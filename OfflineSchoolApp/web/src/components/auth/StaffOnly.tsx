@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/Card";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth.store";
+import { useSignOut } from "@/hooks/useSignOut";
 import { type UserRole } from "@/types";
 import { MOBILE_APP_LINKS } from "@/config/mobileApp";
 
@@ -41,7 +42,8 @@ export default function StaffOnly({ children }: { children: React.ReactNode }) {
   const { t }          = useTranslation();
   const user           = useAuthStore((s) => s.user);
   const hasInitialized = useAuthStore((s) => s.hasInitialized);
-  const logout         = useAuthStore((s) => s.logout);
+  // Asks first on a desktop holding unsent changes (hooks/useSignOut).
+  const signOut        = useSignOut();
 
   if (!hasInitialized) return <PageSpinner />;
 
@@ -127,7 +129,7 @@ export default function StaffOnly({ children }: { children: React.ReactNode }) {
           variant="secondary"
           className="mt-5 w-full sm:w-auto"
           icon={<LogOut className="w-4 h-4" />}
-          onClick={logout}
+          onClick={() => void signOut()}
         >
           {t("staffOnly.signOut")}
         </Button>

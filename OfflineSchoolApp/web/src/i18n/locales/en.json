@@ -5764,5 +5764,9 @@
     "offlineTitle": "You're offline.",
     "unreachableTitle": "The server can't be reached.",
     "browserBody": "The web console needs an internet connection — changes can't be saved until you reconnect."
+  },
+  "signOutGuard": {
+    "title": "Changes not yet sent",
+    "message": "You have {{count}} change(s) not yet sent. They'll be sent next time you sign in on this computer."
   }
 }

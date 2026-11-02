@@ -6,7 +6,8 @@ import {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
-import { useAuthStore, useUser, useActiveSchool }   from "@/store/auth.store";
+import { useUser, useActiveSchool }                 from "@/store/auth.store";
+import { useSignOut }                               from "@/hooks/useSignOut";
 import { cn }                                       from "@/utils/cn";
 import { roleLabel }                                from "@/utils/roleLabel";
 import {
@@ -98,7 +99,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const { t }      = useTranslation();
   const user       = useUser();
   const activeSchool = useActiveSchool();
-  const { logout } = useAuthStore();
+  const signOut    = useSignOut();
   const navigate   = useNavigate();
 
   // Search state
@@ -252,9 +253,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   };
 
   // ── Logout ──────────────────────────────────────────────────────────────────
-  const handleLogout = () => {
+  // Through useSignOut, which asks first on a desktop holding unsent changes.
+  const handleLogout = async () => {
+    if (!(await signOut())) return;
     clearSearchCache();
-    logout();
     navigate("/login", { replace: true });
   };
 
@@ -572,7 +574,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               <button
                 type="button"
                 role="menuitem"
-                onClick={handleLogout}
+                onClick={() => { setDropdownOpen(false); void handleLogout(); }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-danger-text hover:bg-danger-soft"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />

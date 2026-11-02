@@ -25,7 +25,8 @@
     "check:buttons": "node scripts/check-primary-buttons.mjs",
     "check:staffgate": "node scripts/check-staff-gate.mjs",
     "check:session": "node scripts/check-session-refresh.mjs",
-    "check:connectivity": "node scripts/check-connectivity.mjs"
+    "check:connectivity": "node scripts/check-connectivity.mjs",
+    "check:signout": "node scripts/check-signout-guard.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
