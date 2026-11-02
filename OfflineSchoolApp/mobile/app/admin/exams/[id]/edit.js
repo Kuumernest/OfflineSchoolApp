@@ -10,7 +10,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
-import api              from "../../../../src/services/api";
+import { getPickerClasses } from "../../../../src/services/pickerData.service";
 import DateField        from "../../../../src/components/DateField";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../src/utils/appError";
@@ -392,21 +392,9 @@ export default function EditExamScreen() {
     setClassesLoading(true);
 
     try {
-      let list = [];
-      const endpoints = [
-        `/admin/classes?schoolId=${schoolId}`,
-        `/classes?schoolId=${schoolId}`,
-        `/schools/${schoolId}/classes`,
-      ];
-
-      for (const ep of endpoints) {
-        try {
-          const response = await api.get(ep);
-          const raw = response.data?.classes || response.data?.data || response.data || [];
-          list = Array.isArray(raw) ? raw : [];
-          if (list.length > 0) break;
-        } catch { continue; }
-      }
+      // Local-first (refreshed from the server when it answers), so the
+      // picker is not silently empty offline.
+      const list = schoolId ? await getPickerClasses() : [];
 
       setAvailableClasses(list);
       classesLoadedRef.current = true;

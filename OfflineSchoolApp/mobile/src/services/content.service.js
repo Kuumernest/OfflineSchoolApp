@@ -5,6 +5,8 @@ import api          from "./api";
 import { getDatabase } from "../db/database";
 import NetInfo      from "@react-native-community/netinfo";
 import { generateUUID } from "../utils/idHelpers";
+import { getCurrentAuth } from "../utils/authHelpers";
+import { fetchTeacherScope } from "./teacherScope.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -741,12 +743,25 @@ export const getTeacherContent = async (teacherId = null, filters = {}) => {
 // GET TEACHER SUBJECTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const getTeacherSubjectsForContent = async (teacherId = null) => {
+/**
+ * The teacher's subjects (each with the classes it is taught in), in the shape
+ * the content screens use: [{ subjectId, subjectName, classes: [{classId, className}] }].
+ *
+ * Online, the server answers. When both routes fail (offline), the answer
+ * comes from the phone: teacherScope's cached copy of /teacher/my-subjects,
+ * then the mirror's own teacher_assignments join — the same place the quiz,
+ * homework and attendance pickers read, so a teacher who can work offline
+ * there can also pick a subject for notes here.
+ *
+ * @returns {Promise<{subjects: Array, source: string, neverLoaded: boolean}>}
+ *   neverLoaded: the phone has never held this teacher's subjects, so the
+ *   screen must say "connect once", not "no subjects assigned".
+ */
+export const loadTeacherSubjectsForContent = async (teacherId = null) => {
   try {
     const response = await api.get("/teacher/subjects-classes");
     const data     = response.data;
-    if (Array.isArray(data) && data.length > 0) return data;
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) return { subjects: data, source: "api", neverLoaded: false };
     throw new Error("Unexpected response shape from /teacher/subjects-classes");
   } catch (primaryErr) {
     console.warn(
@@ -785,15 +800,52 @@ export const getTeacherSubjectsForContent = async (teacherId = null) => {
       });
     });
 
-    return Array.from(subjectMap.values());
+    return { subjects: Array.from(subjectMap.values()), source: "api", neverLoaded: false };
   } catch (fallbackErr) {
     console.warn(
-      "[getTeacherSubjectsForContent] fallback also failed:",
+      "[getTeacherSubjectsForContent] fallback also failed — reading the phone:",
       fallbackErr.message
     );
-    return [];
   }
+
+  return loadTeacherSubjectsForContentLocal(teacherId);
 };
+
+/** The phone's own answer — see loadTeacherSubjectsForContent. */
+export const loadTeacherSubjectsForContentLocal = async (teacherId = null) => {
+  const auth = getCurrentAuth() ?? {};
+  const tid  = teacherId || auth.user?._id || auth.user?.id || null;
+  if (!tid) return { subjects: [], source: "none", neverLoaded: true };
+
+  let scope;
+  try {
+    scope = await fetchTeacherScope({ teacherId: tid, schoolId: auth.schoolId ?? null });
+  } catch (err) {
+    console.warn("[getTeacherSubjectsForContent] local scope failed:", err.message);
+    return { subjects: [], source: "none", neverLoaded: true };
+  }
+
+  const subjectMap = new Map();
+  for (const cls of scope.classes ?? []) {
+    for (const sub of scope.subjectsByClassId?.[cls.id] ?? []) {
+      if (!subjectMap.has(sub.id)) {
+        subjectMap.set(sub.id, { subjectId: sub.id, subjectName: sub.name || "", classes: [] });
+      }
+      subjectMap.get(sub.id).classes.push({ classId: cls.id, className: cls.name || "" });
+    }
+  }
+  const subjects = [...subjectMap.values()]
+    .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+
+  // An empty cached server answer is a real "nothing assigned". An empty
+  // mirror join (source "local") only means nothing was ever downloaded.
+  const neverLoaded =
+    subjects.length === 0 && scope.source !== "api" && scope.source !== "cache";
+  return { subjects, source: scope.source ?? "none", neverLoaded };
+};
+
+export const getTeacherSubjectsForContent = async (teacherId = null) =>
+  (await loadTeacherSubjectsForContent(teacherId)).subjects;
 
 export const getTeacherSubjectsForUpload = getTeacherSubjectsForContent;
 
@@ -1091,6 +1143,8 @@ export default {
   getTeacherContent,
   getTeacherSubjectsForContent,
   getTeacherSubjectsForUpload,
+  loadTeacherSubjectsForContent,
+  loadTeacherSubjectsForContentLocal,
   uploadContent,
   deleteContent,
   updateContentStatus,

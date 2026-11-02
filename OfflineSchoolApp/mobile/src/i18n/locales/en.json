@@ -5733,6 +5733,8 @@
     "noSubjectMatch": "No subjects found",
     "noSubjects": "No subjects assigned",
     "noSubjectsSub": "Contact admin to get subjects assigned",
+    "subjectsNeverLoaded": "Your subjects are not on this phone yet",
+    "subjectsNeverLoadedSub": "Connect to the internet once to load your subjects. After that, you can pick them offline.",
     "pickClasses": "Which classes get access?",
     "pickClassesSub": "Select one or more classes for this content",
     "noClasses": "No classes found",

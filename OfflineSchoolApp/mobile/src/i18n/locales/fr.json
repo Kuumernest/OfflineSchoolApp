@@ -5733,6 +5733,8 @@
     "noSubjectMatch": "Aucune matière trouvée",
     "noSubjects": "Aucune matière attribuée",
     "noSubjectsSub": "Contactez l’administration pour obtenir des matières",
+    "subjectsNeverLoaded": "Vos matières ne sont pas encore sur ce téléphone",
+    "subjectsNeverLoadedSub": "Connectez-vous à internet une fois pour charger vos matières. Ensuite, vous pourrez les choisir hors ligne.",
     "pickClasses": "Quelles classes y ont accès ?",
     "pickClassesSub": "Sélectionnez une ou plusieurs classes pour ce contenu",
     "noClasses": "Aucune classe trouvée",

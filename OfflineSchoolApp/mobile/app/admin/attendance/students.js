@@ -25,7 +25,7 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { PeriodsService }  from "../../../src/services/periods.service";
-import api                 from "../../../src/services/api";
+import { ClassService }    from "../../../src/services/class.service";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 
@@ -143,14 +143,10 @@ const ClassSelector = ({ schoolId, onSelect }) => {
       setLoading(true);
       setError(null);
 
-      const response = await api.get("/admin/classes", {
-        params: { schoolId },
-      });
-
-      const list =
-        response.data?.classes ||
-        response.data?.data    ||
-        (Array.isArray(response.data) ? response.data : []);
+      // Local-first: ClassService refreshes from the server when it can and
+      // always answers from the phone's SQLite, so the register can be taken
+      // offline (AttendanceService queues the marks).
+      const list = schoolId ? await ClassService.getAll(false) : [];
 
       const active = list.filter((c) => c.isActive !== false);
 
