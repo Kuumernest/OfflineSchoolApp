@@ -40,7 +40,7 @@ const loadOwnerStamp = () => {
 const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i;
 
 /** Tables whose writes are the sync's own machinery, never a user's change. */
-const IGNORED = /\b(mutation_outbox|sync_id_map)\b/i;
+const IGNORED = /\b(mutation_outbox|mutation_outbox_migrated|sync_id_map|local_meta)\b/i;
 
 const listeners = new Set();
 

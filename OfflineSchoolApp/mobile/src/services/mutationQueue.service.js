@@ -854,6 +854,11 @@ export class MutationQueue {
    * them, so a homework row never lands pointing at a file the server has
    * not received.
    */
+  /** A drain is running or waiting (perUserData.service waits for it before switching files). */
+  static isDraining() {
+    return !!(_drainRunning || _drainQueued);
+  }
+
   static drain(options = {}) {
     // One run at a time, and at most one waiting behind it. A caller that
     // arrives mid-run may have just queued a row the running pass already

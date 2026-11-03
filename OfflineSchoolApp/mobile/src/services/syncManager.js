@@ -349,6 +349,8 @@ class SyncManagerClass {
     this.LIST_REFRESH_MS       = 30 * 60 * 1_000;
     this._listPulledAt         = new Map();
     this._fullRun              = false;
+    // How the last syncAll that got as far as taking the lock ended.
+    this.lastOutcome           = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -489,29 +491,56 @@ class SyncManagerClass {
   // SECTION 3 — LAST-SYNC PERSISTENCE
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // On the legacy shared file the cursors are in SecureStore, as they always
+  // were. A per-user store (docs/40) keeps its own inside the file
+  // (db/storeMeta.js), so a new store is a full pull for its account.
+  async _storeMeta() {
+    try { return await require("../db/storeMeta").activeStoreMeta(); } catch { return null; }
+  }
+
   async getLastSync() {
-    try { return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH; }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) return (await meta.get(LAST_SYNC_KEY)) || EPOCH;
+      return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH;
+    }
     catch { return EPOCH; }
   }
 
   async setLastSync(timestamp) {
-    try { await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp); }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.set(LAST_SYNC_KEY, timestamp);
+      else await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp);
+    }
     catch (err) { console.warn("[SyncManager] Could not persist lastSync:", err.message); }
     this.lastSync = timestamp;
   }
 
   async resetLastSync() {
-    try { await SecureStore.deleteItemAsync(LAST_SYNC_KEY); } catch { /* ignore */ }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.del(LAST_SYNC_KEY);
+      else await SecureStore.deleteItemAsync(LAST_SYNC_KEY);
+    } catch { /* ignore */ }
     this.lastSync = null;
   }
 
   async getLastQuizSync() {
-    try { return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH; }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) return (await meta.get(QUIZ_LAST_SYNC_KEY)) || EPOCH;
+      return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH;
+    }
     catch { return EPOCH; }
   }
 
   async setLastQuizSync(timestamp) {
-    try { await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp); }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.set(QUIZ_LAST_SYNC_KEY, timestamp);
+      else await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp);
+    }
     catch (err) { console.warn("[SyncManager] Could not persist quiz lastSync:", err.message); }
   }
 
@@ -573,6 +602,39 @@ class SyncManagerClass {
       .finally(() => { this._initInFlight = null; });
 
     return this._initInFlight;
+  }
+
+  /**
+   * One full sync of the active file, with no timers left running — the
+   * first sync of a per-user store (docs/40, perUserData.service). Answers the
+   * outcome: "completed" only when every step of syncAll ran; anything else
+   * (offline, signed out, a failed pull, a cancel) means the store is not
+   * ready to be read and the account stays on the shared file.
+   */
+  async primeOnce() {
+    if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
+    if (this.syncInterval)  { clearTimeout(this.syncInterval);  this.syncInterval  = null; }
+    this._destroyed            = false;
+    this.isSyncing             = false;
+    this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
+    this._repairsDone          = false;
+    this._listPulledAt.clear();
+    this._migrationsDone       = false;
+    await this.runAllMigrations();
+    this._migrationsDone       = true;
+    try { require("./syncBackfill.service").registerReconcilers(); } catch { /* registered on use */ }
+    try { require("./message.service").registerMessageReconcilers(); } catch { /* optional */ }
+    this.lastOutcome = null;
+    try {
+      await this.syncAll({ force: true, full: true });
+    } finally {
+      const outcome = this.lastOutcome;
+      // Stopped until the app starts it for the session (ensureStarted).
+      this._destroyed = true;
+      this.lastOutcome = outcome;
+    }
+    return this.lastOutcome ?? "aborted";
   }
 
   destroy() {
@@ -1263,6 +1325,7 @@ class SyncManagerClass {
       // was built to remove.
       SyncProgress.end(outcome);
       releaseSyncLock();
+      this.lastOutcome = outcome;
     }
   }
 
