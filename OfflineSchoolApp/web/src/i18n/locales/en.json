@@ -603,7 +603,7 @@
     "notAssigned": "Not assigned yet",
     "resetPassword": "Reset password",
     "subjectsCovered": "Subjects covered",
-    "searchPh": "Search this page…",
+    "searchPh": "Search name, email or staff no.…",
     "activeOnly": "Active only",
     "inactiveOnly": "Inactive only",
     "resetTitle": "Reset this teacher's password?",
@@ -637,7 +637,9 @@
     "unassignedTitle_other": "{{count}} of {{total}} class-subjects have no teacher",
     "unassignedHint": "Their marks cannot be entered by a teacher and their report-card rows print no teacher.",
     "unassignedShow": "Show them",
-    "unassignedHide": "Hide"
+    "unassignedHide": "Hide",
+    "staffNo": "Staff no.",
+    "staffNoNone": "Not assigned yet"
   },
   "subjects": {
     "title": "Subjects",
@@ -1284,7 +1286,14 @@
     "subtitle": "Teacher profile & subject assignments",
     "subjectsAssignedCount": "{{count}} subject assigned",
     "subjectsAssignedCount_other": "{{count}} subjects assigned",
-    "assign": "Assign"
+    "assign": "Assign",
+    "staffNo": "Staff number",
+    "staffNoHint": "Issued by the school when the teacher was added. Change it only to match numbers already on paperwork.",
+    "staffNoNone": "Not assigned yet — the server gives one shortly.",
+    "errStaffNoRequired": "A staff number cannot be removed.",
+    "errStaffNoTooLong": "A staff number is at most 32 characters.",
+    "errStaffNoChars": "Use only letters, digits and - / . _",
+    "errStaffNoTaken": "{{number}} is already another member of staff's number."
   },
   "subjectsAdd": {
     "title": "Add subject",

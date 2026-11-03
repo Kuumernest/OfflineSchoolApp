@@ -28,7 +28,8 @@
     "check:connectivity": "node scripts/check-connectivity.mjs",
     "check:signout": "node scripts/check-signout-guard.mjs",
     "check:offlineperiod": "node scripts/check-offline-period.mjs",
-    "check:outboxowner": "node scripts/check-outbox-ownership.mjs"
+    "check:outboxowner": "node scripts/check-outbox-ownership.mjs",
+    "check:staffno": "node scripts/check-staff-number.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

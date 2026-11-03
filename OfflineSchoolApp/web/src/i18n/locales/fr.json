@@ -603,7 +603,7 @@
     "notAssigned": "Pas encore affecté",
     "resetPassword": "Réinitialiser le mot de passe",
     "subjectsCovered": "Matières enseignées",
-    "searchPh": "Rechercher dans cette page…",
+    "searchPh": "Rechercher nom, e-mail ou matricule…",
     "activeOnly": "Actifs uniquement",
     "inactiveOnly": "Inactifs uniquement",
     "resetTitle": "Réinitialiser le mot de passe de cet enseignant ?",
@@ -637,7 +637,9 @@
     "unassignedTitle_other": "{{count}} matières-classes sur {{total}} sans enseignant",
     "unassignedHint": "Aucun enseignant ne peut y saisir de notes, et le bulletin n'affiche aucun enseignant pour ces lignes.",
     "unassignedShow": "Afficher",
-    "unassignedHide": "Masquer"
+    "unassignedHide": "Masquer",
+    "staffNo": "N° matricule",
+    "staffNoNone": "Pas encore attribué"
   },
   "subjects": {
     "title": "Matières",
@@ -1284,7 +1286,14 @@
     "subtitle": "Profil de l’enseignant et matières attribuées",
     "subjectsAssignedCount": "{{count}} matière affectée",
     "subjectsAssignedCount_other": "{{count}} matières affectées",
-    "assign": "Affecter"
+    "assign": "Affecter",
+    "staffNo": "Matricule",
+    "staffNoHint": "Attribué par l'établissement à l'ajout de l'enseignant. Ne le modifiez que pour correspondre à un numéro déjà sur les documents.",
+    "staffNoNone": "Pas encore attribué — le serveur en donnera un sous peu.",
+    "errStaffNoRequired": "Un matricule ne peut pas être supprimé.",
+    "errStaffNoTooLong": "Un matricule comporte au plus 32 caractères.",
+    "errStaffNoChars": "Utilisez uniquement lettres, chiffres et - / . _",
+    "errStaffNoTaken": "{{number}} est déjà le matricule d'un autre membre du personnel."
   },
   "subjectsAdd": {
     "title": "Ajouter une matière",
