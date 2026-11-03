@@ -348,6 +348,7 @@ const _openDatabase = async (DB_NAME) => {
         name                TEXT,
         email               TEXT,
         enrollmentNo        TEXT,
+        staff_no            TEXT,
         role                TEXT,
         is_active           INTEGER DEFAULT 1,
         must_reset_password INTEGER DEFAULT 0,
@@ -379,6 +380,9 @@ const _openDatabase = async (DB_NAME) => {
       ["passwordSalt",        "TEXT"],
       ["passwordHash",        "TEXT"],
       ["enrollmentNo",        "TEXT"],
+      // The school's staff number (CODE-STF-NNN). Issued by the server only;
+      // a teacher created offline has none until the create syncs.
+      ["staff_no",            "TEXT"],
       ["must_reset_password", "INTEGER DEFAULT 0"],
       ["_synced",             "INTEGER DEFAULT 0"],
       ["_synced_at",          "TEXT"],

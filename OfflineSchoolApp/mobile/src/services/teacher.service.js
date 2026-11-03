@@ -115,6 +115,8 @@ const ensureSchema = (db) =>
       await safeAddColumn(db, USERS_TABLE, "is_active",           "INTEGER DEFAULT 1");
       await safeAddColumn(db, USERS_TABLE, "must_reset_password", "INTEGER DEFAULT 0");
       await safeAddColumn(db, USERS_TABLE, "_synced_at",          "TEXT");
+      // The school's staff number, issued by the server (additive).
+      await safeAddColumn(db, USERS_TABLE, "staff_no",            "TEXT");
       // Stamped by create() before its direct POST (teacherCreateState).
       await safeAddColumn(db, USERS_TABLE, "_create_sent_at",     "TEXT");
 
@@ -247,6 +249,7 @@ const normaliseServerTeacher = (raw, schoolId) => {
     name:       (raw.name  || "").trim(),
     email:      (raw.email || "").toLowerCase().trim(),
     role:       "teacher",
+    staff_no:   String(raw.staffNo || raw.staff_no || "").trim() || null,
     school_id:  String(raw.schoolId || raw.school_id || schoolId || "").trim() || null,
     is_active:  raw.isActive ?? raw.is_active ?? 1,
     _synced:    1,
@@ -311,8 +314,9 @@ const persistTeachersLocally = async (db, teachers) => {
         await db.runAsync(
           `INSERT OR REPLACE INTO ${USERS_TABLE}
            (id, name, email, role, school_id, schoolId,
-            is_active, _synced, _synced_at, deleted_at, created_at, updated_at)
-           VALUES (?, ?, ?, 'teacher', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            is_active, _synced, _synced_at, deleted_at, created_at, updated_at, staff_no)
+           VALUES (?, ?, ?, 'teacher', ?, ?, ?, ?, ?, ?, ?, ?,
+                   COALESCE(?, (SELECT staff_no FROM ${USERS_TABLE} WHERE id = ?)))`,
           [
             t.id,
             t.name,
@@ -325,6 +329,10 @@ const persistTeachersLocally = async (db, teachers) => {
             t.deleted_at ?? null,
             t.created_at ?? new Date().toISOString(),
             t.updated_at ?? new Date().toISOString(),
+            // A REPLACE rewrites the whole row: a payload without a number
+            // keeps the one already stored rather than erasing it.
+            t.staff_no   ?? null,
+            t.id,
           ]
         );
       }
@@ -757,6 +765,8 @@ export const TeacherService = {
            u.id,
            u.name,
            u.email,
+           u.staff_no                               AS staffNo,
+           u._synced_at                             AS syncedAt,
            ${schoolColExpr}                         AS schoolId,
            u.created_at,
            COUNT(DISTINCT ta.${taCols.subjectCol}) AS subjectCount,
@@ -855,6 +865,8 @@ export const TeacherService = {
 
       return await db.getFirstAsync(
         `SELECT id, name, email, role,
+                staff_no   AS staffNo,
+                _synced_at AS syncedAt,
                 ${cols.schoolCol ?? "school_id"} AS schoolId,
                 created_at
          FROM   ${USERS_TABLE}
@@ -1134,13 +1146,23 @@ export const TeacherService = {
         localId
       );
 
+      // The staff number the server just issued, so the phone shows it at
+      // once rather than after the next pull.
+      const staffNo = String(
+        response.data?.teacher?.staffNo || response.data?.data?.staffNo || ""
+      ).trim() || null;
+
       if (serverId !== localId) {
-        return reconcileTeacherId(db, localId, serverId);
+        const finalId = await reconcileTeacherId(db, localId, serverId);
+        if (staffNo) {
+          await db.runAsync(`UPDATE ${USERS_TABLE} SET staff_no = ? WHERE id = ?`, [staffNo, serverId]).catch(() => {});
+        }
+        return finalId;
       }
 
       await db.runAsync(
-        `UPDATE ${USERS_TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
-        [now, localId]
+        `UPDATE ${USERS_TABLE} SET _synced = 1, _synced_at = ?, staff_no = COALESCE(?, staff_no) WHERE id = ?`,
+        [now, staffNo, localId]
       );
       console.log(`[teachers] Synced to server: ${cleanName} [${serverId}]`);
       return serverId;

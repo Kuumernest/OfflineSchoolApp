@@ -840,6 +840,12 @@ export const registerReconcilers = () => {
     // be overtaken: the DELETE meets a 404 and settles, then the create lands.
     // If no DELETE is still waiting, one goes now, behind this create.
     const id = serverId ? String(serverId) : localId;
+    // The staff number the server issued with the create: a teacher made
+    // offline shows "pending" until here, then the school's number.
+    const staffNo = String(raw?.staffNo ?? "").trim();
+    if (id && staffNo) {
+      await db.runAsync("UPDATE users SET staff_no = ? WHERE id = ?", [staffNo, id]).catch(() => {});
+    }
     const gone = id && await db.getFirstAsync(
       "SELECT 1 AS d FROM users WHERE id = ? AND deleted_at IS NOT NULL AND deleted_at != ''", [id]
     ).catch(() => null);

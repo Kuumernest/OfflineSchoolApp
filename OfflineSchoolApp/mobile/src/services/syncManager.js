@@ -2370,11 +2370,12 @@ class SyncManagerClass {
           await db.runAsync(
             `INSERT INTO users
                (id, schoolId, school_id, name, email, role, is_active,
-                must_reset_password, _synced, _synced_at, deleted_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 'teacher', ?, ?, 1, ?, NULL, ?, ?)
+                must_reset_password, _synced, _synced_at, deleted_at, created_at, updated_at, staff_no)
+             VALUES (?, ?, ?, ?, ?, 'teacher', ?, ?, 1, ?, NULL, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId = excluded.schoolId, school_id = excluded.school_id,
                name = excluded.name, email = excluded.email,
+               staff_no = COALESCE(excluded.staff_no, users.staff_no),
                is_active = excluded.is_active,
                must_reset_password = excluded.must_reset_password,
                _synced = 1, _synced_at = excluded._synced_at,
@@ -2387,6 +2388,9 @@ class SyncManagerClass {
               ts,
               t.createdAt?.$date || t.createdAt || ts,
               t.updatedAt?.$date || t.updatedAt || ts,
+              // The school's staff number. A feed that does not carry it (an
+              // older server) leaves the stored one alone.
+              String(t.staffNo ?? "").trim() || null,
             ]
           );
           ok++;
