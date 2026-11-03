@@ -85,6 +85,13 @@ const check = (label, actual, expected) => {
   await User.create({ _id: "tea-gone", name: "Kofi Mensah", email: "kofi@e2e.test", password: PW, role: "teacher", schoolId: S, isActive: true });
 
   const server = app.listen(0);
+  // Node's fetch reuses keep-alive sockets; the server's default 5 s idle close
+  // can land on a socket the client is just reusing, and the request dies as
+  // "fetch failed" (seen here as a sign-in refused under load). The phone uses
+  // React Native's networking, not undici, so this is the harness's race —
+  // keep idle sockets open longer than any pause in the script.
+  server.keepAliveTimeout = 120_000;
+  server.headersTimeout   = 121_000;
   const API = `http://127.0.0.1:${server.address().port}/api`;
 
   const axios = require("axios");
@@ -109,6 +116,11 @@ const check = (label, actual, expected) => {
   const login = async (phone, email) => {
     const ok = await quietly(() => phone.useAuthStore.getState().login({ email, password: PW }))();
     await waitIdle(phone);
+    if (ok !== true) {
+      // Say why, so a refused sign-in is a diagnosis rather than "got false".
+      const st = phone.useAuthStore.getState();
+      console.log(`       sign-in of ${email} returned ${ok}: isLoading=${st.isLoading} error=${st.errorKey ?? ""} ${st.error ?? ""}`);
+    }
     return ok;
   };
   const logout = (phone) => quietly(() => phone.useAuthStore.getState().logout())();

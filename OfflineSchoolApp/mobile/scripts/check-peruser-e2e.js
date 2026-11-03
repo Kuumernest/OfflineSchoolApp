@@ -83,6 +83,13 @@ const check = (label, actual, expected) => {
   await User.create({ _id: "root", name: "Root", email: "root@e2e.test", password: PW, role: "super_admin", schoolId: null, isActive: true });
 
   const server = app.listen(0);
+  // Node's fetch reuses keep-alive sockets; the server's default 5 s idle close
+  // can land on a socket the client is just reusing, and the request dies as
+  // "fetch failed" (seen here as a sign-in refused under load). The phone uses
+  // React Native's networking, not undici, so this is the harness's race —
+  // keep idle sockets open longer than any pause in the script.
+  server.keepAliveTimeout = 120_000;
+  server.headersTimeout   = 121_000;
   const port = server.address().port;
   const API = `http://127.0.0.1:${port}/api`;
 
