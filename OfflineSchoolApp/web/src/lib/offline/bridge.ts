@@ -40,7 +40,15 @@ export interface OutboxSummary {
    * nobody signed in. Absent from a main process older than this field.
    */
   mine?:   number;
-  stuck:   Array<{ seq: number; method: string; path: string; last_status: number | null; last_error: string | null }>;
+  /**
+   * `owner`: whose the entry is for the account signed in — only "mine" may be
+   * discarded, retried or copied (the main process refuses the rest). Absent
+   * from a main process older than the field.
+   */
+  stuck:   Array<{
+    seq: number; method: string; path: string; last_status: number | null; last_error: string | null;
+    owner?: "mine" | "other" | "none";
+  }>;
   head:    OutboxSummary["stuck"][number] | null;
 }
 
@@ -113,7 +121,7 @@ interface SchoolBridge {
     list:    () => Promise<OutboxEntry[]>;
     unblock: (seq: number) => Promise<OutboxSummary>;
     discard: (seq: number) => Promise<OutboxSummary>;
-    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string }>;
+    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string; message?: string }>;
   };
   sync: {
     state:    () => Promise<Array<{ collection: string; cursor: string | null; last_pull_at: string | null; last_error: string | null }>>;

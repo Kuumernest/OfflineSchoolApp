@@ -27,7 +27,8 @@
     "check:session": "node scripts/check-session-refresh.mjs",
     "check:connectivity": "node scripts/check-connectivity.mjs",
     "check:signout": "node scripts/check-signout-guard.mjs",
-    "check:offlineperiod": "node scripts/check-offline-period.mjs"
+    "check:offlineperiod": "node scripts/check-offline-period.mjs",
+    "check:outboxowner": "node scripts/check-outbox-ownership.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
