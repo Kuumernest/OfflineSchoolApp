@@ -24,7 +24,6 @@
 const path = require("path");
 const fs   = require("fs");
 const os   = require("os");
-const nodeCrypto = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
 const babel = require("@babel/core");
 const { MOBILE } = require("./offline-harness");
@@ -128,7 +127,7 @@ const bootDevice = async ({ dir, api, apiUrl = "http://phone.invalid/api" }) => 
       addEventListener: () => noop, fetch: async () => ({ isConnected: net.connected }),
     }],
     ["react-native", { AppState: { addEventListener: () => ({ remove: noop }), currentState: "active" }, Platform: { OS: "android" } }],
-    ["expo-crypto", { getRandomBytes: (n) => nodeCrypto.randomBytes(n), randomUUID: () => nodeCrypto.randomUUID() }],
+    ["expo-crypto", require("./expo-crypto-node")],
     ["react-native-get-random-values", {}],
   ]);
   const rel = new Map([

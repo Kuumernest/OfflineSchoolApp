@@ -27,7 +27,6 @@
 
 const path = require("path");
 const fs   = require("fs");
-const nodeCrypto = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { adapt, makeLoader, quietly, MOBILE } = require("./offline-harness");
 
@@ -100,7 +99,7 @@ const run = quietly(async () => {
       addEventListener: () => noop, fetch: async () => ({ isConnected: false }),
     }],
     ["react-native", { AppState: { addEventListener: () => ({ remove: noop }), currentState: "active" }, Platform: { OS: "android" } }],
-    ["expo-crypto", { getRandomBytes: (n) => nodeCrypto.randomBytes(n), randomUUID: () => nodeCrypto.randomUUID() }],
+    ["expo-crypto", require("./expo-crypto-node")],
     ["react-native-get-random-values", {}],
     ["expo-print",   { printAsync: async () => {}, printToFileAsync: async () => ({ uri: "file:///x.pdf" }) }],
     ["expo-sharing", { isAvailableAsync: async () => false, shareAsync: async () => {} }],
