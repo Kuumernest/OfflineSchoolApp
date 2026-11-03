@@ -296,6 +296,7 @@ userSchema.methods.toSafeObject = function () {
     name:              this.name,
     email:             this.email        ?? null,
     enrollmentNo:      this.enrollmentNo ?? null,
+    staffNo:           this.staffNo      ?? null,
     role:              this.role,
     schoolId:          this.schoolId     ?? null,
     classId:           this.classId      ?? null,

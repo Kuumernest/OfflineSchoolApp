@@ -186,7 +186,7 @@ exports.pullChanges = async (req, res) => {
     // timetable on their device, and it says nothing about the account.
     const teacherFields = isStudent
       ? "name role schoolId deletedAt createdAt updatedAt"
-      : "name email role schoolId isActive mustResetPassword enrollmentNo deletedAt createdAt updatedAt";
+      : "name email role schoolId isActive mustResetPassword enrollmentNo staffNo deletedAt createdAt updatedAt";
 
     // ── Removals: how a deletion reaches a device ────────────────────────
     //

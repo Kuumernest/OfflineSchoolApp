@@ -149,6 +149,9 @@ const serializeUser = (user, permissions = []) => ({
   name:              user.name              ?? null,
   email:             user.email             ?? null,
   enrollmentNo:      user.enrollmentNo      ?? null,
+  // The school's number for a member of staff (CODE-STF-NNN), null for pupils
+  // and for staff not numbered. The phone shows it on the teacher's profile.
+  staffNo:           user.staffNo           ?? null,
   // Canonicalised for the same reason middleware/auth.js does it at the door:
   // this payload is what both clients store and route on, and it is read
   // straight off the document rather than through the middleware. A legacy
