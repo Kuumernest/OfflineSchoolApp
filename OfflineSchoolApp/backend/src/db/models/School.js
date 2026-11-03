@@ -248,6 +248,20 @@ const settingsSchema = new mongoose.Schema(
       payrollRequired:  { type: Boolean, default: false },
     },
 
+    /**
+     * How the phones of this school keep their local data (docs/40).
+     *
+     * perUserLocalData: each account on a shared phone gets its own local
+     * store, and the shared file's unsent work is placed with its owner or
+     * held for review. OFF by default, and off means the phone behaves exactly
+     * as it always has. Rolled out one school at a time by the platform
+     * (PUT /api/super-admin/schools/:id/offline-settings); a phone learns it
+     * at sign-in and token refresh (auth.routes.js buildTokenResponse).
+     */
+    offline: {
+      perUserLocalData: { type: Boolean, default: false },
+    },
+
     currency: {
       type:    String,
       default: "USD",

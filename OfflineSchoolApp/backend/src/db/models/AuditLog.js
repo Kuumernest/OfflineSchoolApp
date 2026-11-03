@@ -46,6 +46,9 @@ const AUDIT_ACTIONS = [
   // reason (services/unpublish.service.js): before/after are the counts of
   // published rows; resourceType says which layer.
   "results.unpublished",
+  // A school's phone local-data mode was switched (docs/40 D7): before/after
+  // are { perUserLocalData }.
+  "school.offlineSettingsChanged",
 ];
 
 const auditLogSchema = new mongoose.Schema(

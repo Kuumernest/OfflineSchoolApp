@@ -19,6 +19,7 @@ const { sendEmail }            = require("../services/email.service");
 const mail                     = require("../services/email.transport");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
 const { YEAR_FORMAT }                         = require("../services/rankingScope.service");
+const { resolveOfflineSettings } = require("../services/offlineSettings.service");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
 const { parseFilters, computePlatformStats, availableFilters } =
@@ -348,6 +349,56 @@ const setActive = (isActive, action) => asyncHandler(async (req, res) => {
 
   return sendSuccess(res, { school: shape(after, (await countsFor([id])).get(id)), changed: true });
 });
+
+/**
+ * GET / PUT /schools/:schoolId/offline-settings — the per-school switch for
+ * per-user local data on phones (docs/40 D7).
+ *
+ * Platform-only on purpose: turning it on starts a one-way migration of every
+ * shared phone's local data in that school, so it is rolled out by whoever
+ * runs the platform, one school at a time, never by the school itself. Off is
+ * the default and is the phone's long-standing behaviour. A phone picks the
+ * value up at its next sign-in or token refresh.
+ *
+ *   PUT { perUserLocalData: true|false, reason? }
+ */
+router.get("/schools/:schoolId/offline-settings", canView, asyncHandler(async (req, res) => {
+  const school = await School.findOne({ _id: req.params.schoolId, ...School.notDeletedClause() })
+    .select("_id name settings.offline").lean()
+    .catch(() => null);
+  if (!school) return sendError(res, 404, "School not found");
+  return sendSuccess(res, { offline: resolveOfflineSettings(school) });
+}));
+
+router.put("/schools/:schoolId/offline-settings", canManage, asyncHandler(async (req, res) => {
+  if (!looksLikeSchoolId(req.params.schoolId)) return sendError(res, 404, "School not found");
+  const value = req.body?.perUserLocalData;
+  if (typeof value !== "boolean") {
+    return sendError(res, 400, "perUserLocalData must be true or false");
+  }
+  const before = await School.findOne({ _id: req.params.schoolId, ...School.notDeletedClause() })
+    .select("_id name settings.offline").lean();
+  if (!before) return sendError(res, 404, "School not found");
+  const was = resolveOfflineSettings(before);
+  if (was.perUserLocalData === value) {
+    return sendSuccess(res, { offline: was, changed: false });
+  }
+
+  await School.updateOne(
+    { _id: before._id },
+    { $set: { "settings.offline.perUserLocalData": value } },
+    { runValidators: true }
+  );
+  invalidateSchool(String(before._id));
+  await recordAudit(req, {
+    action: "school.offlineSettingsChanged",
+    schoolId: String(before._id), schoolName: before.name,
+    resource: { type: "school", id: String(before._id), label: before.name },
+    before: was, after: { perUserLocalData: value },
+    reason: req.body?.reason ? String(req.body.reason).trim() : null,
+  });
+  return sendSuccess(res, { offline: { perUserLocalData: value }, changed: true });
+}));
 
 router.post("/schools/:schoolId/activate",   canManage, setActive(true,  "school.activated"));
 router.post("/schools/:schoolId/deactivate", canManage, setActive(false, "school.deactivated"));

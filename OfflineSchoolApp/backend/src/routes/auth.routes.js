@@ -15,6 +15,7 @@ const {
   defaultsFor,
 } = require("../services/permissions.service");
 const { normalizeRole } = require("../config/roles");
+const { offlineSettingsForUser } = require("../services/offlineSettings.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RATE LIMITING — brute-force protection on login
@@ -173,6 +174,9 @@ const buildTokenResponse = async (user) => {
     token,
     ...(refreshToken !== null ? { refreshToken } : {}),
     user: serializeUser(user, await permissionsFor(user)),
+    // The school's phone local-data mode (docs/40 D7). Here because sign-in
+    // and refresh are the two moments every phone talks to the server.
+    localData: await offlineSettingsForUser(user),
   };
 };
 
