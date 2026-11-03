@@ -97,6 +97,42 @@ const isDeviceReceipt = (value) =>
   typeof value === "string" && DEVICE_RECEIPT.test(value.trim());
 
 /**
+ * A device-issued number the server is about to REFUSE, kept for the record.
+ *
+ * When parseDeviceReceipt says no — today, because the year inside the number
+ * is not the payment's — the server issues its own number. The bursar may
+ * already have printed a provisional receipt under the device's, so the server
+ * stores what was claimed (FeePayment.claimedReceiptNo) and the official
+ * receipt names it.
+ *
+ * Only a well-formed device number is kept: anything else is not a number any
+ * paper could carry, and a free-text field from a client does not belong on a
+ * receipt. Bounded in length for the same reason.
+ *
+ * @param   {unknown} value         the receiptNo the client sent
+ * @param   {string}  academicYear  the year the payment is for
+ * @returns {string|null}           the claimed number, when it is being replaced
+ */
+const rejectedDeviceReceipt = (value, academicYear) => {
+  if (!isDeviceReceipt(value)) return null;
+  if (parseDeviceReceipt(value, academicYear)) return null;   // kept, not replaced
+  const claimed = value.trim();
+  return claimed.length <= 40 ? claimed : null;
+};
+
+/**
+ * Which device receipt NUMBER an official receipt should say it replaces: the
+ * one the device claimed and the server refused, when it differs from the
+ * number the server issued.
+ */
+const replacedProvisionalReceipt = (payment) => {
+  const claimed = payment?.claimedReceiptNo;
+  if (typeof claimed !== "string" || !claimed) return null;
+  if (claimed === payment.receiptNo) return null;
+  return claimed;
+};
+
+/**
  * The reference a PROVISIONAL receipt carries, from the payment's own id.
  *
  * A payment taken with no connection is printed before the server has seen it
@@ -138,6 +174,8 @@ const replacedProvisionalReference = (payment) => {
 module.exports = {
   DEVICE_RECEIPT,
   replacedProvisionalReference,
+  replacedProvisionalReceipt,
+  rejectedDeviceReceipt,
   SERVER_RECEIPT,
   parseDeviceReceipt,
   isServerReceipt,

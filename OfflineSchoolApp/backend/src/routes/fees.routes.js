@@ -6,7 +6,7 @@ const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
 // Shared with the desktop application, which issues the offline ones. See
 // OfflineSchoolApp/shared/receipts.js for why a client may name its own.
-const { parseDeviceReceipt } = require("../../../shared/receipts");
+const { parseDeviceReceipt, rejectedDeviceReceipt } = require("../../../shared/receipts");
 
 const { requirePermission } = require("../../middleware/permissions");
 
@@ -357,6 +357,10 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
 // PAYMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** FeePayment.source values a client may claim. "import" is the server's own. */
+const PAYMENT_SOURCES = ["web", "mobile", "desktop"];
+const DEVICE_SOURCES  = ["mobile", "desktop"];
+
 // POST /api/fees/payments
 //
 // The phone generates _id before it ever reaches the network, so a retry
@@ -368,8 +372,13 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
   const {
     _id, studentId, academicYear, term = null,
     method = "cash", reference = null, note = null,
-    receivedAt, source = "web",
+    receivedAt,
   } = req.body;
+
+  // Where the row was made. The phone and the desktop say so; the browser sends
+  // nothing and is "web", as it always was. Anything unrecognised is "web" too,
+  // rather than a validation error on money that has already changed hands.
+  const source = PAYMENT_SOURCES.includes(req.body.source) ? req.body.source : "web";
 
   if (!studentId)    return bad(res, "studentId is required");
   if (!academicYear) return bad(res, "academicYear is required");
@@ -425,6 +434,13 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
     ? String(req.body.receiptNo).trim()
     : await nextReceiptNo(schoolId, academicYear);
 
+  // A device number this endpoint refused is still the number on the paper the
+  // parent may be holding. Kept beside the server's, so the official receipt
+  // can say which provisional receipt it replaces. Written only here, at
+  // creation — the replay above returns the stored row untouched, and the
+  // field is immutable on the model.
+  const claimedReceiptNo = claimed ? null : rejectedDeviceReceipt(req.body.receiptNo, academicYear);
+
   let payment;
   try {
     payment = await FeePayment.create({
@@ -433,6 +449,7 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
       classId:    student.classId ?? null,
       amount, method, reference, note,
       receiptNo,
+      claimedReceiptNo,
       receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
       receivedBy: req.user?._id ? String(req.user._id) : null,
       source,
@@ -548,11 +565,16 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
     receiptNo:    claimedReceipt
       ? String(req.body.receiptNo).trim()
       : await nextReceiptNo(schoolId, original.academicYear),
+    // As a payment: the refused device number, for the credit note to name.
+    claimedReceiptNo: claimedReceipt
+      ? null
+      : rejectedDeviceReceipt(req.body.receiptNo, original.academicYear),
     receivedAt:   new Date(),
     receivedBy:   req.user?._id ? String(req.user._id) : null,
     reversesId:   String(original._id),
     reversalReason: reason,
-    source:       "web",
+    // A device that took the reversal offline says so; the browser does not.
+    source:       DEVICE_SOURCES.includes(req.body.source) ? req.body.source : "web",
   });
 
   original.reversedById   = String(reversal._id);

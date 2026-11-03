@@ -14,14 +14,18 @@
  */
 
 const shared = require("../../../shared/receiptHtml");
-const { replacedProvisionalReference } = require("../../../shared/receipts");
+const {
+  replacedProvisionalReference, replacedProvisionalReceipt,
+} = require("../../../shared/receipts");
 const { absoluteLogo } = require("./document");
 
 /**
  * The provisional paper this official receipt supersedes, when it may have had
  * a different identifier: a payment taken on the phone, which issues no
  * receipt number and prints its provisional receipt under the payment's own id
- * (shared/receipts.js provisionalReference). The staff route and the guardian
+ * (shared/receipts.js provisionalReference) — or a desktop payment whose
+ * device number the server refused, whose provisional paper carries that
+ * number (FeePayment.claimedReceiptNo). The staff route and the guardian
  * portal both print through here, so both say it.
  */
 const buildReceiptHtml = ({ data, labels, lang, printedOn, origin }) =>
@@ -29,6 +33,8 @@ const buildReceiptHtml = ({ data, labels, lang, printedOn, origin }) =>
     data: {
       ...data,
       replacesProvisional: data.replacesProvisional ?? replacedProvisionalReference(data.payment),
+      replacesProvisionalReceipt:
+        data.replacesProvisionalReceipt ?? replacedProvisionalReceipt(data.payment),
     },
     labels,
     lang,

@@ -94,6 +94,8 @@ const RECEIPT_LABELS = {
     voidWatermark:          "VOID",
     replacesProvisional:
       "Replaces any provisional receipt issued for this payment (provisional reference {ref}).",
+    replacesProvisionalReceipt:
+      "Replaces provisional receipt {no}.",
   },
 
   fr: {
@@ -141,6 +143,8 @@ const RECEIPT_LABELS = {
     voidWatermark:          "ANNULÉ",
     replacesProvisional:
       "Remplace tout reçu provisoire délivré pour ce paiement (référence provisoire {ref}).",
+    replacesProvisionalReceipt:
+      "Remplace le reçu provisoire {no}.",
   },
 };
 
@@ -212,7 +216,8 @@ const PROVISIONAL_CSS = `<style>
 /**
  * @param {object}  o
  * @param {object}  o.data         { school, student, payment, totals,
- *                                   recordedBy?, replacesProvisional? }
+ *                                   recordedBy?, replacesProvisional?,
+ *                                   replacesProvisionalReceipt? }
  * @param {object}  o.labels       RECEIPT_LABELS[lang], or a catalogue containing it
  * @param {string}  o.lang
  * @param {string}  o.printedOn    the date line, already formatted
@@ -273,11 +278,18 @@ const buildReceiptHtml = ({ data, labels, lang, printedOn, logoSrc = null, provi
   }
 
   // On the official receipt for a payment that may have had provisional paper
-  // under a different identifier: say which one this supersedes.
-  const replaces = !provisional && data.replacesProvisional
+  // under a different identifier: say which one this supersedes. A device
+  // number the server refused names that paper exactly, so it is said instead
+  // of the payment-id reference, not as well.
+  const replacesLine = data.replacesProvisionalReceipt
+    ? String(labels.replacesProvisionalReceipt ?? "").replace("{no}", data.replacesProvisionalReceipt)
+    : data.replacesProvisional
+      ? String(labels.replacesProvisional ?? "").replace("{ref}", data.replacesProvisional)
+      : "";
+  const replaces = !provisional && replacesLine
     ? `
       <p class="muted" style="margin-top:4px;font-size:8.5px">
-        ${esc(String(labels.replacesProvisional ?? "").replace("{ref}", data.replacesProvisional))}
+        ${esc(replacesLine)}
       </p>`
     : "";
 
