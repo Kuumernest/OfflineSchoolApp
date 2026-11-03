@@ -31,7 +31,9 @@ import { getDatabase }                                from "../db/database";
 import { ensureTableSchema }                          from "../db/schemaManager";
 import { createTableFromSchema }                      from "../db/schema";
 import { MutationQueue }                              from "./mutationQueue.service";
-import { teacherKnownToServer }                       from "./syncBackfill.service";
+import {
+  teacherKnownToServer, teacherCreateState, dropUnsentTeacher,
+}                                                     from "./syncBackfill.service";
 import {
   tableExists,
   getTableColumns,
@@ -113,6 +115,8 @@ const ensureSchema = (db) =>
       await safeAddColumn(db, USERS_TABLE, "is_active",           "INTEGER DEFAULT 1");
       await safeAddColumn(db, USERS_TABLE, "must_reset_password", "INTEGER DEFAULT 0");
       await safeAddColumn(db, USERS_TABLE, "_synced_at",          "TEXT");
+      // Stamped by create() before its direct POST (teacherCreateState).
+      await safeAddColumn(db, USERS_TABLE, "_create_sent_at",     "TEXT");
 
       await createTableFromSchema(db, "teacher_assignments");
 
@@ -1103,6 +1107,14 @@ export const TeacherService = {
     const net = await NetInfo.fetch();
     if (!net.isConnected) return localId;
 
+    // From here the create may reach the server even if no answer comes
+    // back, so a delete must not treat this teacher as never sent
+    // (teacherCreateState). Cleared below only on a definite refusal.
+    await safeAddColumn(db, USERS_TABLE, "_create_sent_at", "TEXT").catch(() => {});
+    await db.runAsync(
+      `UPDATE ${USERS_TABLE} SET _create_sent_at = ? WHERE id = ?`, [now, localId]
+    ).catch(() => {});
+
     try {
       const response = await api.post(API.admin.teachers.list, {
         id:       localId,
@@ -1150,6 +1162,14 @@ export const TeacherService = {
         return serverId;
       }
 
+      // An answer that refused it (400, 403…): the server does not have it.
+      // No answer, a 5xx, a timeout or a rate limit: it may.
+      const status = err?.response?.status;
+      if (status && status < 500 && status !== 408 && status !== 429) {
+        await db.runAsync(
+          `UPDATE ${USERS_TABLE} SET _create_sent_at = NULL WHERE id = ?`, [localId]
+        ).catch(() => {});
+      }
       console.warn(`[teachers] Server push failed: ${err.message}`);
       return localId;
     }
@@ -1501,7 +1521,7 @@ export const TeacherService = {
     }
 
     const teacher = await db.getFirstAsync(
-      `SELECT id FROM ${USERS_TABLE}
+      `SELECT * FROM ${USERS_TABLE}
        WHERE id = ?
          AND LOWER(role) = 'teacher'
          AND LOWER(role) NOT IN ('admin', 'school_admin', 'super_admin', 'superadmin')
@@ -1534,6 +1554,23 @@ export const TeacherService = {
 
     const now = new Date().toISOString();
 
+    // Created on this phone and never sent: there is nothing upstream to
+    // delete. The row, its queued create and the assignments made against it
+    // simply go, and nothing is sent. This used to soft-delete the row and
+    // leave the create queued, so the sync created the teacher on the server
+    // and then deactivated them — or, online, sent DELETE first (a 404) and
+    // the create after it, leaving the teacher live on the server.
+    let createState = await teacherCreateState(teacher);
+    if (createState === "unsent" || createState === "none") {
+      if (await dropUnsentTeacher(db, teacher)) {
+        console.log(`[teachers] Dropped unsent teacher: ${id}`);
+        return true;
+      }
+      // An assignment made against it may have landed, so the teacher may
+      // have too: delete it on the server like one in flight.
+      createState = "inflight";
+    }
+
     await db.runAsync(
       `UPDATE ${USERS_TABLE}
        SET deleted_at = ?, updated_at = ?, _synced = 0
@@ -1542,6 +1579,24 @@ export const TeacherService = {
          AND LOWER(role) NOT IN ('admin', 'school_admin', 'super_admin', 'superadmin')`,
       [now, now, id]
     );
+
+    // The create went out and no answer came back: it may have landed. The
+    // create stays queued and the DELETE is queued behind it, explicitly (as
+    // announcements do). A direct DELETE now could reach the server before
+    // the create's retry and settle as a 404; the teacher reconciler
+    // re-queues the delete if the create lands after one did anyway.
+    if (createState === "inflight") {
+      await MutationQueue.enqueue({
+        entityKey: `teacher-delete:${id}`,
+        method:    "DELETE",
+        endpoint:  API.admin.teachers.detail(id),
+        payload:   {
+          __local:     { table: USERS_TABLE, ids: [id] },
+          __reconcile: { kind: "softDelete", table: USERS_TABLE, localId: id },
+        },
+      });
+      return true;
+    }
 
     if (!isAuthenticated()) return true;
 

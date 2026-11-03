@@ -73,6 +73,75 @@ const isStale = (updatedAt) =>
 export const teacherKnownToServer = (row) =>
   isServerGeneratedId(row?.id) || !!(row?._synced_at && String(row._synced_at).trim());
 
+/**
+ * Where a teacher's create stands, for deleting it (MutationQueue.createState
+ * vocabulary): "sent", "inflight", "unsent" or "none".
+ *
+ * A teacher the server is known to have is "sent" whatever the queue says.
+ * TeacherService.create() also POSTs directly while online, outside the
+ * queue; it stamps `_create_sent_at` before that request and clears it only
+ * on a refusal, so a direct send that got no answer reads as "inflight" —
+ * it may have landed — and not as "none".
+ */
+export const teacherCreateState = async (row) => {
+  if (teacherKnownToServer(row)) return "sent";
+  const state = await MutationQueue.createState(`teacher:${row.id}`);
+  if (state === "none" && row?._create_sent_at && String(row._create_sent_at).trim()) return "inflight";
+  return state;
+};
+
+/**
+ * Drop a teacher created on this phone that the server cannot have: the row,
+ * its queued create (and any edit or delete queued for it), and the teacher
+ * assignments that point at it — those were made against an id the server
+ * has never seen, and once the teacher is gone they could only fail for ever.
+ *
+ * Returns false, dropping nothing, when any of those assignments may have
+ * reached the server (synced, a server id, or a create attempted): the server
+ * checks the teacher exists before it accepts an assignment, so the teacher
+ * may have landed too, and its delete must go on the wire instead.
+ *
+ * The caller has already established the teacher's own create is "unsent" or
+ * "none" (teacherCreateState).
+ */
+export const dropUnsentTeacher = async (db, row) => {
+  const id = row?.id;
+  if (!id) return false;
+
+  let deps = [];
+  if (await tableExists(db, "teacher_assignments")) {
+    const cols = new Set(
+      ((await db.getAllAsync("PRAGMA table_info(teacher_assignments)").catch(() => [])) ?? []).map((c) => c.name)
+    );
+    const teacherCols = ["teacher_id", "teacherId"].filter((c) => cols.has(c));
+    if (teacherCols.length) {
+      deps = (await db.getAllAsync(
+        `SELECT * FROM teacher_assignments WHERE ${teacherCols.map((c) => `${c} = ?`).join(" OR ")}`,
+        teacherCols.map(() => id)
+      ).catch(() => null)) ?? null;
+      if (deps === null) return false;   // could not look: do not guess
+    }
+  }
+
+  for (const dep of deps) {
+    if (isServerGeneratedId(dep.id)) return false;
+    if (dep._synced_at && String(dep._synced_at).trim()) return false;
+    const s = await MutationQueue.createState(`assignment:${dep.id}`);
+    if (s === "sent" || s === "inflight") return false;
+  }
+
+  for (const dep of deps) {
+    await MutationQueue.cancelUnsent(`assignment:${dep.id}`);
+    await MutationQueue.cancelUnsent(`assignment-delete:${dep.id}`);
+    await db.runAsync("DELETE FROM teacher_assignments WHERE id = ?", [dep.id]).catch(() => {});
+  }
+  for (const k of [`teacher:${id}`, `teacher-update:${id}`, `teacher-delete:${id}`]) {
+    await MutationQueue.cancelUnsent(k);
+  }
+  await db.runAsync("DELETE FROM users WHERE id = ? AND LOWER(role) = 'teacher'", [id]);
+  return true;
+};
+
 const roleAllows = (spec) => {
   if (spec.adminOnly) return isAdmin();
   if (!spec.roles) return true;
@@ -653,7 +722,15 @@ const SPECS = [
 const DELETE_SPECS = [
   { key: "class",      table: "classes",             endpoint: API.admin.classes.list,     adminOnly: true },
   { key: "subject",    table: "subjects",            endpoint: API.admin.subjects.list,    adminOnly: true },
-  { key: "teacher",    table: "users",               endpoint: API.admin.teachers.list,    adminOnly: true, extraWhere: "role = 'teacher'" },
+  // A teacher made on this phone and never sent is dropped with its queued
+  // create, not created and then deactivated (TeacherService.delete does the
+  // same when the delete is made; this catches rows older builds left).
+  { key: "teacher",    table: "users",               endpoint: API.admin.teachers.list,    adminOnly: true, extraWhere: "role = 'teacher'",
+    dropUnsent: async (db, row) => {
+      const state = await teacherCreateState(row);
+      if (state !== "unsent" && state !== "none") return false;
+      return dropUnsentTeacher(db, row);
+    } },
   { key: "assignment", table: "teacher_assignments", endpoint: API.admin.assignments.list, adminOnly: true },
   // A quiz or question still under its local id was never created upstream
   // (the create's reconciler swaps in the server id). Deleting it used to
@@ -757,6 +834,25 @@ export const registerReconcilers = () => {
         `UPDATE users SET _synced = ${clean}, _synced_at = ? WHERE id = ?`,
         [...(args.since === undefined ? [] : [args.since]), new Date().toISOString(), localId]
       ).catch(() => {});
+    }
+    // Deleted on this phone while the create was in flight. Its DELETE was
+    // queued behind the create, but a create backing off between retries can
+    // be overtaken: the DELETE meets a 404 and settles, then the create lands.
+    // If no DELETE is still waiting, one goes now, behind this create.
+    const id = serverId ? String(serverId) : localId;
+    const gone = id && await db.getFirstAsync(
+      "SELECT 1 AS d FROM users WHERE id = ? AND deleted_at IS NOT NULL AND deleted_at != ''", [id]
+    ).catch(() => null);
+    if (gone && !(await MutationQueue.hasPending(`teacher-delete:${id}`))) {
+      await MutationQueue.enqueue({
+        entityKey: `teacher-delete:${id}`,
+        method:    "DELETE",
+        endpoint:  API.admin.teachers.detail(id),
+        payload:   {
+          __local:     { table: "users", ids: [id] },
+          __reconcile: { kind: "softDelete", table: "users", localId: id },
+        },
+      });
     }
   });
 
