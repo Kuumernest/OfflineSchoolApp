@@ -53,6 +53,7 @@ import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID } from "../utils/idHelpers";
 import { remapPayload } from "./idMap";
+import { localIdsOf } from "./syncState";
 import { getCurrentAuth } from "../utils/authHelpers";
 
 const TABLE = "mutation_outbox";
@@ -152,6 +153,10 @@ const wireBody = (payload) => {
   return rest;
 };
 
+// localIdsOf lives with the pure classifier so screens and checks can use it
+// without a database; re-exported for the services that already import here.
+export { localIdsOf };
+
 /**
  * Tables whose dirty flag this queue may clear via `payload.__local`.
  *
@@ -170,7 +175,7 @@ const SYNCABLE_LOCAL_TABLES = new Set([
   "classes", "subjects", "users", "teacher_assignments",
   "timetable", "students", "announcements",
   "questions", "quizzes", "quiz_attempts",
-  "fee_structures",
+  "fee_structures", "interventions",
 ]);
 
 /** Cache of "does this table have a _synced_at column?" — probed once each. */
@@ -748,7 +753,8 @@ export class MutationQueue {
    */
   static async _clearLocalFlag(db, payload) {
     const meta = payload?.__local;
-    if (!meta?.table || !meta?.ids?.length) return;
+    const ids  = localIdsOf(meta);
+    if (!meta?.table || !ids.length) return;
 
     if (!SYNCABLE_LOCAL_TABLES.has(meta.table)) {
       console.warn(
@@ -759,7 +765,7 @@ export class MutationQueue {
 
     const hasSyncedAt = await tableHasSyncedAt(db, meta.table);
     const idCol = meta.idColumn === "_id" ? "_id" : "id";
-    const placeholders = meta.ids.map(() => "?").join(",");
+    const placeholders = ids.map(() => "?").join(",");
 
     // `since`: the row's updated_at when this was queued. Edited after that,
     // the row stays dirty — what was just sent is not what it now holds.
@@ -769,7 +775,7 @@ export class MutationQueue {
       : `UPDATE ${meta.table} SET _synced = 1 WHERE ${idCol} IN (${placeholders})${guard}`;
     const params = [
       ...(hasSyncedAt ? [new Date().toISOString()] : []),
-      ...meta.ids,
+      ...ids,
       ...(guard ? [meta.since] : []),
     ];
 

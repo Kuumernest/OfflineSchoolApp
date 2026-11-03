@@ -35,6 +35,19 @@ const LIVE = new Set(["pending", "retrying"]);
 const STUCK = new Set(["failed", "conflict"]);
 
 /**
+ * The local rows a mutation names in `payload.__local`: `ids`, a list. Some
+ * services wrote `id`, one id (teacher edits, interventions, fee structures),
+ * which nothing read: the flag was never cleared on success and the backfill
+ * did not see the row as queued, so a teacher edit was ALSO sent as a teacher
+ * create. Both spellings are read, so rows already queued that way settle.
+ */
+export function localIdsOf(meta) {
+  if (!meta) return [];
+  if (Array.isArray(meta.ids)) return meta.ids;
+  return meta.id !== undefined && meta.id !== null && meta.id !== "" ? [meta.id] : [];
+}
+
+/**
  * @param {object}   args
  * @param {string[]} args.dirtyIds    local ids with _synced = 0
  * @param {object[]} args.outboxRows  { status, payload } for the table in question,
@@ -48,7 +61,8 @@ export function classifyDirtyRows({ dirtyIds = [], outboxRows = [], table }) {
 
   for (const row of outboxRows) {
     const meta = row?.payload?.__local;
-    if (!meta || meta.table !== table || !Array.isArray(meta.ids)) continue;
+    const ids  = localIdsOf(meta);
+    if (!meta || meta.table !== table || !ids.length) continue;
 
     const status = String(row.status ?? "");
     const bucket = LIVE.has(status) ? pendingIds
@@ -56,7 +70,7 @@ export function classifyDirtyRows({ dirtyIds = [], outboxRows = [], table }) {
                  : null;
     if (!bucket) continue;               // 'synced' entries settle their own rows
 
-    for (const id of meta.ids) bucket.add(String(id));
+    for (const id of ids) bucket.add(String(id));
   }
 
   const pending  = [];
@@ -97,4 +111,4 @@ export function syncStateLabel({ pending = [], failed = [], orphaned = [] }) {
   return { kind: "synced", count: 0, key: "syncState.marksSynced" };
 }
 
-export default { classifyDirtyRows, syncStateLabel };
+export default { classifyDirtyRows, syncStateLabel, localIdsOf };

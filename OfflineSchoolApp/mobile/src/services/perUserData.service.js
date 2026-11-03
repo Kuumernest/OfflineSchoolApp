@@ -52,6 +52,7 @@ import {
 } from "../db/database";
 import Dev from "../db/deviceDb";
 import { hashRow } from "../db/rowHash";
+import { localIdsOf } from "./syncState";
 import { isLegacyValue, replaceLegacyCredential, flushWal, compactDeviceDb } from "../db/credentialCache";
 
 export const MAX_STORES = 5;
@@ -350,7 +351,7 @@ const outboxEvidence = async (db, keyToTable) => {
     for (const r of rows ?? []) {
       const p = parse(r.payload);
       const tbl = p?.__local?.table ?? p?.__reconcile?.table ?? null;
-      for (const id of p?.__local?.ids ?? []) add(tbl, id, r.owner_id);
+      for (const id of localIdsOf(p?.__local)) add(tbl, id, r.owner_id);
       if (p?.__reconcile?.localId && tbl) add(tbl, p.__reconcile.localId, r.owner_id);
       const [key, ...rest] = String(r.entity_key ?? "").split(":");
       const t = keyToTable.get(key);
@@ -1090,7 +1091,7 @@ export const accountLegacy = async ({ verifyFiles = false } = {}) => {
     const sent = await h.getAllAsync(`SELECT payload FROM ${OUTBOX} WHERE status = 'synced'`).catch(() => []);
     return (sent ?? []).some((r) => {
       const p = parse(r.payload);
-      return (p?.__local?.ids ?? []).map(String).includes(String(id)) || String(p?.__reconcile?.localId ?? "") === String(id);
+      return localIdsOf(p?.__local).map(String).includes(String(id)) || String(p?.__reconcile?.localId ?? "") === String(id);
     });
   };
 
