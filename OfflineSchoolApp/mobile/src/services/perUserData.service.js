@@ -290,10 +290,12 @@ export const dirtyInventory = async (db) => {
     const rows = await db.getAllAsync(`SELECT * FROM ${q(sel.table)} WHERE ${sel.where}`).catch(() => []);
     for (const row of rows ?? []) {
       if (sel.skip) { try { if (sel.skip(row)) continue; } catch { continue; } }
-      // The offline sign-in cache writes a `users` row per account with the
-      // column's default _synced = 0 (auth.store.js). It carries a password
-      // hash, which no change made on a screen ever does: it is a credential,
-      // not somebody's unsent work (docs/40 §1 caution).
+      // The offline sign-in cache writes a `users` row per account; older
+      // builds left it at the column's default _synced = 0. It carries a
+      // password hash, which no change made on a screen ever does: it is a
+      // credential, not somebody's unsent work (docs/40 §1 caution). The
+      // teacher spec itself now excludes it too (CREDENTIAL_ROW,
+      // db/credentialCache.js); this also covers the delete selector.
       if (sel.table === "users" && row.passwordHash) continue;
       const id = row[sel.idColumn];
       if (id == null || id === "") continue;

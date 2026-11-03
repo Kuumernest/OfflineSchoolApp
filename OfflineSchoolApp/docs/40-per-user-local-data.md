@@ -71,6 +71,32 @@ the offline credential upsert into `users`). A migration must use the
 backfill's own filters (SPECS `where`/`skip`) to decide what is a real change,
 never `_synced = 0` alone.
 
+**Fixed: the credential row was sent as a teacher create.** The backfill's
+"teacher" spec matched every dirty `role = 'teacher'` row in `users`. That included
+the credential cache, which was inserted with `_synced = 0`. Once a teacher had
+signed in on a shared phone, the next administrator's sync, with the switch off,
+POSTed that teacher to `/admin/teachers`. The real server answered in one of two
+ways:
+
+- For an active teacher, it returned 409 and the outbox row was parked as a
+  conflict.
+- For a teacher the school had removed, it **restored** the account. The account
+  was reactivated, given a new temporary password and emailed it.
+
+Reproduced end to end in `mobile/scripts/check-credential-rows.js`.
+
+The changes:
+
+- The cache row is now inserted with `_synced = 1`.
+- The teacher spec skips any row that carries a password hash (`CREDENTIAL_ROW`,
+  `src/db/credentialCache.js`). The per-user inventory already excluded such rows.
+- At each backfill, phones left in the old state are repaired. A queued or parked
+  `teacher:<id>` POST for a credential row is dropped. A successful online sign-in
+  for that id proved that the server has the account. The row's dirty flag is
+  cleared, except on a soft-deleted row or a row with a queued
+  `teacher-update`/`teacher-delete`.
+- A genuine offline teacher create carries no hash and is untouched.
+
 ---
 
 ## 2. Options

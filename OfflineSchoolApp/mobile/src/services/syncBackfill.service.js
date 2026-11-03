@@ -35,6 +35,7 @@ import { API } from "./apiEndpoints";
 import { getCurrentAuth, hasRole } from "../utils/authHelpers";
 import { canonicalDay, VALID_DAYS } from "../utils/timetableMappers";
 import { isServerGeneratedId } from "../utils/idHelpers";
+import { CREDENTIAL_ROW, credentialRowIds, repairCredentialRows } from "../db/credentialCache";
 
 const isAdmin   = () => hasRole(["super_admin", "school_admin", "admin"]);
 const isTeacher = () => hasRole("teacher");
@@ -212,11 +213,18 @@ const SPECS = [
     skip: (row) => !(row.class_id || row.classId),
   },
 
+  /**
+   * A teacher created on this device. Never a sign-in's credential cache:
+   * that row is the server's own account (an online sign-in just answered
+   * for it), and POSTing it made the server answer 409 — parked for good —
+   * or, for a teacher the school had removed, RESTORE the account with a new
+   * password (db/credentialCache.js, check-credential-rows.js).
+   */
   {
     key: "teacher",
     table: "users",
     adminOnly: true,
-    where: `role = 'teacher' AND ${IS_DIRTY} AND ${NOT_DELETED}`,
+    where: `role = 'teacher' AND ${IS_DIRTY} AND ${NOT_DELETED} AND NOT ${CREDENTIAL_ROW}`,
     endpoint: () => API.admin.teachers.list,
     method: "POST",
     reconcile: "teacher",
@@ -1413,6 +1421,31 @@ const adoptQueuedContentDeletes = async (db) => {
  * Sweeps every entity and returns how many mutations were queued.
  * Purely local — safe to run offline, and cheap when nothing is dirty.
  */
+/**
+ * What older builds left on a phone whose sign-in cache rows were dirty: a
+ * queued or parked POST /admin/teachers (`teacher:<id>`) for an account that
+ * signed in here — the server has it, an online sign-in proved so; sending it
+ * can only 409 or restore a removed account — and the dirty flag itself. Both
+ * go, for credential rows only (repairCredentialRows says which); a genuine
+ * offline create carries no credential and is untouched. Idempotent; cheap
+ * when there is nothing to do.
+ */
+const repairCredentialCache = async (db) => {
+  const ids = await credentialRowIds(db);
+  if (!ids.size) return;
+  let dropped = 0;
+  for (const id of ids) dropped += await MutationQueue.cancelUnsent(`teacher:${id}`);
+  const keep = new Set();
+  for (const k of await MutationQueue.pendingKeys("teacher-")) {
+    const m = /^teacher-(?:update|delete):(.+)$/.exec(k);
+    if (m) keep.add(m[1]);
+  }
+  const cleared = await repairCredentialRows(db, keep);
+  if (dropped || cleared.length) {
+    console.log(`[backfill] credential cache: dropped ${dropped} queued teacher create(s), cleared ${cleared.length} flag(s)`);
+  }
+};
+
 export const backfillOutbox = async () => {
   registerReconcilers();
 
@@ -1423,6 +1456,8 @@ export const backfillOutbox = async () => {
 
   let total = 0;
   const byKey = {};
+
+  await repairCredentialCache(db).catch((err) => console.warn("[backfill] credential rows:", err?.message));
 
   const adopted = await adoptQueuedContentDeletes(db).catch(() => 0);
   if (adopted) { byKey["content-delete"] = adopted; total += adopted; }
