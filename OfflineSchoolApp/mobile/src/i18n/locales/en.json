@@ -7543,5 +7543,12 @@
     "deleteLegacy": "Delete old shared data",
     "deleteLegacyTitle": "Delete the old shared data?",
     "deleteLegacyBody": "Every change in it is with its account or in the held list. This cannot be undone."
+  },
+  "staffNo": {
+    "label": "Staff no.",
+    "labelLong": "Staff number",
+    "pending": "Pending — the school issues it when this syncs",
+    "none": "Not assigned yet",
+    "fromSchool": "Issued by the school. It cannot be changed on the phone."
   }
 }

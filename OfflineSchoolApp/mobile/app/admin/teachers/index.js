@@ -22,6 +22,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
 import { errorText } from "../../../src/utils/appError";
+import { staffNoStatus, staffNoText } from "../../../src/utils/staffNumber";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -37,6 +38,8 @@ const STALE_THRESHOLD_MS = 30_000;
 const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
   const { t } = useTranslation();
   const hasAssignments = Number(teacher.subjectCount ?? 0) > 0;
+  // The school's number — "pending" for one created here that has not synced.
+  const staffNo = staffNoStatus(teacher);
 
   return (
     <TouchableOpacity
@@ -54,6 +57,13 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
         </Text>
         <Text style={styles.teacherEmail} numberOfLines={1}>
           {teacher.email || t("teachers.noEmail")}
+        </Text>
+        <Text
+          style={[styles.teacherStaffNo, staffNo.kind !== "assigned" && styles.teacherStaffNoMuted]}
+          numberOfLines={1}
+          accessibilityLabel={`${t("staffNo.labelLong")}: ${staffNoText(t, staffNo)}`}
+        >
+          {t("staffNo.label")} · {staffNoText(t, staffNo)}
         </Text>
 
         <View style={styles.metaRow}>
@@ -609,6 +619,8 @@ const styles = StyleSheet.create({
   cardInfo:     { flex: 1, marginRight: 8 },
   teacherName:  { fontSize: 15, fontWeight: "700", color: "#111827" },
   teacherEmail: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  teacherStaffNo:      { fontSize: 12, color: "#374151", marginTop: 1, fontWeight: "600" },
+  teacherStaffNoMuted: { color: "#9CA3AF", fontWeight: "400", fontStyle: "italic" },
   metaRow: {
     flexDirection: "row",
     flexWrap:      "wrap",
@@ -672,4 +684,4 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
 });
-import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useTranslation } from "../../../src/i18n/useTranslation";

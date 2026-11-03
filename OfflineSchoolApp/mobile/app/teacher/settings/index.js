@@ -21,6 +21,8 @@ import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import TeacherProfile from "../../../src/services/teacherProfile.service";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { loadOwnStaffNo } from "../../../src/services/staffNumber.service";
+import { staffNoText } from "../../../src/utils/staffNumber";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 
 // ─────────────────────────────────────────────────────────
@@ -217,7 +219,6 @@ function ProfileProgress({ profile }) {
     profile?.lastName,
     profile?.gender,
     profile?.phone,
-    profile?.staffId,
     profile?.qualification,
     profile?.address,
     profile?.emergencyName,
@@ -290,6 +291,14 @@ export default function TeacherSettingsScreen() {
   const [profile,         setProfile]         = useState(null);
   const [loading,         setLoading]         = useState(true);
   const [profileComplete, setProfileComplete] = useState(false);
+  // The school's staff number (server-issued), not anything the teacher typed.
+  const [staffNo,         setStaffNo]         = useState({ kind: "none", value: null });
+
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   // ✅ Fix 2 — notification preference loaded from AsyncStorage
   const [notifEnabled, setNotifEnabled] = useState(true);
@@ -374,7 +383,7 @@ export default function TeacherSettingsScreen() {
 
   const profileSubtitle =
     [
-      profile?.staffId ? t("teacherSettings.idLabel", { id: profile.staffId }) : null,
+      staffNo.value ? t("teacherSettings.idLabel", { id: staffNo.value }) : null,
       profile?.qualification || null,
     ]
       .filter(Boolean)
@@ -491,16 +500,14 @@ export default function TeacherSettingsScreen() {
         {/* ── My Details (shown once profile has data) ── */}
         {profile && (
           <Section title={t("teacherSettings.myDetails")}>
-            {!!profile.staffId && (
-              <SettingRow
-                icon="id-card-outline"
-                iconBg="#EDE9FE"
-                iconColor="#7C3AED"
-                title={t("teacherSettings.staffId")}
-                type="value"
-                value={profile.staffId}
-              />
-            )}
+            <SettingRow
+              icon="id-card-outline"
+              iconBg="#EDE9FE"
+              iconColor="#7C3AED"
+              title={t("staffNo.labelLong")}
+              type="value"
+              value={staffNoText(t, staffNo)}
+            />
             {!!profile.qualification && (
               <SettingRow
                 icon="ribbon-outline"

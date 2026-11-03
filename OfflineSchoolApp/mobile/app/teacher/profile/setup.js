@@ -26,6 +26,8 @@ import DateField                from "../../../src/components/DateField";
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 import { useTranslation }       from "../../../src/i18n/useTranslation";
+import { loadOwnStaffNo }       from "../../../src/services/staffNumber.service";
+import { staffNoText }          from "../../../src/utils/staffNumber";
 import { needsInternetFailureText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
@@ -240,7 +242,6 @@ const validateStep = (step, form, t) => {
     if (!form.nationalId?.trim())  errors.nationalId  = t("profileTeacher.errNationalId");
   }
   if (step === 1) {
-    if (!form.staffId?.trim())   errors.staffId        = t("profileTeacher.errStaffId");
     if (!form.qualification)     errors.qualification  = t("profileTeacher.errQualification");
     if (!form.employmentType)    errors.employmentType = t("profileTeacher.errEmploymentType");
     if (!form.joinDate?.trim())  errors.joinDate       = t("profileTeacher.errJoinDate");
@@ -416,6 +417,17 @@ export default function TeacherProfileSetup() {
   const [step,   setStep]   = useState(0);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // The school's staff number: issued by the server, shown read-only. It
+  // replaced the "Staff ID" a teacher used to type here, which the server
+  // never stored. Whatever an older build typed stays in form.staffId (and
+  // the local teacher_profiles.staff_id column) untouched, but is not shown.
+  const [staffNo, setStaffNo] = useState({ kind: "none", value: null });
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   const [form, setForm] = useState({
     firstName:         user?.name?.split(" ")[0]                 || "",
@@ -659,12 +671,11 @@ export default function TeacherProfileSetup() {
             </View>
 
             <Field
-              label={t("profileTeacher.labelStaffId")} required
-              value={form.staffId}
-              onChangeText={(v) => set("staffId", v)}
-              placeholder={t("profileTeacher.phStaffId")}
+              label={t("staffNo.labelLong")}
+              value={staffNoText(t, staffNo)}
+              editable={false}
               icon="id-card-outline"
-              error={errors.staffId}
+              hint={t("staffNo.fromSchool")}
             />
 
             <SelectField

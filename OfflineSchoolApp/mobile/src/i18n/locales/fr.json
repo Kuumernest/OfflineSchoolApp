@@ -7543,5 +7543,12 @@
     "deleteLegacy": "Supprimer les anciennes données",
     "deleteLegacyTitle": "Supprimer les anciennes données partagées ?",
     "deleteLegacyBody": "Chaque modification est avec son compte ou dans la liste en attente. Cette action est irréversible."
+  },
+  "staffNo": {
+    "label": "Matricule",
+    "labelLong": "Matricule",
+    "pending": "En attente — attribué par l'établissement à la synchronisation",
+    "none": "Pas encore attribué",
+    "fromSchool": "Attribué par l'établissement. Il ne peut pas être modifié sur le téléphone."
   }
 }
