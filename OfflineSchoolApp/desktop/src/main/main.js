@@ -33,7 +33,7 @@ const fs   = require("fs");
 const { app, BrowserWindow, ipcMain, shell, dialog, protocol, net } = require("electron");
 
 const store        = require("./db/store");
-const { outbox }   = require("./db/outbox");
+const { outbox, ownOutboxActions } = require("./db/outbox");
 const { client }   = require("./sync/client");
 const { engine }   = require("./sync/engine");
 const localApi     = require("./api");
@@ -313,7 +313,9 @@ const registerHandlers = () => {
    * THEY sign in (the engine sends only the signed-in account's requests).
    */
   const summaryForSession = () => ({
-    ...queue.summary(),
+    // userId: each stuck entry says whether it is this person's, so the panel
+    // offers its buttons only on their own (ownOutboxActions below).
+    ...queue.summary({ userId: session?.userId ?? null }),
     mine: session?.userId
       ? db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE user_id = ?").get(String(session.userId))?.n ?? 0
       : 0,
@@ -321,13 +323,30 @@ const registerHandlers = () => {
 
   ipcMain.handle("outbox:summary", () => summaryForSession());
   ipcMain.handle("outbox:list",    () => queue.all());
-  ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return summaryForSession(); });
+
+  /**
+   * Try again, Save a copy, Discard: on the signed-in account's own entries
+   * only. Another account's, and an entry with no owner, are read-only — the
+   * owner's decision, enforced here and not only by the panel hiding the
+   * buttons (db/outbox.js ownOutboxActions). A refusal throws, and changes
+   * nothing.
+   */
+  const ownActions = ownOutboxActions({
+    queue, docs, currentUser: () => session?.userId ?? null,
+  });
+
+  ipcMain.handle("outbox:unblock", (_e, seq) => { ownActions.unblock(seq); return summaryForSession(); });
   /**
    * Save a copy of a blocked entry before it is discarded (unsentCopy.js).
    * The person chooses where; nothing is written without the dialog.
    */
   ipcMain.handle("outbox:saveCopy", async (e, seq) => {
-    const row = queue.get(seq);
+    let row;
+    try {
+      row = ownActions.entryForCopy(seq);
+    } catch (err) {
+      return { ok: false, error: err.code ?? "REFUSED", message: err.message };
+    }
     if (!row) return { ok: false, error: "NOT_FOUND" };
     const win = BrowserWindow.fromWebContents(e.sender);
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -344,13 +363,9 @@ const registerHandlers = () => {
   });
 
   ipcMain.handle("outbox:discard", (_e, seq) => {
-    const undo = queue.discard(seq);
-    // The local rows this request wrote have to go with it, or the desktop
-    // keeps showing something the server has never heard of.
-    if (undo?.collection && undo?.docId) docs.forget(undo.collection, undo.docId);
-    for (const extra of undo?.extraDocs ?? []) {
-      if (extra?.collection && extra?.docId) docs.forget(extra.collection, extra.docId);
-    }
+    // The local rows this request wrote go with it (ownOutboxActions), or the
+    // desktop keeps showing something the server has never heard of.
+    ownActions.discard(seq);
     return summaryForSession();
   });
 
