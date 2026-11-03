@@ -1133,6 +1133,41 @@ const coveredIds = async (table) => {
   return ids;
 };
 
+/**
+ * The rows each spec would send, as data: what the per-user migration counts
+ * as a real unsent change (docs/40 §1 caution — `_synced = 0` alone is not
+ * one). Same `where` and `skip` as the sweep below; role filters are left to
+ * the caller.
+ */
+export const dirtySelectors = () => [
+  ...SPECS.map((s) => ({
+    key: s.key, table: s.table, where: s.where, skip: s.skip ?? null, idColumn: s.idColumn || "id",
+  })),
+  ...DELETE_SPECS.map((s) => ({
+    key: `${s.key}-delete`, table: s.table, idColumn: "id", skip: null,
+    where: ["(deleted_at IS NOT NULL AND deleted_at != '')", IS_DIRTY, ...(s.extraWhere ? [s.extraWhere] : [])].join(" AND "),
+  })),
+  { key: "timetable-delete", table: "timetable", idColumn: "_id", skip: null,
+    where: `(deleted_at IS NOT NULL AND deleted_at != '') AND ${IS_DIRTY}` },
+  { key: "period-delete", table: "periods", idColumn: "id", skip: null,
+    where: "dirty = 1 AND deletedat IS NOT NULL AND deletedat != ''" },
+];
+
+/**
+ * Per-user local data (docs/40): once the migration has started on this
+ * phone, an account on the shared file sends only its own rows — never a held
+ * one, never one already placed in somebody's store. Null (no gate, exactly
+ * the old behaviour) on a phone where it has not started.
+ */
+const ownerGate = async (db) => {
+  try {
+    return await require("./perUserData.service").legacyBackfillGate(db);
+  } catch (err) {
+    console.warn("[backfill] owner gate unavailable — sending nothing from the shared file:", err?.message);
+    return () => false;
+  }
+};
+
 const enqueueSpec = async (db, spec, ctx) => {
   if (!roleAllows(spec)) return 0;
   if (!(await tableExists(db, spec.table))) return 0;
@@ -1158,6 +1193,7 @@ const enqueueSpec = async (db, spec, ctx) => {
     const localId = row[idCol];
     if (!localId) continue;
     if (spec.skip?.(row)) continue;
+    if (ctx.gate && !ctx.gate(spec.table, row, idCol)) continue;
 
     const entityKey = `${spec.key}:${localId}`;
     if (queued.has(entityKey)) continue;   // already waiting its turn
@@ -1211,7 +1247,7 @@ const enqueueSpec = async (db, spec, ctx) => {
   return n;
 };
 
-const enqueueDeletes = async (db, spec) => {
+const enqueueDeletes = async (db, spec, gate = null) => {
   if (!roleAllows(spec)) return 0;
   if (!(await tableExists(db, spec.table))) return 0;
 
@@ -1221,13 +1257,14 @@ const enqueueDeletes = async (db, spec) => {
     ...(spec.extraWhere ? [spec.extraWhere] : []),
   ].join(" AND ");
 
-  const rows = await db.getAllAsync(`SELECT id FROM ${spec.table} WHERE ${where}`).catch(() => []);
+  const rows = await db.getAllAsync(`SELECT * FROM ${spec.table} WHERE ${where}`).catch(() => []);
   if (!rows?.length) return 0;
 
   const queued = await MutationQueue.pendingKeys(`${spec.key}-delete:`);
   let n = 0;
 
   for (const row of rows) {
+    if (gate && !gate(spec.table, row, "id")) continue;
     const entityKey = `${spec.key}-delete:${row.id}`;
     if (queued.has(entityKey)) continue;
     // Created on this phone and never sent: there is nothing upstream to
@@ -1258,12 +1295,12 @@ const enqueueDeletes = async (db, spec) => {
  * slot the server never saw is simply dropped locally, because there is
  * nothing upstream to delete.
  */
-const enqueueTimetableDeletes = async (db) => {
+const enqueueTimetableDeletes = async (db, gate = null) => {
   if (!isAdmin()) return 0;
   if (!(await tableExists(db, "timetable"))) return 0;
 
   const rows = await db.getAllAsync(
-    `SELECT _id FROM timetable
+    `SELECT * FROM timetable
      WHERE (deleted_at IS NOT NULL AND deleted_at != '') AND ${IS_DIRTY}`
   ).catch(() => []);
   if (!rows?.length) return 0;
@@ -1274,6 +1311,7 @@ const enqueueTimetableDeletes = async (db) => {
   for (const row of rows) {
     const id = row._id;
     if (!id) continue;
+    if (gate && !gate("timetable", row, "_id")) continue;
 
     if (!isServerGeneratedId(id)) {
       await db.runAsync("DELETE FROM timetable WHERE _id = ?", [id]).catch(() => {});
@@ -1302,12 +1340,12 @@ const enqueueTimetableDeletes = async (db) => {
  * dropped locally instead — periods.service does that at delete time; this
  * catches one whose create is still only queued.
  */
-const enqueuePeriodDeletes = async (db) => {
+const enqueuePeriodDeletes = async (db, gate = null) => {
   if (!isAdmin()) return 0;
   if (!(await tableExists(db, "periods"))) return 0;
 
   const rows = await db.getAllAsync(
-    `SELECT id, operation FROM periods
+    `SELECT * FROM periods
      WHERE dirty = 1 AND deletedat IS NOT NULL AND deletedat != ''`
   ).catch(() => []);
   if (!rows?.length) return 0;
@@ -1317,6 +1355,7 @@ const enqueuePeriodDeletes = async (db) => {
 
   for (const row of rows) {
     if (!row.id) continue;
+    if (gate && !gate("periods", row, "id")) continue;
     const state = await MutationQueue.createState(`period:${row.id}`);
     if (row.operation === "create" && (state === "unsent" || state === "none")) {
       await MutationQueue.cancelUnsent(`period:${row.id}`);
@@ -1379,7 +1418,8 @@ export const backfillOutbox = async () => {
 
   const db = await getDatabase();
   const { schoolId } = getCurrentAuth();
-  const ctx = { schoolId, student: isStudent() };
+  const gate = await ownerGate(db);
+  const ctx = { schoolId, student: isStudent(), gate };
 
   let total = 0;
   const byKey = {};
@@ -1400,18 +1440,18 @@ export const backfillOutbox = async () => {
   // Deletes last: removing a parent before its children are pushed would
   // strand them.
   for (const spec of DELETE_SPECS) {
-    const n = await enqueueDeletes(db, spec).catch(() => 0);
+    const n = await enqueueDeletes(db, spec, gate).catch(() => 0);
     if (n) { byKey[`${spec.key}-delete`] = n; total += n; }
   }
 
-  const ttDeletes = await enqueueTimetableDeletes(db).catch(() => 0);
+  const ttDeletes = await enqueueTimetableDeletes(db, gate).catch(() => 0);
   if (ttDeletes) { byKey["timetable-delete"] = ttDeletes; total += ttDeletes; }
 
-  const periodDeletes = await enqueuePeriodDeletes(db).catch(() => 0);
+  const periodDeletes = await enqueuePeriodDeletes(db, gate).catch(() => 0);
   if (periodDeletes) { byKey["period-delete"] = periodDeletes; total += periodDeletes; }
 
   if (total) console.log(`[backfill] Queued ${total} mutation(s):`, byKey);
   return { total, byKey };
 };
 
-export default { backfillOutbox, registerReconcilers };
+export default { backfillOutbox, registerReconcilers, dirtySelectors };
