@@ -52,6 +52,7 @@ import {
 } from "../db/database";
 import Dev from "../db/deviceDb";
 import { hashRow } from "../db/rowHash";
+import { isLegacyValue, replaceLegacyCredential, flushWal, compactDeviceDb } from "../db/credentialCache";
 
 export const MAX_STORES = 5;
 export const LEGACY_RETENTION_DAYS = 30;
@@ -432,7 +433,12 @@ export const copyCredentials = async (legacy, dev) => {
   return { copied };
 };
 
-/** An online sign-in's credentials, for offline sign-in later (per-user mode). */
+/**
+ * An online sign-in's credentials, for offline sign-in later (per-user mode).
+ * Replaces whatever this account had here — an old clear-text value too
+ * (setup:credentials copies `users` as it finds it), with the file compacted
+ * after so no freed copy of that value survives (db/credentialCache.js).
+ */
 export const saveCredentials = async (user, { salt, hash }) => {
   if (!(await Dev.deviceDbExists()) && !(await enabledFor(user))) return false;
   const dev = await Dev.openDeviceDb();
@@ -440,6 +446,8 @@ export const saveCredentials = async (user, { salt, hash }) => {
     id: idOf(user), name: user.name ?? null, email: user.email ?? null,
     enrollmentNo: user.enrollmentNo ?? null, role: user.role ?? null, schoolId: user.schoolId ?? null,
   };
+  const prior = await dev.getFirstAsync("SELECT password_hash FROM credentials WHERE user_id = ?", [idOf(user)]).catch(() => null);
+  await dev.execAsync("PRAGMA secure_delete = ON;").catch(() => {});
   await dev.runAsync(
     `INSERT OR REPLACE INTO credentials (user_id, email, enrollment_no, role, school_id, name,
        password_salt, password_hash, profile, updated_at, source)
@@ -447,7 +455,57 @@ export const saveCredentials = async (user, { salt, hash }) => {
     [idOf(user), profile.email, profile.enrollmentNo, profile.role, profile.schoolId,
      profile.name, salt, hash, JSON.stringify(profile), nowIso()]
   );
+  if (isLegacyValue(prior?.password_hash)) await compactDeviceDb(dev);
   return true;
+};
+
+/**
+ * After an online sign-in: no copy of this account's old clear-text value
+ * may stay anywhere on the phone (docs/14). device.db's copy is handled by
+ * saveCredentials; this covers every `users` table — the shared file, the
+ * active file, every account's own store — replacing the value with `cred`
+ * (the new one; null if it could not be made: then removed). Each file that
+ * held one is compacted. Never throws.
+ * @returns {Promise<string[]>} the files where a clear-text value was replaced
+ */
+export const replaceLegacyCredentialCopies = async (user, cred) => {
+  const uid = idOf(user);
+  if (!uid) return [];
+  const names = new Set([LEGACY_DB_NAME, activeDatabaseName()]);
+  try {
+    if (await Dev.deviceDbExists()) {
+      const dev = await Dev.openDeviceDb();
+      for (const s of (await dev.getAllAsync("SELECT file FROM stores WHERE evicted_at IS NULL").catch(() => [])) ?? []) {
+        if (s?.file) names.add(s.file);
+      }
+      // device.db itself, when saveCredentials did not run for this account
+      // (its school's switch is off now, but device.db was made earlier).
+      const row = await dev.getFirstAsync("SELECT password_hash FROM credentials WHERE user_id = ?", [uid]).catch(() => null);
+      if (isLegacyValue(row?.password_hash)) {
+        await dev.execAsync("PRAGMA secure_delete = ON;").catch(() => {});
+        await dev.runAsync(
+          "UPDATE credentials SET password_salt = ?, password_hash = ?, updated_at = ? WHERE user_id = ?",
+          [cred?.salt ?? null, cred?.hash ?? null, nowIso(), uid]
+        );
+        await compactDeviceDb(dev);
+      }
+    }
+  } catch (err) {
+    console.warn("[peruser] device credentials:", err?.message);
+  }
+  const replaced = [];
+  for (const name of names) {
+    try {
+      const db = await openDatabaseFile(name);
+      if (await replaceLegacyCredential(db, uid, cred)) {
+        replaced.push(name);
+        await flushWal(db);
+      }
+    } catch (err) {
+      console.warn(`[peruser] credentials in ${name}:`, err?.message);
+    }
+  }
+  return replaced;
 };
 
 /** Offline sign-in lookup. Null when device.db does not exist (caller uses `users`). */
@@ -1194,7 +1252,7 @@ export const exportReviewItem = async (itemId) => {
 
 export default {
   rememberSchoolSwitch, schoolSwitchOn, enabledFor, prepareSession, needsPriming, endSession,
-  requestCancelPreparing, admit, saveCredentials, findCredentials, legacyBackfillGate,
+  requestCancelPreparing, admit, saveCredentials, replaceLegacyCredentialCopies, findCredentials, legacyBackfillGate,
   accountLegacy, legacyDeletionGate, deleteLegacyFile, listReview, reviewCounts, knownAccounts,
   assignReviewItem, sendReviewItemAsMe, exportReviewItem, canReview, MAX_STORES,
 };

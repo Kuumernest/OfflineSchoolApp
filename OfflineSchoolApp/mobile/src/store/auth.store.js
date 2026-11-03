@@ -4,6 +4,7 @@ import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
 import { appError }     from "../utils/appError";
+import { hashPassword, verifyPassword } from "../security/passwordHash";
 
 // ── Safe imports ───────────────────────────────────────────────────────────
 let NetInfo = null;
@@ -11,13 +12,6 @@ try {
   NetInfo = require("@react-native-community/netinfo").default;
 } catch (e) {
   console.warn("NetInfo not available");
-}
-
-let CryptoJS = null;
-try {
-  CryptoJS = require("crypto-js");
-} catch (e) {
-  console.warn("CryptoJS not available");
 }
 
 let DB = null;
@@ -34,20 +28,22 @@ const USER_KEY          = "user";
 const OFFLINE_TOKEN     = "offline_mode";
 const ACTIVE_SCHOOL_KEY = "active_school";
 
-// ── Crypto helpers ─────────────────────────────────────────────────────────
-const generateSalt = () =>
-  Date.now().toString(36) + Math.random().toString(36).substring(2);
+// ── Offline sign-in credentials ────────────────────────────────────────────
+// PBKDF2-HMAC-SHA256 over expo-crypto (security/passwordHash.js). This used to
+// call CryptoJS.PBKDF2, but crypto-js was never installed, so every phone
+// stored `password + salt` — the password in clear text. Those old values
+// still verify offline; the account's next ONLINE sign-in replaces every copy
+// (users tables, device.db) with the new form (docs/14).
 
-const hashPassword = (password, salt) => {
-  if (!CryptoJS) return password + salt;
-  return CryptoJS.PBKDF2(password, salt, {
-    keySize:    256 / 32,
-    iterations: 10000,
-  }).toString();
+/** The new stored value for `password`, or null if it could not be made. */
+const makeCredential = async (password) => {
+  try {
+    return await hashPassword(password);
+  } catch (e) {
+    console.warn("Offline credentials could not be hashed:", e?.message || String(e));
+    return null;
+  }
 };
-
-const comparePassword = (password, salt, hash) =>
-  hashPassword(password, salt) === hash;
 
 // ── User normalizer ────────────────────────────────────────────────────────
 const normalizeUser = (user) => {
@@ -519,66 +515,44 @@ export const useAuthStore = create((set, get) => ({
 
         console.log("✅ Session saved to SecureStore");
 
-        // Cache to SQLite for offline use
-        if (DB && typeof DB.upsert === "function") {
+        // Cache to SQLite for offline use. The new value goes into the active
+        // file and device.db, and every older clear-text copy of this
+        // account's password on the phone is replaced (or, if the new value
+        // could not be made, removed) — never left behind after an online
+        // sign-in.
+        const cred = await makeCredential(password);
+        if (cred && DB) {
           try {
-            const salt = generateSalt();
-            await DB.upsert("users", {
-              id:           user.id,
-              name:         user.name,
-              email:        user.email        || null,
-              enrollmentNo: user.enrollmentNo || null,
-              role:         user.role,
-              schoolId:     user.schoolId     || null,
-              passwordSalt: salt,
-              passwordHash: hashPassword(password, salt),
-              updated_at:   new Date().toISOString(),
-            });
+            const { getDatabase } = require("../db/database");
+            const { upsertCachedCredential, flushWal } = require("../db/credentialCache");
+            const db = await getDatabase();
+            const { replacedLegacy } = await upsertCachedCredential(db, user, cred);
+            if (replacedLegacy) await flushWal(db);
             console.log("✅ User cached to SQLite");
           } catch (e) {
             console.warn("Offline cache failed:", e?.message || String(e));
-          }
-        } else if (DB) {
-          try {
-            const { getDatabase } = require("../db/database");
-            const db   = await getDatabase();
-            const salt = generateSalt();
-            const now  = new Date().toISOString();
-
-            await db.runAsync(
-              `INSERT INTO users
-                 (id, name, email, enrollmentNo, role, schoolId,
-                  passwordSalt, passwordHash, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 name         = excluded.name,
-                 email        = excluded.email,
-                 enrollmentNo = excluded.enrollmentNo,
-                 role         = excluded.role,
-                 schoolId     = excluded.schoolId,
-                 passwordSalt = excluded.passwordSalt,
-                 passwordHash = excluded.passwordHash,
-                 updated_at   = excluded.updated_at`,
-              [
-                user.id, user.name, user.email || null,
-                user.enrollmentNo || null, user.role,
-                user.schoolId || null, salt,
-                hashPassword(password, salt), now,
-              ]
-            );
-            console.log("✅ User cached to SQLite (direct)");
-          } catch (e) {
-            console.warn("Offline cache failed (direct):", e?.message || String(e));
           }
         }
 
         // Per-user local data: credentials also live in device.db, which the
         // offline sign-in reads first once it exists. No-op otherwise.
         try {
-          const salt = generateSalt();
-          await localData()?.saveCredentials(user, { salt, hash: hashPassword(password, salt) });
+          if (cred) await localData()?.saveCredentials(user, cred);
         } catch (e) {
           console.warn("Offline credentials (device) failed:", e?.message || String(e));
+        }
+        try {
+          const LDcopies = localData();
+          if (LDcopies) {
+            await LDcopies.replaceLegacyCredentialCopies(user, cred);
+          } else if (DB) {
+            const { getDatabase } = require("../db/database");
+            const { replaceLegacyCredential, flushWal } = require("../db/credentialCache");
+            const db = await getDatabase();
+            if (await replaceLegacyCredential(db, user.id, cred)) await flushWal(db);
+          }
+        } catch (e) {
+          console.warn("Replacing old offline credentials failed:", e?.message || String(e));
         }
       }
 
@@ -610,12 +584,8 @@ export const useAuthStore = create((set, get) => ({
           deviceRow = await localData()?.findCredentials(isEnrollment ? { enrollmentNo } : { email });
         } catch { deviceRow = null; }
         const candidates = [deviceRow, ...(legacyRows ?? [])].filter(Boolean);
-        const rows = candidates.filter((r) =>
-          r.passwordSalt && comparePassword(password, r.passwordSalt, r.passwordHash)
-        );
-        if (!rows.length && candidates.length) rows.push(candidates[0]);
 
-        if (!rows?.length) {
+        if (!candidates.length) {
           throw isEnrollment
             ? appError(
                 "svcErr.noOfflineAccountEnrollment",
@@ -624,12 +594,17 @@ export const useAuthStore = create((set, get) => ({
             : appError("svcErr.noOfflineAccount", "No offline account found");
         }
 
-        const cached = rows[0];
+        // Either copy may answer (one may be newer). An old clear-text value
+        // verifies too; it is replaced at the next online sign-in.
+        let cached = null;
+        const tried = new Set();
+        for (const r of candidates) {
+          if (!r.passwordHash || tried.has(r.passwordHash)) continue;
+          tried.add(r.passwordHash);
+          if ((await verifyPassword(password, r.passwordSalt, r.passwordHash)).ok) { cached = r; break; }
+        }
 
-        if (
-          !cached.passwordSalt ||
-          !comparePassword(password, cached.passwordSalt, cached.passwordHash)
-        ) {
+        if (!cached) {
           throw isEnrollment
             ? appError(
                 "svcErr.invalidEnrollmentOrPassword",

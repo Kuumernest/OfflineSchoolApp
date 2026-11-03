@@ -165,6 +165,61 @@ from the device sync feed, and why:
 A blocklist there would leak a temporary password to a guardian's screen the first
 time a new notification kind was added.
 
+### Offline sign-in credentials (mobile)
+
+The phone keeps a value derived from each account's password so the account can
+sign in with no network (`mobile/src/store/auth.store.js`). The server never
+trusts it: every request still carries a server-issued token.
+
+**What was wrong.** The code called `CryptoJS.PBKDF2`, but `crypto-js` was never a
+dependency (not in `package.json` or the lockfile in any commit). The `require`
+failed, and the fallback stored `password + salt`, which is the password in clear
+text, in the `users` table of `schoolapp.db`. The per-user migration's
+`setup:credentials` step then copied those values into `device.db` unchanged. No
+build could have stored a real CryptoJS PBKDF2 value.
+
+**What it is now** (`mobile/src/security/passwordHash.js`):
+
+| | |
+|---|---|
+| KDF | PBKDF2-HMAC-SHA256 (RFC 8018, HMAC per RFC 2104), 32-byte key |
+| Salt | 16 random bytes from `expo-crypto`'s `getRandomBytesAsync` (the native CSPRNG) |
+| Iterations | 10,000, stored in each value so the count can be raised later |
+| Stored form | `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` in `passwordHash` (the salt is repeated in `passwordSalt`) |
+| Compare | constant time over the derived bytes |
+| Self-test | once per launch: known answers for SHA-256 and PBKDF2, and the JS SHA-256 checked against `expo-crypto`'s native digest. If it fails, nothing is hashed and the account is not cached for offline sign-in. |
+
+`expo-crypto` 57 has no KDF and no HMAC, only one digest per call. PBKDF2 is
+therefore built in two ways that produce identical bytes. One runs the loop in plain
+JS with the HMAC pad states precomputed. The other runs each SHA-256 through
+`expo-crypto`'s `digest`, which is two native calls per iteration. The phone times
+both once per launch and uses the faster one. Measured in Node, 10,000 iterations
+take about 15 ms with the JIT, about 720 ms with `--jitless` (the closest stand-in
+for Hermes, which interprets), and about 160 ms through the per-call native digest.
+On a mid-range Android phone a sign-in's hash is **estimated at roughly 0.3–1.5 s.
+This has not been measured on a device.** The loop yields every 1,000 iterations.
+10,000 iterations is far below OWASP's server-side figure of 600,000. That is a
+deliberate trade against sign-in time on a phone: an attacker first needs the
+app-private database, and the value only unlocks the offline cache.
+
+**Old values.** A value in the old `password + salt` form still verifies, so offline
+sign-in keeps working. Offline sign-in does not rewrite it. At the account's next
+**online** sign-in, every copy is replaced with the new form: the active file's
+`users` row, `schoolapp.db`, each per-user store `schoolapp.u_<id>.db` and the
+`device.db` credentials. If the new value cannot be made, the copies are removed
+instead. These writes run with `PRAGMA secure_delete = ON`, so SQLite zeroes the
+freed cell. A TRUNCATE checkpoint then empties the `-wal` file, which still held the
+old pages. `device.db` is also `VACUUM`ed.
+
+**Limitation.** The data files are not VACUUMed, for two reasons: VACUUM renumbers
+the rowids of tables without an INTEGER PRIMARY KEY, and it would rewrite the whole
+shared file during a sign-in. Each old sign-in rewrote the clear-text value, so a
+data file can still hold a *freed* copy from before this build in page space that
+SQLite has not yet reused. No live row holds one. An account that has not signed in
+online since this build still has its clear-text value. A one-off, owner-approved
+`VACUUM` of `schoolapp.db` at a quiet moment, such as app start before any service
+opens it, would remove the freed copies. Test: `mobile/scripts/check-offline-credentials.js`.
+
 ---
 
 ## Secrets

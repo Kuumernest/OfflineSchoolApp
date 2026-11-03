@@ -320,7 +320,7 @@ There is no UI toggle. The existing platform screens are on the web, and this is
 
 1. **Setup.** Runs once per phone, locally, and is safe offline. The steps are:
    - `setup:meta`.
-   - `setup:credentials`: copies (never moves) the salt and hash from `users` into `credentials`.
+   - `setup:credentials`: copies (never moves) the salt and hash from `users` into `credentials`. It copies them as it finds them. On a phone that ran an older build, that can be the old clear-text `password + salt` form ([14-security.md](14-security.md#offline-sign-in-credentials-mobile)). Such a value still signs the account in offline. The account's next online sign-in replaces it in `device.db`, in the shared `users` table and in the account's own store.
    - `setup:attribution`: records a D2 decision for every existing dirty row. Rows with no evidence, and every ownerless outbox row, are copied in full into `review_items`.
 2. **Sign-in, online, not yet primed.**
    - The cap check runs (D6).
