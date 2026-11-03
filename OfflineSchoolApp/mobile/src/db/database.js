@@ -4,6 +4,7 @@
 import * as SQLite from "expo-sqlite";
 import { createTableFromSchema, ensureSchemaColumns } from "./schema";
 import { instrument } from "./localWrites";
+import { scrubFreedPages } from "./freePageScrub";
 
 /**
  * The shared file every install has always used. With per-user local data
@@ -93,6 +94,16 @@ const _openDatabase = async (DB_NAME) => {
     // ── Performance + safety pragmas ──────────────────────────────────
     await db.execAsync("PRAGMA journal_mode = WAL;").catch(() => {});
     await db.execAsync("PRAGMA foreign_keys = ON;").catch(() => {});
+
+    // ── One-time rebuild (db/freePageScrub.js) ────────────────────────
+    // Before the handle exists for anyone else: no screen, sync or drain
+    // can be using it. Clears freed copies of clear-text offline passwords
+    // older builds left; keeps every rowid. A failure leaves the file as it
+    // was and is retried at the next launch.
+    await scrubFreedPages(db).then(
+      (r) => { if (r.ran || r.reason === "engine-renumbers") console.log(`[database] ${DB_NAME} scrub: ${r.reason} (${r.ms} ms)`); },
+      (err) => console.warn(`[database] ${DB_NAME} scrub failed, retried next launch:`, err?.message)
+    );
 
     // ── Core schema ───────────────────────────────────────────────────
 

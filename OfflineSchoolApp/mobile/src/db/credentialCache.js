@@ -19,12 +19,8 @@
  * device.db, which only the per-user migration uses, is VACUUMed after such
  * a replacement as well (compactDeviceDb): rebuilt from live rows, which also
  * drops freed copies left by writes made before this build. The data files
- * (schoolapp.db, schoolapp.u_<id>.db) are NOT VACUUMed: VACUUM renumbers the
- * rowids of tables without an INTEGER PRIMARY KEY (seen in node:sqlite
- * 3.53), and a few screens fall back to rowid as an id; and it would rewrite
- * the whole shared file during a sign-in. What a data file can still hold is
- * a freed copy written before this build (each old sign-in rewrote the value)
- * in page space SQLite has not reused yet — no live row (docs/14).
+ * (schoolapp.db, schoolapp.u_<id>.db) are rebuilt once, at app start, by
+ * db/freePageScrub.js — not here, during a sign-in — keeping every rowid.
  */
 
 // security/passwordHash (and through it expo-crypto) is loaded only when a
