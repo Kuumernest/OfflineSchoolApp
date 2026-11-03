@@ -1018,13 +1018,10 @@ async function startServer() {
     // looking as though it is protecting them. See the module docstring.
     await ensureIdempotencyIndex();
 
-    // Staff numbers (CODE-STF-NNN): the unique (schoolId, staffNo) index.
-    // Never fatal, a no-op once built; see db/ensureStaffNoIndex.js.
-    try {
-      await require("./db/ensureStaffNoIndex").ensureStaffNoIndex();
-    } catch (err) {
-      console.error("[staffNo] could not check the staff-number index — " + err.message);
-    }
+    // Staff numbers (CODE-STF-NNN): the unique (schoolId, staffNo) index, then
+    // every teacher still without a number gets one. Never fatal, a no-op once
+    // done; see db/ensureStaffNoIndex.js.
+    await require("./db/ensureStaffNoIndex").ensureStaffNumbers();
 
     // The sync tombstones (models/SyncTombstone.js): one per hard-deleted row,
     // read by GET /sync/pull. Built here, as above — autoIndex is off in

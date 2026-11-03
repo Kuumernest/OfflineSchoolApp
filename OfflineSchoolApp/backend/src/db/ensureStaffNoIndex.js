@@ -2,7 +2,8 @@
 "use strict";
 
 /**
- * Staff numbers at boot: the index that keeps them unique.
+ * Staff numbers at boot: the index that keeps them unique, then the backfill
+ * that numbers every teacher who has none.
  *
  * ── The index ──────────────────────────────────────────────────────────────
  *
@@ -14,8 +15,18 @@
  *
  * Never fatal. If it cannot be built — duplicate numbers already stored, say —
  * the server still starts (a school's day does not stop over this), the
- * failure is said loudly with the duplicates counted.
+ * failure is said loudly with the duplicates counted, and the backfill does
+ * NOT run: numbering without the index would be numbering without the
+ * guarantee.
  *
+ * ── The backfill ───────────────────────────────────────────────────────────
+ *
+ * services/staffNumber.service.js backfillStaffNumbers(): every teacher of
+ * every school without a number gets the next one, oldest first. Run at every
+ * boot because it is a no-op once done (one indexed query finding nobody),
+ * and because it is also what settles an account created by any path that
+ * did not number it (a seed, an import). An operator can run or preview it
+ * by hand too: `npm run staffno:backfill` (dry run) / `-- --apply`.
  */
 
 const mongoose = require("mongoose");
@@ -66,4 +77,30 @@ async function ensureStaffNoIndex({ log = console.log, error = console.error } =
   return ok;
 }
 
-module.exports = { ensureStaffNoIndex, INDEX_NAME };
+/**
+ * The index, then — only if it is there — the backfill. Never throws.
+ * @returns {Promise<{ indexed: boolean, backfill: object|null }>}
+ */
+async function ensureStaffNumbers({ log = console.log, error = console.error } = {}) {
+  let indexed = false;
+  try {
+    indexed = await ensureStaffNoIndex({ log, error });
+  } catch (err) {
+    error(`[staffNo] could not check the staff-number index — ${err.message}`);
+  }
+  if (!indexed) return { indexed, backfill: null };
+  try {
+    const { backfillStaffNumbers } = require("../services/staffNumber.service");
+    const r = await backfillStaffNumbers();
+    if (r.missing) {
+      log(`[staffNo] numbered ${r.assigned} of ${r.missing} teacher(s) without a staff number` +
+        (r.failed ? `, ${r.failed} failed (retried at the next boot)` : ""));
+    }
+    return { indexed, backfill: r };
+  } catch (err) {
+    error(`[staffNo] backfill failed — ${err.message} (retried at the next boot)`);
+    return { indexed, backfill: null };
+  }
+}
+
+module.exports = { ensureStaffNoIndex, ensureStaffNumbers, INDEX_NAME };
