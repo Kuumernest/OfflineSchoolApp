@@ -387,6 +387,19 @@ const main = async () => {
       [r.status, (r.body.data?.teachers ?? []).length > 0, (r.body.data?.teachers ?? []).some((x) => "staffNo" in x)], [200, true, false]);
     r = await quiet(() => call("GET", "/sync/changes?collections=user"));
     check("the desktop's /sync/changes users", r.body.collections?.user?.documents?.find((x) => x._id === known._id)?.staffNo, known.staffNo);
+
+    // The payroll export, where a staff identifier belongs on paper.
+    await M("SalaryPayment").create({ schoolId: A, userId: known._id, periodMonth: "2026-10", status: "paid",
+      payslipNo: "PSL-2026-10-0001", baseAmount: 100000, gross: 100000, net: 100000 });
+    const { EXPORTS } = require("../src/export/exports");
+    const { labelsFor } = require("../src/export/labels");
+    for (const lang of ["en", "fr"]) {
+      const L = labelsFor(lang);
+      const sheet = (await EXPORTS.payroll.build({ schoolId: A, query: { periodMonth: "2026-10" }, L })).sheets[0];
+      const col = sheet.columns.find((c) => c.label === L.staffNo);
+      check(`the payroll export has a "${L.staffNo}" column with the number (${lang})`,
+        col ? col.cell(sheet.rows[0]).value : "no column", known.staffNo);
+    }
   } finally {
     server.close();
   }
