@@ -1341,12 +1341,59 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
     updateFields.schoolId = String(schoolId).trim();
   }
 
-  const teacher = await User.findOneAndUpdate(
-    { ...getTenantQuery(req, req.params.id), role: "teacher" },
-    updateFields,
-    { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
-  );
+  // The staff number, overridden by an administrator (this route is
+  // teachers.manage, which only administrators hold and cannot be delegated).
+  // Only when the body names it: a phone's queued edit sends name and email
+  // alone and must never touch it. It cannot be cleared — every teacher has
+  // one — and must be free within the school. One in the generated shape
+  // moves the sequence past it, so the next generated number does not clash.
+  let staffNoChange = null;
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "staffNo")) {
+    const parsed = staffNumbers.normaliseStaffNo(req.body.staffNo);
+    if (parsed.error) return sendError(res, 400, parsed.error, { code: "STAFF_NO_INVALID" });
+    const current = await User.findOne({ ...getTenantQuery(req, req.params.id), role: "teacher" })
+      .select("schoolId staffNo").lean();
+    if (!current) return sendError(res, 404, "Teacher not found");
+    const school = updateFields.schoolId ?? current.schoolId;
+    if (parsed.value !== current.staffNo || updateFields.schoolId) {
+      const holder = await User.findOne({
+        schoolId: school, staffNo: parsed.value, _id: { $ne: String(current._id) },
+      }).select("name").lean();
+      if (holder) {
+        return sendError(res, 409,
+          `Staff number ${parsed.value} is already used by ${holder.name || "another member of staff"}`,
+          { code: "STAFF_NO_TAKEN" });
+      }
+      updateFields.staffNo = parsed.value;
+      staffNoChange = { school, before: current.staffNo ?? null, after: parsed.value };
+    }
+  }
+
+  let teacher;
+  try {
+    teacher = await User.findOneAndUpdate(
+      { ...getTenantQuery(req, req.params.id), role: "teacher" },
+      updateFields,
+      { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
+    );
+  } catch (err) {
+    // Taken between the check above and this write.
+    if (staffNumbers.isStaffNoClash(err)) {
+      return sendError(res, 409, `Staff number ${updateFields.staffNo} is already used`,
+        { code: "STAFF_NO_TAKEN" });
+    }
+    throw err;
+  }
   if (!teacher) return sendError(res, 404, "Teacher not found");
+
+  if (staffNoChange && staffNoChange.before !== staffNoChange.after) {
+    await staffNumbers.noteStaffNo(staffNoChange.school, staffNoChange.after);
+    await recordAudit(req, {
+      action: "teacher.staffNoChanged", schoolId: staffNoChange.school,
+      resource: { type: "user", id: teacher._id, label: teacher.email },
+      before: { staffNo: staffNoChange.before }, after: { staffNo: staffNoChange.after },
+    });
+  }
 
   console.log(`✅ Teacher updated: ${teacher.name}`);
   return sendSuccess(res, { data: teacher.toObject() });
