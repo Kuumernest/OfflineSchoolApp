@@ -212,6 +212,7 @@ const parseCoefficient = (raw) => {
 // shape. See OfflineSchoolApp/shared/students.js for why it is not copied.
 const { normaliseStudentDoc } = require("../../../shared/students");
 const { nextAdmissionNo } = require("../services/admissionNumber.service");
+const staffNumbers = require("../services/staffNumber.service");
 
 // ─── Multi-collection student helpers ────────────────────────────────────────
 
@@ -1221,6 +1222,9 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
     const { user, tempPassword: restoredPassword } = await restoreStaffAccount({
       doc: claim.restore, name,
     });
+    // A teacher coming back keeps the number on their old paperwork; one who
+    // somehow never had one is given one now, as a new teacher would be.
+    if (!user.staffNo) user.staffNo = await staffNumbers.ensureStaffNo(user._id);
 
     const restoreEmail = await sendEmailSafe({
       to:       emailClean,
@@ -1265,7 +1269,14 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
   };
   if (id) userData._id = String(id).trim();
 
-  const teacher = await User.create(userData);
+  // Numbered in the same request, by the server: a phone's offline create
+  // gets its number here, when it syncs, never on the device. The number is
+  // taken first; if the create then fails it is a gap, never a duplicate, and
+  // a clash with the unique index takes the next one (staffNumber.service).
+  const teacher = await staffNumbers.withStaffNo(
+    resolvedSchoolId,
+    (staffNo) => User.create({ ...userData, staffNo })
+  );
 
   const emailResult = await sendEmailSafe({
     to:       emailClean,
