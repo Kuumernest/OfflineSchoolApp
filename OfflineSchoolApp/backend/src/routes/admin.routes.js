@@ -1156,7 +1156,46 @@ router.get("/teachers", requirePermission("teachers.view"), asyncHandler(async (
 }));
 
 router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
-  const { id, name, email, schoolId } = req.body;
+  const { name, email, schoolId } = req.body;
+  const id = req.body.id ?? req.body._id;
+
+  // A create carrying an id that already names an account is a REPLAY, never a
+  // create. Phones keep the id they made offline and send it here; an old build
+  // could still POST a teacher it had already synced (pulled without
+  // _synced_at, then edited). Before this guard that POST fell through to the
+  // email claim below and, for a removed teacher, reactivated them with a new
+  // password and a welcome email — a removal undone by a retry nobody saw.
+  //
+  // Answered before validation on purpose: a replay must settle whatever the
+  // body says, and it changes NOTHING — not isActive, not the password, not
+  // the name or email, and no mail. Only an id that is new (or absent) may go
+  // on to the email claim, so the console's deliberate re-add by email of a
+  // removed teacher — which sends no id, or a fresh one — works as before.
+  const clientId = id == null ? "" : String(id).trim();
+  if (clientId) {
+    const already = await User.findById(clientId)
+      .select("-password -tempPassword").lean();
+    if (already) {
+      const ownSchool = resolveSchoolId(req, schoolId);
+      const sameTenant = String(already.schoolId ?? "") === String(ownSchool ?? "");
+      if (already.role !== "teacher" || !sameTenant) {
+        // Another school's account, or a pupil/bursar/admin: refused with
+        // nothing changed and nothing about the row disclosed.
+        return sendError(res, 409, "An account with this id already exists");
+      }
+      console.log(`↩️  Teacher create replayed: ${already._id} (unchanged)`);
+      return sendSuccess(res, {
+        data:         already,
+        teacher:      already,
+        serverId:     String(already._id),
+        clientId,
+        replay:       true,
+        deduplicated: true,
+        message:      "This teacher already exists",
+      });
+    }
+  }
+
   if (!name?.trim() || !email) {
     return sendError(res, 400, "name and email are required");
   }
