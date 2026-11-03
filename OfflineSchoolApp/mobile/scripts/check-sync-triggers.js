@@ -216,7 +216,9 @@ const main = async () => {
   }
 
   console.log("--- the handle every service shares is the instrumented one ---");
-  check("database.js instruments the singleton", /_db\s*=\s*instrument\(db\)/.test(read("db/database.js")), true);
+  // Every file is opened through _openDatabase, which returns the handle
+  // instrumented; getDatabase() answers one of those (per-user stores, docs/40).
+  check("database.js instruments every handle it opens", /return instrument\(db\);/.test(read("db/database.js")), true);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
 };
