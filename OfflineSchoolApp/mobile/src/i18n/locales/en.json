@@ -6069,7 +6069,8 @@
     "noOfflineAccountEnrollment": "No offline account found for that enrollment number",
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone."
   },
   "syncStep": {
     "prepare": "Preparing",
@@ -7502,5 +7503,45 @@
       "other": "You have {{count}} changes not yet sent. If you sign out, they'll be sent next time you sign in on this phone."
     },
     "signOut": "Sign out"
+  },
+  "localData": {
+    "preparingTitle": "Setting up your own data on this phone",
+    "preparingBody": "This phone is shared, so your school now keeps each person's data separately. Your data is downloading once; nothing you saved on this phone is lost.",
+    "preparingSkip": "Use the app now",
+    "preparingStopping": "Stopping…",
+    "reviewTitle": "Held changes",
+    "reviewIntro": "These changes were saved on this phone without a record of who made them. They are kept here, in full, and are not sent under anybody's name until someone decides whose they are.",
+    "reviewAdminOnly": "Only an administrator signed in on this phone can decide what happens to them.",
+    "reviewEmpty": "No changes are held on this phone.",
+    "reviewLink": {
+      "one": "1 change on this phone is held for review",
+      "other": "{{count}} changes on this phone are held for review"
+    },
+    "statusHeld": "Held",
+    "statusAssigned": "Given to an account",
+    "statusPlaced": "With its account",
+    "heldSince": "Held since {{date}}",
+    "assign": "Give to an account",
+    "assignTitle": "Whose change is this?",
+    "assignBody": "Choose the account that made it. It will be sent the next time that person is signed in on this phone.",
+    "assignConfirmTitle": "Give this change away?",
+    "assignConfirmBody": "This change will be recorded as made by {{name}} and sent from their account.",
+    "sendAsMe": "Send as me",
+    "sendAsMeTitle": "Send this change as yours?",
+    "sendAsMeBody": "It will be recorded on the server as made by you, even if somebody else made it. Do this only if you know it is right.",
+    "saveCopy": "Save a copy",
+    "actionFailed": "That could not be done. Nothing was changed.",
+    "legacyTitle": "Old shared data on this phone",
+    "gateOk": "Everything on it is accounted for. It can be deleted.",
+    "gateNotMigrated": "This phone has not been moved to per-person data.",
+    "gateTooSoon": "It is kept for 30 days after the move ({{days}} so far).",
+    "gateAlreadyDeleted": "It has already been deleted.",
+    "gateUnplaced": "Some changes in it are not yet with their account.",
+    "gateWaitingOwner": "Some changes in it wait for their account to sign in on this phone.",
+    "gateUploadsPending": "Some files in it have not been uploaded yet.",
+    "gateInUse": "Somebody on this phone is still using it.",
+    "deleteLegacy": "Delete old shared data",
+    "deleteLegacyTitle": "Delete the old shared data?",
+    "deleteLegacyBody": "Every change in it is with its account or in the held list. This cannot be undone."
   }
 }

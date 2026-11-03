@@ -6069,7 +6069,8 @@
     "noOfflineAccountEnrollment": "Aucun compte hors ligne trouvé pour ce numéro de matricule",
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
-    "invalidCredentials": "Identifiants invalides"
+    "invalidCredentials": "Identifiants invalides",
+    "deviceFullOfAccounts": "Ce téléphone contient déjà des modifications non envoyées de cinq autres comptes. L’un d’eux doit se connecter et les envoyer avant qu’un autre compte puisse utiliser ce téléphone."
   },
   "syncStep": {
     "prepare": "Préparation",
@@ -7502,5 +7503,45 @@
       "other": "Vous avez {{count}} modifications pas encore envoyées. Si vous vous déconnectez, elles seront envoyées à votre prochaine connexion sur ce téléphone."
     },
     "signOut": "Se déconnecter"
+  },
+  "localData": {
+    "preparingTitle": "Préparation de vos données sur ce téléphone",
+    "preparingBody": "Ce téléphone est partagé : votre école garde désormais les données de chaque personne séparément. Vos données se téléchargent une seule fois ; rien de ce que vous avez enregistré sur ce téléphone n’est perdu.",
+    "preparingSkip": "Utiliser l’application maintenant",
+    "preparingStopping": "Arrêt en cours…",
+    "reviewTitle": "Modifications en attente",
+    "reviewIntro": "Ces modifications ont été enregistrées sur ce téléphone sans indiquer leur auteur. Elles sont conservées ici en entier et ne sont envoyées au nom de personne tant que quelqu’un n’a pas décidé à qui elles appartiennent.",
+    "reviewAdminOnly": "Seul un administrateur connecté sur ce téléphone peut décider de leur sort.",
+    "reviewEmpty": "Aucune modification n’est en attente sur ce téléphone.",
+    "reviewLink": {
+      "one": "1 modification sur ce téléphone attend une décision",
+      "other": "{{count}} modifications sur ce téléphone attendent une décision"
+    },
+    "statusHeld": "En attente",
+    "statusAssigned": "Attribuée à un compte",
+    "statusPlaced": "Avec son compte",
+    "heldSince": "En attente depuis le {{date}}",
+    "assign": "Attribuer à un compte",
+    "assignTitle": "À qui appartient cette modification ?",
+    "assignBody": "Choisissez le compte qui l’a faite. Elle sera envoyée la prochaine fois que cette personne sera connectée sur ce téléphone.",
+    "assignConfirmTitle": "Attribuer cette modification ?",
+    "assignConfirmBody": "Cette modification sera enregistrée comme faite par {{name}} et envoyée depuis son compte.",
+    "sendAsMe": "Envoyer en mon nom",
+    "sendAsMeTitle": "Envoyer cette modification en votre nom ?",
+    "sendAsMeBody": "Elle sera enregistrée sur le serveur comme faite par vous, même si quelqu’un d’autre l’a faite. Ne le faites que si vous êtes sûr que c’est juste.",
+    "saveCopy": "Enregistrer une copie",
+    "actionFailed": "Impossible de le faire. Rien n’a été modifié.",
+    "legacyTitle": "Anciennes données partagées sur ce téléphone",
+    "gateOk": "Tout leur contenu est pris en compte. Elles peuvent être supprimées.",
+    "gateNotMigrated": "Ce téléphone n’est pas encore passé aux données par personne.",
+    "gateTooSoon": "Elles sont conservées 30 jours après le passage ({{days}} pour l’instant).",
+    "gateAlreadyDeleted": "Elles ont déjà été supprimées.",
+    "gateUnplaced": "Certaines modifications ne sont pas encore avec leur compte.",
+    "gateWaitingOwner": "Certaines modifications attendent que leur compte se connecte sur ce téléphone.",
+    "gateUploadsPending": "Certains fichiers n’ont pas encore été envoyés.",
+    "gateInUse": "Quelqu’un sur ce téléphone les utilise encore.",
+    "deleteLegacy": "Supprimer les anciennes données",
+    "deleteLegacyTitle": "Supprimer les anciennes données partagées ?",
+    "deleteLegacyBody": "Chaque modification est avec son compte ou dans la liste en attente. Cette action est irréversible."
   }
 }

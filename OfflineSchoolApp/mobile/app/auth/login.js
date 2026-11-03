@@ -128,6 +128,9 @@ export default function LoginScreen() {
   const router    = useRouter();
   const login     = useAuthStore((s) => s.login);
   const error     = useAuthStore((s) => s.error);
+  // A refusal the phone itself makes (e.g. full of other accounts' unsent
+  // work, docs/40 D6) carries a key, said in the reader's language.
+  const errorKey  = useAuthStore((s) => s.errorKey);
   const isLoading = useAuthStore((s) => s.isLoading);
   const { t }     = useTranslation();
   const screenPad = useScreenInsets({ top: 28, bottom: 24 });
@@ -208,7 +211,7 @@ export default function LoginScreen() {
         <View style={styles.card}>
           {(portalError || error) ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {portalError || error}</Text>
+              <Text style={styles.errorText}>⚠️ {portalError || (errorKey ? t(errorKey) : error)}</Text>
             </View>
           ) : null}
 

@@ -442,6 +442,16 @@ export const refreshAccessToken = async () => {
         }
       } catch { /* ignore */ }
 
+      // The school's per-user local data switch (docs/40 D7) rides on every
+      // refresh; remembered so the next sign-in on this phone acts on it.
+      try {
+        const localData = response.data?.localData;
+        const schoolId  = getAuthStore()?.getState?.()?.user?.schoolId;
+        if (localData && schoolId) {
+          await require("./perUserData.service").rememberSchoolSwitch(schoolId, localData.perUserLocalData === true);
+        }
+      } catch { /* the switch is learnt again at sign-in */ }
+
       _lastRefreshOutcome = "ok";
       try { getAuthStore()?.getState?.().clearNeedsSignIn?.(); } catch { /* ignore */ }
       return newToken;
