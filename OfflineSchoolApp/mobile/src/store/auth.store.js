@@ -4,7 +4,6 @@ import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
 import { appError }     from "../utils/appError";
-import { hashPassword, verifyPassword } from "../security/passwordHash";
 
 // ── Safe imports ───────────────────────────────────────────────────────────
 let NetInfo = null;
@@ -35,10 +34,13 @@ const ACTIVE_SCHOOL_KEY = "active_school";
 // still verify offline; the account's next ONLINE sign-in replaces every copy
 // (users tables, device.db) with the new form (docs/14).
 
+// Loaded on first use (it brings in expo-crypto), like the safe imports above.
+const passwordHashModule = () => require("../security/passwordHash");
+
 /** The new stored value for `password`, or null if it could not be made. */
 const makeCredential = async (password) => {
   try {
-    return await hashPassword(password);
+    return await passwordHashModule().hashPassword(password);
   } catch (e) {
     console.warn("Offline credentials could not be hashed:", e?.message || String(e));
     return null;
@@ -601,7 +603,7 @@ export const useAuthStore = create((set, get) => ({
         for (const r of candidates) {
           if (!r.passwordHash || tried.has(r.passwordHash)) continue;
           tried.add(r.passwordHash);
-          if ((await verifyPassword(password, r.passwordSalt, r.passwordHash)).ok) { cached = r; break; }
+          if ((await passwordHashModule().verifyPassword(password, r.passwordSalt, r.passwordHash)).ok) { cached = r; break; }
         }
 
         if (!cached) {
