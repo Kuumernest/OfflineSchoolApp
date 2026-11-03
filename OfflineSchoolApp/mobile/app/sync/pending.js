@@ -18,11 +18,13 @@ import {
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { MutationQueue } from "../../src/services/mutationQueue.service";
-import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+
 
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { getDatabase } from "../../src/db/database";
 import { countHeldChanges } from "../../src/db/heldChanges";
+import { reviewCounts } from "../../src/services/perUserData.service";
 
 const C = {
   bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB",
@@ -59,6 +61,22 @@ const HeldNotice = ({ held }) => {
         )}
       </View>
     </View>
+  );
+};
+
+/**
+ * Per-user local data (docs/40): changes held in the review store because
+ * nobody could tell whose they are. Opens the review list.
+ */
+const ReviewLink = ({ count, onOpen }) => {
+  const { t } = useTranslation();
+  if (!count) return null;
+  return (
+    <TouchableOpacity style={styles.held} onPress={onOpen} accessibilityRole="button">
+      <Ionicons name="hand-left-outline" size={16} color={C.held} />
+      <Text style={[styles.heldText, { flex: 1 }]}>{t("localData.reviewLink", { count })}</Text>
+      <Ionicons name="chevron-forward" size={16} color={C.held} />
+    </TouchableOpacity>
   );
 };
 
@@ -108,6 +126,7 @@ export default function PendingChangesScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [held, setHeld] = useState({ otherAccounts: 0, ownerlessQueued: 0 });
+  const [reviewHeld, setReviewHeld] = useState(0);
   const { stats, refresh: refreshStats } = useSyncStatus({ poll: false });
 
   const load = useCallback(async () => {
@@ -115,6 +134,7 @@ export default function PendingChangesScreen() {
       const list = await MutationQueue.listUnresolved();
       setRows(list);
       setHeld(await countHeldChanges(await getDatabase()));
+      setReviewHeld((await reviewCounts().catch(() => ({ held: 0 }))).held);
     } catch (err) {
       console.warn("[pending] load failed:", err.message);
       setRows([]);
@@ -257,6 +277,7 @@ export default function PendingChangesScreen() {
       </View>
 
       <HeldNotice held={held} />
+      <ReviewLink count={reviewHeld} onOpen={() => router.push("/sync/review")} />
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={C.primary} />
