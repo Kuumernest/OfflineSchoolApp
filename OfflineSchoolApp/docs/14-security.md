@@ -211,14 +211,37 @@ instead. These writes run with `PRAGMA secure_delete = ON`, so SQLite zeroes the
 freed cell. A TRUNCATE checkpoint then empties the `-wal` file, which still held the
 old pages. `device.db` is also `VACUUM`ed.
 
-**Limitation.** The data files are not VACUUMed, for two reasons: VACUUM renumbers
-the rowids of tables without an INTEGER PRIMARY KEY, and it would rewrite the whole
-shared file during a sign-in. Each old sign-in rewrote the clear-text value, so a
-data file can still hold a *freed* copy from before this build in page space that
-SQLite has not yet reused. No live row holds one. An account that has not signed in
-online since this build still has its clear-text value. A one-off, owner-approved
-`VACUUM` of `schoolapp.db` at a quiet moment, such as app start before any service
-opens it, would remove the freed copies. Test: `mobile/scripts/check-offline-credentials.js`.
+**Freed copies from older builds.** Each old sign-in rewrote the clear-text value
+without `secure_delete`, so a data file could hold a *freed* copy from before this
+build, in page space no query reads. Once per file, at app start, the open path
+(`mobile/src/db/database.js` → `src/db/freePageScrub.js`) rebuilds `schoolapp.db` and
+each per-user store with `VACUUM`, which writes every page again from the live rows.
+Overwriting only the freelist would miss copies inside pages still in use.
+
+- **Identifiers are kept.** The SQLite docs say VACUUM *may* change the rowids of
+  tables without an INTEGER PRIMARY KEY. In practice (SQLite's `xferOptimization`,
+  confirmed on node:sqlite 3.53) it renumbers only a table that has **no index at
+  all**. Every table the app creates has a `TEXT PRIMARY KEY`, which brings an
+  automatic index. No code persists a rowid: outbox, id map, entity keys, migration
+  journal, placements and review items all use the `id`/`_id` column. Rowid appears
+  only as a sort tie-break, in a one-statement dedupe and as a list key for a table
+  with no id column, which no build creates. Before the rebuild, a canary on an
+  attached in-memory database checks that the phone's SQLite keeps an indexed table's
+  rowids. If it does not, nothing is done. A table with no index gets a temporary
+  one, and every rowid table's rowids are fingerprinted before and after.
+- **Crash-safe, once.** The rebuild runs before the handle is given to any screen,
+  sync or outbox drain. VACUUM is atomic, so a crash or a refusal (it needs free space
+  up to the file's size) leaves the file as it was and unmarked, and the next launch
+  tries again. The `-wal` is emptied with a TRUNCATE checkpoint before and after. A
+  `_scrub_state` row in the file records completion. A file with no tables when first
+  opened was written only by this build, so it is marked without a rebuild.
+  `device.db` is not included, because it is already VACUUMed when a value is replaced.
+- **Cost.** About 150–200 ms for a 10–12 MB file in Node, once. On a phone it runs
+  behind the startup splash. It has not been timed on a device.
+- An account that has not signed in online since this build still has its clear-text
+  value in its live row until it does.
+
+Tests: `mobile/scripts/check-offline-credentials.js`, `mobile/scripts/check-freed-page-scrub.js`.
 
 ---
 
