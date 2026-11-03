@@ -31,6 +31,7 @@ import { getDatabase }                                from "../db/database";
 import { ensureTableSchema }                          from "../db/schemaManager";
 import { createTableFromSchema }                      from "../db/schema";
 import { MutationQueue }                              from "./mutationQueue.service";
+import { teacherKnownToServer }                       from "./syncBackfill.service";
 import {
   tableExists,
   getTableColumns,
@@ -1181,7 +1182,7 @@ export const TeacherService = {
     }
 
     const existing = await db.getFirstAsync(
-      `SELECT id FROM ${USERS_TABLE}
+      `SELECT id, _synced_at FROM ${USERS_TABLE}
        WHERE id = ? AND LOWER(role) = 'teacher' ${softFilter} ${schoolF}
        LIMIT 1`,
       existParams
@@ -1207,12 +1208,46 @@ export const TeacherService = {
 
     if (!isAuthenticated()) return true;
 
+    // A teacher created here that the server has not accepted yet: there is
+    // nothing upstream to update. The create carries the edit — the row
+    // holds it, and a create already queued (never attempted) takes the new
+    // fields in place, keeping its place ahead of anything queued behind it.
+    // A PUT here used to go out ahead of the create, to an id the server did
+    // not have yet.
+    const createKey = `teacher:${id}`;
+    const createState = await MutationQueue.createState(createKey);
+    if (!teacherKnownToServer(existing) && (createState === "unsent" || createState === "none")) {
+      if (createState === "unsent") {
+        await MutationQueue.enqueue({
+          entityKey: createKey,
+          method:    "POST",
+          endpoint:  API.admin.teachers.list,
+          merge:     true,
+          payload:   {
+            name: cleanName,
+            email: cleanEmail,
+            __local:     { table: USERS_TABLE, ids: [id], idColumn: "id", since: now },
+            __reconcile: { kind: "teacher", localId: id, table: USERS_TABLE, since: now },
+          },
+        });
+      }
+      return true;
+    }
+
     // Queued, like every other write on this device.
     //
     // It used to PUT directly and give up quietly: nothing when offline, a
     // console.warn on failure, and a row left marked unsent with nothing to
     // retry it. A teacher renamed on the phone could stay renamed only on that
     // phone, indefinitely, with no sign anything had gone wrong.
+    //
+    // `ids`, a list, is what the queue and the backfill read. This said `id`,
+    // so the PUT's success never cleared the flag and the backfill, not
+    // seeing the row as queued, sent the edit again as POST /admin/teachers:
+    // a 409 parked for good, or — for a teacher the school had removed — the
+    // account restored with a new password (check-teacher-edits.js). `since`:
+    // an edit made after this one keeps the row dirty until it too is sent.
+    // A create still in flight goes first; this follows it in order.
     await MutationQueue.enqueue({
       entityKey: `teacher-update:${id}`,
       method:    "PUT",
@@ -1220,7 +1255,7 @@ export const TeacherService = {
       payload:   {
         name: cleanName,
         email: cleanEmail,
-        __local: { table: USERS_TABLE, id },
+        __local: { table: USERS_TABLE, ids: [id], idColumn: "id", since: now },
       },
     });
 

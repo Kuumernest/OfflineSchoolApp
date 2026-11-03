@@ -29,7 +29,7 @@
 
 import { getDatabase } from "../db/database";
 import {
-  MutationQueue, registerReconciler, mapId, outboxRowsForTable,
+  MutationQueue, registerReconciler, mapId, outboxRowsForTable, localIdsOf,
 } from "./mutationQueue.service";
 import { API } from "./apiEndpoints";
 import { getCurrentAuth, hasRole } from "../utils/authHelpers";
@@ -55,6 +55,23 @@ const safeParse = (raw, fallback) => {
 const STALE_MS = 24 * 60 * 60 * 1000;
 const isStale = (updatedAt) =>
   Date.now() - new Date(updatedAt || 0).getTime() > STALE_MS;
+
+/**
+ * Whether the server has this teacher, so a dirty row is an edit (PUT) and
+ * not a create (POST). The id alone cannot say: the server keeps the id a
+ * phone created a teacher under (POST /admin/teachers takes `id` as _id), so
+ * a teacher made here is still `local_…` after it is accepted. Proof is
+ * either of:
+ *   - a server-shaped id (a UUID or ObjectId — what the server mints; this
+ *     app's own ids are `local_…`);
+ *   - `_synced_at`, set only when the server accepted the row: by the pull,
+ *     the create's success (TeacherService.create or the reconciler), or a
+ *     settled send. A teacher created here and never accepted has none.
+ * When in doubt this says "known": a PUT for a teacher the server lacks is a
+ * visible 404; a POST for one it has is a 409, or restores a removed account.
+ */
+export const teacherKnownToServer = (row) =>
+  isServerGeneratedId(row?.id) || !!(row?._synced_at && String(row._synced_at).trim());
 
 const roleAllows = (spec) => {
   if (spec.adminOnly) return isAdmin();
@@ -214,27 +231,42 @@ const SPECS = [
   },
 
   /**
-   * A teacher created on this device. Never a sign-in's credential cache:
-   * that row is the server's own account (an online sign-in just answered
-   * for it), and POSTing it made the server answer 409 — parked for good —
-   * or, for a teacher the school had removed, RESTORE the account with a new
-   * password (db/credentialCache.js, check-credential-rows.js).
+   * A dirty teacher row: an edit of a teacher the server has (PUT), or a
+   * teacher created on this device and never accepted (POST). Never a
+   * sign-in's credential cache: that row is the server's own account (an
+   * online sign-in just answered for it), and POSTing it made the server
+   * answer 409 — parked for good — or, for a teacher the school had removed,
+   * RESTORE the account with a new password (db/credentialCache.js,
+   * check-credential-rows.js).
+   *
+   * Every dirty row used to be POSTed, so an edit made on the phone also went
+   * out as a create, with the same two outcomes (check-teacher-edits.js). The
+   * dirty flag says only that work exists; whether it is a create or an edit
+   * is teacherKnownToServer(). An edit is keyed like TeacherService.update()'s
+   * own PUT, so the two coalesce rather than both being sent.
    */
   {
     key: "teacher",
     table: "users",
     adminOnly: true,
     where: `role = 'teacher' AND ${IS_DIRTY} AND ${NOT_DELETED} AND NOT ${CREDENTIAL_ROW}`,
-    endpoint: () => API.admin.teachers.list,
-    method: "POST",
+    entityKey: (row) => (teacherKnownToServer(row) ? `teacher-update:${row.id}` : `teacher:${row.id}`),
+    method:    (row) => (teacherKnownToServer(row) ? "PUT" : "POST"),
+    endpoint:  (row) =>
+      teacherKnownToServer(row) ? API.admin.teachers.detail(row.id) : API.admin.teachers.list,
+    guardEdits: true,
     reconcile: "teacher",
-    payload: (row, { schoolId }) => ({
-      id:       row.id,
-      name:     row.name,
-      email:    row.email,
-      role:     "teacher",
-      schoolId: row.schoolId || row.school_id || schoolId,
-    }),
+    payload: (row, { schoolId }) => (teacherKnownToServer(row)
+      // PUT /admin/teachers/:id updates name and email and nothing else: it
+      // never reactivates a teacher the school has removed.
+      ? { name: row.name, email: row.email }
+      : {
+          id:       row.id,
+          name:     row.name,
+          email:    row.email,
+          role:     "teacher",
+          schoolId: row.schoolId || row.school_id || schoolId,
+        }),
   },
 
   {
@@ -673,6 +705,11 @@ export const registerReconcilers = () => {
   if (_registered) return;
   _registered = true;
 
+  // Clean only if nothing was edited since the request was built (args.since,
+  // see guardEdits). An edit made while the create was in flight leaves the
+  // row dirty under its new server id, and the next sweep PUTs it.
+  const CLEAN_IF_UNEDITED = "CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END";
+
   registerReconciler("class", async ({ response, args }) => {
     const serverId = serverIdFrom(response, "class", "data");
     const localId  = args.localId;
@@ -712,9 +749,13 @@ export const registerReconcilers = () => {
       const { SyncManager } = require("./syncManager");
       await SyncManager._replaceTeacherId(db, localId, String(serverId));
     } else if (localId) {
+      // _synced_at is set either way: the server has the row now, so a later
+      // sweep of it is an edit (teacherKnownToServer). The flag clears only
+      // if nothing was edited since the request was built (args.since).
+      const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
       await db.runAsync(
-        "UPDATE users SET _synced = 1, _synced_at = ? WHERE id = ?",
-        [new Date().toISOString(), localId]
+        `UPDATE users SET _synced = ${clean}, _synced_at = ? WHERE id = ?`,
+        [...(args.since === undefined ? [] : [args.since]), new Date().toISOString(), localId]
       ).catch(() => {});
     }
   });
@@ -808,11 +849,6 @@ export const registerReconcilers = () => {
       ).catch(() => {});
     }
   });
-
-  // Clean only if nothing was edited since the request was built (args.since,
-  // see guardEdits). An edit made while the create was in flight leaves the
-  // row dirty under its new server id, and the next sweep PUTs it.
-  const CLEAN_IF_UNEDITED = "CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END";
 
   registerReconciler("question", async ({ response, args }) => {
     const serverId = serverIdFrom(response, "question", "data");
@@ -1136,7 +1172,7 @@ const coveredIds = async (table) => {
   try { entries = await outboxRowsForTable(table); } catch { entries = []; }
   const ids = new Set();
   for (const e of entries) {
-    for (const id of e.payload?.__local?.ids ?? []) ids.add(String(id));
+    for (const id of localIdsOf(e.payload?.__local)) ids.add(String(id));
   }
   return ids;
 };
@@ -1187,7 +1223,9 @@ const enqueueSpec = async (db, spec, ctx) => {
   if (!rows?.length) return 0;
 
   // One query instead of one per row.
-  const queued = await MutationQueue.pendingKeys(`${spec.key}:`);
+  // Prefix without the colon: a spec may key a row under a sibling name
+  // (teacher edits as teacher-update:<id>); membership is exact below.
+  const queued = await MutationQueue.pendingKeys(spec.key);
   // Rows a queued mutation already carries, whatever its key. The services
   // enqueue under their own keys — attendance:class:<school>:<class>:…, a
   // class edit as class-update:<id> — and name the rows they cover in
@@ -1203,7 +1241,7 @@ const enqueueSpec = async (db, spec, ctx) => {
     if (spec.skip?.(row)) continue;
     if (ctx.gate && !ctx.gate(spec.table, row, idCol)) continue;
 
-    const entityKey = `${spec.key}:${localId}`;
+    const entityKey = spec.entityKey ? spec.entityKey(row) : `${spec.key}:${localId}`;
     if (queued.has(entityKey)) continue;   // already waiting its turn
     if (covered.has(String(localId))) continue;
 
@@ -1446,6 +1484,69 @@ const repairCredentialCache = async (db) => {
   }
 };
 
+/**
+ * What older builds left behind for teacher EDITS: every dirty teacher row
+ * was POSTed as a create, and TeacherService.update()'s own PUT named its row
+ * as `__local.id`, which nothing read — so the flag never cleared and each
+ * sync POSTed the edit again. On a phone like that sit `teacher:<id>` POSTs
+ * (parked on the server's 409, or still queued) for teachers the server has.
+ * Sending one can only 409, or RESTORE a teacher the school removed.
+ *
+ * Each such POST, for a teacher teacherKnownToServer() says the server has,
+ * is removed — never the edit it carried:
+ *   - a PUT for the teacher is still queued → it carries the edit (it was
+ *     queued first and coalesced every later edit); the POST was a copy;
+ *   - the row is still dirty → the sweep below PUTs it from the row, which
+ *     is the latest;
+ *   - the row is clean but holds other values (a pull overwrote it) → the
+ *     POST is the only copy of the edit, so it is re-queued as the PUT,
+ *     under the account that queued it.
+ * A POST for a teacher never accepted (a genuine offline create) is left
+ * alone. Idempotent; one indexed query when there is nothing to do.
+ */
+const repairTeacherEditCreates = async (db) => {
+  const posts = await db.getAllAsync(
+    `SELECT entity_key, payload, owner_id FROM mutation_outbox
+      WHERE entity_key LIKE 'teacher:%' AND status != 'synced' AND UPPER(method) = 'POST'`
+  ).catch(() => []);
+  if (!posts?.length) return;
+
+  const queued = await MutationQueue.pendingKeys("teacher-update:");
+  let dropped = 0, requeued = 0;
+  for (const post of posts) {
+    const id = String(post.entity_key).slice("teacher:".length);
+    const row = await db.getFirstAsync(
+      "SELECT id, name, email, _synced, _synced_at FROM users WHERE id = ? AND LOWER(role) = 'teacher'", [id]
+    ).catch(() => null);
+    if (!row || !teacherKnownToServer(row)) continue;   // a genuine create, or nothing to judge by
+
+    const sent = safeParse(post.payload, {});
+    const dirty = row._synced === 0 || row._synced === null;
+    const differs = (sent.name && sent.name !== row.name) ||
+      (sent.email && String(sent.email).toLowerCase() !== String(row.email ?? "").toLowerCase());
+    const editElsewhere = queued.has(`teacher-update:${id}`) || dirty;
+
+    dropped += await MutationQueue.cancelUnsent(post.entity_key);
+    if (!editElsewhere && differs) {
+      await MutationQueue.enqueue({
+        entityKey: `teacher-update:${id}`,
+        method:    "PUT",
+        endpoint:  API.admin.teachers.detail(id),
+        ownerId:   post.owner_id ?? null,
+        payload:   {
+          ...(sent.name ? { name: sent.name } : {}),
+          ...(sent.email ? { email: sent.email } : {}),
+          __local: { table: "users", ids: [id], idColumn: "id" },
+        },
+      });
+      requeued++;
+    }
+  }
+  if (dropped || requeued) {
+    console.log(`[backfill] teacher edits: dropped ${dropped} create(s) for known teachers, re-queued ${requeued} as edits`);
+  }
+};
+
 export const backfillOutbox = async () => {
   registerReconcilers();
 
@@ -1458,6 +1559,7 @@ export const backfillOutbox = async () => {
   const byKey = {};
 
   await repairCredentialCache(db).catch((err) => console.warn("[backfill] credential rows:", err?.message));
+  await repairTeacherEditCreates(db).catch((err) => console.warn("[backfill] teacher edits:", err?.message));
 
   const adopted = await adoptQueuedContentDeletes(db).catch(() => 0);
   if (adopted) { byKey["content-delete"] = adopted; total += adopted; }
