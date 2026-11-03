@@ -116,7 +116,7 @@ module.exports = [
         request: {
           method: "POST",
           path:   `/api/fees/payments/${original._id}/reverse`,
-          body:   { ...body, _id: id, receiptNo },
+          body:   { ...body, _id: id, receiptNo, source: "desktop" },
         },
 
         /**

@@ -127,7 +127,10 @@ module.exports = [
       const request = {
         method:  "POST",
         path:    "/api/fees/payments",
-        body:    { ...body, _id: id, receiptNo },
+        // source: the server records "web" for a request that does not say,
+        // and this payment was not taken in a browser — reconciling a day's
+        // takings against this machine depends on the row saying so.
+        body:    { ...body, _id: id, receiptNo, source: "desktop" },
       };
 
       return {
