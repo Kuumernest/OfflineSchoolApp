@@ -31,6 +31,7 @@ import axios            from "axios";
 import NetInfo          from "@react-native-community/netinfo";
 import * as SecureStore from "expo-secure-store";
 import * as LinkQuality from "./linkQuality";
+import { appBuildHeaders, isUpdateRequiredAnswer } from "../config/appBuild";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — BASE URL
@@ -339,6 +340,36 @@ const markSessionNeedsSignIn = (reason) => {
 };
 
 /**
+ * The server said this build is too old for the school's data (426
+ * APP_UPDATE_REQUIRED, docs/40 §8.9). auth.store raises the update-required
+ * state and stops the sync; nothing is signed out or cleared.
+ */
+const markUpdateRequired = () => {
+  try {
+    getAuthStore()?.getState?.()?.markUpdateRequired?.("server");
+  } catch (e) {
+    if (__DEV__) console.warn("[api] could not mark update required:", e?.message);
+  }
+};
+const isUpdateRequiredState = () => {
+  try { return getAuthStore()?.getState?.()?.updateRequired === true; } catch { return false; }
+};
+
+/**
+ * Not sent: this build may not talk to the server. Shaped like "no answer"
+ * (no `response`), so the outbox keeps the row pending without spending its
+ * retry budget (mutationQueue classifyError), and screens fall back to what
+ * the phone holds.
+ */
+const updateRequiredError = (config) => {
+  const err = new Error("Update the app to keep syncing");
+  err.isOffline        = true;
+  err.isUpdateRequired = true;
+  err.config           = config;
+  return err;
+};
+
+/**
  * Attempts to get a new access token using:
  *   1. The refresh token from the Zustand store
  *   2. The refresh token from SecureStore
@@ -384,7 +415,7 @@ export const refreshAccessToken = async () => {
 
       // ── Call /auth/refresh ────────────────────────────────────────────────
       const payload  = refreshToken ? { refreshToken } : {};
-      const headers  = {};
+      const headers  = { ...appBuildHeaders() };
 
       // Always send the bearer when we have one. Mode A ignores it; Mode B
       // (server without JWT_REFRESH_SECRET, or no refresh token on hand)
@@ -464,7 +495,11 @@ export const refreshAccessToken = async () => {
         );
       }
       const code = err?.response?.data?.code ?? null;
-      if (isRefreshRefusal(err) && code === "PASSWORD_CHANGE_REQUIRED") {
+      if (isUpdateRequiredAnswer(err?.response?.status, err?.response?.data)) {
+        // Not a dead session and not a network blip: this build is too old.
+        _lastRefreshOutcome = "update-required";
+        markUpdateRequired();
+      } else if (isRefreshRefusal(err) && code === "PASSWORD_CHANGE_REQUIRED") {
         // Not a dead session: the password wall (app/_layout.js) handles it.
         _lastRefreshOutcome = "refused";
         try {
@@ -516,6 +551,14 @@ api.interceptors.request.use(
 // This lives outside the interceptor so every early-return path
 // (offline guard, offline session, unexpected throw) releases the slot.
 async function _prepareRequest(config) {
+
+    // 0. This build may not talk to the server (426 earlier, or a phone whose
+    //    data a newer build wrote): nothing is sent, the caller keeps its work.
+    if (isUpdateRequiredState()) throw updateRequiredError(config);
+
+    // 0b. Which build this is — every request (docs/40 §8.9).
+    const build = appBuildHeaders();
+    for (const k of Object.keys(build)) config.headers[k] = build[k];
 
     // 1. Offline guard
     if (!_isConnected) {
@@ -648,6 +691,14 @@ api.interceptors.response.use(
     const maxRetries = error?.config?._maxRetries ?? 1;
     const isFinal    = attempt >= maxRetries;
     const isOneShot  = maxRetries <= 1;
+
+    // ── 426 APP_UPDATE_REQUIRED ──────────────────────────────────────────────
+    // This build is too old for the school's data. The update-required screen
+    // takes over and the sync stops; the request is answered as "not sent".
+    if (isUpdateRequiredAnswer(status, error?.response?.data)) {
+      markUpdateRequired();
+      return Promise.reject(updateRequiredError(error.config));
+    }
 
     // ── 403 PASSWORD_CHANGE_REQUIRED ─────────────────────────────────────────
     // The server admits an account on a temporary password to the password
