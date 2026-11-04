@@ -247,7 +247,12 @@ const admin = { _id: "adm-1", id: "adm-1", role: "school_admin", schoolId: S, na
       { _id: "c-form",   schoolId: S, name: "Form",   isActive: true, classTeacherId: ME },
       { _id: "c-off",    schoolId: S, name: "Switched off", isActive: true },
       { _id: "c-other",  schoolId: S, name: "Other",  isActive: true },
+      { _id: "c-form-gone", schoolId: S, name: "Form, deleted", isActive: true, classTeacherId: ME },
     ]))();
+    // The teacher was form master of a class the school has since deleted:
+    // the server no longer counts it (syncFeed.js teacher scope), so neither
+    // may the phone.
+    await p.db.runAsync("UPDATE classes SET deleted_at = '2026-11-04T09:00:00.000Z' WHERE id = 'c-form-gone'");
     if (assignments) {
       await quietly(() => SyncManager.syncAssignments([
         { _id: "as-1", schoolId: S, teacher: ME, class: "c-taught", subject: "sub-1" },
@@ -259,6 +264,7 @@ const admin = { _id: "adm-1", id: "adm-1", role: "school_admin", schoolId: S, na
       pupil("in-taught", { classId: "c-taught" }), pupil("in-form", { classId: "c-form" }),
       pupil("in-off", { classId: "c-off" }), pupil("in-other", { classId: "c-other" }),
       pupil("in-other-unsent", { classId: "c-other" }), pupil("no-class", { classId: null }),
+      pupil("in-form-gone", { classId: "c-form-gone" }),
     ]))();
     await p.db.runAsync("UPDATE students SET _synced = 0, _operation = 'create' WHERE id = 'in-other-unsent'");
   };
@@ -268,7 +274,7 @@ const admin = { _id: "adm-1", id: "adm-1", role: "school_admin", schoolId: S, na
     await loadSchool(p);
     const removed = await quietly(() => p.SyncManager.purgeOutOfScopePupils())();
     check("taught and form class kept, others removed, the unsent one kept",
-      [removed, left(p)], [3, ["in-form", "in-other-unsent", "in-taught"]]);
+      [removed, left(p)], [4, ["in-form", "in-other-unsent", "in-taught"]]);
     check("the purge runs after the pull", /await this\.purgeOutOfScopePupils\(\)/.test(
       require("fs").readFileSync(require("path").join(__dirname, "../src/services/syncManager.js"), "utf8")), true);
   }
@@ -276,19 +282,19 @@ const admin = { _id: "adm-1", id: "adm-1", role: "school_admin", schoolId: S, na
     const p = await makePhone({ _id: ME, id: ME, role: "teacher", schoolId: S, name: "Teacher" });
     await loadSchool(p, { assignments: false });
     const removed = await quietly(() => p.SyncManager.purgeOutOfScopePupils())();
-    check("no assignments stored yet: nothing removed", [removed, left(p).length], [0, 6]);
+    check("no assignments stored yet: nothing removed", [removed, left(p).length], [0, 7]);
   }
   {
     const p = await makePhone(admin);
     await loadSchool(p);
     const removed = await quietly(() => p.SyncManager.purgeOutOfScopePupils())();
-    check("an admin phone: nothing removed", [removed, left(p).length], [0, 6]);
+    check("an admin phone: nothing removed", [removed, left(p).length], [0, 7]);
   }
   {
     const p = await makePhone({ _id: "bur", id: "bur", role: "bursar", schoolId: S, name: "Bursar" });
     await loadSchool(p);
     const removed = await quietly(() => p.SyncManager.purgeOutOfScopePupils())();
-    check("a bursar phone: nothing removed", [removed, left(p).length], [0, 6]);
+    check("a bursar phone: nothing removed", [removed, left(p).length], [0, 7]);
   }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
