@@ -181,11 +181,28 @@ const engine = ({
         // while taking the response's copy below cannot leave them pending: a
         // pending row is never overwritten by a pull, so it would disagree with
         // the server permanently rather than until the next cycle.
+        //
+        // ── Settled only by the LAST queued write to a row ─────────────────
+        //
+        // Two edits to one pupil queued, the first accepted and the second
+        // still waiting: settling on the first cleared the pending flag, so
+        // the pull in this same cycle overwrote the screen with the server's
+        // copy — the FIRST edit — while the second was still queued. While
+        // another request for the row is queued it stays pending and keeps
+        // showing the latest local change; the server's answer is kept under
+        // it (rebase), which is what a discard of the later write restores.
         for (const extra of item.extraDocs ?? []) {
-          if (extra?.collection && extra?.docId) docs.settle(extra.collection, extra.docId);
+          if (!extra?.collection || !extra?.docId) continue;
+          if (!queue.queuedFor(extra.collection, extra.docId)) docs.settle(extra.collection, extra.docId);
         }
 
-        if (item.collection && item.doc_id) {
+        const stillQueued = Boolean(item.collection && item.doc_id) && queue.queuedFor(item.collection, item.doc_id);
+        if (stillQueued) {
+          const stored = answer?.data ?? answer?.admin ?? answer?.teacher ?? null;
+          if (stored && String(stored._id ?? stored.id) === String(item.doc_id)) {
+            docs.rebase(item.collection, item.doc_id, stored);
+          }
+        } else if (item.collection && item.doc_id) {
           docs.settle(item.collection, item.doc_id);
 
           /**
