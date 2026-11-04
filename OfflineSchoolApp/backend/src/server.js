@@ -41,6 +41,7 @@ const {
   ensureIdempotencyIndex,
 } = require("./db/ensureStudentIndexes");
 const { generateTempPassword } = require("./utils/tempPassword");
+const { requireSupportedMobileBuild } = require("./services/appVersionPolicy.service");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -657,7 +658,10 @@ app.post(
 // own auth.
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.use("/api", optionalAuthenticate, require("../middleware/idempotency"));
+// An outdated phone build may not write into a school with per-user local
+// data on (docs/40 §8.9; services/appVersionPolicy.service.js). Writes only:
+// a current client, web or desktop passes without a lookup.
+app.use("/api", optionalAuthenticate, requireSupportedMobileBuild({ writesOnly: true }), require("../middleware/idempotency"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT ROUTES
@@ -677,7 +681,7 @@ app.use("/api/users", auth.authenticate, loadRoute("./routes/user.routes"));
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.use("/api/sync",
-  auth.authenticate,
+  auth.authenticate, requireSupportedMobileBuild(),
   loadRoute("./routes/sync.routes")
 );
 

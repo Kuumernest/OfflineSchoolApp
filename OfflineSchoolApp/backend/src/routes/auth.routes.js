@@ -16,6 +16,7 @@ const {
 } = require("../services/permissions.service");
 const { normalizeRole } = require("../config/roles");
 const { offlineSettingsForUser } = require("../services/offlineSettings.service");
+const { refuseOutdatedMobile } = require("../services/appVersionPolicy.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RATE LIMITING — brute-force protection on login
@@ -286,6 +287,11 @@ router.post("/login", loginLimiter, async (req, res) => {
       });
     }
 
+    // A phone build that cannot read per-user local data gets no session in a
+    // school that has it on (docs/40 §8.9): 426 APP_UPDATE_REQUIRED. After the
+    // password, so the answer says nothing about an account to a guesser.
+    if (await refuseOutdatedMobile(req, res, user)) return;
+
     console.log(`🔐 Login success: ${user._id} (${user.role})`);
     return res.json(await buildTokenResponse(user));
 
@@ -370,6 +376,8 @@ router.post("/refresh", async (req, res, next) => {
       });
     }
 
+    if (await refuseOutdatedMobile(req, res, user)) return;
+
     console.log(`🔄 Token refreshed: ${user._id}`);
     return res.json(await buildTokenResponse(user));
 
@@ -389,6 +397,7 @@ router.post("/refresh", authenticate, async (req, res) => {
         message: "User not found or account deactivated",
       });
     }
+    if (await refuseOutdatedMobile(req, res, user)) return;
     console.log(`🔄 Token refreshed: ${user._id}`);
     return res.json(await buildTokenResponse(user));
   } catch (err) {
