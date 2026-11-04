@@ -2286,6 +2286,12 @@ class SyncManagerClass {
     console.log(`[SyncManager] Periods: ${ok} synced, ${fail} failed`);
   }
 
+  // A pulled row never overwrites one with an unsent local change (_synced
+  // != 1): the pull may have left the server before the change was made, and
+  // overwriting would undo it silently — a delete made while a pull was in
+  // flight came back active and was never sent. The change goes out first;
+  // the next pull refreshes the row. Same rule as the desktop's merge(), and
+  // the same rows the backfill treats as pending. Classes, teachers, subjects.
   async syncClasses(classes) {
     if (!classes?.length) return;
     const db = await getDatabase();
@@ -2304,7 +2310,7 @@ class SyncManagerClass {
 
           if (c.deletedAt || c.deleted_at) {
             await db.runAsync(
-              "UPDATE classes SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE classes SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [c.deletedAt || c.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2321,7 +2327,8 @@ class SyncManagerClass {
                classTeacherId   = excluded.classTeacherId,
                classTeacherName = excluded.classTeacherName,
                is_active = excluded.is_active, _synced = 1, deleted_at = NULL,
-               updated_at = excluded.updated_at`,
+               updated_at = excluded.updated_at
+             WHERE classes._synced = 1`,
             [
               String(id), c.schoolId, c.schoolId,
               c.name, c.level || null, c.section || "",
@@ -2361,7 +2368,7 @@ class SyncManagerClass {
 
           if (t.deletedAt || t.deleted_at) {
             await db.runAsync(
-              "UPDATE users SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE users SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [t.deletedAt || t.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2379,7 +2386,8 @@ class SyncManagerClass {
                is_active = excluded.is_active,
                must_reset_password = excluded.must_reset_password,
                _synced = 1, _synced_at = excluded._synced_at,
-               deleted_at = NULL, updated_at = excluded.updated_at`,
+               deleted_at = NULL, updated_at = excluded.updated_at
+             WHERE users._synced = 1`,
             [
               String(id), t.schoolId, t.schoolId,
               t.name || "Unknown", t.email.toLowerCase().trim(),
@@ -2421,7 +2429,7 @@ class SyncManagerClass {
 
           if (s.deletedAt || s.deleted_at) {
             await db.runAsync(
-              "UPDATE subjects SET deleted_at = ?, teacher_id = NULL, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE subjects SET deleted_at = ?, teacher_id = NULL, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [s.deletedAt || s.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2446,7 +2454,8 @@ class SyncManagerClass {
                name = excluded.name, code = excluded.code,
                teacher_id = excluded.teacher_id, teacher_name = excluded.teacher_name,
                coefficient = excluded.coefficient,
-               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at`,
+               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at
+             WHERE subjects._synced = 1`,
             [
               String(id), s.schoolId, s.schoolId,
               String(classId), String(classId),
