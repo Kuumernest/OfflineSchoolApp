@@ -292,10 +292,14 @@ its cursor; re-asks only collections that said `hasMore`; applies through the
 same `syncClasses … syncStudents` functions, so the **pull-protection rule** (a
 pulled row never overwrites one with `_synced != 1`) holds for classes, teachers,
 subjects, periods (`dirty`) and now also teacher assignments (by id or by the
-teacher/class/subject key). **Pupils are not under the rule yet**:
-`students._synced` is added by the admissions code with `DEFAULT 0` and the pull
-never sets it, so it cannot tell a pulled pupil from a changed one — making the
-flag trustworthy comes first. A server without the profile (every collection
+teacher/class/subject key) and pupils. Pupils pulled from the server are
+written as synced, every genuine local pupil change sets `_synced = 0` (and an
+admission decision made on the phone also `_local_decision`), and a pupil with
+work in the outbox is skipped by the pull (`mobile/src/db/pupilSync.js`); only
+decisions made on the phone are sent, so a pulled pupil never produces an
+approve. A teacher's phone then drops locally stored pupils outside its classes
+by the same rule the server uses for its feed (`purgeOutOfScopePupils`), never
+one with an unsent change. A server without the profile (every collection
 refused `UNKNOWN_COLLECTION`) → the phone falls back to `/sync/pull`. Students'
 phones still do not pull the six (unchanged). Everything else the phone mirrors
 (fees, attendance, exams, finance, timetable, gate, homework, messages,
