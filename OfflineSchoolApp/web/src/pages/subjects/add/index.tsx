@@ -1,4 +1,4 @@
-import { useState, useCallback, useId, useMemo } from "react";
+import { useState, useCallback, useId, useMemo, useRef } from "react";
 import { useNavigate }                  from "react-router-dom";
 import { useQuery, useMutation }        from "@tanstack/react-query";
 import {
@@ -16,6 +16,7 @@ import { useUser }       from "@/store/auth.store";
 import { fetchClasses }  from "@/services/class.service";
 import { fetchTeachers } from "@/services/teacher.service";
 import { createSubject } from "@/services/subject.service";
+import { createIds }     from "@/lib/clientId";
 import { cn }            from "@/utils/cn";
 import type { Class, Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
@@ -241,7 +242,12 @@ export default function AddSubjectPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [results,     setResults]     = useState<CreateResult[] | null>(null);
 
-  const nameId     = useId();
+  // One id per subject being created — one per selected class — kept while
+  // the same form is retried and renewed once that subject exists
+  // (lib/clientId.ts). It is what lets the desktop create them offline.
+  const subjectIds = useRef(createIds());
+
+  const nameId    = useId();
   const codeId     = useId();
   const coeffId    = useId();
   const classesId  = useId();
@@ -303,17 +309,19 @@ export default function AddSubjectPage() {
 
       for (const cid of values.classIds) {
         const cls = classes.find((c) => c._id === cid);
+        const attempt = {
+          name:        values.name.trim(),
+          code:        values.code.trim() || undefined,
+          classId:     cid,
+          teacherId:   values.teacherId || undefined,
+          coefficient: values.coefficient.trim()
+            ? Number(values.coefficient.trim())
+            : undefined,
+          schoolId,
+        };
         try {
-          await createSubject({
-            name:        values.name.trim(),
-            code:        values.code.trim() || undefined,
-            classId:     cid,
-            teacherId:   values.teacherId || undefined,
-            coefficient: values.coefficient.trim()
-              ? Number(values.coefficient.trim())
-              : undefined,
-            schoolId,
-          });
+          await createSubject({ ...attempt, id: subjectIds.current.forAttempt(attempt) });
+          subjectIds.current.created(attempt);
           outcomes.push({
             classId:   cid,
             className: cls?.name ?? cid,

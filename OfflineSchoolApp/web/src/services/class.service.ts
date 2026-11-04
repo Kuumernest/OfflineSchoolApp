@@ -1,5 +1,6 @@
 // web/src/services/class.service.ts
 import api from "@/services/api";
+import { withClientId } from "@/lib/clientId";
 import type {
   Class,
   Subject,
@@ -231,10 +232,13 @@ export async function fetchClasses(
   return unwrapList<RawClass>(data, "classes").map(normaliseClass);
 }
 
+// Both creates go out under a client id (lib/clientId.ts): the caller's, kept
+// across retries, or a fresh one. The desktop answers them offline only with
+// one; the server stores the row under it and answers a repeat with that row.
 export async function createClass(
   payload: CreateClassPayload,
 ): Promise<Class> {
-  const { data } = await api.post("/admin/classes", payload);
+  const { data } = await api.post("/admin/classes", withClientId(payload));
   return normaliseClass(unwrapSingle<RawClass>(data, "class"));
 }
 
@@ -281,9 +285,9 @@ export async function fetchSubjects(
 }
 
 export async function createSubject(
-  payload: CreateSubjectPayload,
+  payload: CreateSubjectPayload & { id?: EntityId },
 ): Promise<Subject> {
-  const { data } = await api.post("/admin/subjects", payload);
+  const { data } = await api.post("/admin/subjects", withClientId(payload));
   return normaliseSubject(unwrapSingle<RawSubject>(data, "subject"));
 }
 

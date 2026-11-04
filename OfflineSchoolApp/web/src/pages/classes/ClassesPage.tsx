@@ -1,4 +1,4 @@
-import { useState, useMemo }                             from "react";
+import { useState, useMemo, useRef }                     from "react";
 import { useSearchParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }         from "@tanstack/react-query";
 import { School, Plus, Pencil, Trash2, BookOpen }        from "lucide-react";
@@ -17,6 +17,7 @@ import {
   deleteSubject,
 }                                                        from "@/services/class.service";
 import { fetchTeachers }                                 from "@/services/teacher.service";
+import { createIds }                                     from "@/lib/clientId";
 import type {
   Class,
   Subject,
@@ -147,6 +148,12 @@ export default function ClassesPage() {
   const schoolId = user?.schoolId ?? "";
   const qc       = useQueryClient();
 
+  // The id each new class or subject is created under: kept while the same
+  // form is retried, renewed once it is created (lib/clientId.ts). It is what
+  // lets the desktop create them with no connection.
+  const classIds   = useRef(createIds());
+  const subjectIds = useRef(createIds());
+
   // ── URL-driven tab ─────────────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = (searchParams.get("tab") as ClassPageTab) ?? "classes";
@@ -248,8 +255,9 @@ export default function ClassesPage() {
     mutationFn: (values: ClassForm) =>
       editingClass
         ? updateClass(editingClass._id, { ...values, schoolId })
-        : createClass({ ...values, schoolId }),
+        : createClass({ ...values, schoolId, id: classIds.current.forAttempt({ ...values, schoolId }) }),
     onSuccess: () => {
+      classIds.current.created();
       qc.invalidateQueries({ queryKey: QK.classes(schoolId) });
       closeClassModal();
     },
@@ -292,7 +300,9 @@ export default function ClassesPage() {
     mutationFn: async ({ coefficient, ...values }: SubjectForm) => {
       const coeff = coefficientValue(coefficient);
       if (!editingSubject) {
-        await createSubject({ ...values, schoolId, coefficient: coeff });
+        const attempt = { ...values, schoolId, coefficient: coeff };
+        await createSubject({ ...attempt, id: subjectIds.current.forAttempt(attempt) });
+        subjectIds.current.created();
         return null;
       }
       // Sent only when it changed: the field opens on the value the list
