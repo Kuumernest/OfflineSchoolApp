@@ -110,7 +110,14 @@ const check = (label, actual, expected) => {
   const sync = (phone) => quietly(async () => {
     const { SyncManager } = phone.load("src/services/syncManager");
     await SyncManager.ensureStarted();
+    // Wait out a sync already running (the phone starts one 3 s after any
+    // save), or syncAll returns at once ("Already syncing") and the check
+    // looks before anything was sent. Waiting again after covers one that
+    // started in between — it began after the change, so it carries it.
+    const idle = async () => { for (let i = 0; i < 6000 && SyncManager.isSyncing; i++) await new Promise((r) => setTimeout(r, 10)); };
+    await idle();
     await SyncManager.syncAll({ force: true });
+    await idle();
   })();
   const local = (phone, id) => {
     const d = phone.inspect("schoolapp.db");
