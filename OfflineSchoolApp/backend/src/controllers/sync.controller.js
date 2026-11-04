@@ -450,3 +450,7 @@ exports.pushRetired = (_req, res) =>
       "(e.g. PUT /api/admin/students/:id/approve, the periods routes) and pull " +
       "with GET /api/sync/pull or GET /api/sync/changes.",
   });
+
+// The pupil row shape, shared with the phone profile of /sync/changes
+// (config/syncFeed.js PHONE_FEED) so both feeds hand the phone the same row.
+exports.normaliseStudentForSync = normaliseStudentForSync;

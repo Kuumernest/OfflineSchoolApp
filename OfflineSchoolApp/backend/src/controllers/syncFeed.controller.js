@@ -15,8 +15,10 @@
  * entire phone fleet is built on, to serve a client that does not exist yet.
  *
  * So this is a second door, opened correctly: capability-scoped from the first
- * commit, uniform in shape, and used only by the desktop. /sync/pull is left
- * exactly as it is.
+ * commit, uniform in shape. The desktop reads FEED; since 2026-11 the phone
+ * reads its six collections here too, as ?profile=phone (config/syncFeed.js
+ * PHONE_FEED — /sync/pull's audience and row shapes, this endpoint's cursor and
+ * pages). /sync/pull stays for phone builds from before that.
  *
  * ── The cursor, which is where feeds like this go wrong ───────────────────
  *
@@ -45,7 +47,7 @@
 
 const mongoose = require("mongoose");
 
-const { byCollection, FEED, required, satisfies } = require("../config/syncFeed");
+const { byCollection, FEED, PHONE_FEED, phoneByCollection, required, satisfies } = require("../config/syncFeed");
 const permissions = require("../services/permissions.service");
 const { safeHorizon, safetyWindowMs } = require("../config/syncWindow");
 
@@ -189,7 +191,7 @@ const tenantFilter = (req) => {
  * screen that is empty for a reason nobody can see is how people conclude the
  * software has lost their data.
  */
-const partition = async (req, wanted) => {
+const partition = async (req, wanted, phone = false) => {
   const held = new Set(await permissions.effectiveFor(req.user?.role, req.user?.schoolId));
   const { ROLES } = require("../config/roles");
   const isRoot = req.user?.role === ROLES.SUPER_ADMIN;
@@ -198,8 +200,14 @@ const partition = async (req, wanted) => {
   const refused = [];
 
   for (const name of wanted) {
-    const entry = byCollection.get(name);
+    const entry = (phone ? phoneByCollection : byCollection).get(name);
     if (!entry) { refused.push({ collection: name, reason: "UNKNOWN_COLLECTION" }); continue; }
+    // The phone profile says who by role, as /sync/pull did (config/syncFeed.js).
+    if (phone) {
+      if (entry.allow(req, held)) allowed.push(entry);
+      else refused.push({ collection: name, reason: "FORBIDDEN" });
+      continue;
+    }
     if (isRoot || satisfies(entry, held)) allowed.push(entry);
     else refused.push({
       collection: name, reason: "FORBIDDEN",
@@ -220,11 +228,14 @@ exports.changes = async (req, res) => {
 
     // No ?collections= means "everything I am allowed to have", which is what a
     // first sync asks and saves the client hard-coding the list.
+    // profile=phone: the phone's own table (config/syncFeed.js PHONE_FEED).
+    // Anything else, including nothing at all, is the desktop feed as it was.
+    const phone  = req.query.profile === "phone";
     const wanted = req.query.collections
       ? String(req.query.collections).split(",").map((s) => s.trim()).filter(Boolean)
-      : FEED.map((e) => e.collection);
+      : (phone ? PHONE_FEED : FEED).map((e) => e.collection);
 
-    const { allowed, refused } = await partition(req, wanted);
+    const { allowed, refused } = await partition(req, wanted, phone);
 
     const limit = Math.min(
       Math.max(Number.parseInt(req.query.limit, 10) || DEFAULT_LIMIT, 1),
@@ -291,6 +302,10 @@ exports.changes = async (req, res) => {
         .lean();
 
       if (entry.omit?.length) query.select(entry.omit.map((f) => `-${f}`).join(" "));
+      // Phone entries: the fields and joins /sync/pull sent (PHONE_FEED).
+      // updatedAt and _id are always kept — the cursor is built from them.
+      if (entry.project) query.select(`${entry.project(req)} updatedAt`);
+      if (entry.populate) entry.populate(query, req);
 
       const rows    = await query;
       const hasMore = rows.length > limit;
@@ -298,7 +313,8 @@ exports.changes = async (req, res) => {
       // An entry may drop rows from what is SENT (syncTombstone: one whose row
       // still exists). The cursor below is still the page's last row, so a
       // dropped row is passed, not re-fetched.
-      const documents = entry.postFilter ? await entry.postFilter(page, models) : page;
+      const kept      = entry.postFilter ? await entry.postFilter(page, models) : page;
+      const documents = entry.transform ? entry.transform(kept, req) : kept;
 
       // Rows dated ahead of the server clock: delivered, re-sent every pass
       // until real time passes them (the cursor never rests beyond the floor),

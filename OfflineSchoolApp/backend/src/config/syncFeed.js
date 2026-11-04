@@ -800,6 +800,110 @@ const KNOWN_GAPS = [
 
 const byCollection = new Map(FEED.map((e) => [e.collection, e]));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PHONE PROFILE — GET /sync/changes?profile=phone
+//
+// The phone used GET /sync/pull: six collections, one timestamp cursor, one
+// unbounded answer. It now reads the same six through this endpoint's keyset
+// cursor, pages and tombstones. They are a separate table rather than entries
+// in FEED because they are a different AUDIENCE, not a different capability:
+//
+//   - the desktop's class/subject/teacherAssignment are gated on classes.view /
+//     subjects.view, which no teacher holds (KNOWN_GAPS) — yet a teacher's
+//     phone has always received them from /sync/pull, and its timetable,
+//     subjects and register screens are built on them;
+//   - a STUDENT's phone gets its own pupil row and teacher NAMES, nothing more
+//     (the narrowing /sync/pull applies), which no capability expresses;
+//   - the rows are shaped as /sync/pull shaped them (a normalised pupil, an
+//     assignment with its teacher/class/subject names joined), so the phone's
+//     apply functions take them unchanged.
+//
+// So each entry says WHO (allow) and WHICH (scope, project) the way
+// /sync/pull did — tenancy from the token, never the query string — and
+// nothing here widens what a role received from /sync/pull. The desktop never
+// sends profile=phone, and FEED, its default list, is untouched.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Every account that signs in to the phone app. Guardians use the portal and are not Users. */
+const PHONE_ROLES = new Set([ROLES.SUPER_ADMIN, ROLES.SCHOOL_ADMIN, ROLES.BURSAR, ROLES.TEACHER, ROLES.STUDENT]);
+const isStudentCaller = (req) => req.user?.role === ROLES.STUDENT;
+const callerIdOf = (req) => String(req.user?._id ?? req.user?.id ?? "");
+const anyPhoneRole = (req) => PHONE_ROLES.has(req.user?.role);
+
+/** A pupil's own record: matched on either key, as /sync/pull does (userId on most rows, the shared _id on older ones). */
+const ownPupil = (req) => ({ $or: [{ userId: callerIdOf(req) }, { _id: callerIdOf(req) }] });
+
+/** /sync/pull's teacher fields: names only for a pupil. */
+const teacherFieldsFor = (req) => isStudentCaller(req)
+  ? "name role schoolId deletedAt createdAt updatedAt"
+  : "name email role schoolId isActive mustResetPassword enrollmentNo staffNo deletedAt createdAt updatedAt";
+
+/** Pupils: the roster as /sync/pull serves it; off the roster → a removal. */
+const pupilRows = (rows) => {
+  const { normaliseStudentForSync } = require("../controllers/sync.controller");
+  const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
+  return rows.map((s) => onRoster(s)
+    ? normaliseStudentForSync(s)
+    : { _id: String(s._id), id: String(s._id), schoolId: s.schoolId ?? null, deletedAt: s.deletedAt || s.updatedAt, updatedAt: s.updatedAt });
+};
+
+/** Hard deletes the phone applies: subjects and assignments for everyone, pupils for staff — a pupil hears only of their own. */
+const phoneTombstones = async (req, models) => {
+  if (!isStudentCaller(req)) return { entity: { $in: ["subject", "teacherAssignment", "student"] } };
+  const own = await models.Student.findOne(ownPupil(req)).select("_id").lean();
+  const ids = [callerIdOf(req), own ? String(own._id) : null].filter(Boolean);
+  return { $or: [{ entity: { $in: ["subject", "teacherAssignment"] } }, { entity: "student", docId: { $in: ids } }] };
+};
+
+/** A tombstone as the phone applies it: the removal row of the collection it belongs to. */
+const TOMBSTONE_TARGET = { subject: "subjects", teacherAssignment: "assignments", student: "students" };
+const tombstoneRows = (rows) => rows.map((t) => ({
+  _id: t.docId, id: t.docId, collection: TOMBSTONE_TARGET[t.entity], schoolId: t.schoolId ?? null,
+  deletedAt: t.deletedAt, updatedAt: t.updatedAt,
+}));
+
+/**
+ * @type {Array<FeedEntry & { allow: Function, project?: Function, populate?: Function, transform?: Function }>}
+ * allow(req, held) — who may have it (held: the caller's capabilities).
+ */
+const PHONE_FEED = [
+  { collection: "classes",  model: "Class",  allow: anyPhoneRole },
+  { collection: "subjects", model: "Subject", allow: anyPhoneRole },
+  { collection: "periods",  model: "Period", allow: anyPhoneRole },
+  {
+    collection: "teachers", model: "User", allow: anyPhoneRole,
+    scope: () => ({ role: ROLES.TEACHER }),
+    project: teacherFieldsFor,
+    why: "Teacher names for the timetable; a pupil gets nothing else about an account.",
+  },
+  {
+    collection: "assignments", model: "TeacherAssignment", allow: anyPhoneRole,
+    populate: (q, req) => q
+      .populate("teacher", isStudentCaller(req) ? "name" : "name email")
+      .populate("class", "name")
+      .populate("subject", "name"),
+  },
+  {
+    collection: "students", model: "Student",
+    // A pupil: their own row. Staff: as /sync/pull served them, but only with a
+    // capability to read pupils at all.
+    allow: (req, held) => isStudentCaller(req) || held.has("students.view") || held.has("students.viewTaught"),
+    scope: (req) => (isStudentCaller(req) ? ownPupil(req) : {}),
+    transform: pupilRows,
+    why: "The whole roster for staff, as /sync/pull has always sent a teacher's phone " +
+         "(narrowing a teacher to taught classes would drop a form-master's class " +
+         "that has no subject assignment — a role-matrix decision, not a sync one).",
+  },
+  {
+    collection: "tombstones", model: "SyncTombstone", allow: anyPhoneRole,
+    scope: phoneTombstones,
+    postFilter: dropTombstonesOfLiveRows,
+    transform: tombstoneRows,
+  },
+];
+
+const phoneByCollection = new Map(PHONE_FEED.map((e) => [e.collection, e]));
+
 // Invoked here, at the very bottom, rather than beside its definition: it reads
 // required() and every const above, and calling it earlier put it in front of
 // their initialisation — a temporal dead zone error at require time, which
@@ -816,6 +920,9 @@ module.exports = {
   required,
   satisfies,
   byCollection,
+  PHONE_FEED,
+  PHONE_ROLES,
+  phoneByCollection,
   modelNames,
   assertEveryModelIsClassified,
   assertHardDeletesAreTombstoned,
