@@ -36,6 +36,7 @@ const store        = require("./db/store");
 const { outbox, ownOutboxActions } = require("./db/outbox");
 const { client }   = require("./sync/client");
 const { engine }   = require("./sync/engine");
+const { connectivity } = require("./sync/connectivity");
 const localApi     = require("./api");
 const appProtocol  = require("./appProtocol");
 const { normaliseServerUrl, checkServer } = require("./serverAddress");
@@ -73,6 +74,7 @@ let syncState = null;
 let metaBag = null;
 let api     = null;
 let sync    = null;
+let netWatch = null;   // the connectivity monitor (sync/connectivity.js)
 
 /**
  * Who is signed in, as the window last told us.
@@ -139,12 +141,33 @@ const openDatabase = () => {
       // No collection list: the server decides what this caller may mirror, so
       // the desktop holds no copy of the feed table to drift from it.
       onChange: (status) => {
+        // A cycle that could not reach the server puts the monitor on watch;
+        // one that did takes it off.
+        netWatch?.engineStatus(status.phase);
         // Pushed rather than polled, so a window can show "3 waiting to send"
         // without asking every second.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) win.webContents.send("sync:status", status);
         }
       },
+    });
+
+    /**
+     * Noticing the connection come back, so a write that failed offline is
+     * sent then rather than when its backoff (up to ten minutes) runs out.
+     * Idle while online; while offline, net.isOnline() every few seconds (a
+     * local check, no traffic) and, once that says yes and stays yes, the
+     * server's /api/health. See sync/connectivity.js.
+     */
+    netWatch = connectivity({
+      isOnline: () => net.isOnline(),
+      probe: async () => {
+        const url = api.serverUrl();
+        if (!url) return false;
+        return (await checkServer(url, (u, init) => net.fetch(u, init), 10_000)).ok;
+      },
+      // Only for somebody signed in: there is nothing to send otherwise.
+      onReconnect: () => (session && api.hasToken() ? sync.reconnected() : null),
     });
 
     return true;
@@ -432,8 +455,18 @@ const registerHandlers = () => {
   /** Is there a school server at this address? Before it is saved. */
   ipcMain.handle("server:check", (_e, url) => checkServer(url, (u, init) => net.fetch(u, init)));
 
-  /** Sync now — a button, or straight after a local write. */
-  ipcMain.handle("sync:now", () => sync.cycle());
+  /**
+   * Sync now — a button. Also brings forward requests backing off only
+   * because the network had failed: a person pressing it has a connection
+   * in mind, and waiting out a ten-minute backoff is not what they asked for.
+   */
+  ipcMain.handle("sync:now", () => sync.syncNow());
+
+  /**
+   * The window's own online / offline events (preload.js). A hint only: an
+   * "online" is confirmed against the server before anything is sent.
+   */
+  ipcMain.on("net:status", (_e, online) => netWatch?.signal(Boolean(online)));
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +479,7 @@ app.whenReady().then(() => {
   if (!openDatabase()) { app.quit(); return; }
 
   registerHandlers();
+  netWatch.start();
 
   protocol.handle("app", appProtocol.createAppProtocolHandler({
     distDir:   WEB_DIST,
@@ -545,6 +579,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
+  try { netWatch?.stop(); } catch { /* nothing useful to do while exiting */ }
   try { sync?.stop(); } catch { /* nothing useful to do while exiting */ }
   // Give an in-progress sync cycle a moment to finish before closing the
   // database. Without this, SQL operations on the closed handle throw into

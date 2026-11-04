@@ -66,6 +66,7 @@ const engine = ({
   let running  = false;
   let timer    = null;
   let stopped  = false;
+  const whenIdle = [];
 
   /** The last thing that happened, for the UI to render. */
   let status = {
@@ -394,6 +395,10 @@ const engine = ({
         return status;
       }
 
+      // The last cycle could not reach the server. If this one can, the
+      // connection is back — see the second push after the pull.
+      const wasOffline = status.phase === "offline";
+
       // A cycle with a token starts with no verdict on it: a new token handed
       // over after signing in again must not inherit the old one's refusal.
       publish({ phase: "pushing", sessionRejected: false });
@@ -422,6 +427,25 @@ const engine = ({
       // The server answered every page asked for: this is a successful sync,
       // whether or not more pages remain or a write is blocked.
       markSynced(new Date().toISOString());
+
+      // ── Back from offline: send now, not when the backoff runs out ───────
+      //
+      // The push above ran while the queue still believed the network was
+      // gone: a request that failed for want of a connection may be backing
+      // off for up to ten minutes. The pull just reached the server, so that
+      // belief is out of date. Bring those requests forward and push again,
+      // once. Refused (blocked) and 5xx-backed-off requests are untouched —
+      // see outbox.retryNetworkNow().
+      if (wasOffline && pushed.stopped !== "blocked" && queue.retryNetworkNow() > 0) {
+        publish({ phase: "pushing" });
+        const again = await push();
+        pushed.sent += again.sent;
+        pushed.stopped = again.stopped;
+        if (again.stopped === "unauthenticated") {
+          publish({ phase: "unauthenticated", pushed: pushed.sent, sessionRejected: true });
+          return status;
+        }
+      }
 
       console.log(
         `[sync] pulled ${pulledResult.pulled} row(s) in ${pulledResult.pages} page(s), ${pullMs} ms` +
@@ -460,6 +484,8 @@ const engine = ({
       return status;
     } finally {
       running = false;
+      // Anything waiting for this cycle to finish (kick, below).
+      for (const resolve of whenIdle.splice(0)) resolve();
       // A cycle run on demand (sign-in, a local write) is not followed by
       // scheduleNext, so without this the rest of a first sync would wait the
       // full idle interval. Re-arming is safe: scheduleNext clears any timer.
@@ -486,9 +512,44 @@ const engine = ({
     timer.unref?.();
   };
 
+  /**
+   * A cycle now, with network backoffs brought forward first — for "Sync now"
+   * and for the connection coming back.
+   *
+   * If a cycle is already running, its push may have passed over requests
+   * that were not due; so another runs straight after it rather than this
+   * call being dropped, as cycle() alone would drop it.
+   */
+  let rerun = null;
+  const kick = async () => {
+    queue.retryNetworkNow();
+    if (!running) return cycle();
+    if (!rerun) {
+      rerun = (async () => {
+        while (running) await new Promise((r) => whenIdle.push(r));
+        rerun = null;
+        queue.retryNetworkNow();
+        return cycle();
+      })();
+    }
+    return rerun;
+  };
+
   return {
     /** Run one cycle now — on sign-in, on a local write, on a button. */
     cycle,
+
+    /** "Sync now": send what is waiting for the network, then sync. */
+    syncNow: kick,
+
+    /**
+     * The connectivity monitor (sync/connectivity.js) saw the connection come
+     * back and the server answer. Same as Sync now; named for the log.
+     */
+    reconnected: () => {
+      console.log("[sync] connection back: sending what was waiting for it");
+      return kick();
+    },
 
     start() {
       stopped = false;

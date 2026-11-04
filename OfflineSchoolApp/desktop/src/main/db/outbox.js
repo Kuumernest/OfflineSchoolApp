@@ -243,6 +243,29 @@ const outbox = (db) => {
     },
 
     /**
+     * The connection is back (or a person pressed "Sync now"): make every
+     * entry that is backing off because the NETWORK failed due now.
+     *
+     * Only those. A network failure says nothing about the request, and its
+     * backoff — up to ten minutes — exists only so an absent connection is not
+     * hammered; once the connection is known to be back, waiting it out just
+     * leaves a payment unsent for no reason. A 5xx/429/408 backoff is the
+     * SERVER asking for time and is kept, and a blocked entry (a refusal) is
+     * a person's to release. The attempt count is kept, so a connection that
+     * drops again backs off from where it was.
+     *
+     * @returns how many entries were brought forward
+     */
+    retryNetworkNow() {
+      const now = nowIso();
+      return Number(db.prepare(`
+        UPDATE outbox SET next_try_at = ?
+        WHERE status = 'pending' AND attempts > 0 AND last_status IS NULL
+          AND next_try_at IS NOT NULL AND next_try_at > ?
+      `).run(now, now).changes);
+    },
+
+    /**
      * Is any request still queued (pending or blocked) that wrote this row —
      * as its primary document or among its extra_docs? While one is, the row
      * stays pending: settling it early let the next pull overwrite the latest
