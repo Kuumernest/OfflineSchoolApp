@@ -106,6 +106,7 @@ const check = (label, actual, expected) => {
   const auth = require(path.join(ROOT, "middleware/auth"));
   const app = express(); app.use(express.json());
   app.use("/api/sync", auth.authenticate, require(path.join(ROOT, "src/routes/sync.routes")));
+  app.use("/api/attendance", auth.authenticate, require(path.join(ROOT, "src/routes/attendance.routes")));
   const server = app.listen(0);
   server.keepAliveTimeout = 120_000;
   const port = server.address().port;
@@ -269,6 +270,31 @@ const check = (label, actual, expected) => {
   check("desktop FEED (no profile) for teacher A: its taughtStudentsOnly answer, unchanged",
     live(desk.body.collections.student.documents), []);
   check("  and no c2/c4 pupil anywhere, whole run", leaked(), []);
+
+  console.log("--- 8. the pupil roster route a teacher phone falls back to ---");
+  // GET /attendance/students/roster (mobile studentFetch.service.js, last
+  // fallback for a teacher's pupil list). Registers (/students/today,
+  // /students) are not asked here: they stay school-wide reads, docs/20 §7b.
+  // teaA now: c6 (form master) only. Give them c1 back to have an assignment class too.
+  await M("TeacherAssignment").updateOne({ _id: "as1" }, { $set: { isActive: true } });
+  const att = async (who, p) => {
+    const r = await fetch(`http://127.0.0.1:${port}/api/attendance${p}`, { headers: { Authorization: `Bearer ${T[who]}` } });
+    const text = await r.text();
+    if (who === "teaA") raw.push(text);
+    return { status: r.status, body: JSON.parse(text) };
+  };
+  const rosterIds = (b) => uniq((b.students ?? []).map((s) => String(s._id)));
+  let r = await att("teaA", "/students/roster");
+  check("no class: the teacher's classes only (c1 + c6; p1c was deleted above)", rosterIds(r.body), ["p1a", "p1b", "p1pend", "p6a"]);
+  r = await att("teaA", "/students/roster?classId=c2");
+  check("  naming another class: nothing", [r.status, rosterIds(r.body)], [200, []]);
+  r = await att("teaA", "/students/roster?classId=c1");
+  check("  naming their own class: its pupils", rosterIds(r.body), ["p1a", "p1b", "p1pend"]);
+  r = await att("adm", "/students/roster?classId=c2");
+  check("  the admin: any class, as before (p2b was deleted above)", rosterIds(r.body), ["p2a", "p2c"]);
+  r = await att("bur", "/students/roster");
+  check("  the bursar: the whole school, as before", rosterIds(r.body).length, 11);
+  check("no c2/c4 pupil anywhere a teacher was sent, whole run", leaked(), []);
 
   server.close();
   await mongoose.disconnect();
