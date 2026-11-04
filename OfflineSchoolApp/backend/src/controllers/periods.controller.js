@@ -73,6 +73,31 @@ const findPeriodForCaller = async (req, id) => {
   return period;
 };
 
+/*
+ * isActive and sortOrder as a client states them, or a 400 reason.
+ *
+ * PUT and POST take them as ABSOLUTE values, so an offline phone can send the
+ * state it shows rather than replay the actions that produced it. The phone
+ * queues a toggle or a reorder made offline as the period's whole record; the
+ * dedicated routes are relative ("flip", "swap with the neighbour") and give a
+ * different answer when replayed twice, or against a school day another
+ * device changed in the meantime. Absent (undefined / null) means "leave it".
+ */
+const readStateFields = (body) => {
+  const out = {};
+  if (body?.isActive !== undefined && body?.isActive !== null) {
+    if (typeof body.isActive !== "boolean") return { error: "isActive must be true or false" };
+    out.isActive = body.isActive;
+  }
+  if (body?.sortOrder !== undefined && body?.sortOrder !== null) {
+    if (!Number.isInteger(body.sortOrder) || body.sortOrder < 0) {
+      return { error: "sortOrder must be a whole number, 0 or more" };
+    }
+    out.sortOrder = body.sortOrder;
+  }
+  return { fields: out };
+};
+
 // Check for time overlaps excluding a specific period (for updates)
 const checkOverlap = async (schoolId, startTime, endTime, excludeId = null) => {
   const startMin = toMinutes(startTime);
@@ -188,6 +213,9 @@ exports.create = async (req, res) => {
       });
     }
 
+    const state = readStateFields(req.body);
+    if (state.error) return res.status(400).json({ success: false, message: state.error });
+
     // ── Validate time format ─────────────────────────────────
     if (!isValidTime(startTime) || !isValidTime(endTime)) {
       return res.status(400).json({
@@ -205,7 +233,10 @@ exports.create = async (req, res) => {
     }
 
     // ── Check overlap ────────────────────────────────────────
-    const overlap = await checkOverlap(schoolId, startTime, endTime);
+    // An inactive period is not on the day, so it overlaps nothing.
+    const overlap = state.fields.isActive === false
+      ? null
+      : await checkOverlap(schoolId, startTime, endTime);
     if (overlap) {
       return res.status(409).json({
         success: false,
@@ -217,7 +248,7 @@ exports.create = async (req, res) => {
     const last = await Period.findOne({ schoolId, deletedAt: null })
       .sort({ sortOrder: -1 })
       .select("sortOrder");
-    const sortOrder = (last?.sortOrder ?? 0) + 1;
+    const sortOrder = state.fields.sortOrder ?? (last?.sortOrder ?? 0) + 1;
 
     // ── Create ───────────────────────────────────────────────
     const period = await Period.create({
@@ -227,6 +258,7 @@ exports.create = async (req, res) => {
       endTime,
       sortOrder,
       isBreak:    !!isBreak,
+      ...(state.fields.isActive !== undefined ? { isActive: state.fields.isActive } : {}),
       assignedBy: req.user?.id || null,
     });
 
@@ -260,8 +292,12 @@ exports.update = async (req, res) => {
       });
     }
 
-    const newStart = startTime || existing.startTime;
-    const newEnd   = endTime   || existing.endTime;
+    const state = readStateFields(req.body);
+    if (state.error) return res.status(400).json({ success: false, message: state.error });
+
+    const newStart  = startTime || existing.startTime;
+    const newEnd    = endTime   || existing.endTime;
+    const newActive = state.fields.isActive ?? existing.isActive;
 
     // ── Validate time format ─────────────────────────────────
     if (!isValidTime(newStart) || !isValidTime(newEnd)) {
@@ -280,7 +316,10 @@ exports.update = async (req, res) => {
     }
 
     // ── Check overlap (excluding self) ───────────────────────
-    const overlap = await checkOverlap(existing.schoolId, newStart, newEnd, id);
+    // Only a period that will be on the day can clash with one.
+    const overlap = newActive === false
+      ? null
+      : await checkOverlap(existing.schoolId, newStart, newEnd, id);
     if (overlap) {
       return res.status(409).json({
         success: false,
@@ -295,6 +334,7 @@ exports.update = async (req, res) => {
         startTime: newStart,
         endTime:   newEnd,
         isBreak:   isBreak !== undefined ? !!isBreak : existing.isBreak,
+        ...state.fields,
         version:   existing.version + 1,
       },
       { returnDocument: 'after' }

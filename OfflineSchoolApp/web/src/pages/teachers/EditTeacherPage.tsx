@@ -9,6 +9,7 @@ import { useToast }       from "@/components/ui/Toast";
 import axios               from "axios";
 import NeedsInternet       from "@/components/offline/NeedsInternet";
 import { useNeedsInternet } from "@/hooks/useNeedsInternet";
+import { createIds }       from "@/lib/clientId";
 import { STAFF_NO_MAX, normaliseStaffNoInput, staffNoErrorKey } from "@/utils/staffNo";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,
@@ -117,6 +118,12 @@ export default function EditTeacherPage() {
   // Editing a teacher is online-only on the desktop (desktop coverage.js:
   // PUT /admin/teachers/:id), the staff number included.
   const net                   = useNeedsInternet();
+
+  // The id each new assignment is created under: kept while the same subject
+  // is retried, renewed once it is shown assigned (lib/clientId.ts). It is what
+  // lets the desktop assign a subject with no connection — and assignments are
+  // NOT online-only, unlike the profile above.
+  const assignIds = useRef(createIds());
 
   const isMounted = useRef(true);
   useEffect(() => {
@@ -388,13 +395,14 @@ export default function EditTeacherPage() {
       setAssigned((p) => [...p, optimistic]);
       setAvailable((p) => p.filter((s) => (s.subjectId || s.id) !== sid));
 
+      const attempt = {
+        teacherId,
+        subjectId: sid,
+        classId:   subject.classId,
+        schoolId,
+      };
       try {
-        await api.post("/admin/assignments", {
-          teacherId,
-          subjectId: sid,
-          classId:   subject.classId,
-          schoolId,
-        });
+        await api.post("/admin/assignments", { ...attempt, id: assignIds.current.forAttempt(attempt) });
 
         // Refresh both lists for server-confirmed data
         const [assignedRes, availableRes] = await Promise.all([
@@ -423,6 +431,10 @@ export default function EditTeacherPage() {
           );
 
         setAssigned(normAssigned);
+        // Renewed only here, once the assignment is on screen: if the refresh
+        // fails the row rolls back, and a retry must be answered with the
+        // assignment already made, not refused as a second one.
+        assignIds.current.created(attempt);
 
         const rawSubjects: RawSubjectRow[] =
           availableRes.data?.subjects ??

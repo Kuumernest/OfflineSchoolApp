@@ -2,10 +2,14 @@
 "use strict";
 
 import api from "@/services/api";
+import { withClientId } from "@/lib/clientId";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CreateSubjectPayload {
+  /** The id to create it under, kept across retries (lib/clientId.ts). One is
+   *  supplied when absent: the desktop answers the create offline only with it. */
+  id?:          string;
   name:         string;
   code?:        string;
   classId:      string;
@@ -102,7 +106,7 @@ export const createSubject = async (
 ): Promise<Subject> => {
   const { data } = await api.post<SubjectSingleEnvelope | Subject>(
     "/admin/subjects",
-    payload
+    withClientId(payload)
   );
   return unwrapSingle(data);
 };

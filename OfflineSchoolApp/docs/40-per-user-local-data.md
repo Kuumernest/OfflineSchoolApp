@@ -430,8 +430,64 @@ It **does** see the legacy dirty rows that were placed, because they stay dirty 
 
 Mitigation: the switch is per school, controlled by the owner and off by default. Do not ship a downgrade to a school that has it on.
 
+#### 8.9.1 Enforced: the build check
+
+The rule above is now enforced by the server and by the phone.
+
+**The phone says which build it is.** Every request carries three headers (`mobile/src/config/appBuild.js`):
+
+| Header | Value |
+|---|---|
+| `X-App-Platform` | `android` or `ios` |
+| `X-App-Version` | `expo.version` from `app.json`, for logs only |
+| `X-App-Data-Format` | `LOCAL_DATA_FORMAT`: `0` = the shared file only, `1` = per-user local data (this section) |
+
+The axios instance sets them in its request interceptor. The raw calls that bypass it also set them: api.js's `axios.post` refresh, and the auth store's `fetch` sign-in and refresh.
+
+**The server's policy** (`backend/src/services/appVersionPolicy.service.js`):
+- `MIN_MOBILE_DATA_FORMAT_PER_USER = 1`.
+- A phone is a request with `X-App-Platform` `android`/`ios`. A build from before this check sends no headers. It is recognised by its native User-Agent (`okhttp/` on Android, `CFNetwork/` or `Darwin/` on iOS) and counts as format `0`.
+- **Switch on, phone below the minimum:** the server answers `426` with `{ code: "APP_UPDATE_REQUIRED", message, minDataFormat }`. This happens at:
+  - `/auth/login`, after the password check;
+  - both `/auth/refresh` modes;
+  - every `/api/sync/*` request;
+  - every write (`POST`/`PUT`/`PATCH`/`DELETE`) under `/api`, mounted with the idempotency middleware in `server.js`.
+
+  Old builds can still read outside `/sync`.
+- **Switch off:** the server never refuses on version. An outdated phone gets an `X-App-Update-Recommended: 1` header and nothing else.
+- **Never refused:** web, desktop, scripts (no phone headers, no phone User-Agent) and super_admin (no school switch).
+- **Cost:** a current client costs nothing. Only an outdated phone costs a school read.
+
+The super-admin switch API is unchanged. Sign-ins are not recorded per build, so it cannot say how many old phones a school still has.
+
+**The phone, on a 426:**
+- `auth.store` raises `updateRequired` (reason `"server"`) and the sync engine is stopped.
+- `app/_layout.js` shows `UpdateRequired` (en/fr) instead of any screen.
+- api.js sends nothing more. A refused request is answered as "not sent" (no `response`), so outbox rows stay pending without spending their retry budget.
+- Nothing is signed out or deleted. "Check again" clears the state, for a school whose switch was turned off.
+
+**The downgrade guard on the phone:**
+- `device.db` is stamped `meta.data_format = LOCAL_DATA_FORMAT`. The stamp is raised, never lowered.
+- At start, `initAuth` reads the stamp before restoring any session (read only, offline).
+- If the stamp is higher than this build understands, the app shows the same screen (reason `"local-data-format"`, no "Check again") and stops there:
+  - no session is restored;
+  - `openDeviceDb` refuses (`LOCAL_DATA_FORMAT_TOO_NEW`) before writing;
+  - no per-user store is opened;
+  - sign-in is refused locally;
+  - nothing is sent.
+
+  This protects against a sideloaded older build, offline. It works only from this build on: builds older than this one never read the stamp. Against those builds, the server check above is the protection.
+
+**Releasing a build:**
+- Raise `LOCAL_DATA_FORMAT` only when the files on the phone change in a way an older build would misread.
+- After the new build is out, raise `MIN_MOBILE_DATA_FORMAT_PER_USER` to match, if older builds must no longer sync into switched-on schools.
+- Raise `expo.version` in `app.json` as usual. Only the data format is compared.
+- Before turning a school's switch on, its phones must run a build with `X-App-Data-Format` ≥ 1. Phones that do not are refused until they are updated.
+
 ### 8.10 Checks
 
 - `mobile/scripts/check-peruser-migration.js`: database files on disk, the real modules and the real auth store. Ten sections, including a kill after each of the 33 journal and row steps.
 - `mobile/scripts/check-peruser-e2e.js`: the real backend, with real sign-in and sync.
 - `backend/scripts/check-offline-switch.js`.
+- `backend/scripts/check-app-version-policy.js`: the build check (§8.9.1).
+- `mobile/scripts/check-app-update-required.js`: the build headers, 426 handling and the downgrade guard.

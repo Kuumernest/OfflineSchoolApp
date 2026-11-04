@@ -238,6 +238,32 @@ MIGRATIONS.push({
   `,
 });
 
-const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
+MIGRATIONS.push({
+  version: 5,
+  name:    "a pending row remembers the server's version under it",
+  /**
+   * Discarding a refused EDIT used to delete the row. For a record that
+   * already existed that is wrong twice over: the record vanishes from every
+   * screen, and the pull never brings it back, because the cursor is already
+   * past the server's copy. Only a refused CREATE should leave nothing behind.
+   *
+   * So when a row goes pending, the version it replaced is kept beside it:
+   *
+   *   base_state NULL  unknown — a row written pending before this migration
+   *              0     there was no server copy: a local create
+   *              1     base_json is the last version the server confirmed
+   *
+   * A discard puts base_json back (or removes a create). A write the server
+   * accepts while a later one for the same row is still queued updates
+   * base_json to the server's answer, so the version restored is the newest
+   * the server holds, not the one from before the first edit.
+   */
+  up: `
+    ALTER TABLE docs ADD COLUMN base_json TEXT;
+    ALTER TABLE docs ADD COLUMN base_state INTEGER;
+  `,
+});
+
+const SCHEMA_VERSION =MIGRATIONS[MIGRATIONS.length - 1].version;
 
 module.exports = { PRAGMAS, MIGRATIONS, SCHEMA_VERSION };

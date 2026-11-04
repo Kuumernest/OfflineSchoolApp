@@ -99,8 +99,9 @@ const check = (label, actual, expected) => {
     let phone = null;
     http.interceptors.request.use(async (cfg) => {
       // Case 5b holds the phone's pull in flight while the teacher is deleted.
+      // The phone pulls through /sync/changes now (/sync/pull for older servers).
       const hold = globalThis.__holdPull;
-      if (hold && !hold.held && /\/sync\/pull/.test(cfg.url || "")) { hold.held = true; hold.onStart(); await hold.gate; }
+      if (hold && !hold.held && /\/sync\/(pull|changes)/.test(cfg.url || "")) { hold.held = true; hold.onStart(); await hold.gate; }
       if (!phone.net.connected) { const e = new Error("Network Error"); e.code = "ERR_NETWORK"; e.isOffline = true; throw e; }
       cfg.headers.Authorization = `Bearer ${phone.useAuthStore.getState().token}`;
       // A request that times out before it reaches the server: the phone

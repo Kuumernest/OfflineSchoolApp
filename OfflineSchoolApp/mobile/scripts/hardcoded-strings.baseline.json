@@ -196,26 +196,6 @@
   "text": "• ${stats.unassigned} unassigned"
  },
  {
-  "file": "app/admin/sync-overwrites/[id].js",
-  "text": "this record"
- },
- {
-  "file": "app/admin/sync-overwrites/[id].js",
-  "text": "'s edit"
- },
- {
-  "file": "app/admin/sync-overwrites/[id].js",
-  "text": "Changes ("
- },
- {
-  "file": "app/admin/sync-overwrites/index.js",
-  "text": "Unnamed ${item.entity_type}"
- },
- {
-  "file": "app/admin/sync-overwrites/index.js",
-  "text": "'s edit replaced yours from"
- },
- {
   "file": "app/admin/teachers/add.js",
   "text": "📧 Email"
  },

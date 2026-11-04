@@ -85,9 +85,31 @@ module.exports = [
       if (!session?.permissions?.includes("classes.manage")) return null;
       const name = body?.name ? String(body.name).trim() : "";
       if (!name) return null;
+      // No id: the server would mint one, and a row stored here under a guess
+      // is an orphan. The web sends one (web/src/lib/clientId.ts).
       if (!body?.id) return null;
       const id = String(body.id).trim();
-      if (docs.get("class", id)) return null;
+      if (!id) return null;
+      const dedupeKey = `create:class:${id}`;
+
+      // The same create sent again under its id — a retry whose answer was
+      // lost. The server answers that with the row it holds (deduplicated), so
+      // this does too, and the dedupeKey keeps it to one queued request. An id
+      // held by another school's row is the server's 409, not a row.
+      const held = docs.get("class", id);
+      if (held) {
+        if (String(held.schoolId ?? "") !== String(schoolId)) return null;
+        const { _pending, ...already } = held;
+        return {
+          collection: "class",
+          doc:        already,
+          request: { method: "POST", path: "/api/admin/classes", body, dedupeKey },
+          response: {
+            status: 200,
+            data: { success: true, class: already, serverId: id, clientId: id, deduplicated: true },
+          },
+        };
+      }
       // Any class not deleted holds its name, compared without case, as the
       // server's unique index does (../names.js): the server's 409 is its own.
       if (require("../names").classNameTaken(docs, schoolId, name)) return null;
@@ -130,7 +152,7 @@ module.exports = [
       return {
         collection: "class",
         doc:        cls,
-        request: { method: "POST", path: "/api/admin/classes", body },
+        request: { method: "POST", path: "/api/admin/classes", body, dedupeKey },
         // serverId equals clientId now that the endpoint takes the id it is
         // given — which is what made queueing this create possible at all.
         response: {

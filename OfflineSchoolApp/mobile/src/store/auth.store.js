@@ -4,6 +4,7 @@ import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
 import { appError }     from "../utils/appError";
+import { appBuildHeaders, isUpdateRequiredAnswer } from "../config/appBuild";
 
 // ── Safe imports ───────────────────────────────────────────────────────────
 let NetInfo = null;
@@ -165,6 +166,21 @@ async function resolveLocalData(user) {
   catch (err) { console.warn("[auth] local data:", err?.message); }
 }
 
+/**
+ * Was this phone's local data written by a newer build (docs/40 §8.9)? Read
+ * only, offline. An error answers "fine": the guard must never be what stops
+ * a phone that has no device.db at all.
+ */
+async function localDataFormatOk() {
+  try {
+    const { checkLocalDataFormat } = require("../db/deviceDb");
+    return (await checkLocalDataFormat()).ok !== false;
+  } catch (err) {
+    console.warn("[auth] could not check the local data format:", err?.message);
+    return true;
+  }
+}
+
 /** Would this sign-in need the first full sync of a new per-user store? */
 async function needsPreparing(user, online) {
   try { return !!(await localData()?.needsPriming(user, { online })); }
@@ -253,6 +269,13 @@ export const useAuthStore = create((set, get) => ({
   // the layout shows a progress screen instead of any data screen, so nobody
   // reads a half-filled store. "idle" otherwise — always, with the switch off.
   localDataPhase:    "idle",
+  // This build may not go on (app/_layout.js shows UpdateRequired instead of
+  // any screen, and nothing is sent): "server" — the server answered 426
+  // APP_UPDATE_REQUIRED; "local-data-format" — this phone's data was written
+  // by a newer build. Nothing is deleted or signed out: the session, the
+  // local data and the outbox stay exactly as they are for the updated app.
+  updateRequired:       false,
+  updateRequiredReason: null,
 
   /**
    * First full sync of this account's own store, behind the preparing screen.
@@ -275,6 +298,23 @@ export const useAuthStore = create((set, get) => ({
   },
 
   setProfileCompleted: (val) => set({ profileCompleted: val }),
+
+  markUpdateRequired: (reason = "server") => {
+    if (get().updateRequired && get().updateRequiredReason === reason) return;
+    // A newer build's data outranks a server answer: it cannot be retried away.
+    if (get().updateRequiredReason === "local-data-format") return;
+    console.log(`⛔ App update required (${reason}) — local data and queued work kept`);
+    try {
+      const { SyncManager } = require("../services/syncManager");
+      SyncManager.destroy();   // stops timers only; nothing is cleared
+    } catch { /* not started */ }
+    set({ updateRequired: true, updateRequiredReason: reason });
+  },
+  /** "Check again" after a server refusal. A newer build's data is not retried. */
+  clearUpdateRequired: () => {
+    if (!get().updateRequired || get().updateRequiredReason !== "server") return;
+    set({ updateRequired: false, updateRequiredReason: null });
+  },
 
   markNeedsSignIn: (reason = null) => {
     if (!get().user) return;
@@ -342,6 +382,16 @@ export const useAuthStore = create((set, get) => ({
     // Mark loading synchronously before any await so concurrent callers
     // hit the isLoading guard above instead of starting a second read.
     set({ isLoading: true });
+
+    // Before anything is read for an account: data written by a newer build
+    // is not opened, changed or sent by this one. The session stays stored.
+    if (!(await localDataFormatOk())) {
+      set({
+        user: null, token: null, hydrated: true, hasInitialized: true, isLoading: false,
+        error: null, updateRequired: true, updateRequiredReason: "local-data-format",
+      });
+      return false;
+    }
 
     try {
       const [token, userJson, storedRefresh, schoolJson] = await Promise.all([
@@ -421,6 +471,7 @@ export const useAuthStore = create((set, get) => ({
   // ── LOGIN ─────────────────────────────────────────────────────────────────
   login: async (payloadOrIdentifier, legacyPassword) => {
     if (get().isLoading) return false;
+    if (get().updateRequiredReason === "local-data-format") return false;
 
     // Mark loading synchronously before any await
     set({ isLoading: true, error: null, errorKey: null });
@@ -477,11 +528,15 @@ export const useAuthStore = create((set, get) => ({
       if (isOnline) {
         const res = await fetch(`${API_URL}/auth/login`, {
           method:  "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...appBuildHeaders() },
           body:    JSON.stringify(requestBody),
         });
 
         const data = await res.json().catch(() => ({}));
+        if (isUpdateRequiredAnswer(res.status, data)) {
+          get().markUpdateRequired("server");
+          throw appError("svcErr.appUpdateRequired", "Update the app to keep syncing.");
+        }
         if (!res.ok) {
           throw data.message
             ? new Error(data.message)
@@ -723,9 +778,14 @@ export const useAuthStore = create((set, get) => ({
       if (!currentRefreshToken) return false;
       const res = await fetch(`${API_URL}/auth/refresh`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...appBuildHeaders() },
         body:    JSON.stringify({ refreshToken: currentRefreshToken }),
       });
+      if (res.status === 426) {
+        const body = await res.json().catch(() => ({}));
+        if (isUpdateRequiredAnswer(res.status, body)) get().markUpdateRequired("server");
+        return false;
+      }
       if (res.status === 401 || res.status === 403) {
         // A definitive refusal — but never a silent logout: queued work is
         // kept and the person is asked to sign in again.

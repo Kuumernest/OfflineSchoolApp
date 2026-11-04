@@ -15,6 +15,7 @@
 import api from "@/lib/axios";
 import { unwrapList, unwrapSingle } from "@/utils/unwrap";
 import { API } from "@/services/apiEndpoints";
+import { withClientId } from "@/lib/clientId";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -55,6 +56,10 @@ export interface Assignment {
 }
 
 export interface CreateAssignmentPayload {
+  /** The id to create it under, kept across retries (lib/clientId.ts). One is
+   *  supplied when absent: the desktop answers the create offline only with it.
+   *  The bulk create takes none — the server mints those ids. */
+  id?:       string;
   teacherId: string;
   classId:   string;
   subjectId: string;
@@ -179,7 +184,7 @@ export async function fetchAssignmentsByClass(
 export async function createAssignment(
   payload: CreateAssignmentPayload,
 ): Promise<Assignment> {
-  const { data } = await api.post(API.admin.assignments.list, payload);
+  const { data } = await api.post(API.admin.assignments.list, withClientId(payload));
   return normalise(unwrapSingle<Record<string, unknown>>(data, "assignment"));
 }
 

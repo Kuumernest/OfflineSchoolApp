@@ -196,8 +196,10 @@ const main = () => {
   // more than one row — publishing an exam marks every result summary with it.
   // Empty here, because this request wrote one row, but present: the caller
   // iterates it, and a missing key and an empty array are different to read.
+  // method too: a POST whose server version was never kept is a create (see
+  // ownOutboxActions.discard).
   check("it says which document to forget",
-    discarded, { collection: "feePayment", docId: "pay-1", extraDocs: [] });
+    discarded, { method: "POST", collection: "feePayment", docId: "pay-1", extraDocs: [] });
   check("and the queue drains past it", q.nextBatch().map((r) => r.path),
     ["/api/fees/penalties"]);
 

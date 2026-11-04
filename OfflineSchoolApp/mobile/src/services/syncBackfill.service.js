@@ -36,6 +36,7 @@ import { getCurrentAuth, hasRole } from "../utils/authHelpers";
 import { canonicalDay, VALID_DAYS } from "../utils/timetableMappers";
 import { isServerGeneratedId } from "../utils/idHelpers";
 import { CREDENTIAL_ROW, credentialRowIds, repairCredentialRows } from "../db/credentialCache";
+import { repairPupilSyncFlags } from "../db/pupilSync";
 
 const isAdmin   = () => hasRole(["super_admin", "school_admin", "admin"]);
 const isTeacher = () => hasRole("teacher");
@@ -295,6 +296,7 @@ const SPECS = [
       code:     row.code || "",
       classId:  row.class_id || row.classId || null,
       schoolId: row.schoolId || row.school_id || schoolId,
+      ...(Number(row.coefficient) > 0 ? { coefficient: Number(row.coefficient) } : {}),
     }),
     skip: (row) => !(row.class_id || row.classId),
   },
@@ -347,7 +349,11 @@ const SPECS = [
     method: "POST",
     reconcile: "assignment",
     resolve: ["teacherId", "classId", "subjectId"],
+    // The device's id goes with it: POST /admin/teacher-assignments keeps it
+    // and answers a repeat with the row it already made, so a retry after a
+    // lost answer is a replay, not a second assignment.
     payload: (row, { schoolId }) => ({
+      id:        row.id,
       teacherId: row.teacherId || row.teacher_id,
       classId:   row.classId   || row.class_id,
       subjectId: row.subjectId || row.subject_id,
@@ -665,16 +671,18 @@ const SPECS = [
     // The reconciler owns the flag here because it must also write back the
     // enrolment number the server minted.
     noLocalFlag: true,
-    // `_operation = 'create'` rows belong to the spec above. Without this
-    // guard a locally-enrolled student (status 'approved', unsynced) would be
-    // PUT to /admin/students/<id>/approve — an id the server has never
-    // seen — and fail forever.
+    // Only a decision made ON THIS PHONE: `_local_decision` is written by the
+    // applications screen when it approves or rejects offline (db/pupilSync).
+    // Status alone said nothing — every pulled pupil is 'approved', and with
+    // a stray dirty flag each one was PUT to /approve on every admin sync.
+    // `_operation = 'create'` rows belong to the spec above: a pupil enrolled
+    // here has no application on the server to decide.
     where:
-      `${IS_DIRTY} AND status IN ('approved', 'rejected') ` +
+      `${IS_DIRTY} AND _local_decision IN ('approved', 'rejected') ` +
       `AND (_operation IS NULL OR _operation != 'create')`,
     method: "PUT",
     endpoint: (row) =>
-      row.status === "approved"
+      row._local_decision === "approved"
         ? API.admin.students.approve(row.id)
         : API.admin.students.reject(row.id),
     reconcile: "studentDecision",
@@ -682,11 +690,14 @@ const SPECS = [
       classId: row.class_id || row.classId || null,
       reason:  row.rejection_reason || row.reject_reason || null,
       __endpoints:
-        row.status === "approved"
+        row._local_decision === "approved"
           ? API.admin.students.approveFallbackChain(row.id)
           : API.admin.students.rejectFallbackChain(row.id),
     }),
-    skip: (row) => row.status === "approved" && !(row.class_id || row.classId),
+    // The server refuses an approval without a class (400 "classId is
+    // required"). The offline approve cannot be made without one, so this
+    // only holds a row whose class was lost since; it goes once it has one.
+    skip: (row) => row._local_decision === "approved" && !(row.class_id || row.classId),
   },
 
   {
@@ -777,6 +788,28 @@ const serverIdFrom = (response, ...paths) => {
 };
 
 let _registered = false;
+
+/**
+ * A period still dirty after its send settled was edited while the send was
+ * in flight. The server now holds what it answered with, so that becomes the
+ * copy a discard of the later edit goes back to (periods.service
+ * discardLocal). No answer body: the copy is dropped and a discard asks for a
+ * full pull instead. Its own statement — an older table without the column
+ * must not undo the settle.
+ */
+const keepSentPeriodImage = async (db, id, doc) => {
+  const image = doc && typeof doc === "object" && doc.name
+    ? JSON.stringify({
+        name: doc.name, starttime: doc.startTime, endtime: doc.endTime,
+        sortorder: doc.sortOrder ?? 0, isbreak: doc.isBreak ? 1 : 0,
+        isactive: doc.isActive !== false ? 1 : 0, version: doc.version ?? 1,
+        updated_at: doc.updatedAt ?? null,
+      })
+    : null;
+  await db.runAsync(
+    "UPDATE periods SET server_image = ? WHERE id = ? AND dirty = 1", [image, id]
+  ).catch(() => {});
+};
 
 export const registerReconcilers = () => {
   if (_registered) return;
@@ -915,10 +948,12 @@ export const registerReconcilers = () => {
       // Slots placed in this period while it only had the local id.
       await db.runAsync("UPDATE timetable SET period_id = ? WHERE period_id = ?", [serverId, localId]).catch(() => {});
       await db.runAsync("UPDATE timetable_slots SET periodId = ? WHERE periodId = ?", [serverId, localId]).catch(() => {});
+      await keepSentPeriodImage(db, serverId, created);
       return;
     }
 
     await db.runAsync(`UPDATE periods SET ${settle} WHERE id = ?`, [...settleParams, localId]).catch(() => {});
+    await keepSentPeriodImage(db, localId, created);
   });
 
   registerReconciler("periodDelete", async ({ args }) => {
@@ -927,6 +962,15 @@ export const registerReconcilers = () => {
       "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [args.localId]
     ).catch(() => {});
   });
+
+  // A discarded period change is undone from the server's copy the period
+  // row keeps (periods.service discardLocal). Lazily required, as the queue
+  // and the periods service both are from here.
+  require("./mutationQueue.service").registerDiscardHandler(
+    "periods",
+    async ({ localId }) => require("./periods.service").PeriodsService.discardLocal(localId),
+    { kinds: ["period", "periodDelete"] }
+  );
 
   registerReconciler("timetable", async ({ response, args }) => {
     const db = await getDatabase();
@@ -1212,6 +1256,11 @@ export const registerReconcilers = () => {
     );
   });
 
+  // Suspend / restore / move / delete / correct, queued by student.service.
+  try { require("./student.service").registerStudentReconcilers?.(); } catch (err) {
+    console.warn("[backfill] student change handlers unavailable:", err?.message);
+  }
+
   registerReconciler("studentDecision", async ({ response, args }) => {
     const db = await getDatabase();
     const ts = new Date().toISOString();
@@ -1224,8 +1273,10 @@ export const registerReconcilers = () => {
       response?.data?.student?.enrollmentNo ||
       null;
 
+    // The decision is the server's now: the marker goes with the flag, so it
+    // is never sent again.
     await db.runAsync(
-      `UPDATE students SET _synced = 1, updated_at = ? WHERE id = ?`,
+      `UPDATE students SET _synced = 1, _local_decision = NULL, updated_at = ? WHERE id = ?`,
       [ts, args.localId]
     ).catch(() => {});
 
@@ -1662,6 +1713,9 @@ export const backfillOutbox = async () => {
 
   await repairCredentialCache(db).catch((err) => console.warn("[backfill] credential rows:", err?.message));
   await repairTeacherEditCreates(db).catch((err) => console.warn("[backfill] teacher edits:", err?.message));
+  // Before the specs read students._synced: pulled pupils the old pull left
+  // "unsent" are settled, so the decision sweep never sees them.
+  await repairPupilSyncFlags(db).catch((err) => console.warn("[backfill] pupil flags:", err?.message));
 
   const adopted = await adoptQueuedContentDeletes(db).catch(() => 0);
   if (adopted) { byKey["content-delete"] = adopted; total += adopted; }

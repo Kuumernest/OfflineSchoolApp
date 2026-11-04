@@ -1,10 +1,11 @@
 # 11 — Conflict Resolution
 
-*Documented commit `be2d2ac`.*
+*Documented commit `fc8cf6d`.*
 
 ## The actual strategy
 
-**Last-write-wins, with an audit trail wherever the losing write mattered.**
+**Last-write-wins by arrival at the server (owner decision), with an audit trail
+wherever the losing write mattered.**
 
 Not optimistic locking, not CRDTs, not merge dialogs. That is a deliberate trade
 for a school: two people editing the same record in the same minute is rare, and
@@ -23,16 +24,17 @@ this commit. Money never used last-write-wins at all.
 
 | Record type | Conflict strategy | Audit history | Recoverable |
 |---|---|---|---|
-| **Exam marks** (`StudentScore`) | Last-write-wins on a derived `_id` | `ResultChangeLog` — old and new value, actor, reason | **Yes** |
-| **Result summaries** | Last-write-wins; refused while locked without a reason | `ResultChangeLog` incl. `locked`/`unlocked` | **Yes** |
+| **Exam marks** (`StudentScore`) | Last-write-wins on the `(exam, student, subject)` row | `ResultChangeLog` — old and new value, actor, reason | **Yes** |
+| **Result summaries** | Last-write-wins; refused while locked without a reason. Rows a re-run drops are hard-deleted with a tombstone | `ResultChangeLog` incl. `locked`/`unlocked` | **Yes** |
 | **Student attendance** | Last-write-wins on a derived `_id` | `AttendanceChangeLog` | **Yes** (since `be2d2ac`) |
 | **Teacher attendance** | Last-write-wins on a derived `_id` | **none** | **No** — `PARTIALLY IMPLEMENTED` |
-| **Student records** | Last-write-wins, with `baseUpdatedAt` detection | `SyncOverwrite` incl. a full snapshot of the losing version | **Yes** |
+| **Student records** | Last-write-wins, with `baseUpdatedAt` detection | `SyncOverwrite` incl. a snapshot of the losing version, delivered to the loser | **Yes** |
 | **Fee payments** | **Append-only.** Never edited. | The ledger itself; reversals are paired rows | **Yes** |
 | **Salary payments** | Append-only, unique per `(school, user, month, run)` | payslip records | **Yes** |
 | **Expenses** | Append-only | the ledger | **Yes** |
-| **Classes, subjects, timetable** | Last-write-wins | none | **No** |
-| **Announcements, homework** | Last-write-wins | none | **No** |
+| **Classes, subjects, timetable** | Last-write-wins; periods take `isActive`/`sortOrder` as absolute values | none | **No** |
+| **Announcements** | Last-write-wins | none | **No** |
+| **Homework** | Last-write-wins, except an `If-Match` version that no longer matches → `412 VERSION_CONFLICT` | none | **No** |
 
 ---
 
@@ -40,9 +42,12 @@ this commit. Money never used last-write-wins at all.
 
 ### The mechanism
 
-`StudentScore._id` is derived from `(examId, studentId, subjectId)`, which is also
-its unique index. A re-mark therefore **updates in place**, and a replayed sync
-upserts the same document rather than inserting a second.
+`(examId, studentId, subjectId)` is `StudentScore`'s unique index
+(`StudentScore.js:78`). A write looks the row up by that triple and **updates it
+in place**; only when none exists is a row created, under a fresh `uuidv4` `_id`
+(the model default) — a client-supplied id is never claimed
+(`results.controller.js:1515`). A replay therefore updates the same row rather
+than inserting a second.
 
 ### The audit trail
 
@@ -160,19 +165,65 @@ A client sends `baseUpdatedAt` — the `updatedAt` it last saw. On the server,
 2. `student.updatedAt <= baseline` → nobody else changed it, do nothing;
 3. the previous editor **is the same person** → do nothing (you may overwrite
    yourself);
-4. otherwise → write a `SyncOverwrite` carrying a **full snapshot** of the
-   version being replaced.
+4. otherwise → write a `SyncOverwrite` carrying a snapshot of the version being
+   replaced — taken **before** the change is applied (the edit route used to
+   assign first, so the "lost" version held the winner's).
 
 **The write still proceeds.** This is detection and audit, not a rejection —
 last-write-wins is preserved.
 
-`SyncOverwrite` carries who won, who lost, the action (`suspend`, `move`,
-`delete`), `lostVersion` (the snapshot), and `seenByLoser` / `seenAt` /
-`dismissedAt` so the loser can be shown what happened. The mobile app has screens
-for this at `app/admin/sync-overwrites/`.
+`SyncOverwrite` carries who won, who lost (`lostEditBy` = the author of the
+replaced version), the action, `lostVersion` (the snapshot), and `seenByLoser` /
+`seenAt`.
 
-**`SyncOverwrite` is excluded from the device feed** because it is an instruction
-*to* one specific device, consumed by the mobile sync engine — not shared data.
+### Delivered to the loser
+
+`backend/src/routes/syncOverwrites.routes.js`, under `/api/sync/overwrites`:
+
+| Route | |
+|---|---|
+| `GET /mine` (`?unseen=1`) | the caller's own overwritten edits, with `unseenCount` |
+| `POST /:id/seen`, `POST /seen-all` | the loser's alone — another's id is a 404 |
+| `GET /` | the school view — `students.manage` |
+
+The snapshot follows the permission to read the student: `students.viewFull` →
+the whole record; `students.view` → the roster projection; neither → no
+snapshot, only who, what and when. Shown in the web bell
+(`web/src/services/notification.service.ts`) and on mobile at
+`app/admin/sync-overwrites/`. It is not in the desktop feed (`syncFeed.js`
+EXCLUDED).
+
+**Known limitation:** some writes bump `Student.updatedAt` without setting
+`updatedBy`. A later edit from a stale baseline then raises an overwrite against
+the previous named editor — a possible false alarm. Nothing leaks: the snapshot
+is still gated as above.
+
+---
+
+## Client-side protection of unsent changes
+
+- **Mobile:** a pull never overwrites a class, teacher or subject row with an
+  unsent change. Discarding a refused change reverts the row; periods restore
+  from the `server_image` pre-image (`mobile/src/services/periods.service.js`).
+  `409 IDEMPOTENCY_IN_PROGRESS` is transient and never parks an entry
+  (`mutationQueue.service.js:453`).
+- **Desktop:** a row with a queued write is held from the pull and the
+  tombstones until its **last** queued write settles; a discard restores the
+  server's version from `docs.base_json` (migration 5) or removes a local
+  create. See [08](08-desktop.md).
+
+## Replays and deletions
+
+- **Idempotency keys** are kept **45 days** (`IdempotencyKey.js:21`).
+- **Teacher create:** a body carrying an id that already names an account is a
+  **replay** — answered as such, never a restore or a second account
+  (`admin.routes.js:1163`).
+- **Results, enrolments, promotions** are **hard-deleted with a tombstone**
+  (`syncTombstones` plugin) rather than soft-deleted, so mirrors remove their
+  copy and a deleted id cannot be recreated. The results' unique indexes
+  (`ResultSummary`, `TermResult`, `AnnualResult`) are not partial on
+  `deletedAt`, so a soft-deleted row would block its replacement. Unpublishing
+  a result also writes an `"unpublished"` tombstone for non-admin mirrors.
 
 ---
 
@@ -240,7 +291,7 @@ flowchart TD
     AC -->|yes| AY["AttendanceChangeLog: previous → new, both actors"]
 
     T -->|"Student record"| P{"baseUpdatedAt < server updatedAt<br/>AND a different editor?"}
-    P -->|yes| PO["Apply anyway · SyncOverwrite with a full snapshot"]
+    P -->|yes| PO["Snapshot, then apply · SyncOverwrite to the loser"]
     P -->|no| PA["Apply"]
 
     T -->|"Everything else"| E["Apply. Last write wins. No trace."]
@@ -263,5 +314,5 @@ flowchart TD
 | Item | Classification |
 |---|---|
 | Teacher attendance has no change log | **PARTIALLY IMPLEMENTED** — the student path writes one, the near-identical staff path does not. |
-| Classes, subjects, timetable, announcements, homework | **NO AUDIT TRAIL.** Last-write-wins with no trace. Acceptable for configuration; worth knowing before treating any of them as a record of fact. |
+| Classes, subjects, timetable, announcements, homework | **NO AUDIT TRAIL** (homework has `If-Match`). Last-write-wins with no trace. Acceptable for configuration; worth knowing before treating any of them as a record of fact. |
 | Results published before the lock check existed | **NOT REMEDIATED** — a data task, not a code one. See [19](19-known-limitations.md). |

@@ -64,6 +64,11 @@ promotionRunSchema.index(
   }
 );
 
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). A draft run is discarded outright (promotion.routes DELETE /runs/:runId).
+promotionRunSchema.plugin(require("../plugins/syncTombstones"), { entity: "promotionRun" });
+
 module.exports =
   mongoose.models.PromotionRun ||
   mongoose.model("PromotionRun", promotionRunSchema);

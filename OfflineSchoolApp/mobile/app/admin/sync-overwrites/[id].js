@@ -169,6 +169,9 @@ export default function OverwriteDetailScreen() {
 
   const action = getActionConfig(overwrite.new_action);
   const diffs  = buildDiff(overwrite.lost_version, currentVersion);
+  // "lost": your edit was replaced. "won": you replaced someone else's — the
+  // replaced version is theirs, not yours.
+  const isMine = overwrite.side === "lost";
 
   // ── Render ───────────────────────────────────────────
 
@@ -204,7 +207,8 @@ export default function OverwriteDetailScreen() {
               </Text>
               {" "}
               <Text style={{ color: "#6B7280" }}>{(action.raw || t(action.labelKey)).toLowerCase()}</Text>
-              {" this record"}
+              {" "}
+              {t("syncScreens.thisRecord")}
             </Text>
             <Text style={styles.summaryTime}>
               {formatDateTime(overwrite.overwritten_at)}
@@ -219,7 +223,11 @@ export default function OverwriteDetailScreen() {
           <View style={styles.timelineRow}>
             <View style={styles.timelineDotMine} />
             <View style={styles.timelineContent}>
-              <Text style={styles.timelineLabel}>{t("syncScreens.yourEdit")}</Text>
+              <Text style={styles.timelineLabel}>
+                {isMine
+                  ? t("syncScreens.yourEdit")
+                  : t("syncScreens.editOf", { name: overwrite.lost_edit_by_name || t("syncScreens.anotherAdmin") })}
+              </Text>
               <Text style={styles.timelineTime}>
                 {formatDateTime(overwrite.lost_edit_at)}
               </Text>
@@ -232,7 +240,9 @@ export default function OverwriteDetailScreen() {
             <View style={styles.timelineDotTheirs} />
             <View style={styles.timelineContent}>
               <Text style={styles.timelineLabel}>
-                {overwrite.overwritten_by_name || t("syncScreens.anotherAdmin")}'s edit
+                {isMine
+                  ? t("syncScreens.editOf", { name: overwrite.overwritten_by_name || t("syncScreens.anotherAdmin") })
+                  : t("syncScreens.yourEdit")}
               </Text>
               <Text style={styles.timelineTime}>
                 {formatDateTime(overwrite.overwritten_at)}
@@ -245,7 +255,7 @@ export default function OverwriteDetailScreen() {
         {diffs.length > 0 ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>
-              Changes ({diffs.filter((d) => d.changed).length})
+              {t("syncScreens.changesCount", { count: diffs.filter((d) => d.changed).length })}
             </Text>
             {diffs.map((d, i) => {
                          return (
@@ -260,7 +270,7 @@ export default function OverwriteDetailScreen() {
 
                 <View style={styles.diffValues}>
                   <View style={styles.diffCol}>
-                    <Text style={styles.diffColLabel}>{t("syncScreens.yourVersion")}</Text>
+                    <Text style={styles.diffColLabel}>{isMine ? t("syncScreens.yourVersion") : t("syncScreens.theirVersion")}</Text>
                     <Text style={[
                       styles.diffValue,
                       d.changed && styles.diffValueOld,

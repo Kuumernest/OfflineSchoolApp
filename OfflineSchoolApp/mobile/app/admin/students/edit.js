@@ -29,7 +29,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import NetInfo from "@react-native-community/netinfo";
 
 import StudentService from "@/services/student.service";
 import DateField          from "../../../src/components/DateField";
@@ -160,20 +159,9 @@ export default function EditStudentScreen() {
       return;
     }
 
-    /*
-     * Checked before sending, not after failing.
-     *
-     * Every student write in this app is online-only — move, suspend, restore
-     * and remove all call the API directly. Saying so up front is better than
-     * letting the request fail and showing a network error the admin has to
-     * interpret.
-     */
-    const net = await NetInfo.fetch().catch(() => ({ isConnected: true }));
-    if (net && net.isConnected === false) {
-      Alert.alert(t("studentEdit.errSave"), t("studentEdit.needsConnection"));
-      return;
-    }
-
+    // Works offline: the phone's copy is corrected at once and the change is
+    // queued (outbox), sent once when there is a connection, with the version
+    // this form was loaded from as baseUpdatedAt.
     setSaving(true);
     try {
       // Only what moved. An empty string goes as null so the server clears the
@@ -197,7 +185,7 @@ export default function EditStudentScreen() {
       }
       Alert.alert(
         t("studentEdit.saved"),
-        t("studentEdit.savedCount", { count: changed.length })
+        `${t("studentEdit.savedCount", { count: changed.length })} ${t("studentEdit.queuedNote")}`
       );
       router.back();
     } catch (err) {

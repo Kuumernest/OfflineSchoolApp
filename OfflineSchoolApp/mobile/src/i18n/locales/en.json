@@ -105,7 +105,8 @@
     "female": "Female",
     "needsInternetTitle": "No internet connection",
     "needsInternet": "This needs an internet connection. Connect and try again.",
-    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected."
+    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected.",
+    "notSentYet": "Not sent yet"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -3164,7 +3165,9 @@
     "movedMessage": "{{name}} moved to {{className}}.",
     "moveFailed": "Failed to move.",
     "error": "Error",
-    "ok": "OK"
+    "ok": "OK",
+    "changePending": "Saved on this phone. The change is sent to the school automatically when there is a connection.",
+    "changeRefused": "The school did not accept a change to this pupil. Open Pending changes to see why, then retry or discard it."
   },
   "studentSettings": {
     "title": "Settings",
@@ -5367,7 +5370,7 @@
     "listTitle": "Sync Overwrites",
     "listBlurb": "Edits replaced by other admins",
     "loading": "Loading overwrites…",
-    "banner": "These are edits you made that were later replaced by other admins. Tap one to see the diff.",
+    "banner": "Edits of yours that other admins later replaced, newest first. Changes you replaced are listed below them. Tap one to see the diff.",
     "bannerLine2": "Tap one to see the diff.",
     "allClear": "All clear!",
     "allClearSub": "None of your edits have been overwritten by other admins.",
@@ -5432,7 +5435,7 @@
       "one": "Mark {{count}} overwrite as seen? This will clear the dashboard alert.",
       "other": "Mark all {{count}} overwrites as seen? This will clear the dashboard alert."
     },
-    "discardBody": "“{{label}}” will be permanently removed from the upload queue. The change stays on this device but will never reach the server.",
+    "discardBody": "“{{label}}” will be removed from the upload queue and undone on this device: the record goes back to what the server has (something created here and never sent is removed). This cannot be reversed.",
     "attemptCount": {
       "one": "{{count}} attempt",
       "other": "{{count}} attempts"
@@ -5447,7 +5450,15 @@
       "other": "{{count}} conflicts"
     },
     "failedCount": "{{count}} failed",
-    "retryAll": "Retry all {{count}}"
+    "retryAll": "Retry all {{count}}",
+    "lostRow": "{{name}}’s edit replaced yours from {{when}}",
+    "wonRow": "You replaced {{name}}’s change from {{when}}",
+    "unnamed": "Unnamed {{type}}",
+    "thisRecord": "this record",
+    "editOf": "{{name}}’s edit",
+    "changesCount": "Changes ({{count}})",
+    "theirVersion": "Their version",
+    "yourWin": "You replaced this change. It was {{name}}’s, and they are shown it."
   },
   "assignList": {
     "title": "Teacher Assignments",
@@ -6070,7 +6081,8 @@
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
     "invalidCredentials": "Invalid credentials",
-    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone."
+    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone.",
+    "appUpdateRequired": "Update the app to keep syncing. This school's data now needs a newer version of the app."
   },
   "syncStep": {
     "prepare": "Preparing",
@@ -6152,7 +6164,8 @@
     "edit": "Correct details",
     "guardianPhone": "Guardian's phone",
     "alternatePhone": "Other phone",
-    "city": "City or town"
+    "city": "City or town",
+    "queuedNote": "It is sent to the school automatically when there is a connection."
   },
   "teacherHw": {
     "title": "Homework",
@@ -7550,5 +7563,12 @@
     "pending": "Pending — the school issues it when this syncs",
     "none": "Not assigned yet",
     "fromSchool": "Issued by the school. It cannot be changed on the phone."
+  },
+  "updateRequired": {
+    "title": "Update the app to keep syncing",
+    "bodyServer": "Your school's data now needs a newer version of this app. Install the latest version, then open the app again.",
+    "bodyLocal": "A newer version of this app saved the data on this phone. This version cannot read it safely. Install the latest version to go on.",
+    "kept": "Nothing has been deleted. Your saved work and unsent changes stay on this phone and are sent after the update.",
+    "checkAgain": "Check again"
   }
 }

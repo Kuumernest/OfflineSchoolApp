@@ -2133,9 +2133,10 @@ router.get("/school/info", asyncHandler(async (req, res) => {
     const LIGHT_FIELDS =
       "name code address city state country phone email website motto updatedAt";
 
-    const school = await School.findById(schoolId)
-      .select(includeLogo ? `${LIGHT_FIELDS} logo` : LIGHT_FIELDS)
-      .lean();
+    // By the id as the account holds it, whatever the school's _id type
+    // (utils/schoolById.js): findById threw for a string _id.
+    const { findSchoolById, matchId } = require("../utils/schoolById");
+    const school = await findSchoolById(schoolId, includeLogo ? `${LIGHT_FIELDS} logo` : LIGHT_FIELDS);
 
     if (!school) return res.status(404).json({ success: false, message: "School not found" });
 
@@ -2154,17 +2155,17 @@ router.get("/school/info", asyncHandler(async (req, res) => {
     // Probe what the logo is without transferring the image. When the value
     // is a short reference (a migrated school's URL) the head IS the whole
     // value, so it comes back for free; a legacy base64 blob stays put.
-    const mongoose    = require("mongoose");
     const logoStorage = require("../utils/logoStorage");
     const HEAD = 512;
 
     let logoLen = null;
     let logoUrl = null;
 
-    if (mongoose.Types.ObjectId.isValid(String(schoolId))) {
+    // aggregate() does not cast: probe on the _id as the found document holds it.
+    if (matchId(school) != null) {
       try {
         const rows = await School.aggregate([
-          { $match: { _id: new mongoose.Types.ObjectId(String(schoolId)) } },
+          { $match: { _id: matchId(school) } },
           { $project: {
               logoLen: { $strLenBytes: { $trim: { input: { $ifNull: ["$logo", ""] } } } },
               logoHead: {

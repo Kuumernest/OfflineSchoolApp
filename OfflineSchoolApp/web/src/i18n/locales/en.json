@@ -1489,7 +1489,11 @@
     "alertCount": "{{count}} alert",
     "alertCount_other": "{{count}} alerts",
     "families": "{{count}} family",
-    "families_other": "{{count}} families"
+    "families_other": "{{count}} families",
+    "overwriteTitle": "Your edit was replaced",
+    "overwriteBody": "{{name}} saved over your change to {{student}}. Their version is the one kept.",
+    "overwriteBodyDeleted": "{{name}} deleted {{student}} after your change to the record.",
+    "overwriteSomeone": "Someone"
   },
   "applications": {
     "refresh": "Refresh applications",

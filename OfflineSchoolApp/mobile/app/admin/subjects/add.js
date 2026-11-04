@@ -9,10 +9,10 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth.store";
 import { getDatabase }    from "@/db/database";
-import api              from "@/services/api";
+import { SubjectService } from "@/services/subject.service";
+import { createAssignment } from "@/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
-import { useNeedsInternet } from "../../../src/hooks/useNeedsInternet";
-import { NeedsInternetNote } from "../../../src/components/NeedsInternetNote";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -131,9 +131,6 @@ function ResultsSummary({ results, subjectName, onDone, onAddAnother }) {
 
 export default function AddSubjectScreen() {
   const { t } = useTranslation();
-  // Creating and editing a subject write straight to the server (online-only
-  // until made offline-capable): said up front, not as a network error.
-  const { isOnline, requireOnline, failureText } = useNeedsInternet();
   const router   = useRouter();
   const { user } = useAuthStore();
   const schoolId = user?.schoolId ?? "";
@@ -241,31 +238,22 @@ export default function AddSubjectScreen() {
       return;
     }
     setErrors({});
-    if (!(await requireOnline())) return;
     setSubmitting(true);
 
+    // Both write the phone's copy at once and queue the request (outbox:
+    // Idempotency-Key, retry, the pending-changes screen), online or not.
     if (isEdit) {
-      // PUT /admin/subjects/:id — the route the console's edit page calls. A
-      // blank coefficient leaves the stored one alone.
+      // PUT /admin/subjects/:id once sent. A blank coefficient leaves the
+      // stored one alone.
       try {
-        await api.put(`/admin/subjects/${editId}`, {
+        await SubjectService.update(String(editId), {
           name:        form.name.trim(),
           code:        form.code.trim(),
           coefficient: form.coefficient.trim() || undefined,
-          schoolId,
         });
-        // The mirror catches up on the next pull; the list reads it meanwhile.
-        try {
-          const db = await getDatabase();
-          const coeff = form.coefficient.trim();
-          await db.runAsync(
-            "UPDATE subjects SET name = ?, code = ?, coefficient = COALESCE(?, coefficient) WHERE id = ?",
-            [form.name.trim(), form.code.trim(), coeff ? Number(coeff) : null, String(editId)]
-          );
-        } catch { /* the next pull sets it right */ }
         router.push("/admin/subjects");
       } catch (err) {
-        Alert.alert(t("common.error"), failureText(err, "subjectsAdd.unknownError"));
+        Alert.alert(t("common.error"), errorText(t, err, "subjectsAdd.unknownError"));
       } finally {
         setSubmitting(false);
       }
@@ -277,19 +265,24 @@ export default function AddSubjectScreen() {
     for (const cid of form.classIds) {
       const cls = classes.find((c) => c._id === cid);
       try {
-        // "/admin/subjects" — the only route that serves this; the old
-        // "/subjects" had no handler and every create 404'd.
-        await api.post("/admin/subjects", {
+        // Under an id this phone chooses; POST /admin/subjects keeps it, so
+        // an assignment made to it before it is sent points at the right row.
+        const subject = await SubjectService.create({
           name:        form.name.trim(),
           code:        form.code.trim() || undefined,
           classId:     cid,
-          teacherId:   form.teacherId || undefined,
           coefficient: form.coefficient.trim() || undefined,
           schoolId,
         });
+        // The teacher picked here becomes an assignment, queued behind the
+        // subject it names. POST /admin/subjects never read a teacherId, so
+        // this choice used to go nowhere.
+        if (form.teacherId) {
+          await createAssignment({ teacherId: form.teacherId, classId: cid, subjectId: subject.id });
+        }
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: true });
       } catch (err) {
-        const msg = failureText(err, "subjectsAdd.unknownError");
+        const msg = errorText(t, err, "subjectsAdd.unknownError");
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: false, error: msg });
       }
     }
@@ -303,7 +296,7 @@ export default function AddSubjectScreen() {
     }
 
     setResults(outcomes);
-  }, [form, t, classes, schoolId, router, isEdit, editId, requireOnline, failureText]);
+  }, [form, t, classes, schoolId, router, isEdit, editId]);
 
   // ── Discard ─────────────────────────────────────────────
 
@@ -658,13 +651,11 @@ export default function AddSubjectScreen() {
             </View>
           )}
 
-          <NeedsInternetNote online={isOnline} />
-
           {/* Submit */}
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={submitting || !isOnline}
-            style={[styles.submitBtn, (submitting || !isOnline) && styles.submitDisabled]}
+            disabled={submitting}
+            style={[styles.submitBtn, submitting && styles.submitDisabled]}
             activeOpacity={0.8}
           >
             {submitting ? (

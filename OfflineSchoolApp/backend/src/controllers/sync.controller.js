@@ -7,6 +7,7 @@ const Subject           = require("../db/models/Subject");
 const Period            = require("../db/models/Period");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const SyncTombstone     = require("../db/models/SyncTombstone");
+const { safeHorizon }   = require("../config/syncWindow");
 
 // ── Optional models ───────────────────────────────────────────────────────────
 
@@ -71,6 +72,36 @@ const sinceFilter = (lastSyncDate) => {
   }
 
   return { updatedAt: { $gte: lastSyncDate } };
+};
+
+/**
+ * How many rows of ONE collection a single pull may carry.
+ *
+ * The pull used to answer with every changed row of all six collections in
+ * one body, so a first sync of a large school was one unbounded response —
+ * tens of thousands of students over a phone link that may not last a minute.
+ *
+ * Now each collection is read in (updatedAt, _id) order and cut at the limit.
+ * When any collection is cut, `timestamp` is pulled back to the updatedAt of
+ * the last row sent from the cut collection(s), and `hasMore: true` says so.
+ * A client that knows nothing of paging — every phone build before the feed
+ * moved to /sync/changes — stores `timestamp` as it always has, and its next
+ * pull (inclusive `$gte`) continues from there. The data arrives over several
+ * syncs instead of one, and nothing is skipped: every row after the cursor is
+ * either in this answer or after the cursor that goes back.
+ *
+ * Known edge, documented rather than fixed: more than `limit` rows of one
+ * collection sharing ONE millisecond cannot be split by a plain timestamp, so
+ * an old client would be offered the same first `limit` of them every time.
+ * New clients read /sync/changes, whose (updatedAt, _id) cursor has no such
+ * edge; logged when it happens.
+ */
+const PULL_LIMIT_DEFAULT = 2000;
+const PULL_LIMIT_MAX     = 2000;
+
+const pullLimit = (raw) => {
+  const n = Number.parseInt(raw, 10);
+  return Math.min(Math.max(Number.isFinite(n) ? n : PULL_LIMIT_DEFAULT, 1), PULL_LIMIT_MAX);
 };
 
 /** Excludes soft-deleted documents from any query. */
@@ -219,46 +250,108 @@ exports.pullChanges = async (req, res) => {
     // and a student's token received every pupil in the school with their
     // guardians' names and phone numbers.
     const ownStudent = isStudent ? { $or: [{ userId: callerId }, { _id: callerId }] } : null;
+    // A teacher: the pupils of their roster classes only (config/syncFeed.js
+    // teacherRosterClassIds — the phone feed's rule, and the one the phone
+    // purges by). null for every other role.
+    const mongoose = require("mongoose");
+    const { teacherRosterClassIds } = require("../config/syncFeed");
+    const roster = await teacherRosterClassIds(req, mongoose.models);
     const studentFilter = {
       schoolId,
       ...since,
+      ...(roster ? { classId: { $in: roster } } : {}),
       ...(incremental ? {} : { status: "approved", isActive: true }),
       $and: [ownStudent, incremental ? null : NOT_DELETED].filter(Boolean),
     };
     if (!studentFilter.$and.length) delete studentFilter.$and;
 
-    // ── Fetch all entity types in parallel ───────────────────────────────
-    const [classes, teachers, subjects, periods, assignments, rawStudents, tombstones] =
-      await Promise.all([
-        Class.find({ schoolId, ...since, ...live }).lean(),
+    // ── Fetch all entity types in parallel, one bounded page each ────────
+    const limit = pullLimit(req.query.limit);
+    const page  = (q, key = "updatedAt") => q.sort({ [key]: 1, _id: 1 }).limit(limit + 1);
 
-        User.find({ schoolId, role: "teacher", ...since })
-          .select(teacherFields)
+    const [rawClasses, rawTeachers, rawSubjects, rawPeriods, rawAssignments, rawStudentsPage, rawTombstones] =
+      await Promise.all([
+        page(Class.find({ schoolId, ...since, ...live })).lean(),
+
+        page(User.find({ schoolId, role: "teacher", ...since })
+          .select(teacherFields))
           .lean(),
 
-        Subject.find({ schoolId, ...since, ...live }).lean(),
+        page(Subject.find({ schoolId, ...since, ...live })).lean(),
 
-        Period.find({ schoolId, ...since, ...live }).lean(),
+        page(Period.find({ schoolId, ...since, ...live })).lean(),
 
-        TeacherAssignment.find({ schoolId, ...since, ...live })
+        page(TeacherAssignment.find({ schoolId, ...since, ...live })
           // Name only for a student: teacherFields above keeps staff emails
           // off a pupil's device, and this join handed them back.
           .populate("teacher", isStudent ? "name" : "name email")
           .populate("class",   "name")
-          .populate("subject", "name")
+          .populate("subject", "name"))
           .lean(),
 
         // Their own row is still sent to a student rather than dropped,
         // because the local students table is what several student screens
         // read their class and admission number from.
-        Student ? Student.find(studentFilter).lean() : Promise.resolve([]),
+        Student ? page(Student.find(studentFilter)).lean() : Promise.resolve([]),
 
         incremental
           // The same bound as every row above (sinceFilter: a cursor from the
           // future reads from the beginning), on the deletion's own time.
-          ? SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }).lean()
+          ? page(SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }), "deletedAt").lean()
           : Promise.resolve([]),
       ]);
+
+    // Cut each collection at the limit. The cursor handed back may not pass
+    // the last row SENT of any cut collection, or the rows after it in that
+    // collection would sort before the next pull's `since` and never come.
+    // A class the teacher GAINED since lastSync: its pupils did not change, so
+    // the timestamp cursor would never offer them. The grant did change — an
+    // assignment created or switched on, a class given this form master — so
+    // every roster class whose grant is newer than lastSync sends its live
+    // pupils whatever their updatedAt. Outside the page limit (one teacher's
+    // classes, not the school), so it cannot hold the cursor back. Over-sending
+    // is an upsert the phone already tolerates; under-sending is a pupil
+    // missing from a register.
+    let gainedStudents = [];
+    if (roster && roster.length && incremental && Student) {
+      const [byAssignment, byFormMaster] = await Promise.all([
+        TeacherAssignment.find({
+          schoolId: String(schoolId), isActive: { $ne: false }, ...since,
+          $or: [{ teacher: callerId }, { teacherId: callerId }],
+        }).select("class classId").lean(),
+        Class.find({ schoolId: String(schoolId), classTeacherId: callerId, ...since }).distinct("_id"),
+      ]);
+      const gained = [...new Set([
+        ...byAssignment.map((a) => String(a.classId ?? a.class ?? "")),
+        ...byFormMaster.map(String),
+      ])].filter((id) => roster.includes(id));
+      if (gained.length) {
+        gainedStudents = await Student.find({
+          schoolId, classId: { $in: gained }, status: "approved", isActive: true, ...NOT_DELETED,
+        }).sort({ updatedAt: 1, _id: 1 }).lean();
+      }
+    }
+
+    let hasMore  = false;
+    let boundary = null;
+    const cut = (rows, key = "updatedAt") => {
+      if (rows.length <= limit) return rows;
+      hasMore = true;
+      const kept = rows.slice(0, limit);
+      const at   = new Date(kept[kept.length - 1][key]);
+      if (!boundary || at < boundary) boundary = at;
+      return kept;
+    };
+    const classes     = cut(rawClasses);
+    const teachers    = cut(rawTeachers);
+    const subjects    = cut(rawSubjects);
+    const periods     = cut(rawPeriods);
+    const assignments = cut(rawAssignments);
+    const rawStudents = cut(rawStudentsPage);
+    for (const s of gainedStudents) {
+      if (!rawStudents.some((r) => String(r._id) === String(s._id))) rawStudents.push(s);
+    }
+    const tombstones  = cut(rawTombstones, "deletedAt");
 
     // Students: on the roster → the full row; off it → a removal.
     const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
@@ -276,7 +369,10 @@ exports.pullChanges = async (req, res) => {
     // Hard deletes. A student caller hears only of their own record.
     const stoneFor = { subject: subjects, teacherAssignment: assignments, student: students };
     const stoneModel = { subject: Subject, teacherAssignment: TeacherAssignment, student: Student };
-    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (!isStudent || t.entity !== "student" || t.docId === callerId));
+    // A pupil hears only of their own deletion; a teacher only of their roster
+    // classes' pupils (the tombstone keeps the deleted pupil's class).
+    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (t.entity !== "student" || (
+      isStudent ? t.docId === callerId : !roster || roster.includes(String(t.classId)))));
     for (const entity of Object.keys(stoneFor)) {
       const ids = relevant.filter((t) => t.entity === entity).map((t) => t.docId);
       if (!ids.length || !stoneModel[entity]) continue;
@@ -301,8 +397,38 @@ exports.pullChanges = async (req, res) => {
       `📦 Pull results (${role ?? "unknown"}) — classes: ${classes.length}, ` +
       `teachers: ${teachers.length}, subjects: ${subjects.length}, ` +
       `periods: ${periods.length}, assignments: ${assignments.length}, ` +
-      `students: ${students.length}`
+      `students: ${students.length}` + (hasMore ? ` — page cut at ${limit}, more to come` : "")
     );
+
+    // The cursor: the earliest of
+    //   - "before the queries ran", less the commit-safety window
+    //     (config/syncWindow.js). updatedAt is stamped when a document is
+    //     BUILT, not when it commits, so a slow write can become visible
+    //     with an updatedAt behind a cursor already handed out — and a
+    //     timestamp cursor would then skip it for good. Lagging the cursor
+    //     re-reads the last two minutes on every pull instead;
+    //   - the last row sent from a collection that was cut (PULL_LIMIT_DEFAULT).
+    // It also keeps a row dated in the future from mattering: the cursor is
+    // never later than the server's clock less the window.
+    let timestamp = safeHorizon(new Date(pulledAt)).toISOString();
+    if (boundary && boundary < new Date(timestamp)) timestamp = boundary.toISOString();
+
+    // Rows dated ahead of the clock are re-sent every pull until real time
+    // passes them. Delivered, never hidden, and said out loud.
+    const nowMs = Date.now();
+    let futureDated = 0;
+    for (const rows of [classes, teachers, subjects, periods, assignments, rawStudents]) {
+      for (const r of rows) if (r.updatedAt && new Date(r.updatedAt).getTime() > nowMs) futureDated++;
+    }
+    if (futureDated) {
+      console.warn(`[sync] ⚠️  ${futureDated} row(s) for school ${schoolId} are dated in the future — re-sent until the clock passes them`);
+    }
+    if (hasMore && boundary && boundary.getTime() <= effectiveDate.getTime()) {
+      console.warn(
+        `[sync] ⚠️  more than ${limit} rows share updatedAt ${boundary.toISOString()} — ` +
+        "a timestamp cursor cannot split them; /sync/changes can"
+      );
+    }
 
     return res.json({
       success: true,
@@ -315,7 +441,12 @@ exports.pullChanges = async (req, res) => {
         students,
         deletedItems,
       },
-      timestamp: pulledAt,
+      timestamp,
+      // True when a collection was cut at `limit`: pull again from `timestamp`
+      // for the rest. Older clients ignore it and get the rest next sync.
+      hasMore,
+      limit,
+      futureDated,
     });
 
   } catch (err) {
@@ -360,3 +491,7 @@ exports.pushRetired = (_req, res) =>
       "(e.g. PUT /api/admin/students/:id/approve, the periods routes) and pull " +
       "with GET /api/sync/pull or GET /api/sync/changes.",
   });
+
+// The pupil row shape, shared with the phone profile of /sync/changes
+// (config/syncFeed.js PHONE_FEED) so both feeds hand the phone the same row.
+exports.normaliseStudentForSync = normaliseStudentForSync;

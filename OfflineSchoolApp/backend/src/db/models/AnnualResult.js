@@ -108,4 +108,11 @@ annualResultSchema.index({ schoolId: 1, isPublished: 1 });
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 annualResultSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). A run removes the rows of pupils it no longer ranks (annualGrading.service).
+// Unpublishing writes one too (reason "unpublished"): non-admins mirror
+// published results only, and the published copy on their machine must go.
+annualResultSchema.plugin(require("../plugins/syncTombstones"), { entity: "annualResult", unpublishable: true });
+
 module.exports = mongoose.model("AnnualResult", annualResultSchema);

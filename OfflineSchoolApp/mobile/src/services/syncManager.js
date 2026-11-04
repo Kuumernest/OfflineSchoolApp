@@ -28,6 +28,7 @@ import {
 }                                       from "../utils/authHelpers";
 import { API }                          from "./apiEndpoints";
 import { MutationQueue }                from "./mutationQueue.service";
+import { ensurePupilSyncColumns, queuedPupilIds } from "../db/pupilSync";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -491,55 +492,49 @@ class SyncManagerClass {
   // SECTION 3 — LAST-SYNC PERSISTENCE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // On the legacy shared file the cursors are in SecureStore, as they always
-  // were. A per-user store (docs/40) keeps its own inside the file
-  // (db/storeMeta.js), so a new store is a full pull for its account.
-  async _storeMeta() {
-    try { return await require("../db/storeMeta").activeStoreMeta(); } catch { return null; }
+  // The cursors belong to an ACCOUNT (db/syncCursors.js): a per-user store
+  // (docs/40) keeps its own inside the file, as before; on the shared legacy
+  // file they are keyed by server, school and account, so another account on
+  // the same phone starts from its own position rather than this one's.
+  async _cursorStore() {
+    try { return await require("../db/syncCursors").cursorStore(); } catch { return null; }
   }
 
-  async getLastSync() {
+  /** A stored cursor, or the epoch when there is none or it is not a date. */
+  async _readCursor(key) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) return (await meta.get(LAST_SYNC_KEY)) || EPOCH;
-      return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH;
-    }
-    catch { return EPOCH; }
+      const store = await this._cursorStore();
+      const v = store ? await store.get(key) : null;
+      return v && !Number.isNaN(new Date(v).getTime()) ? v : EPOCH;
+    } catch { return EPOCH; }
   }
+
+  async getLastSync() { return this._readCursor(LAST_SYNC_KEY); }
 
   async setLastSync(timestamp) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.set(LAST_SYNC_KEY, timestamp);
-      else await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp);
+      const store = await this._cursorStore();
+      if (store) await store.set(LAST_SYNC_KEY, timestamp);
     }
     catch (err) { console.warn("[SyncManager] Could not persist lastSync:", err.message); }
     this.lastSync = timestamp;
   }
 
+  /** Forget where this account had got to — every cursor, so the next pull is a full one. */
   async resetLastSync() {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.del(LAST_SYNC_KEY);
-      else await SecureStore.deleteItemAsync(LAST_SYNC_KEY);
+      const store = await this._cursorStore();
+      if (store) await store.clear();
     } catch { /* ignore */ }
     this.lastSync = null;
   }
 
-  async getLastQuizSync() {
-    try {
-      const meta = await this._storeMeta();
-      if (meta) return (await meta.get(QUIZ_LAST_SYNC_KEY)) || EPOCH;
-      return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH;
-    }
-    catch { return EPOCH; }
-  }
+  async getLastQuizSync() { return this._readCursor(QUIZ_LAST_SYNC_KEY); }
 
   async setLastQuizSync(timestamp) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.set(QUIZ_LAST_SYNC_KEY, timestamp);
-      else await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp);
+      const store = await this._cursorStore();
+      if (store) await store.set(QUIZ_LAST_SYNC_KEY, timestamp);
     }
     catch (err) { console.warn("[SyncManager] Could not persist quiz lastSync:", err.message); }
   }
@@ -868,6 +863,9 @@ class SyncManagerClass {
       const db = await getDatabase();
       const { ensureStudentColumns } = require("./studentEnroll.service");
       await ensureStudentColumns(db);
+      // _synced and the offline-decision marker (db/pupilSync), before
+      // anything reads which pupils hold unsent changes.
+      await ensurePupilSyncColumns(db);
       console.log("[SyncManager] Student enrollment columns ready");
     } catch (err) {
       console.log("[SyncManager] student columns migration skipped:", err.message);
@@ -1072,6 +1070,7 @@ class SyncManagerClass {
       await safeAddColumn(db, "teacher_assignments", "teacher_json", "TEXT");
       await safeAddColumn(db, "teacher_assignments", "class_json",   "TEXT");
       await safeAddColumn(db, "teacher_assignments", "subject_json", "TEXT");
+      await safeAddColumn(db, "teacher_assignments", "is_active",    "INTEGER DEFAULT 1");
     } catch (err) {
       console.log("[SyncManager] assignments migration skipped:", err.message);
     }
@@ -1694,6 +1693,42 @@ class SyncManagerClass {
   // SECTION 10 — PULL ORCHESTRATION
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * The six collections, through the change feed (services/syncFeed.client.js).
+   * Each page goes through the same apply functions /sync/pull's answer did,
+   * so the pull-protection rule (a pulled row never overwrites one with an
+   * unsent change, _synced != 1) holds for every row the feed writes.
+   */
+  async _pullFeed(schoolId) {
+    const { pullPhoneFeed, tombstonesByCollection } = require("./syncFeed.client");
+    const store = await this._cursorStore();
+    const apply = async (collection, docs) => {
+      switch (collection) {
+        case "classes":     SyncProgress.step("classes",     this._count(docs)); return this.syncClasses(docs);
+        case "subjects":    SyncProgress.step("subjects",    this._count(docs)); return this.syncSubjects(docs);
+        case "teachers":    SyncProgress.step("teachers",    this._count(docs)); return this.syncTeachers(docs);
+        case "periods":     SyncProgress.step("periods",     this._count(docs)); return this.syncPeriods(docs);
+        case "assignments": SyncProgress.step("assignments", this._count(docs)); return this.syncAssignments(docs);
+        case "students":    SyncProgress.step("students",    this._count(docs)); return this.syncStudents(docs);
+        case "tombstones": {
+          const by = tombstonesByCollection(docs);
+          if (by.subjects)    await this.syncSubjects(by.subjects);
+          if (by.assignments) await this.syncAssignments(by.assignments);
+          if (by.students)    await this.syncStudents(by.students);
+          return undefined;
+        }
+        default: return undefined;
+      }
+    };
+    const result = await pullPhoneFeed({
+      api: { get: (p, o) => this._withRetry("pullFeed", () => api.get(p, o)) },
+      store, apply, schoolId,
+    });
+    for (const r of result.refused) console.log(`[SyncManager] Feed refused ${r.collection} (${r.reason})`);
+    console.log(`[SyncManager] Feed pull: ${JSON.stringify(result.counts)} in ${result.pages} page(s)`);
+    return result;
+  }
+
   async pullChanges() {
     if (this._isUnauthenticated()) return;
 
@@ -1722,8 +1757,23 @@ class SyncManagerClass {
     console.log(`[SyncManager] Pulling since ${lastSyncTime}…`);
 
     try {
+      // The six collections come from the change feed (GET /sync/changes,
+      // phone profile): a cursor per collection, bounded pages, hard deletes,
+      // commit-safe positions. /sync/pull below only for a server that does
+      // not have the phone profile yet.
+      let viaFeed = false;
       if (!this.isStudent()) {
         SyncProgress.step("download");
+        try {
+          const feed = await this._pullFeed(schoolId);
+          if (feed.serverTime) cursor = feed.serverTime;
+          viaFeed = true;
+        } catch (err) {
+          if (err?.code !== "FEED_UNAVAILABLE") throw err;
+          console.log("[SyncManager] Server has no phone feed — using /sync/pull");
+        }
+      }
+      if (!this.isStudent() && !viaFeed) {
         const response = await this._withRetry(
           "pullChanges",
           () => api.get(API.sync.pull, {
@@ -1766,6 +1816,10 @@ class SyncManagerClass {
           await this.syncStudents(data.students);
         }
       }
+
+      // The six collections are in: a teacher's phone lets go of pupils
+      // outside the classes it teaches (no-op for every other role).
+      await this.purgeOutOfScopePupils();
 
       // Full assignment list — richer than the /sync/pull slice (it carries
       // teacher/class/subject name blobs) and it retires local rows the
@@ -2291,7 +2345,8 @@ class SyncManagerClass {
   // overwriting would undo it silently — a delete made while a pull was in
   // flight came back active and was never sent. The change goes out first;
   // the next pull refreshes the row. Same rule as the desktop's merge(), and
-  // the same rows the backfill treats as pending. Classes, teachers, subjects.
+  // the same rows the backfill treats as pending. Classes, teachers, subjects;
+  // pupils too (syncStudents, which also asks the outbox).
   async syncClasses(classes) {
     if (!classes?.length) return;
     const db = await getDatabase();
@@ -2488,7 +2543,17 @@ class SyncManagerClass {
     if (!students?.length) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
-    let ok = 0, fail = 0;
+    let ok = 0, fail = 0, kept = 0;
+
+    // The pull-protection rule (syncClasses), for pupils too: a pulled pupil
+    // never overwrites one with an unsent change. Two signals, either enough:
+    // the row's own flag (_synced != 1: an offline decision, an enrolment not
+    // yet sent, a correction or suspension waiting) and the outbox (a change
+    // queued or refused for this pupil). The flag is trustworthy since pulled
+    // pupils are written synced here and the backfill settles the ones older
+    // builds left at 0 (db/pupilSync.repairPupilSyncFlags).
+    await ensurePupilSyncColumns(db);
+    const busy = await queuedPupilIds(db);
 
     // One commit for the whole batch. expo-sqlite autocommits (and in WAL
     // mode fsyncs) every loose statement, so a pull of 500 rows meant 500
@@ -2499,10 +2564,13 @@ class SyncManagerClass {
         try {
           const id = s.id || s._id;
           if (!id) { fail++; continue; }
+          if (busy.has(String(id))) { kept++; continue; }
 
+          // Off the roster (deleted, suspended, gone): applies to a clean row,
+          // waits behind an unsent change like every other pulled write.
           if (s.deletedAt || s.deleted_at) {
             await db.runAsync(
-              "UPDATE students SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?",
+              "UPDATE students SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [s.deletedAt || s.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2514,8 +2582,8 @@ class SyncManagerClass {
             `INSERT INTO students
                (id, schoolId, school_id, classId, class_id, user_id,
                 name, studentName, admissionNo, admissionNumber, enrollmentNo,
-                email, is_active, status, deleted_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                email, is_active, status, _synced, deleted_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId        = COALESCE(excluded.schoolId, students.schoolId),
                school_id       = COALESCE(excluded.school_id, students.school_id),
@@ -2530,8 +2598,10 @@ class SyncManagerClass {
                email           = COALESCE(excluded.email, students.email),
                is_active       = excluded.is_active,
                status          = excluded.status,
+               _synced         = 1,
                deleted_at      = NULL,
-               updated_at      = excluded.updated_at`,
+               updated_at      = excluded.updated_at
+             WHERE students._synced = 1`,
             [
               String(id),
               s.schoolId || null, s.schoolId || null,
@@ -2556,7 +2626,74 @@ class SyncManagerClass {
         }
       }
     });
-    console.log(`[SyncManager] Students: ${ok} synced, ${fail} failed`);
+    console.log(`[SyncManager] Students: ${ok} synced, ${kept} kept (unsent change), ${fail} failed`);
+  }
+
+  /**
+   * A teacher's phone keeps only the pupils of the classes that teacher
+   * teaches — the same rule the server's phone feed applies to what it sends:
+   * a class the teacher holds an ACTIVE assignment in (any subject), or the
+   * class they are class teacher (form master) of. Pupils stored before that
+   * rule existed would otherwise stay on the phone for good, since the feed
+   * no longer sends them, not even as removals.
+   *
+   * Never on another role. Never a pupil with an unsent change. Nothing at
+   * all while the phone has no classes or no assignments stored yet, or the
+   * teacher's scope comes out empty: a half-loaded phone must not be wiped.
+   *
+   * @returns {Promise<number>} pupils removed
+   */
+  async purgeOutOfScopePupils() {
+    const { user, role } = getCurrentAuth();
+    if (role !== "teacher") return 0;
+    const me = String(user?._id || user?.id || "");
+    if (!me) return 0;
+    const db = await getDatabase();
+    try {
+      for (const t of ["students", "teacher_assignments", "classes"]) {
+        const found = await db.getFirstAsync(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [t]
+        );
+        if (!found) return 0;
+      }
+      const count = async (t) => Number((await db.getFirstAsync(`SELECT COUNT(*) AS n FROM ${t}`))?.n ?? 0);
+      if (!(await count("teacher_assignments")) || !(await count("classes"))) return 0;
+
+      await ensurePupilSyncColumns(db);
+      await safeAddColumn(db, "teacher_assignments", "is_active", "INTEGER DEFAULT 1");
+      const scope = new Set();
+      const taught = await db.getAllAsync(
+        `SELECT class_id, classId FROM teacher_assignments
+         WHERE (teacher_id = ? OR teacherId = ?)
+           AND ${NOT_DELETED_BARE}
+           AND COALESCE(is_active, 1) != 0`,
+        [me, me]
+      );
+      for (const r of taught ?? []) for (const c of [r.class_id, r.classId]) if (c) scope.add(String(c));
+      // Not a soft-deleted class: the server's teacher scope skips those too
+      // (backend/src/config/syncFeed.js), and the two must agree exactly.
+      const formClasses = await db.getAllAsync("SELECT id FROM classes WHERE classTeacherId = ? AND deleted_at IS NULL", [me]);
+      for (const r of formClasses ?? []) if (r.id) scope.add(String(r.id));
+      if (!scope.size) return 0;
+
+      const busy = await queuedPupilIds(db);
+      const rows = await db.getAllAsync(
+        `SELECT id, class_id, classId FROM students
+         WHERE _synced = 1 AND COALESCE(_operation, '') != 'create'`
+      );
+      let removed = 0;
+      for (const r of rows ?? []) {
+        if (busy.has(String(r.id))) continue;
+        if ((r.class_id && scope.has(String(r.class_id))) || (r.classId && scope.has(String(r.classId)))) continue;
+        await db.runAsync("DELETE FROM students WHERE id = ? AND _synced = 1", [r.id]);
+        removed++;
+      }
+      if (removed) console.log(`[SyncManager] Removed ${removed} pupil(s) outside this teacher's classes`);
+      return removed;
+    } catch (err) {
+      console.warn("[SyncManager] purgeOutOfScopePupils:", err.message);
+      return 0;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2591,6 +2728,20 @@ class SyncManagerClass {
           const subjectId =
             (typeof a.subject === "string" ? a.subject : null) ||
             a.subject?._id || a.subject?.id || a.subjectId || null;
+
+          // The pull-protection rule (see syncClasses): the local row this
+          // would write — by id, or by the (teacher, class, subject) key
+          // upsertAssignmentRow adopts — has an unsent change. Leave it; the
+          // change goes out first and the next pull refreshes the row.
+          const pendingLocal = await db.getFirstAsync(
+            `SELECT id FROM teacher_assignments
+             WHERE (_synced IS NULL OR _synced != 1)
+               AND (id = ? OR (teacher_id = ? AND class_id = ? AND subject_id = ?
+                               AND (deleted_at IS NULL OR deleted_at = '')))
+             LIMIT 1`,
+            [String(id), teacherId, classId, subjectId]
+          ).catch(() => null);
+          if (pendingLocal) { ok++; continue; }
 
           if (a.deletedAt || a.deleted_at) {
             await db.runAsync(
@@ -2630,6 +2781,12 @@ class SyncManagerClass {
             updated_at:  a.updatedAt || a.updated_at || ts,
             deleted_at:  null,
           });
+          // Kept for the teacher's pupil scope (purgeOutOfScopePupils): an
+          // assignment the office switched off is not a class taught.
+          await db.runAsync(
+            "UPDATE teacher_assignments SET is_active = ? WHERE id = ?",
+            [a.isActive === false ? 0 : 1, String(id)]
+          ).catch(() => {});
 
           if (subjectId && teacherId) {
             await db.runAsync(

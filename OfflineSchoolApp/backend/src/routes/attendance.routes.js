@@ -183,6 +183,28 @@ const { resolveSchoolId } = require("../utils/tenant");
 
 const isStudentRole = (req) => req.user?.role === "student";
 
+/**
+ * The classId filter for the pupil ROSTER, narrowed for a teacher to their
+ * roster classes — the classes a teacher's phone holds pupils of
+ * (config/syncFeed.js teacherRosterClassIds: an active assignment, or form
+ * master). The phone falls back to /students/roster for a teacher's pupil list
+ * (mobile studentFetch.service.js), so it answers by the same rule as the sync
+ * (owner decision, 2026-11). Every other role: the class asked for, or none
+ * (undefined = no class filter). Registers (/students/today, /students) stay
+ * school-wide reads, as docs/20 §7b/§11.7 record.
+ *
+ * A class outside the roster yields a filter that matches nothing — an empty
+ * roster, as /teacher/my-students answers, not a 403 a cached screen would
+ * have to explain.
+ */
+const pupilClassFilter = async (req, classId) => {
+  const { teacherRosterClassIds } = require("../config/syncFeed");
+  const roster = await teacherRosterClassIds(req, require("mongoose").models);
+  if (!roster) return classId ? String(classId) : undefined;
+  if (classId) return roster.includes(String(classId)) ? String(classId) : { $in: [] };
+  return { $in: roster };
+};
+
 // Three capabilities where this file had three hand-rolled role checks. The
 // defaults are the same sets those checks used — attendance.view is
 // STAFF_ROLES, attendance.mark is TEACHING_ROLES, attendance.markStaff is
@@ -296,7 +318,8 @@ router.get("/students/roster", staffRead, async (req, res) => {
     }
 
     const query = { schoolId, isActive: { $ne: false } };
-    if (classId) query.classId = classId;
+    const classFilter = await pupilClassFilter(req, classId);
+    if (classFilter !== undefined) query.classId = classFilter;
 
     const students = await Student.find(query)
       .select(
