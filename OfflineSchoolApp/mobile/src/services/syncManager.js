@@ -1070,6 +1070,7 @@ class SyncManagerClass {
       await safeAddColumn(db, "teacher_assignments", "teacher_json", "TEXT");
       await safeAddColumn(db, "teacher_assignments", "class_json",   "TEXT");
       await safeAddColumn(db, "teacher_assignments", "subject_json", "TEXT");
+      await safeAddColumn(db, "teacher_assignments", "is_active",    "INTEGER DEFAULT 1");
     } catch (err) {
       console.log("[SyncManager] assignments migration skipped:", err.message);
     }
@@ -1815,6 +1816,10 @@ class SyncManagerClass {
           await this.syncStudents(data.students);
         }
       }
+
+      // The six collections are in: a teacher's phone lets go of pupils
+      // outside the classes it teaches (no-op for every other role).
+      await this.purgeOutOfScopePupils();
 
       // Full assignment list — richer than the /sync/pull slice (it carries
       // teacher/class/subject name blobs) and it retires local rows the
@@ -2624,6 +2629,71 @@ class SyncManagerClass {
     console.log(`[SyncManager] Students: ${ok} synced, ${kept} kept (unsent change), ${fail} failed`);
   }
 
+  /**
+   * A teacher's phone keeps only the pupils of the classes that teacher
+   * teaches — the same rule the server's phone feed applies to what it sends:
+   * a class the teacher holds an ACTIVE assignment in (any subject), or the
+   * class they are class teacher (form master) of. Pupils stored before that
+   * rule existed would otherwise stay on the phone for good, since the feed
+   * no longer sends them, not even as removals.
+   *
+   * Never on another role. Never a pupil with an unsent change. Nothing at
+   * all while the phone has no classes or no assignments stored yet, or the
+   * teacher's scope comes out empty: a half-loaded phone must not be wiped.
+   *
+   * @returns {Promise<number>} pupils removed
+   */
+  async purgeOutOfScopePupils() {
+    const { user, role } = getCurrentAuth();
+    if (role !== "teacher") return 0;
+    const me = String(user?._id || user?.id || "");
+    if (!me) return 0;
+    const db = await getDatabase();
+    try {
+      for (const t of ["students", "teacher_assignments", "classes"]) {
+        const found = await db.getFirstAsync(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [t]
+        );
+        if (!found) return 0;
+      }
+      const count = async (t) => Number((await db.getFirstAsync(`SELECT COUNT(*) AS n FROM ${t}`))?.n ?? 0);
+      if (!(await count("teacher_assignments")) || !(await count("classes"))) return 0;
+
+      await ensurePupilSyncColumns(db);
+      await safeAddColumn(db, "teacher_assignments", "is_active", "INTEGER DEFAULT 1");
+      const scope = new Set();
+      const taught = await db.getAllAsync(
+        `SELECT class_id, classId FROM teacher_assignments
+         WHERE (teacher_id = ? OR teacherId = ?)
+           AND ${NOT_DELETED_BARE}
+           AND COALESCE(is_active, 1) != 0`,
+        [me, me]
+      );
+      for (const r of taught ?? []) for (const c of [r.class_id, r.classId]) if (c) scope.add(String(c));
+      const formClasses = await db.getAllAsync("SELECT id FROM classes WHERE classTeacherId = ?", [me]);
+      for (const r of formClasses ?? []) if (r.id) scope.add(String(r.id));
+      if (!scope.size) return 0;
+
+      const busy = await queuedPupilIds(db);
+      const rows = await db.getAllAsync(
+        `SELECT id, class_id, classId FROM students
+         WHERE _synced = 1 AND COALESCE(_operation, '') != 'create'`
+      );
+      let removed = 0;
+      for (const r of rows ?? []) {
+        if (busy.has(String(r.id))) continue;
+        if ((r.class_id && scope.has(String(r.class_id))) || (r.classId && scope.has(String(r.classId)))) continue;
+        await db.runAsync("DELETE FROM students WHERE id = ? AND _synced = 1", [r.id]);
+        removed++;
+      }
+      if (removed) console.log(`[SyncManager] Removed ${removed} pupil(s) outside this teacher's classes`);
+      return removed;
+    } catch (err) {
+      console.warn("[SyncManager] purgeOutOfScopePupils:", err.message);
+      return 0;
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SECTION 13 — ASSIGNMENT PULL
   //
@@ -2709,6 +2779,12 @@ class SyncManagerClass {
             updated_at:  a.updatedAt || a.updated_at || ts,
             deleted_at:  null,
           });
+          // Kept for the teacher's pupil scope (purgeOutOfScopePupils): an
+          // assignment the office switched off is not a class taught.
+          await db.runAsync(
+            "UPDATE teacher_assignments SET is_active = ? WHERE id = ?",
+            [a.isActive === false ? 0 : 1, String(id)]
+          ).catch(() => {});
 
           if (subjectId && teacherId) {
             await db.runAsync(
