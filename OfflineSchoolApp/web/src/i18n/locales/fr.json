@@ -1489,7 +1489,11 @@
     "alertCount": "{{count}} alerte",
     "alertCount_other": "{{count}} alertes",
     "families": "{{count}} famille",
-    "families_other": "{{count}} familles"
+    "families_other": "{{count}} familles",
+    "overwriteTitle": "Votre modification a été remplacée",
+    "overwriteBody": "{{name}} a enregistré par-dessus votre modification de {{student}}. C’est sa version qui est conservée.",
+    "overwriteBodyDeleted": "{{name}} a supprimé {{student}} après votre modification de la fiche.",
+    "overwriteSomeone": "Quelqu’un"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
