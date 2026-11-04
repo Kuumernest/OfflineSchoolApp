@@ -3983,10 +3983,12 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "principalName description academicYearStart academicYearEnd " +
     "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear settings.studentAgeRanges";
 
+  // By the id as the account holds it, whatever the school's _id type
+  // (utils/schoolById.js): findById threw for a string _id.
+  const { findSchoolById, matchId } = require("../utils/schoolById");
+
   if (includeLogo) {
-    const school = await School.findById(schoolId)
-      .select(`${LIGHT_FIELDS} logo`)
-      .lean();
+    const school = await findSchoolById(schoolId, `${LIGHT_FIELDS} logo`);
     if (!school) return sendError(res, 404, "School not found");
     // The school's current year, by the one rule (B5): its own setting, else
     // the calendar's — what every year picker opens on.
@@ -3996,20 +3998,13 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     });
   }
 
-  // School._id is a Mongoose ObjectId and aggregate() does not auto-cast,
-  // so the id must be cast explicitly or $match silently returns nothing —
-  // which would report logoLen 0 and make a client believe there is no logo.
-  const mongoose = require("mongoose");
-  const objectId = mongoose.Types.ObjectId.isValid(String(schoolId))
-    ? new mongoose.Types.ObjectId(String(schoolId))
-    : null;
-
-  const [school, meta] = await Promise.all([
-    School.findById(schoolId).select(LIGHT_FIELDS).lean(),
-    objectId ? probeLogo(objectId) : Promise.resolve(null),
-  ]);
-
+  // aggregate() does not cast, so the logo is probed on the _id exactly as
+  // the found document holds it (an ObjectId, or a string) — a cast guessed
+  // from the account's id made $match find nothing for a string _id, and a
+  // client read that as "no logo".
+  const school = await findSchoolById(schoolId, LIGHT_FIELDS);
   if (!school) return sendError(res, 404, "School not found");
+  const meta = await probeLogo(matchId(school));
   school.currentAcademicYear = currentAcademicYearOf(school);
 
   // A migrated school stores a short URL, so the probe already carries the

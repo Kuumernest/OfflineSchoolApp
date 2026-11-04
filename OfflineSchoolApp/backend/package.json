@@ -38,6 +38,7 @@
     "check:commitgap": "node scripts/check-sync-commit-gap.js",
     "check:phonefeed": "node scripts/check-sync-phone-feed.js",
     "check:quizsince": "node scripts/check-quiz-since.js",
+    "check:schoolinfoids": "node scripts/check-school-info-ids.js",
     "check:schoolcode": "node scripts/check-school-code.js",
     "check:names": "node scripts/check-name-uniqueness.js",
     "check:feedtombstones": "node scripts/check-feed-tombstones.js",
