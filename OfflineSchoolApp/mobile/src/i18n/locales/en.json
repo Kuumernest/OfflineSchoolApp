@@ -5435,7 +5435,7 @@
       "one": "Mark {{count}} overwrite as seen? This will clear the dashboard alert.",
       "other": "Mark all {{count}} overwrites as seen? This will clear the dashboard alert."
     },
-    "discardBody": "“{{label}}” will be permanently removed from the upload queue. The change stays on this device but will never reach the server.",
+    "discardBody": "“{{label}}” will be removed from the upload queue and undone on this device: the record goes back to what the server has (something created here and never sent is removed). This cannot be reversed.",
     "attemptCount": {
       "one": "{{count}} attempt",
       "other": "{{count}} attempts"

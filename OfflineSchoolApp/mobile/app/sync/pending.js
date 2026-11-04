@@ -185,14 +185,20 @@ export default function PendingChangesScreen() {
           text: t("common.discard"),
           style: "destructive",
           onPress: async () => {
-            await MutationQueue.discard(row.id);
-            await load();
-            await refreshStats();
+            // Drops the change and undoes it on this device. Where only the
+            // server's copy can restore the record, discard() resets the pull
+            // cursor; the sync after it (online) brings that copy down now.
+            const { refresh } = await MutationQueue.discard(row.id);
+            if (refresh) await runSync();
+            else {
+              await load();
+              await refreshStats();
+            }
           },
         },
       ]
     );
-  }, [load, refreshStats, t]);
+  }, [load, refreshStats, runSync, t]);
 
   const renderItem = ({ item }) => {
     const { labelKey, rawKind, detail } = describe(item);

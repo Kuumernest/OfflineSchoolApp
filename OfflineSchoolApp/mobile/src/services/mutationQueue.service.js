@@ -245,6 +245,66 @@ const notifyFailed = async (row, payload, message) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
+// DISCARD — undoing a change the user abandons
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** @type {Map<string, (ctx: { db: object, localId: string, rows: object[] }) => Promise<{deleted?: boolean, refresh?: boolean}>>} */
+const discardHandlers = new Map();
+/** Reconciler kinds whose payload names its row only by `localId`, by table. */
+const discardKinds = new Map();
+
+/**
+ * Registers how to undo a discarded change to one local table — for a table
+ * that knows more than the generic rule (periods keeps the server's copy and
+ * says "create" in its own column). The handler receives the discarded rows
+ * (payloads parsed) and the local id, and answers { deleted, refresh }:
+ * whether it removed the row, and whether only a full pull can restore it.
+ * `kinds` names reconciler kinds whose payload carries no table.
+ */
+export const registerDiscardHandler = (table, handler, { kinds = [] } = {}) => {
+  if (typeof handler !== "function") throw new Error(`Discard handler "${table}" must be a function`);
+  discardHandlers.set(table, handler);
+  for (const k of kinds) discardKinds.set(k, table);
+};
+
+/** Tables the generic discard may write (interpolated into SQL). */
+const REVERTIBLE_TABLES = new Set([
+  ...SYNCABLE_LOCAL_TABLES, "fee_payments", "expenses", "gate_events",
+]);
+
+/** The local record a queued change is about: { table, ids, idColumn }, or null. */
+const targetOf = (payload) => {
+  const meta = payload?.__local;
+  const ids = localIdsOf(meta);
+  if (meta?.table && ids.length) return { table: meta.table, ids: ids.map(String), idColumn: meta.idColumn };
+  const rec = payload?.__reconcile;
+  const table = rec?.table || discardKinds.get(rec?.kind);
+  if (table && rec?.localId) return { table, ids: [String(rec.localId)], idColumn: rec.idColumn };
+  return null;
+};
+
+/**
+ * True when the discarded rows hold the record's create and nothing says the
+ * server ever took it: no row under that key was accepted, and no server id
+ * was adopted for it.
+ */
+const neverReachedServer = async (db, rows, localId) => {
+  const creates = rows.filter((r) =>
+    String(r.method).toUpperCase() === "POST" && String(r.entity_key).endsWith(`:${localId}`));
+  if (!creates.length) return false;
+  for (const c of creates) {
+    const accepted = await db.getFirstAsync(
+      `SELECT 1 AS x FROM ${TABLE} WHERE entity_key = ? AND status = 'synced' LIMIT 1`, [c.entity_key]
+    ).catch(() => null);
+    if (accepted) return false;
+  }
+  const mapped = await db.getFirstAsync(
+    `SELECT 1 AS x FROM ${ID_MAP} WHERE local_id = ?`, [String(localId)]
+  ).catch(() => null);
+  return !mapped;
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
 // ID MAP — local id → server id, applied at send time
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -1192,11 +1252,100 @@ export class MutationQueue {
     return (rows ?? []).length;
   }
 
-  /** Permanently drops a mutation the user has chosen to abandon. */
+  /**
+   * Abandons a change: drops it from the queue AND undoes it on this device.
+   *
+   * Deleting the outbox row alone (what this did) left the local row dirty, so
+   * the next backfill sweep queued it again — the discard never stuck — and
+   * the phone went on showing a value the server never got.
+   *
+   * The unit is the RECORD the change was about (`__local` / `__reconcile`):
+   * every unsent row for it goes, and the record goes back to what the server
+   * holds:
+   *   - a record this device created and the server never accepted is removed;
+   *   - a table that keeps the server's copy (periods: `server_image`) is put
+   *     back from it at once, offline or not;
+   *   - otherwise the row is marked clean and the pull cursor reset, so the
+   *     next sync (a full pull) writes the server's copy over it. A clean row
+   *     is never sent, and a pull overwrites only clean rows.
+   * Nothing is deleted on the server and no server value is lost: at worst a
+   * create that did land comes back down with the next pull.
+   *
+   * @returns {Promise<{removed: number, reverted: string[], deleted: string[], refresh: boolean}>}
+   */
   static async discard(id) {
     const db = await getDatabase();
     await ensureSchema(db);
-    await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+    const out = { removed: 0, reverted: [], deleted: [], refresh: false };
+    const row = await db.getFirstAsync(`SELECT * FROM ${TABLE} WHERE id = ?`, [id]).catch(() => null);
+    if (!row) return out;
+
+    const target = targetOf(parse(row.payload));
+    // Every unsent row for the same record, this account's: undoing one edit
+    // while a second waits would send the second over a value no longer shown.
+    const unsent = await db.getAllAsync(
+      `SELECT * FROM ${TABLE} WHERE status != 'synced' AND COALESCE(owner_id, '') = COALESCE(?, '')`,
+      [row.owner_id ?? null]
+    ).catch(() => []);
+    const mine = (unsent ?? []).filter((r) => {
+      if (r.id === row.id || r.entity_key === row.entity_key) return true;
+      const t = target && targetOf(parse(r.payload));
+      return !!t && t.table === target.table && t.ids.some((x) => target.ids.includes(x));
+    });
+    if (!mine.some((r) => r.id === row.id)) mine.push(row);
+    for (const r of mine) {
+      const res = await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [r.id]).catch(() => null);
+      out.removed += res?.changes ?? 0;
+    }
+    if (!target) return out;
+
+    // Handlers register with the reconcilers (syncBackfill.service).
+    try { require("./syncBackfill.service").registerReconcilers?.(); } catch { /* not available */ }
+    const rows = mine.map((r) => ({ ...r, payload: parse(r.payload) }));
+    const handler = discardHandlers.get(target.table);
+    if (handler) {
+      for (const localId of target.ids) {
+        try {
+          const res = await handler({ db, localId, rows });
+          if (res?.deleted) out.deleted.push(localId); else out.reverted.push(localId);
+          if (res?.refresh) out.refresh = true;
+        } catch (err) {
+          console.warn(`[MutationQueue] discard handler for "${target.table}" failed:`, err.message);
+        }
+      }
+    } else if (REVERTIBLE_TABLES.has(target.table)) {
+      const idCol = target.idColumn === "_id" ? "_id" : "id";
+      for (const localId of target.ids) {
+        if (await neverReachedServer(db, rows, localId)) {
+          await db.runAsync(`DELETE FROM ${target.table} WHERE ${idCol} = ?`, [localId])
+            .catch((err) => console.warn(`[MutationQueue] discard: could not remove ${target.table} ${localId}:`, err.message));
+          out.deleted.push(localId);
+        } else {
+          await db.runAsync(`UPDATE ${target.table} SET _synced = 1 WHERE ${idCol} = ?`, [localId])
+            .catch((err) => console.warn(`[MutationQueue] discard: could not settle ${target.table} ${localId}:`, err.message));
+          // A delete undone: the server still has the record, so it shows
+          // again (tables without the column simply refuse this statement).
+          if (rows.some((r) => String(r.method).toUpperCase() === "DELETE")) {
+            await db.runAsync(`UPDATE ${target.table} SET deleted_at = NULL WHERE ${idCol} = ?`, [localId]).catch(() => {});
+          }
+          out.reverted.push(localId);
+        }
+      }
+      // Even a removed create: inferred from the queue, not known — if the
+      // server did have it, a full pull brings it back.
+      out.refresh = true;
+    }
+
+    if (out.refresh) {
+      // The server's copy of a reverted row is older than the cursor, so an
+      // incremental pull would never send it again. The next pull is full.
+      try {
+        await require("./syncManager").SyncManager?.resetLastSync?.();
+      } catch (err) {
+        console.warn("[MutationQueue] discard: could not reset the pull cursor:", err.message);
+      }
+    }
+    return out;
   }
 
   /**

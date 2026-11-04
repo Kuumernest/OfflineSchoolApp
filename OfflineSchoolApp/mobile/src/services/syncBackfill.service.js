@@ -783,6 +783,28 @@ const serverIdFrom = (response, ...paths) => {
 
 let _registered = false;
 
+/**
+ * A period still dirty after its send settled was edited while the send was
+ * in flight. The server now holds what it answered with, so that becomes the
+ * copy a discard of the later edit goes back to (periods.service
+ * discardLocal). No answer body: the copy is dropped and a discard asks for a
+ * full pull instead. Its own statement — an older table without the column
+ * must not undo the settle.
+ */
+const keepSentPeriodImage = async (db, id, doc) => {
+  const image = doc && typeof doc === "object" && doc.name
+    ? JSON.stringify({
+        name: doc.name, starttime: doc.startTime, endtime: doc.endTime,
+        sortorder: doc.sortOrder ?? 0, isbreak: doc.isBreak ? 1 : 0,
+        isactive: doc.isActive !== false ? 1 : 0, version: doc.version ?? 1,
+        updated_at: doc.updatedAt ?? null,
+      })
+    : null;
+  await db.runAsync(
+    "UPDATE periods SET server_image = ? WHERE id = ? AND dirty = 1", [image, id]
+  ).catch(() => {});
+};
+
 export const registerReconcilers = () => {
   if (_registered) return;
   _registered = true;
@@ -920,10 +942,12 @@ export const registerReconcilers = () => {
       // Slots placed in this period while it only had the local id.
       await db.runAsync("UPDATE timetable SET period_id = ? WHERE period_id = ?", [serverId, localId]).catch(() => {});
       await db.runAsync("UPDATE timetable_slots SET periodId = ? WHERE periodId = ?", [serverId, localId]).catch(() => {});
+      await keepSentPeriodImage(db, serverId, created);
       return;
     }
 
     await db.runAsync(`UPDATE periods SET ${settle} WHERE id = ?`, [...settleParams, localId]).catch(() => {});
+    await keepSentPeriodImage(db, localId, created);
   });
 
   registerReconciler("periodDelete", async ({ args }) => {
@@ -932,6 +956,15 @@ export const registerReconcilers = () => {
       "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [args.localId]
     ).catch(() => {});
   });
+
+  // A discarded period change is undone from the server's copy the period
+  // row keeps (periods.service discardLocal). Lazily required, as the queue
+  // and the periods service both are from here.
+  require("./mutationQueue.service").registerDiscardHandler(
+    "periods",
+    async ({ localId }) => require("./periods.service").PeriodsService.discardLocal(localId),
+    { kinds: ["period", "periodDelete"] }
+  );
 
   registerReconciler("timetable", async ({ response, args }) => {
     const db = await getDatabase();

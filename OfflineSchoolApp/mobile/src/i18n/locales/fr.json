@@ -5435,7 +5435,7 @@
       "one": "Marquer {{count}} écrasement comme vu ? L'alerte du tableau de bord disparaîtra.",
       "other": "Marquer les {{count}} écrasements comme vus ? L'alerte du tableau de bord disparaîtra."
     },
-    "discardBody": "« {{label}} » sera définitivement retiré de la file d'envoi. La modification reste sur cet appareil mais n'atteindra jamais le serveur.",
+    "discardBody": "« {{label}} » sera retiré de la file d'envoi et annulé sur cet appareil : l'enregistrement revient à ce que le serveur possède (un élément créé ici et jamais envoyé est supprimé). Cette action est irréversible.",
     "attemptCount": {
       "one": "{{count}} tentative",
       "other": "{{count}} tentatives"
