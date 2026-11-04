@@ -389,8 +389,17 @@ const isOnline = async () => {
  * failed with one of these (or with none: no answer at all) ran out of
  * patience, not of permission, and is re-armed when connectivity returns.
  */
+//
+// 409 is here for IDEMPOTENCY_IN_PROGRESS alone: a 409 that reports a real
+// clash parks the row as 'conflict', never 'failed', so a failed row whose
+// last answer was 409 ran out of retries while the server was still working
+// on (or holding a dead lock for) the same key — older builds parked those.
 const TRANSIENT_FAILED =
-  "(last_status IS NULL OR last_status >= 500 OR last_status IN (408, 425, 429))";
+  "(last_status IS NULL OR last_status >= 500 OR last_status IN (408, 409, 425, 429))";
+
+/** The server is already handling this very key: it will answer, given time. */
+const isInProgress = (error) =>
+  error?.response?.status === 409 && error?.response?.data?.code === "IDEMPOTENCY_IN_PROGRESS";
 
 // Single flight. Every screen that wants its work sent calls drain(); without
 // this, two drains running at once both selected the same pending row and
@@ -671,7 +680,13 @@ export class MutationQueue {
 
         // transient — back off and try again later
         const retries = (row.retry_count || 0) + 1;
-        const exhausted = retries >= MAX_RETRIES;
+        // "In progress" never parks the row. The answer is about the KEY, not
+        // the request: the server holds that key's lock and gives it up (or
+        // completes) within minutes — a stale lock is taken over after 11
+        // (backend middleware/idempotency.js). Parking it as failed left a
+        // register waiting for somebody to press retry. It backs off to the
+        // ceiling instead, keeping its key, until the server answers for real.
+        const exhausted = retries >= MAX_RETRIES && !isInProgress(error);
         const nextAt = exhausted
           ? null
           : new Date(Date.now() + backoffFor(retries)).toISOString();
@@ -888,7 +903,9 @@ export class MutationQueue {
    *
    * Two kinds: rows waiting out an unreachable backoff (the network is back,
    * there is nothing to wait for), and rows parked as failed after running
-   * out of retries on transient errors — no answer, 5xx, 408/425/429. Those
+   * out of retries on transient errors — no answer, 5xx, 408/425/429, and
+   * 409 IDEMPOTENCY_IN_PROGRESS (older builds parked those; the transient
+   * branch of processPending no longer does). Those
    * never meant "no"; a phone that was offline for a week before this fix
    * holds a queue of them. A 4xx refusal stays parked for a person.
    *
