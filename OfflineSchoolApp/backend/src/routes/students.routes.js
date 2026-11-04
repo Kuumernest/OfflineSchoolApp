@@ -649,6 +649,8 @@ async function logOverwriteIfNeeded({
   if (prevEditorId && thisEditorId && prevEditorId === thisEditorId) return null;
 
   try {
+    // Taken BEFORE the caller applies its change — the edit route used to
+    // assign the new values first, so the "lost" version held the winner's.
     const snapshot = student.toObject ? student.toObject() : student;
     const record   = await SyncOverwrite.create({
       entityType,
@@ -663,6 +665,9 @@ async function logOverwriteIfNeeded({
       lostEditByName:    student.updatedByName || null,
       lostEditAt:        student.updatedAt,
       lostVersion:       snapshot,
+      // What a roster-only reader (students.view) may see of it, through the
+      // same projection GET /students/:id applies.
+      lostVersionRoster: pickRoster(normaliseStudent(snapshot)),
     });
 
     console.log(
@@ -670,7 +675,19 @@ async function logOverwriteIfNeeded({
       `${currentUser?.name || thisEditorId} (action: ${action})`
     );
 
-    return { id: String(record._id), lostEditAt: record.lostEditAt, lostEditBy: record.lostEditByName };
+    // What the WINNER is told. The loser learns of it from
+    // GET /api/sync/overwrites/mine. `lostEditBy` stays the name for older
+    // clients that read it as one.
+    return {
+      id:                String(record._id),
+      lostEditAt:        record.lostEditAt,
+      lostEditBy:        record.lostEditByName,
+      lostEditById:      record.lostEditBy,
+      lostEditByName:    record.lostEditByName,
+      overwrittenBy:     record.overwrittenBy,
+      overwrittenByName: record.overwrittenByName,
+      overwrittenAt:     record.overwrittenAt,
+    };
   } catch (err) {
     console.warn("[sync-overwrite] Failed to log:", err.message);
     return null;
@@ -2676,6 +2693,14 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
 
   const nameBefore = resolveDisplayName(student);
 
+  // Detection and audit for the case where somebody else edited first. The
+  // write still proceeds — last-write-wins is preserved, exactly as /move does.
+  // Before the new values go onto the document: the snapshot is of the
+  // version being replaced.
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "edit",
+  });
+
   for (const [field, value] of Object.entries(changed)) student[field] = value;
 
   /*
@@ -2692,12 +2717,6 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     const finalName = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim();
     if (finalName) student.studentName = finalName;
   }
-
-  // Detection and audit for the case where somebody else edited first. The
-  // write still proceeds — last-write-wins is preserved, exactly as /move does.
-  const overwrote = await logOverwriteIfNeeded({
-    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "edit",
-  });
 
   student.updatedAt     = new Date();
   student.updatedBy     = req.user?._id  || null;
@@ -2756,7 +2775,9 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     message:   "Student record updated.",
     changed:   Object.keys(changed),
     warnings,
-    overwrote: overwrote ? { id: overwrote._id } : null,
+    // The helper's own shape — `{ id, … }`. This read `overwrote._id`, which
+    // never exists, so every edit's overwrite reached the client without an id.
+    overwrote,
     data:      student.toObject(),
   });
 }));
