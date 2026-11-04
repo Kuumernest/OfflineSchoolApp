@@ -5367,7 +5367,7 @@
     "listTitle": "Sync Overwrites",
     "listBlurb": "Edits replaced by other admins",
     "loading": "Loading overwrites…",
-    "banner": "These are edits you made that were later replaced by other admins. Tap one to see the diff.",
+    "banner": "Edits of yours that other admins later replaced, newest first. Changes you replaced are listed below them. Tap one to see the diff.",
     "bannerLine2": "Tap one to see the diff.",
     "allClear": "All clear!",
     "allClearSub": "None of your edits have been overwritten by other admins.",
@@ -5447,7 +5447,15 @@
       "other": "{{count}} conflicts"
     },
     "failedCount": "{{count}} failed",
-    "retryAll": "Retry all {{count}}"
+    "retryAll": "Retry all {{count}}",
+    "lostRow": "{{name}}’s edit replaced yours from {{when}}",
+    "wonRow": "You replaced {{name}}’s change from {{when}}",
+    "unnamed": "Unnamed {{type}}",
+    "thisRecord": "this record",
+    "editOf": "{{name}}’s edit",
+    "changesCount": "Changes ({{count}})",
+    "theirVersion": "Their version",
+    "yourWin": "You replaced this change. It was {{name}}’s, and they are shown it."
   },
   "assignList": {
     "title": "Teacher Assignments",

@@ -5367,7 +5367,7 @@
     "listTitle": "Modifications écrasées",
     "listBlurb": "Vos modifications remplacées par d’autres administrateurs",
     "loading": "Chargement…",
-    "banner": "Voici les modifications que vous avez faites et qui ont ensuite été remplacées par d’autres administrateurs. Touchez-en une pour voir la différence.",
+    "banner": "Vos modifications remplacées ensuite par d’autres administrateurs, les plus récentes d’abord. Les modifications que vous avez remplacées suivent. Touchez-en une pour voir la différence.",
     "bannerLine2": "Touchez-en une pour voir la différence.",
     "allClear": "Tout est en ordre !",
     "allClearSub": "Aucune de vos modifications n’a été écrasée par un autre administrateur.",
@@ -5447,7 +5447,15 @@
       "other": "{{count}} conflits"
     },
     "failedCount": "{{count}} en échec",
-    "retryAll": "Tout réessayer ({{count}})"
+    "retryAll": "Tout réessayer ({{count}})",
+    "lostRow": "La modification de {{name}} a remplacé la vôtre du {{when}}",
+    "wonRow": "Vous avez remplacé la modification de {{name}} du {{when}}",
+    "unnamed": "{{type}} sans nom",
+    "thisRecord": "cet enregistrement",
+    "editOf": "Modification de {{name}}",
+    "changesCount": "Modifications ({{count}})",
+    "theirVersion": "Sa version",
+    "yourWin": "Vous avez remplacé cette modification. Elle était de {{name}}, qui en est informé(e)."
   },
   "assignList": {
     "title": "Attributions",

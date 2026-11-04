@@ -70,7 +70,10 @@ const getEntityIcon = (entityType) => {
 function OverwriteRow({ item, onPress, onDismiss }) {
   const { t } = useTranslation();
   const action = getActionConfig(item.new_action);
-  const isUnseen = item.seen_by_loser === 0;
+  // Only a lost edit of yours is news; the note of a change you replaced is
+  // stored seen and never shows the dot.
+  const isUnseen = item.side === "lost" && item.seen_by_loser === 0;
+  const when     = formatDateTime(item.lost_edit_at);
 
   return (
     <TouchableOpacity
@@ -87,7 +90,7 @@ function OverwriteRow({ item, onPress, onDismiss }) {
       <View style={styles.rowBody}>
         <View style={styles.rowHeader}>
           <Text style={styles.rowTitle} numberOfLines={1}>
-            {item.entity_name || `Unnamed ${item.entity_type}`}
+            {item.entity_name || t("syncScreens.unnamed", { type: item.entity_type })}
           </Text>
           <Text style={styles.rowTime}>{timeAgo(item.overwritten_at)}</Text>
         </View>
@@ -103,16 +106,14 @@ function OverwriteRow({ item, onPress, onDismiss }) {
           </Text>
           <Text style={styles.rowSeparator}>•</Text>
           <Text style={[styles.rowMetaText, { color: action.color, fontWeight: "600" }]}>
-            {action.label}
+            {action.raw || t(action.labelKey)}
           </Text>
         </View>
 
         <Text style={styles.rowDescription} numberOfLines={2}>
-          <Text style={{ fontWeight: "600", color: "#111827" }}>
-            {item.overwritten_by_name || t("syncScreens.someone")}
-          </Text>
-          {"'s edit replaced yours from "}
-          {formatDateTime(item.lost_edit_at)}
+          {item.side === "lost"
+            ? t("syncScreens.lostRow", { name: item.overwritten_by_name || t("syncScreens.someone"), when })
+            : t("syncScreens.wonRow", { name: item.lost_edit_by_name || t("syncScreens.someone"), when })}
         </Text>
       </View>
 
@@ -142,8 +143,11 @@ export default function SyncOverwritesScreen() {
 
   // ── Load overwrites ──────────────────────────────────
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ force = false } = {}) => {
     try {
+      // Your own overwritten edits live on the server; online, bring them
+      // down first. Offline, what this phone already has is shown.
+      await SyncOverwriteService.refreshFromServer({ force });
       const rows = await SyncOverwriteService.getAllOverwrites({
         schoolId,
         limit: 200,
@@ -176,7 +180,7 @@ export default function SyncOverwritesScreen() {
   // ── Dismiss all ──────────────────────────────────────
 
   const handleDismissAll = useCallback(() => {
-    const unseenCount = overwrites.filter((o) => o.seen_by_loser === 0).length;
+    const unseenCount = overwrites.filter((o) => o.side === "lost" && o.seen_by_loser === 0).length;
     if (unseenCount === 0) return;
 
     Alert.alert(
@@ -199,7 +203,7 @@ export default function SyncOverwritesScreen() {
 
   // ── Derived counts ───────────────────────────────────
 
-  const unseenCount = overwrites.filter((o) => o.seen_by_loser === 0).length;
+  const unseenCount = overwrites.filter((o) => o.side === "lost" && o.seen_by_loser === 0).length;
 
   // ── Loading ──────────────────────────────────────────
 
@@ -260,7 +264,7 @@ export default function SyncOverwritesScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
+            onRefresh={() => { setRefreshing(true); load({ force: true }); }}
             tintColor="#4F46E5"
           />
         }
