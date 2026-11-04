@@ -83,13 +83,17 @@ const parseCursor = (raw) => {
     if (!parsed || typeof parsed !== "object") return null;
     const at = validDate(parsed.at);
     if (!parsed.at || !at) return null;
-    if (parsed.r === 1 && !parsed.id) return { at, resume: true };
+    // `k`: the scope fingerprint the cursor was handed out under (an entry's
+    // scopeKey — a teacher phone's roster classes). Kept, never trusted: it
+    // is only ever compared with the server's own.
+    const k = typeof parsed.k === "string" ? { k: parsed.k } : {};
+    if (parsed.r === 1 && !parsed.id) return { at, resume: true, ...k };
     // Both halves or neither. A position with only a timestamp is the broken
     // design this endpoint exists to avoid, and accepting one would reintroduce
     // it through the query string.
     if (!parsed.id) return null;
     const s = parsed.s ? validDate(parsed.s) : null;
-    return { at, id: String(parsed.id), ...(s ? { s } : {}) };
+    return { at, id: String(parsed.id), ...(s ? { s } : {}), ...k };
   } catch {
     return null;
   }
@@ -102,15 +106,16 @@ const parseCursor = (raw) => {
  * is what makes it safe when several documents share a timestamp — a single-key
  * cursor either skips rows or loops on them.
  */
-const encodeCursor = (doc, s = null) =>
+const encodeCursor = (doc, s = null, k = null) =>
   Buffer.from(JSON.stringify({
     at: new Date(doc.updatedAt).toISOString(),
     id: String(doc._id),
     ...(s ? { s: new Date(s).toISOString() } : {}),
+    ...(k ? { k } : {}),
   })).toString("base64url");
 
-const encodeResume = (at) =>
-  Buffer.from(JSON.stringify({ at: new Date(at).toISOString(), r: 1 })).toString("base64url");
+const encodeResume = (at, k = null) =>
+  Buffer.from(JSON.stringify({ at: new Date(at).toISOString(), r: 1, ...(k ? { k } : {}) })).toString("base64url");
 
 /**
  * The cursor handed back for one collection — commit-safe.
@@ -149,16 +154,16 @@ const encodeResume = (at) =>
  * it, sends it back, and pages while hasMore; a pair it builds itself (a row
  * held back by a pending local write) is still a valid position.
  */
-const nextCursor = ({ page, hasMore, cursor, raw, floor }) => {
+const nextCursor = ({ page, hasMore, cursor, raw, floor, key = null }) => {
   const last = page.length ? page[page.length - 1] : null;
-  if (hasMore) return encodeCursor(last, floor);
+  if (hasMore) return encodeCursor(last, floor, key);
   const restAt = last ? new Date(last.updatedAt) : cursor?.at ?? null;
   if (!restAt) return raw ?? null;                       // nothing seen, nothing to keep
-  if (restAt.getTime() > floor.getTime()) return encodeResume(floor);
-  if (last) return encodeCursor(last);
+  if (restAt.getTime() > floor.getTime()) return encodeResume(floor, key);
+  if (last) return encodeCursor(last, null, key);
   // An empty last page: the position the client sent, as a resting place
   // (a pass's floor does not outlive the pass).
-  return cursor.resume ? raw : encodeCursor({ updatedAt: cursor.at, _id: cursor.id });
+  return cursor.resume ? raw : encodeCursor({ updatedAt: cursor.at, _id: cursor.id }, null, key);
 };
 
 /**
@@ -263,7 +268,16 @@ exports.changes = async (req, res) => {
         continue;
       }
 
-      const cursor = parseCursor(cursors[entry.collection]);
+      let cursor = parseCursor(cursors[entry.collection]);
+      let rawCursor = cursors[entry.collection];
+      // A scope that can change under a client (a teacher phone's roster
+      // classes, config/syncFeed.js scopeKey) stamps its cursors with what it
+      // admitted. A cursor stamped otherwise — classes gained or lost since,
+      // or a cursor from before the stamp — is a position in a different set
+      // of rows, and the rows of a gained class are behind it though they never
+      // changed: the collection is read again from the start.
+      const key = entry.scopeKey ? await entry.scopeKey(req, models) : null;
+      if (cursor && (cursor.k ?? null) !== key) { cursor = null; rawCursor = null; }
       // The commit-safe floor of this pass: the earliest "now − window" any
       // of its pages has seen (nextCursor).
       const floor = cursor?.s && cursor.s < horizon ? cursor.s : horizon;
@@ -329,7 +343,7 @@ exports.changes = async (req, res) => {
         hasMore,
         // The cursor to send next time, commit-safe (nextCursor). On an empty
         // first page it stays what the client had rather than resetting.
-        cursor: nextCursor({ page, hasMore, cursor, raw: cursors[entry.collection], floor }),
+        cursor: nextCursor({ page, hasMore, cursor, raw: rawCursor, floor, key }),
         ...(futureDated ? { futureDated } : {}),
       };
     }

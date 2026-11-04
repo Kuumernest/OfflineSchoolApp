@@ -136,8 +136,13 @@ const taughtStudentsOnly = async (req, models) => {
   req._taughtScope = taughtScopeOf(req, models);
   return req._taughtScope;
 };
-const taughtScopeOf = async (req, models) => {
+const taughtScopeOf = async (req, models) =>
+  // No classes means no pupils — said explicitly, because an empty $in would
+  // otherwise be read as "no filter" by anything that builds on this.
+  ({ classId: { $in: await assignedClassIds(req, models) } });
 
+/** The classes this teacher holds an ACTIVE assignment in (the desktop's whole rule; half the phone's). */
+const assignedClassIds = async (req, models) => {
   const teacherId = String(req.user._id ?? req.user.id);
   // Active rows only, as utils/teacherScope.js asks on every write: an
   // assignment the office switched off is a class whose roster the device
@@ -150,13 +155,9 @@ const taughtScopeOf = async (req, models) => {
     deletedAt: null,
   }).select("class classId").lean();
 
-  const classIds = [...new Set(
+  return [...new Set(
     assignments.map((a) => String(a.classId ?? a.class ?? "")).filter(Boolean)
   )];
-
-  // No classes means no pupils — said explicitly, because an empty $in would
-  // otherwise be read as "no filter" by anything that builds on this.
-  return { classId: { $in: classIds } };
 };
 
 /**
@@ -833,6 +834,50 @@ const anyPhoneRole = (req) => PHONE_ROLES.has(req.user?.role);
 /** A pupil's own record: matched on either key, as /sync/pull does (userId on most rows, the shared _id on older ones). */
 const ownPupil = (req) => ({ $or: [{ userId: callerIdOf(req) }, { _id: callerIdOf(req) }] });
 
+/**
+ * The classes whose pupils a TEACHER's phone holds (owner decision, 2026-11),
+ * or null for every other role (the whole roster, or a pupil's own row).
+ *
+ *   a class where the teacher holds an ACTIVE TeacherAssignment — exactly the
+ *   desktop's taughtStudentsOnly (assignedClassIds): isActive !== false, either
+ *   field spelling; validFrom/validUntil are not consulted, as no server check
+ *   consults them (utils/teacherScope.js) — OR
+ *   a class whose classTeacherId is the teacher (the form master, who often
+ *   has no subject assignment in it), the class not soft-deleted.
+ *
+ * Decided by ROLE, as taughtStudentsOnly decides: a teacher granted
+ * students.view is still narrowed here. The mobile app purges local pupils by
+ * this same rule, so the two must not drift. Shared by /sync/changes
+ * ?profile=phone and /sync/pull; memoised on the request.
+ */
+const teacherRosterClassIds = async (req, models) => {
+  if (req.user?.role !== ROLES.TEACHER) return null;
+  if (!req._teacherRoster) {
+    req._teacherRoster = (async () => {
+      const formMaster = await models.Class.find({
+        schoolId: req.user.schoolId, classTeacherId: callerIdOf(req), ...models.Class.notDeletedClause(),
+      }).distinct("_id");
+      return [...new Set([...(await assignedClassIds(req, models)), ...formMaster.map(String)])].sort();
+    })();
+  }
+  return req._teacherRoster;
+};
+
+/**
+ * A short fingerprint of a teacher's roster classes, carried in the phone's
+ * `students` cursor (controllers/syncFeed.controller.js). A cursor is a
+ * position in the rows the teacher COULD see; when the classes change it is a
+ * position in a different set, and the pupils of a gained class — rows that
+ * did not change — sit behind it for good. So a cursor whose fingerprint is
+ * not today's is set aside and the collection is read again from the start:
+ * the teacher's own roster, a few hundred rows, once per change of classes.
+ */
+const teacherRosterKey = async (req, models) => {
+  const classes = await teacherRosterClassIds(req, models);
+  if (!classes) return null;
+  return require("crypto").createHash("sha1").update(classes.join(",")).digest("base64url").slice(0, 16);
+};
+
 /** /sync/pull's teacher fields: names only for a pupil. */
 const teacherFieldsFor = (req) => isStudentCaller(req)
   ? "name role schoolId deletedAt createdAt updatedAt"
@@ -847,8 +892,16 @@ const pupilRows = (rows) => {
     : { _id: String(s._id), id: String(s._id), schoolId: s.schoolId ?? null, deletedAt: s.deletedAt || s.updatedAt, updatedAt: s.updatedAt });
 };
 
-/** Hard deletes the phone applies: subjects and assignments for everyone, pupils for staff — a pupil hears only of their own. */
+/**
+ * Hard deletes the phone applies: subjects and assignments for everyone; pupils
+ * for staff, a teacher only those of their roster classes (the tombstone keeps
+ * the deleted pupil's class) — a pupil hears only of their own.
+ */
 const phoneTombstones = async (req, models) => {
+  const roster = await teacherRosterClassIds(req, models);
+  if (roster) {
+    return { $or: [{ entity: { $in: ["subject", "teacherAssignment"] } }, { entity: "student", classId: { $in: roster } }] };
+  }
   if (!isStudentCaller(req)) return { entity: { $in: ["subject", "teacherAssignment", "student"] } };
   const own = await models.Student.findOne(ownPupil(req)).select("_id").lean();
   const ids = [callerIdOf(req), own ? String(own._id) : null].filter(Boolean);
@@ -863,8 +916,10 @@ const tombstoneRows = (rows) => rows.map((t) => ({
 }));
 
 /**
- * @type {Array<FeedEntry & { allow: Function, project?: Function, populate?: Function, transform?: Function }>}
+ * @type {Array<FeedEntry & { allow: Function, project?: Function, populate?: Function, transform?: Function, scopeKey?: Function }>}
  * allow(req, held) — who may have it (held: the caller's capabilities).
+ * scopeKey(req, models) — a fingerprint of WHICH rows the scope admits; a
+ *   cursor carrying another one is set aside (the collection is re-read).
  */
 const PHONE_FEED = [
   { collection: "classes",  model: "Class",  allow: anyPhoneRole },
@@ -885,14 +940,21 @@ const PHONE_FEED = [
   },
   {
     collection: "students", model: "Student",
-    // A pupil: their own row. Staff: as /sync/pull served them, but only with a
-    // capability to read pupils at all.
+    // A pupil: their own row. A teacher: their roster classes. Other staff:
+    // the school, as /sync/pull served them — each only with a capability to
+    // read pupils at all.
     allow: (req, held) => isStudentCaller(req) || held.has("students.view") || held.has("students.viewTaught"),
-    scope: (req) => (isStudentCaller(req) ? ownPupil(req) : {}),
+    scope: async (req, models) => {
+      if (isStudentCaller(req)) return ownPupil(req);
+      const roster = await teacherRosterClassIds(req, models);
+      return roster ? { classId: { $in: roster } } : {};
+    },
+    scopeKey: teacherRosterKey,
     transform: pupilRows,
-    why: "The whole roster for staff, as /sync/pull has always sent a teacher's phone " +
-         "(narrowing a teacher to taught classes would drop a form-master's class " +
-         "that has no subject assignment — a role-matrix decision, not a sync one).",
+    why: "A teacher's phone holds the pupils of the classes they teach or are form " +
+         "master of (teacherRosterClassIds — owner decision 2026-11); the office " +
+         "roles the whole roster. A change of classes restarts the teacher's cursor " +
+         "(scopeKey), so a gained class's unchanged pupils arrive.",
   },
   {
     collection: "tombstones", model: "SyncTombstone", allow: anyPhoneRole,
@@ -928,4 +990,5 @@ module.exports = {
   assertHardDeletesAreTombstoned,
   hardDeletedModels,
   scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin, marksAsReadOnline },
+  teacherRosterClassIds,
 };

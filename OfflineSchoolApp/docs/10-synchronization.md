@@ -260,17 +260,31 @@ pages and commit-safe positions, and **`/sync/pull`'s audience and row shapes**:
 
 | Role | Receives |
 |---|---|
-| school_admin, bursar, teacher (super_admin with `schoolId`) | the six collections as `/sync/pull` sent them; `students` needs `students.view` or `students.viewTaught` (else refused by name) |
+| school_admin, bursar, teacher (super_admin with `schoolId`) | the six collections as `/sync/pull` sent them; `students` needs `students.view` or `students.viewTaught` (else refused by name); a teacher's `students` is their classes only (below) |
 | student | own pupil row only; teacher **names** only (no email, account state or staff number — also in each assignment's joined teacher); only their own pupil tombstone |
 
 Rows: pupils normalised as `/sync/pull` normalises them (off the roster → a
 removal row); assignments with teacher/class/subject names joined; tombstones as
-`{ collection: "subjects"|"assignments"|"students", _id, deletedAt }`. Teachers
-receive the **whole roster**, exactly as `/sync/pull` gave them — narrowing a
-teacher phone to taught classes would drop a form-master's class that has no
-subject assignment, which is a role-matrix decision. The desktop never sends
-`profile`, and its default list (`FEED`) and `KNOWN_GAPS` are unchanged.
-`check:phonefeed` compares every role row-for-row with `/sync/pull`.
+`{ collection: "subjects"|"assignments"|"students", _id, deletedAt }`. The desktop
+never sends `profile`, and its default list (`FEED`) and `KNOWN_GAPS` are
+unchanged. `check:phonefeed` compares every role row-for-row with `/sync/pull`.
+
+**A teacher's phone holds only their classes' pupils (owner decision, 2026-11)**,
+through both `?profile=phone` and `/sync/pull`, pupil tombstones included
+(`teacherRosterClassIds` in `config/syncFeed.js`; the phone purges local pupils
+by the same rule): a pupil whose class is one where the teacher has an **active**
+`TeacherAssignment` (`isActive !== false`, `teacher`/`teacherId` either spelling;
+`validFrom`/`validUntil` are not consulted, as nowhere on the server) **or** whose
+`Class.classTeacherId` is the teacher (class not soft-deleted). By role, as the
+desktop's `taughtStudentsOnly`: a teacher granted `students.view` is still
+narrowed. Classes and assignments still arrive whole, so a lost class reaches the
+phone as the assignment/class change it purges by. A gained class's unchanged
+pupils: the feed stamps the teacher's `students` cursor with a fingerprint of the
+roster classes and re-reads the collection when it differs; `/sync/pull` adds the
+live pupils of every roster class whose grant changed since `lastSync`. Known
+gap (as on the desktop): a pupil moved out of a teacher's class is not sent to
+that teacher, so the phone keeps the old copy until a full re-sync.
+`check:teacherroster`.
 
 **The phone** (`mobile/src/services/syncFeed.client.js`, called by
 `SyncManager._pullFeed`): pages to the end; applies each page **before** storing

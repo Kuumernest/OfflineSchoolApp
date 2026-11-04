@@ -250,9 +250,16 @@ exports.pullChanges = async (req, res) => {
     // and a student's token received every pupil in the school with their
     // guardians' names and phone numbers.
     const ownStudent = isStudent ? { $or: [{ userId: callerId }, { _id: callerId }] } : null;
+    // A teacher: the pupils of their roster classes only (config/syncFeed.js
+    // teacherRosterClassIds — the phone feed's rule, and the one the phone
+    // purges by). null for every other role.
+    const mongoose = require("mongoose");
+    const { teacherRosterClassIds } = require("../config/syncFeed");
+    const roster = await teacherRosterClassIds(req, mongoose.models);
     const studentFilter = {
       schoolId,
       ...since,
+      ...(roster ? { classId: { $in: roster } } : {}),
       ...(incremental ? {} : { status: "approved", isActive: true }),
       $and: [ownStudent, incremental ? null : NOT_DELETED].filter(Boolean),
     };
@@ -297,6 +304,34 @@ exports.pullChanges = async (req, res) => {
     // Cut each collection at the limit. The cursor handed back may not pass
     // the last row SENT of any cut collection, or the rows after it in that
     // collection would sort before the next pull's `since` and never come.
+    // A class the teacher GAINED since lastSync: its pupils did not change, so
+    // the timestamp cursor would never offer them. The grant did change — an
+    // assignment created or switched on, a class given this form master — so
+    // every roster class whose grant is newer than lastSync sends its live
+    // pupils whatever their updatedAt. Outside the page limit (one teacher's
+    // classes, not the school), so it cannot hold the cursor back. Over-sending
+    // is an upsert the phone already tolerates; under-sending is a pupil
+    // missing from a register.
+    let gainedStudents = [];
+    if (roster && roster.length && incremental && Student) {
+      const [byAssignment, byFormMaster] = await Promise.all([
+        TeacherAssignment.find({
+          schoolId: String(schoolId), isActive: { $ne: false }, ...since,
+          $or: [{ teacher: callerId }, { teacherId: callerId }],
+        }).select("class classId").lean(),
+        Class.find({ schoolId: String(schoolId), classTeacherId: callerId, ...since }).distinct("_id"),
+      ]);
+      const gained = [...new Set([
+        ...byAssignment.map((a) => String(a.classId ?? a.class ?? "")),
+        ...byFormMaster.map(String),
+      ])].filter((id) => roster.includes(id));
+      if (gained.length) {
+        gainedStudents = await Student.find({
+          schoolId, classId: { $in: gained }, status: "approved", isActive: true, ...NOT_DELETED,
+        }).sort({ updatedAt: 1, _id: 1 }).lean();
+      }
+    }
+
     let hasMore  = false;
     let boundary = null;
     const cut = (rows, key = "updatedAt") => {
@@ -313,6 +348,9 @@ exports.pullChanges = async (req, res) => {
     const periods     = cut(rawPeriods);
     const assignments = cut(rawAssignments);
     const rawStudents = cut(rawStudentsPage);
+    for (const s of gainedStudents) {
+      if (!rawStudents.some((r) => String(r._id) === String(s._id))) rawStudents.push(s);
+    }
     const tombstones  = cut(rawTombstones, "deletedAt");
 
     // Students: on the roster → the full row; off it → a removal.
@@ -331,7 +369,10 @@ exports.pullChanges = async (req, res) => {
     // Hard deletes. A student caller hears only of their own record.
     const stoneFor = { subject: subjects, teacherAssignment: assignments, student: students };
     const stoneModel = { subject: Subject, teacherAssignment: TeacherAssignment, student: Student };
-    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (!isStudent || t.entity !== "student" || t.docId === callerId));
+    // A pupil hears only of their own deletion; a teacher only of their roster
+    // classes' pupils (the tombstone keeps the deleted pupil's class).
+    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (t.entity !== "student" || (
+      isStudent ? t.docId === callerId : !roster || roster.includes(String(t.classId)))));
     for (const entity of Object.keys(stoneFor)) {
       const ids = relevant.filter((t) => t.entity === entity).map((t) => t.docId);
       if (!ids.length || !stoneModel[entity]) continue;

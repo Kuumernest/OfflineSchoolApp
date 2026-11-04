@@ -10,7 +10,9 @@
  *
  *   - admin, bursar, teacher: classes, subjects, periods, teachers (with email
  *     and staff number), assignments (teacher/class/subject names joined), the
- *     pupil roster (normalised; off the roster → a removal), hard deletes;
+ *     pupil roster (normalised; off the roster → a removal) — a teacher's
+ *     narrowed to the classes they teach (check-teacher-phone-roster.js) —
+ *     hard deletes;
  *   - a STUDENT: their own pupil row only, teacher NAMES only (no email, no
  *     account state — in `teachers` and in each assignment's teacher), and
  *     only their own pupil tombstone;
@@ -130,8 +132,11 @@ const check = (label, actual, expected) => {
 
   for (const who of ["bur", "tea"]) {
     const p = await phonePass(who);
-    check(`${who}: the same collections and rows as the admin`, [Object.keys(p.got).sort(), live(p.got.students), ids(p.got.classes), ids(p.got.assignments)],
-      [Object.keys(adm.got).sort(), live(adm.got.students), ids(adm.got.classes), ids(adm.got.assignments)]);
+    // A teacher's pupils are those of the classes they teach (Form 1 here) —
+    // owner decision 2026-11, proved in full by check-teacher-phone-roster.js.
+    const pupils = who === "tea" ? ["p-own", "p-sib1"] : live(adm.got.students);
+    check(`${who}: the same collections and rows as the admin (a teacher: their classes' pupils)`, [Object.keys(p.got).sort(), live(p.got.students), ids(p.got.classes), ids(p.got.assignments)],
+      [Object.keys(adm.got).sort(), pupils, ids(adm.got.classes), ids(adm.got.assignments)]);
   }
 
   console.log("--- 2. a student is narrowed as /sync/pull narrows them ---");
