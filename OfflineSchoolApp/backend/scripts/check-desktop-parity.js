@@ -6065,12 +6065,17 @@ const main = async () => {
   check("creating an assignment is answered locally", asProbe?.status, 201);
   check("and the row is in the mirror under the client's id",
     Boolean(docs.get("teacherAssignment", "client-as-probe")), true);
-  // The same id again: already in the mirror, so the handler declines rather
-  // than writing a second row — on either path.
-  check("the same id twice is not a second row",
-    api.handle({ method: "POST", path: "/api/admin/teacher-assignments", query: {},
-      body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx),
-    null);
+  // The same id again (a retry of the same submission): answered with the row
+  // already made, as the server answers a replay (deduplicated) — never a
+  // second row, on either path.
+  {
+    const again = api.handle({ method: "POST", path: "/api/admin/teacher-assignments", query: {},
+      body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx);
+    check("the same id twice is a replay, not a second row",
+      [again?.status, again?.data?.deduplicated, again?.data?.assignment?._id,
+       docs.find("teacherAssignment", {}).filter((a) => a._id === "client-as-probe").length],
+      [200, true, "client-as-probe", 1]);
+  }
   // Out of the mirror AND out of the queue again. The direct create below files
   // the same teacher/class/subject triple, so leaving this queued would have the
   // server answer 409 "Assignment already exists" and block the outbox — which
