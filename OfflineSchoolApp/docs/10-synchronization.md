@@ -11,7 +11,7 @@ throughout.
 |---|---|---|---|
 | Pull endpoint | `GET /api/sync/changes?profile=phone` | `GET /api/sync/pull` | `GET /api/sync/changes` |
 | Controller | `syncFeed.controller.js` + `config/syncFeed.js` `PHONE_FEED` | `sync.controller.js` | `syncFeed.controller.js` + `FEED` |
-| Collections | **6** + hard deletes | **6** | **36** |
+| Collections | **6** + hard deletes | **6** | **42** |
 | Cursor | `(updatedAt, _id)` per collection, per account | one timestamp | `(updatedAt, _id)` per collection |
 | Pagination | `limit` 500, max 2 000 | per collection, cut at 2 000 (`hasMore`) | `limit`, default 500, max 2 000 |
 | Audience | `/sync/pull`'s, per role (below) | per role (student narrowed) | per collection, per permission |
@@ -324,7 +324,7 @@ rows inside the window and the future-dated ones, and closes the hole.
 
 ### Capability gating — IMPLEMENTATION VERIFIED
 
-Each of the 36 fed collections declares the permission that gates it:
+Each of the 42 fed collections declares the permission that gates it:
 
 | Collection group | Permission |
 |---|---|
