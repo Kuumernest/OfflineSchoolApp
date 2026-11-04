@@ -36,6 +36,7 @@ import { getCurrentAuth, hasRole } from "../utils/authHelpers";
 import { canonicalDay, VALID_DAYS } from "../utils/timetableMappers";
 import { isServerGeneratedId } from "../utils/idHelpers";
 import { CREDENTIAL_ROW, credentialRowIds, repairCredentialRows } from "../db/credentialCache";
+import { repairPupilSyncFlags } from "../db/pupilSync";
 
 const isAdmin   = () => hasRole(["super_admin", "school_admin", "admin"]);
 const isTeacher = () => hasRole("teacher");
@@ -670,16 +671,18 @@ const SPECS = [
     // The reconciler owns the flag here because it must also write back the
     // enrolment number the server minted.
     noLocalFlag: true,
-    // `_operation = 'create'` rows belong to the spec above. Without this
-    // guard a locally-enrolled student (status 'approved', unsynced) would be
-    // PUT to /admin/students/<id>/approve — an id the server has never
-    // seen — and fail forever.
+    // Only a decision made ON THIS PHONE: `_local_decision` is written by the
+    // applications screen when it approves or rejects offline (db/pupilSync).
+    // Status alone said nothing — every pulled pupil is 'approved', and with
+    // a stray dirty flag each one was PUT to /approve on every admin sync.
+    // `_operation = 'create'` rows belong to the spec above: a pupil enrolled
+    // here has no application on the server to decide.
     where:
-      `${IS_DIRTY} AND status IN ('approved', 'rejected') ` +
+      `${IS_DIRTY} AND _local_decision IN ('approved', 'rejected') ` +
       `AND (_operation IS NULL OR _operation != 'create')`,
     method: "PUT",
     endpoint: (row) =>
-      row.status === "approved"
+      row._local_decision === "approved"
         ? API.admin.students.approve(row.id)
         : API.admin.students.reject(row.id),
     reconcile: "studentDecision",
@@ -687,11 +690,14 @@ const SPECS = [
       classId: row.class_id || row.classId || null,
       reason:  row.rejection_reason || row.reject_reason || null,
       __endpoints:
-        row.status === "approved"
+        row._local_decision === "approved"
           ? API.admin.students.approveFallbackChain(row.id)
           : API.admin.students.rejectFallbackChain(row.id),
     }),
-    skip: (row) => row.status === "approved" && !(row.class_id || row.classId),
+    // The server refuses an approval without a class (400 "classId is
+    // required"). The offline approve cannot be made without one, so this
+    // only holds a row whose class was lost since; it goes once it has one.
+    skip: (row) => row._local_decision === "approved" && !(row.class_id || row.classId),
   },
 
   {
@@ -1267,8 +1273,10 @@ export const registerReconcilers = () => {
       response?.data?.student?.enrollmentNo ||
       null;
 
+    // The decision is the server's now: the marker goes with the flag, so it
+    // is never sent again.
     await db.runAsync(
-      `UPDATE students SET _synced = 1, updated_at = ? WHERE id = ?`,
+      `UPDATE students SET _synced = 1, _local_decision = NULL, updated_at = ? WHERE id = ?`,
       [ts, args.localId]
     ).catch(() => {});
 
@@ -1705,6 +1713,9 @@ export const backfillOutbox = async () => {
 
   await repairCredentialCache(db).catch((err) => console.warn("[backfill] credential rows:", err?.message));
   await repairTeacherEditCreates(db).catch((err) => console.warn("[backfill] teacher edits:", err?.message));
+  // Before the specs read students._synced: pulled pupils the old pull left
+  // "unsent" are settled, so the decision sweep never sees them.
+  await repairPupilSyncFlags(db).catch((err) => console.warn("[backfill] pupil flags:", err?.message));
 
   const adopted = await adoptQueuedContentDeletes(db).catch(() => 0);
   if (adopted) { byKey["content-delete"] = adopted; total += adopted; }
