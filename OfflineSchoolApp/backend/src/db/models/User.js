@@ -390,4 +390,9 @@ userSchema.virtual("isStudent").get(function () {
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 userSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). Deleting a pupil deletes the pupil's login account (students.routes).
+userSchema.plugin(require("../plugins/syncTombstones"), { entity: "user" });
+
 module.exports = mongoose.model("User", userSchema);

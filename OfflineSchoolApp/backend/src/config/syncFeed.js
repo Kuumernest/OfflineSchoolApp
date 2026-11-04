@@ -62,15 +62,27 @@ const wholeSchool = () => ({});
  * what the capability students.viewTaught exists to prevent.
  */
 /**
- * Which hard deletes this caller hears of (models/SyncTombstone.js): those of
- * the records it may mirror at all. Subject and teacher-assignment deletions
- * with subjects.view (both collections are read under it); a pupil's deletion
- * with students.view, or — for a teacher holding only students.viewTaught —
- * for pupils of the classes they teach (the tombstone keeps the class, the
- * pupil's row being gone).
+ * Which tombstones (models/SyncTombstone.js) this caller hears of: exactly
+ * those of the rows it may mirror. Derived from the FEED entry each tombstone
+ * names (its `entity` is the collection), so a deletion reaches a caller on
+ * the same capability and the same scope as the row did:
+ *
+ *   - no scope (enrollment, promotion runs, users, subjects…): every tombstone
+ *     of the collection, to whoever holds its capability;
+ *   - taughtStudentsOnly (pupils): for a teacher, those of the classes they
+ *     teach — the tombstone keeps the deleted row's class;
+ *   - publishedUnlessAdmin (results): admins hear of deletions; everyone else
+ *     also hears of unpublishing (reason "unpublished"), since their mirror
+ *     holds the published copy and the feed no longer sends the row.
+ *
+ * The boot check below refuses any other scope on a tombstoned collection: a
+ * scope this function cannot reproduce would send a deletion to a machine
+ * that never held the row, or withhold it from one that does.
  */
 const tombstonesVisible = async (req, models) => {
-  if (req.user?.role === ROLES.SUPER_ADMIN) return {};
+  // Root mirrors as an admin does, unpublished rows included: no
+  // "unpublished" tombstone is meant for it.
+  if (req.user?.role === ROLES.SUPER_ADMIN) return { reason: null };
   if (!req._heldForTombstones) {
     req._heldForTombstones = new Set(
       await require("../services/permissions.service").effectiveFor(req.user?.role, req.user?.schoolId)
@@ -78,26 +90,42 @@ const tombstonesVisible = async (req, models) => {
   }
   const held = req._heldForTombstones;
   const visible = [];
-  if (held.has("subjects.view")) visible.push({ entity: { $in: ["subject", "teacherAssignment"] } });
-  if (held.has("students.view")) {
-    visible.push({ entity: "student" });
-  } else if (held.has("students.viewTaught")) {
-    visible.push({ entity: "student", ...(await taughtStudentsOnly(req, models)) });
+  for (const entity of tombstoneEntities()) {
+    const entry = byCollection.get(entity);
+    if (!entry || !satisfies(entry, held)) continue;
+    if (!entry.scope) visible.push({ entity });
+    else if (entry.scope === taughtStudentsOnly) visible.push({ entity, ...(await taughtStudentsOnly(req, models)) });
+    else if (entry.scope === publishedUnlessAdmin) {
+      visible.push(ADMIN_ROLES.includes(req.user?.role) ? { entity, reason: null } : { entity });
+    }
   }
   return visible.length ? { $or: visible } : { entity: { $in: [] } };
 };
 
-/** A tombstone whose row still exists (a delete that failed after writing it) is not sent. */
+/**
+ * What is actually sent of a page of tombstones. A deletion whose row still
+ * exists (a delete that failed after writing it) is not; an "unpublished"
+ * whose row is published again is not either (the row reaches the mirror
+ * through its own collection). The cursor still passes both.
+ */
 const dropTombstonesOfLiveRows = async (rows, models) => {
-  const modelOf = { subject: models.Subject, teacherAssignment: models.TeacherAssignment, student: models.Student };
-  const live = new Set();
-  for (const [entity, Model] of Object.entries(modelOf)) {
-    const ids = rows.filter((r) => r.entity === entity).map((r) => r.docId);
-    if (!ids.length || !Model) continue;
-    for (const id of await Model.find({ _id: { $in: ids } }).distinct("_id")) live.add(`${entity}:${id}`);
+  const keep = new Set();
+  for (const entity of new Set(rows.map((r) => r.entity))) {
+    const Model = models[byCollection.get(entity)?.model];
+    if (!Model) continue;   // nothing this build mirrors: nothing to remove
+    const mine = rows.filter((r) => r.entity === entity);
+    const live = new Map((await Model.find({ _id: { $in: mine.map((r) => r.docId) } })
+      .select("_id isPublished").lean()).map((d) => [String(d._id), d]));
+    for (const r of mine) {
+      const row = live.get(String(r.docId));
+      if (!row || (r.reason === "unpublished" && row.isPublished !== true)) keep.add(r);
+    }
   }
-  return rows.filter((r) => !live.has(`${r.entity}:${r.docId}`));
+  return rows.filter((r) => keep.has(r));
 };
+
+/** The collections a tombstone can name (models/SyncTombstone.js ENTITIES). */
+const tombstoneEntities = () => require("../db/models/SyncTombstone").ENTITIES;
 
 const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
@@ -224,13 +252,16 @@ const FEED = [
   { collection: "timetableSlot", model: "TimetableSlot", permission: "timetable.view" },
   {
     collection: "syncTombstone", model: "SyncTombstone",
-    permission: ["subjects.view", "students.view", "students.viewTaught"],
+    // Any capability that reads a tombstoned collection. Filled in below from
+    // those entries themselves, once FEED exists, so it cannot drift.
+    permission: [],
     scope: tombstonesVisible,
     postFilter: dropTombstonesOfLiveRows,
-    why: "How a HARD delete (subject, teacher assignment, pupil) reaches the " +
-         "mirror: the row is gone, so its tombstone is sent instead and the " +
-         "desktop removes its copy. Only for records the caller may mirror " +
-         "(the scope); a tombstone whose row still exists is never sent.",
+    why: "How a HARD delete (a pupil, a subject, a result a recompute dropped, " +
+         "a discarded promotion run…) reaches the mirror: the row is gone, so " +
+         "its tombstone is sent instead and the desktop removes its copy. Only " +
+         "for records the caller may mirror (the scope); a tombstone whose row " +
+         "still exists is never sent.",
   },
   { collection: "gradingConfig", model: "GradingConfig", permission: "results.view" },
   {
@@ -384,6 +415,13 @@ const FEED = [
   { collection: "promotionDecision", model: "PromotionDecision", permission: "promotion.run" },
   { collection: "studentApplication", model: "StudentApplication", permission: "students.admit" },
 ];
+
+// syncTombstone is readable by whoever may read any collection a tombstone can
+// name; which tombstones each caller gets is its scope (tombstonesVisible).
+FEED.find((e) => e.collection === "syncTombstone").permission = [...new Set(
+  FEED.filter((e) => tombstoneEntities().includes(e.collection))
+    .flatMap((e) => (Array.isArray(e.permission) ? e.permission : [e.permission]))
+)];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELIBERATELY NOT MIRRORED
@@ -624,6 +662,87 @@ const assertEveryModelIsClassified = () => {
   }
 };
 
+/**
+ * A HARD delete of a mirrored collection must leave a tombstone, or every
+ * desktop that holds the row keeps it for good (the feed reads rows by
+ * updatedAt; a deleted row has none). Checked at boot, like classification:
+ *
+ *   1. every collection a tombstone can name (SyncTombstone ENTITIES) is a
+ *      FEED collection, its model carries the syncTombstones plugin under
+ *      that same name (the desktop removes the row from the collection the
+ *      tombstone names), and its scope is one tombstonesVisible reproduces;
+ *   2. every mirrored model the code hard-deletes — Name.deleteOne/deleteMany/
+ *      findOneAndDelete/findByIdAndDelete, or model("Name")/M("Name") the same,
+ *      anywhere under src/ or middleware/ — is one of them.
+ *
+ * (2) reads the source, so a delete through an alias (`const C = Content`)
+ * or the raw driver is not seen; scripts/check-feed-tombstones.js pins the
+ * delete paths themselves.
+ */
+const DELETE_CALL = /(?:\b([A-Z]\w*)|\b(?:model|M)\(\s*["'](\w+)["']\s*\))\s*\.\s*(?:deleteMany|deleteOne|findOneAndDelete|findByIdAndDelete|findOneAndRemove|findByIdAndRemove)\s*\(/g;
+
+const sourceFiles = (dir, out = []) => {
+  if (!fs.existsSync(dir)) return out;
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) { if (ent.name !== "node_modules") sourceFiles(p, out); }
+    else if (ent.name.endsWith(".js")) out.push(p);
+  }
+  return out;
+};
+
+/** Mirrored model names the source hard-deletes, with where. */
+const hardDeletedModels = () => {
+  const mirrored = new Set(FEED.map((e) => e.model));
+  const found = new Map();
+  const roots = [path.join(__dirname, ".."), path.join(__dirname, "..", "..", "middleware")];
+  for (const file of roots.flatMap((r) => sourceFiles(r))) {
+    const text = fs.readFileSync(file, "utf8");
+    for (const m of text.matchAll(DELETE_CALL)) {
+      const name = m[1] || m[2];
+      if (!mirrored.has(name) || found.has(name)) continue;
+      found.set(name, path.relative(path.join(__dirname, "..", ".."), file));
+    }
+  }
+  return found;
+};
+
+const assertHardDeletesAreTombstoned = () => {
+  const mongoose = require("mongoose");
+  const entities = tombstoneEntities();
+  const problems = [];
+
+  for (const entity of entities) {
+    const entry = FEED.find((e) => e.collection === entity);
+    if (!entry) { problems.push(`tombstone entity "${entity}" is not a FEED collection`); continue; }
+    if (entry.scope && entry.scope !== taughtStudentsOnly && entry.scope !== publishedUnlessAdmin) {
+      problems.push(`${entity}: its scope is not one tombstonesVisible can apply to a tombstone`);
+    }
+    require(path.join(MODELS_DIR, entry.model));
+    const tagged = mongoose.models[entry.model]?.schema?.syncTombstoneEntity;
+    if (tagged !== entity) {
+      problems.push(`${entry.model} does not carry the syncTombstones plugin as "${entity}"` +
+        (tagged ? ` (it says "${tagged}")` : ""));
+    }
+  }
+
+  for (const [model, where] of hardDeletedModels()) {
+    const entry = FEED.find((e) => e.model === model);
+    if (!entities.includes(entry.collection)) {
+      problems.push(`${model} is mirrored (${entry.collection}) and hard-deleted in ${where}, with no tombstone`);
+    }
+  }
+
+  if (problems.length) {
+    throw new Error(
+      `src/config/syncFeed.js: a hard delete would never reach the desktop mirror:\n  ` +
+      problems.join("\n  ") +
+      `\nGive the model the syncTombstones plugin (db/plugins/syncTombstones.js) with its ` +
+      `FEED collection as the entity, and add that to ENTITIES in models/SyncTombstone.js.`
+    );
+  }
+};
+
 /** The capabilities that would each be sufficient for one entry. */
 const required = (entry) =>
   Array.isArray(entry.permission) ? entry.permission : [entry.permission];
@@ -687,6 +806,7 @@ const byCollection = new Map(FEED.map((e) => [e.collection, e]));
 // takes the whole server down on boot. Which is the intended failure mode for a
 // misclassified model, but not for this.
 assertEveryModelIsClassified();
+assertHardDeletesAreTombstoned();
 
 module.exports = {
   FEED,
@@ -698,5 +818,7 @@ module.exports = {
   byCollection,
   modelNames,
   assertEveryModelIsClassified,
+  assertHardDeletesAreTombstoned,
+  hardDeletedModels,
   scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin, marksAsReadOnline },
 };
