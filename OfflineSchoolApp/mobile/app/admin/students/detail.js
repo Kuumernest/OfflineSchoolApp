@@ -16,8 +16,6 @@ import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
-import { useNeedsInternet } from "../../../src/hooks/useNeedsInternet";
-import { NeedsInternetNote } from "../../../src/components/NeedsInternetNote";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -326,9 +324,10 @@ export default function StudentDetailScreen() {
   const { studentId }    = useLocalSearchParams();
   const router           = useRouter();
   const { t }            = useTranslation();
-  // Move, suspend, restore and remove write straight to the server (online-
-  // only until they are made offline-capable): disabled offline, and said so.
-  const { isOnline, requireOnline, failureText } = useNeedsInternet();
+  // Move, suspend, restore and remove work offline: the phone's copy changes
+  // at once and the request is queued (outbox), sent once when there is a
+  // connection. `pending` says a change of this pupil's is still on its way
+  // (or was refused), as other queued features do.
   const { user }         = useAuthStore();
   const schoolId         = user?.schoolId ?? "";
 
@@ -339,6 +338,7 @@ export default function StudentDetailScreen() {
   const [isBusy,         setIsBusy]         = useState(false);
   const [showMovePicker, setShowMovePicker] = useState(false);
   const baseUpdatedAtRef = useRef(null);
+  const [pending,        setPending]        = useState(null);
 
   // ── Load student ────────────────────────────────────────
 
@@ -369,6 +369,7 @@ export default function StudentDetailScreen() {
         [schoolId]
       );
       setClasses(cls);
+      setPending(await StudentService.getPendingState(studentId).catch(() => null));
     } catch (err) {
       setError(errorText(t, err, "studentRecord.loadFailed"));
     } finally {
@@ -391,7 +392,6 @@ export default function StudentDetailScreen() {
   }, [t]);
 
   const handleSuspend = useCallback(async () => {
-    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.suspendStudent"),
       t("studentRecord.suspendConfirm", { name: student?.name }),
@@ -410,6 +410,7 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, status: "suspended", updatedAt: now }));
       baseUpdatedAtRef.current = now;
+      setPending(await StudentService.getPendingState(studentId).catch(() => null));
       Alert.alert(
         t("studentRecord.suspendedTitle"),
         t("studentRecord.suspendedMessage", { name: student?.name })
@@ -417,15 +418,14 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        failureText(err, "studentRecord.suspendFailed")
+        errorText(t, err, "studentRecord.suspendFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
+  }, [student, studentId, withConfirm, t]);
 
   const handleRestore = useCallback(async () => {
-    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.restoreStudent"),
       t("studentRecord.restoreConfirm", { name: student?.name }),
@@ -444,6 +444,7 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, status: "approved", updatedAt: now }));
       baseUpdatedAtRef.current = now;
+      setPending(await StudentService.getPendingState(studentId).catch(() => null));
       Alert.alert(
         t("studentRecord.restoredTitle"),
         t("studentRecord.restoredMessage", { name: student?.name })
@@ -451,15 +452,14 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        failureText(err, "studentRecord.restoreFailed")
+        errorText(t, err, "studentRecord.restoreFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
+  }, [student, studentId, withConfirm, t]);
 
   const handleDelete = useCallback(async () => {
-    if (!(await requireOnline())) return;
     const yes = await withConfirm(
       t("studentRecord.deleteStudent"),
       t("studentRecord.deleteConfirm", { name: student?.name }),
@@ -484,14 +484,13 @@ export default function StudentDetailScreen() {
       setIsBusy(false);
       Alert.alert(
         t("studentRecord.error"),
-        failureText(err, "studentRecord.deleteFailed")
+        errorText(t, err, "studentRecord.deleteFailed")
       );
     }
-  }, [student, studentId, router, withConfirm, t, requireOnline, failureText]);
+  }, [student, studentId, router, withConfirm, t]);
 
   const handleMoveSelect = useCallback(async (cls) => {
     const classId = String(cls._id ?? cls.id);
-    if (!(await requireOnline())) { setShowMovePicker(false); return; }
     const yes = await withConfirm(
       t("studentRecord.moveStudentTitle"),
       t("studentRecord.moveConfirm", { name: student?.name, className: cls.name }),
@@ -510,6 +509,7 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, className: cls.name, classId, updatedAt: now }));
       baseUpdatedAtRef.current = now;
+      setPending(await StudentService.getPendingState(studentId).catch(() => null));
       Alert.alert(
         t("studentRecord.movedTitle"),
         t("studentRecord.movedMessage", { name: student?.name, className: cls.name })
@@ -517,12 +517,12 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        failureText(err, "studentRecord.moveFailed")
+        errorText(t, err, "studentRecord.moveFailed")
       );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm, t, requireOnline, failureText]);
+  }, [student, studentId, withConfirm, t]);
 
   // ── Derived ─────────────────────────────────────────────
 
@@ -695,14 +695,25 @@ export default function StudentDetailScreen() {
             })}
           />
 
-          <NeedsInternetNote online={isOnline} />
+          {pending && (
+            <View style={[styles.pendingNote, pending.state === "failed" && styles.pendingNoteFailed]}>
+              <Ionicons
+                name={pending.state === "failed" ? "alert-circle-outline" : "cloud-upload-outline"}
+                size={15}
+                color={pending.state === "failed" ? "#991B1B" : "#92400E"}
+              />
+              <Text style={[styles.pendingNoteText, pending.state === "failed" && styles.pendingNoteTextFailed]}>
+                {pending.state === "failed" ? t("studentRecord.changeRefused") : t("studentRecord.changePending")}
+              </Text>
+            </View>
+          )}
 
           <ActionButton
             icon="swap-horizontal-outline"
             label={t("studentRecord.moveToClass")}
             description={t("studentRecord.moveDesc")}
             variant="default"
-            disabled={isBusy || !isOnline}
+            disabled={isBusy}
             onPress={() => setShowMovePicker(true)}
           />
 
@@ -712,7 +723,7 @@ export default function StudentDetailScreen() {
               label={t("studentRecord.restoreStudent")}
               description={t("studentRecord.restoreDesc")}
               variant="success"
-              disabled={isBusy || !isOnline}
+              disabled={isBusy}
               onPress={handleRestore}
             />
           ) : (
@@ -721,7 +732,7 @@ export default function StudentDetailScreen() {
               label={t("studentRecord.suspendStudent")}
               description={t("studentRecord.suspendDesc")}
               variant="warning"
-              disabled={isBusy || !isOnline}
+              disabled={isBusy}
               onPress={handleSuspend}
             />
           )}
@@ -731,7 +742,7 @@ export default function StudentDetailScreen() {
             label={t("studentRecord.deleteStudent")}
             description={t("studentRecord.deleteDesc")}
             variant="danger"
-            disabled={isBusy || !isOnline}
+            disabled={isBusy}
             onPress={handleDelete}
           />
         </View>
@@ -756,6 +767,14 @@ export default function StudentDetailScreen() {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  pendingNote: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#FFFBEB", borderColor: "#FDE68A", borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 9, marginVertical: 8,
+  },
+  pendingNoteFailed:     { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+  pendingNoteText:       { flex: 1, color: "#92400E", fontSize: 13, fontWeight: "600" },
+  pendingNoteTextFailed: { color: "#991B1B" },
   scroll:          { padding: 16, gap: 12 },
   center:          { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   loadingText:     { marginTop: 12, fontSize: 14, color: "#9CA3AF" },
