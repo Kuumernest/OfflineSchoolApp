@@ -7,6 +7,7 @@ const Subject           = require("../db/models/Subject");
 const Period            = require("../db/models/Period");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const SyncTombstone     = require("../db/models/SyncTombstone");
+const { safeHorizon }   = require("../config/syncWindow");
 
 // ── Optional models ───────────────────────────────────────────────────────────
 
@@ -358,10 +359,29 @@ exports.pullChanges = async (req, res) => {
       `students: ${students.length}` + (hasMore ? ` — page cut at ${limit}, more to come` : "")
     );
 
-    // The cursor: the earlier of "before the queries ran" and the last row
-    // sent from a collection that was cut (see PULL_LIMIT_DEFAULT).
-    let timestamp = pulledAt;
+    // The cursor: the earliest of
+    //   - "before the queries ran", less the commit-safety window
+    //     (config/syncWindow.js). updatedAt is stamped when a document is
+    //     BUILT, not when it commits, so a slow write can become visible
+    //     with an updatedAt behind a cursor already handed out — and a
+    //     timestamp cursor would then skip it for good. Lagging the cursor
+    //     re-reads the last two minutes on every pull instead;
+    //   - the last row sent from a collection that was cut (PULL_LIMIT_DEFAULT).
+    // It also keeps a row dated in the future from mattering: the cursor is
+    // never later than the server's clock less the window.
+    let timestamp = safeHorizon(new Date(pulledAt)).toISOString();
     if (boundary && boundary < new Date(timestamp)) timestamp = boundary.toISOString();
+
+    // Rows dated ahead of the clock are re-sent every pull until real time
+    // passes them. Delivered, never hidden, and said out loud.
+    const nowMs = Date.now();
+    let futureDated = 0;
+    for (const rows of [classes, teachers, subjects, periods, assignments, rawStudents]) {
+      for (const r of rows) if (r.updatedAt && new Date(r.updatedAt).getTime() > nowMs) futureDated++;
+    }
+    if (futureDated) {
+      console.warn(`[sync] ⚠️  ${futureDated} row(s) for school ${schoolId} are dated in the future — re-sent until the clock passes them`);
+    }
     if (hasMore && boundary && boundary.getTime() <= effectiveDate.getTime()) {
       console.warn(
         `[sync] ⚠️  more than ${limit} rows share updatedAt ${boundary.toISOString()} — ` +
@@ -385,6 +405,7 @@ exports.pullChanges = async (req, res) => {
       // for the rest. Older clients ignore it and get the rest next sync.
       hasMore,
       limit,
+      futureDated,
     });
 
   } catch (err) {

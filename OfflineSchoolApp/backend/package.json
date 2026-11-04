@@ -35,6 +35,7 @@
     "check:createsuperadmin": "node scripts/check-create-super-admin.js",
     "check:syncdeletions": "node scripts/check-sync-pull-deletions.js",
     "check:syncpaging": "node scripts/check-sync-paging.js",
+    "check:commitgap": "node scripts/check-sync-commit-gap.js",
     "check:schoolcode": "node scripts/check-school-code.js",
     "check:names": "node scripts/check-name-uniqueness.js",
     "check:feedtombstones": "node scripts/check-feed-tombstones.js",
