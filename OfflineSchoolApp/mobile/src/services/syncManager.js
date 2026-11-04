@@ -28,6 +28,7 @@ import {
 }                                       from "../utils/authHelpers";
 import { API }                          from "./apiEndpoints";
 import { MutationQueue }                from "./mutationQueue.service";
+import { ensurePupilSyncColumns, queuedPupilIds } from "../db/pupilSync";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -862,6 +863,9 @@ class SyncManagerClass {
       const db = await getDatabase();
       const { ensureStudentColumns } = require("./studentEnroll.service");
       await ensureStudentColumns(db);
+      // _synced and the offline-decision marker (db/pupilSync), before
+      // anything reads which pupils hold unsent changes.
+      await ensurePupilSyncColumns(db);
       console.log("[SyncManager] Student enrollment columns ready");
     } catch (err) {
       console.log("[SyncManager] student columns migration skipped:", err.message);
@@ -2336,7 +2340,8 @@ class SyncManagerClass {
   // overwriting would undo it silently — a delete made while a pull was in
   // flight came back active and was never sent. The change goes out first;
   // the next pull refreshes the row. Same rule as the desktop's merge(), and
-  // the same rows the backfill treats as pending. Classes, teachers, subjects.
+  // the same rows the backfill treats as pending. Classes, teachers, subjects;
+  // pupils too (syncStudents, which also asks the outbox).
   async syncClasses(classes) {
     if (!classes?.length) return;
     const db = await getDatabase();
@@ -2533,7 +2538,17 @@ class SyncManagerClass {
     if (!students?.length) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
-    let ok = 0, fail = 0;
+    let ok = 0, fail = 0, kept = 0;
+
+    // The pull-protection rule (syncClasses), for pupils too: a pulled pupil
+    // never overwrites one with an unsent change. Two signals, either enough:
+    // the row's own flag (_synced != 1: an offline decision, an enrolment not
+    // yet sent, a correction or suspension waiting) and the outbox (a change
+    // queued or refused for this pupil). The flag is trustworthy since pulled
+    // pupils are written synced here and the backfill settles the ones older
+    // builds left at 0 (db/pupilSync.repairPupilSyncFlags).
+    await ensurePupilSyncColumns(db);
+    const busy = await queuedPupilIds(db);
 
     // One commit for the whole batch. expo-sqlite autocommits (and in WAL
     // mode fsyncs) every loose statement, so a pull of 500 rows meant 500
@@ -2544,16 +2559,13 @@ class SyncManagerClass {
         try {
           const id = s.id || s._id;
           if (!id) { fail++; continue; }
+          if (busy.has(String(id))) { kept++; continue; }
 
-          // NOT under the pull-protection rule (syncClasses), and deliberately:
-          // students._synced is added by the admissions code with DEFAULT 0
-          // and this function never sets it, so every pulled pupil reads as
-          // "unsent" — a `_synced = 1` guard would freeze the roster. The
-          // flag has to be made trustworthy first (docs/10, "Pupils and the
-          // pull-protection rule").
+          // Off the roster (deleted, suspended, gone): applies to a clean row,
+          // waits behind an unsent change like every other pulled write.
           if (s.deletedAt || s.deleted_at) {
             await db.runAsync(
-              "UPDATE students SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?",
+              "UPDATE students SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [s.deletedAt || s.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2565,8 +2577,8 @@ class SyncManagerClass {
             `INSERT INTO students
                (id, schoolId, school_id, classId, class_id, user_id,
                 name, studentName, admissionNo, admissionNumber, enrollmentNo,
-                email, is_active, status, deleted_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                email, is_active, status, _synced, deleted_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId        = COALESCE(excluded.schoolId, students.schoolId),
                school_id       = COALESCE(excluded.school_id, students.school_id),
@@ -2581,8 +2593,10 @@ class SyncManagerClass {
                email           = COALESCE(excluded.email, students.email),
                is_active       = excluded.is_active,
                status          = excluded.status,
+               _synced         = 1,
                deleted_at      = NULL,
-               updated_at      = excluded.updated_at`,
+               updated_at      = excluded.updated_at
+             WHERE students._synced = 1`,
             [
               String(id),
               s.schoolId || null, s.schoolId || null,
@@ -2607,7 +2621,7 @@ class SyncManagerClass {
         }
       }
     });
-    console.log(`[SyncManager] Students: ${ok} synced, ${fail} failed`);
+    console.log(`[SyncManager] Students: ${ok} synced, ${kept} kept (unsent change), ${fail} failed`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

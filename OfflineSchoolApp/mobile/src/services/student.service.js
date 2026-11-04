@@ -7,6 +7,7 @@ import {
   MutationQueue, outboxRowsForTable, localIdsOf, registerReconciler, registerFailureHandler,
 } from "./mutationQueue.service";
 import { ensureStudentColumns } from "./studentEnroll.service";
+import { ensurePupilSyncColumns, queuedPupilIds } from "../db/pupilSync";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -330,11 +331,22 @@ export const dropAndRecreateStudentTable = async () => {
               row.admissionNumber,
               normaliseStatus(row.status),
               row.is_active ?? 1,
-              0,
+              // The row's own flag, not 0: a blanket 0 made every pupil read
+              // as unsent (db/pupilSync), and the markers below say which
+              // ones really are.
+              row._synced ?? 0,
               row.updated_at,
               row.created_at,
             ]
           );
+          if (row._operation || row._local_decision) {
+            await ensureStudentColumns(db).catch(() => {});
+            await ensurePupilSyncColumns(db).catch(() => {});
+            await db.runAsync(
+              "UPDATE students SET _operation = ?, _local_decision = ? WHERE id = ?",
+              [row._operation ?? null, row._local_decision ?? null, row.id]
+            ).catch(() => {});
+          }
           restored++;
         } catch (restoreErr) {
           failed++;
@@ -606,10 +618,11 @@ const cacheStudentsLocally = async (
   // may have left the server before the change was made, and writing it over
   // the row would undo the change on screen. The change goes first; the next
   // fetch after it refreshes the row.
-  const busy = new Set();
-  for (const r of await outboxRowsForTable("students").catch(() => [])) {
-    for (const id of localIdsOf(r.payload?.__local)) busy.add(String(id));
-  }
+  // Every pupil the outbox has work for — the enrolment and an admission
+  // decision name theirs only in __reconcile — and, below, any row whose own
+  // flag says it holds an unsent change (an offline decision not queued yet).
+  await ensurePupilSyncColumns(db).catch(() => {});
+  const busy = await queuedPupilIds(db).catch(() => new Set());
 
   try {
     await db.execAsync("PRAGMA foreign_keys = OFF;");
@@ -741,7 +754,8 @@ const cacheStudentsLocally = async (
              status          = excluded.status,
              is_active       = excluded.is_active,
              _synced         = 1,
-             updated_at      = excluded.updated_at`,
+             updated_at      = excluded.updated_at
+           WHERE students._synced = 1`,
           [
             String(s.id),
             userId,
@@ -1353,6 +1367,7 @@ const EDIT_COLUMNS = {
 const ensureChangeColumns = async (db) => {
   await ensureStudentSchema(db);
   await ensureStudentColumns(db).catch(() => {});
+  await ensurePupilSyncColumns(db).catch(() => {});
   const cols = await getColumns(db, "students");
   for (const col of ["alternatePhone", "city", "className", "class_name", "deleted_at"]) {
     if (!cols.includes(col)) await safeAddColumn(db, "students", col, "TEXT");
@@ -1384,7 +1399,13 @@ const neverSent = async (row, id) => {
   return row?._operation === "create" && !(Number(row?._synced) === 1);
 };
 
-/** Writes the named columns that exist, plus updated_at. */
+/**
+ * Writes the named columns that exist, plus updated_at. A change made here
+ * (`now` given) also marks the row unsent, so a pull cannot write over it
+ * before it is sent (syncStudents); the send's success marks it clean again
+ * (the outbox clears `_synced` for the `__local` row). A put-back after a
+ * refusal (`now` null) leaves the flag alone.
+ */
 const writeLocal = async (db, id, fields, now) => {
   const cols = await getColumns(db, "students");
   const sets = [];
@@ -1395,6 +1416,7 @@ const writeLocal = async (db, id, fields, now) => {
     values.push(value ?? null);
   }
   if (now) { sets.push("updated_at = ?"); values.push(now); }
+  if (now && sets.length && cols.includes("_synced")) sets.push("_synced = 0");
   if (!sets.length) return;
   await db.runAsync(`UPDATE students SET ${sets.join(", ")} WHERE id = ?`, [...values, id]);
 };
@@ -1792,7 +1814,7 @@ export const StudentService = {
     await db
       .runAsync(
         `UPDATE students
-         SET status = 'approved', is_active = 1, updated_at = ?, _synced = 0
+         SET status = 'approved', is_active = 1, updated_at = ?, _synced = 1
          WHERE id = ?`,
         [now, studentId]
       )
@@ -1810,7 +1832,7 @@ export const StudentService = {
     await db
       .runAsync(
         `UPDATE students
-         SET status = 'rejected', is_active = 0, updated_at = ?, _synced = 0
+         SET status = 'rejected', is_active = 0, updated_at = ?, _synced = 1
          WHERE id = ?`,
         [now, studentId]
       )
