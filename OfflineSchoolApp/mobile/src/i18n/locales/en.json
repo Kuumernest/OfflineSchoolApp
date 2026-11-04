@@ -105,7 +105,8 @@
     "female": "Female",
     "needsInternetTitle": "No internet connection",
     "needsInternet": "This needs an internet connection. Connect and try again.",
-    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected."
+    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected.",
+    "notSentYet": "Not sent yet"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -3164,7 +3165,9 @@
     "movedMessage": "{{name}} moved to {{className}}.",
     "moveFailed": "Failed to move.",
     "error": "Error",
-    "ok": "OK"
+    "ok": "OK",
+    "changePending": "Saved on this phone. The change is sent to the school automatically when there is a connection.",
+    "changeRefused": "The school did not accept a change to this pupil. Open Pending changes to see why, then retry or discard it."
   },
   "studentSettings": {
     "title": "Settings",
@@ -6160,7 +6163,8 @@
     "edit": "Correct details",
     "guardianPhone": "Guardian's phone",
     "alternatePhone": "Other phone",
-    "city": "City or town"
+    "city": "City or town",
+    "queuedNote": "It is sent to the school automatically when there is a connection."
   },
   "teacherHw": {
     "title": "Homework",

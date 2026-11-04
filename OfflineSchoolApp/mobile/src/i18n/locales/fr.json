@@ -105,7 +105,8 @@
     "female": "Féminin",
     "needsInternetTitle": "Pas de connexion internet",
     "needsInternet": "Cette action nécessite une connexion internet. Connectez-vous et réessayez.",
-    "savedOnPhoneOnly": "Enregistré sur ce téléphone uniquement. La copie de l'école n'a pas été mise à jour car cela nécessite une connexion internet — enregistrez à nouveau une fois connecté."
+    "savedOnPhoneOnly": "Enregistré sur ce téléphone uniquement. La copie de l'école n'a pas été mise à jour car cela nécessite une connexion internet — enregistrez à nouveau une fois connecté.",
+    "notSentYet": "Pas encore envoyé"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -3164,7 +3165,9 @@
     "movedMessage": "{{name}} a été déplacé(e) vers {{className}}.",
     "moveFailed": "Échec du déplacement.",
     "error": "Erreur",
-    "ok": "OK"
+    "ok": "OK",
+    "changePending": "Enregistré sur ce téléphone. La modification est envoyée à l'école automatiquement dès qu'il y a une connexion.",
+    "changeRefused": "L'école n'a pas accepté une modification de cet élève. Ouvrez Modifications en attente pour voir pourquoi, puis réessayez ou abandonnez-la."
   },
   "studentSettings": {
     "title": "Paramètres",
@@ -6160,7 +6163,8 @@
     "edit": "Corriger la fiche",
     "guardianPhone": "Téléphone du parent",
     "alternatePhone": "Autre téléphone",
-    "city": "Ville"
+    "city": "Ville",
+    "queuedNote": "Elle est envoyée à l'école automatiquement dès qu'il y a une connexion."
   },
   "teacherHw": {
     "title": "Devoirs",

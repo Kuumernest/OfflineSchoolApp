@@ -85,6 +85,13 @@ const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => {
               {assignment.class?.name || "N/A"}
             </Text>
           </View>
+          {/* Made here and still queued: it goes by itself. */}
+          {assignment._synced === 0 && (
+            <View style={styles.metaChip}>
+              <Ionicons name="cloud-upload-outline" size={12} color="#D97706" />
+              <Text style={styles.metaChipText}>{t("common.notSentYet")}</Text>
+            </View>
+          )}
         </View>
       </View>
     </View>

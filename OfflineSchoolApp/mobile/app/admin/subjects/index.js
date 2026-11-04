@@ -101,6 +101,16 @@ const SubjectCard = React.memo(
               {subject.teacherName || t("subjects.noTeacher")}
             </Text>
           </View>
+
+          {/* Created or edited here and still queued: it goes by itself. */}
+          {subject._synced === 0 && (
+            <View style={[styles.teacherBadge, styles.teacherUnassigned]}>
+              <Ionicons name="cloud-upload-outline" size={12} color="#D97706" />
+              <Text style={[styles.teacherBadgeText, { color: "#92400E" }]} numberOfLines={1}>
+                {t("common.notSentYet")}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 

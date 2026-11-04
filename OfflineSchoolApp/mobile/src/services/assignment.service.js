@@ -4,6 +4,9 @@
 import { getDatabase } from "../db/database";
 import AsyncStorage    from "@react-native-async-storage/async-storage";
 import api             from "./api";
+import { MutationQueue } from "./mutationQueue.service";
+import { API }           from "./apiEndpoints";
+import { generateLocalId } from "../utils/idHelpers";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA GUARD
@@ -819,6 +822,14 @@ export const deleteAssignment = async (id) => {
   const db  = await getDatabase();
   const now = new Date().toISOString();
 
+  // Made on this phone and not sent yet: the create is cancelled and the row
+  // goes, with nothing sent.
+  if ((await MutationQueue.createState(`assignment:${id}`)) === "unsent") {
+    await MutationQueue.cancelUnsent(`assignment:${id}`);
+    await db.runAsync(`DELETE FROM teacher_assignments WHERE id = ?`, [id]).catch(() => {});
+    return;
+  }
+
   await db.runAsync(
     `UPDATE teacher_assignments
      SET deleted_at = ?, updated_at = ?, _synced = 0
@@ -999,7 +1010,28 @@ export const clearLocalAssignments = async (schoolId = null) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE ASSIGNMENT
+//
+// Written to teacher_assignments at once and queued: POST
+// /admin/teacher-assignments carrying the id this phone chose (the server
+// keeps it, and answers a repeat with the row it already holds, so a retry is
+// a replay). This used to be a direct POST with its own retry loop, online
+// only. The teacher, class and subject may themselves have been created on
+// this phone and still be queued: they were queued first, so the outbox sends
+// them first, and the id map rewrites any id the server re-issued.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const localJson = async (db, teacherId, classId, subjectId) => {
+  const [t, c, s] = await Promise.all([
+    db.getFirstAsync("SELECT name, email FROM users WHERE id = ? LIMIT 1", [teacherId]).catch(() => null),
+    db.getFirstAsync("SELECT name, level, section FROM classes WHERE id = ? LIMIT 1", [classId]).catch(() => null),
+    db.getFirstAsync("SELECT name, code FROM subjects WHERE id = ? LIMIT 1", [subjectId]).catch(() => null),
+  ]);
+  return {
+    teacher_json: JSON.stringify({ _id: teacherId, id: teacherId, name: t?.name || null, email: t?.email || null }),
+    class_json:   JSON.stringify({ _id: classId, id: classId, name: c?.name || null, level: c?.level || null, section: c?.section || null }),
+    subject_json: JSON.stringify({ _id: subjectId, id: subjectId, name: s?.name || null, code: s?.code || null }),
+  };
+};
 
 export const createAssignment = async ({ teacherId, classId, subjectId }) => {
   if (!teacherId || !classId || !subjectId) {
@@ -1013,80 +1045,49 @@ export const createAssignment = async ({ teacherId, classId, subjectId }) => {
     throw err;
   }
 
+  const db       = await getDatabase();
+  await ensureAssignmentSchema(db);
   const schoolId = await getStoredSchoolId();
+  const now      = new Date().toISOString();
+  const id       = generateLocalId();
 
-  const response = await withRetry(
-    () => api.post("/admin/teacher-assignments", { teacherId, classId, subjectId, schoolId })
-  );
+  await upsertAssignment(db, {
+    id,
+    teacherId,  teacher_id: teacherId,
+    classId,    class_id:   classId,
+    subjectId,  subject_id: subjectId,
+    schoolId,   school_id:  schoolId,
+    ...(await localJson(db, teacherId, classId, subjectId)),
+    _synced:    0,
+    _synced_at: null,
+    created_at: now,
+    updated_at: now,
+  }, now);
+  // buildUpsertParams fills _synced_at with "now"; an unsent row has none.
+  await db.runAsync(`UPDATE teacher_assignments SET _synced_at = NULL WHERE id = ?`, [id]).catch(() => {});
 
-  const data       = response.data;
-  const assignment = data?.assignment || data?.data || data;
-  const serverId   =
-    assignment?._id || assignment?.id ||
-    data?._id       || data?.id       || null;
+  await MutationQueue.enqueue({
+    entityKey: `assignment:${id}`,
+    method:    "POST",
+    endpoint:  API.admin.assignments.list,
+    payload:   {
+      id, teacherId, classId, subjectId, schoolId,
+      __resolve:   ["teacherId", "classId", "subjectId"],
+      __local:     { table: "teacher_assignments", ids: [id] },
+      __reconcile: { kind: "assignment", localId: id, table: "teacher_assignments" },
+    },
+  });
 
-  try {
-    const db  = await getDatabase();
-    const now = new Date().toISOString();
-    const id  = serverId ? String(serverId) : `local_${Date.now()}`;
-
-    const [localTeacher, localClass, localSubject] = await Promise.all([
-      db.getFirstAsync("SELECT name, email FROM users WHERE id = ? LIMIT 1",     [teacherId]).catch(() => null),
-      db.getFirstAsync("SELECT name, level, section FROM classes WHERE id = ? LIMIT 1", [classId]).catch(() => null),
-      db.getFirstAsync("SELECT name, code FROM subjects WHERE id = ? LIMIT 1",   [subjectId]).catch(() => null),
-    ]);
-
-    const serverTeacher = assignment?.teacher;
-    const serverClass   = assignment?.class;
-    const serverSubject = assignment?.subject;
-
-    const teacherJson = JSON.stringify({
-      _id:   teacherId,
-      id:    teacherId,
-      name:  (typeof serverTeacher === "object" ? serverTeacher?.name  : null) || localTeacher?.name  || null,
-      email: (typeof serverTeacher === "object" ? serverTeacher?.email : null) || localTeacher?.email || null,
-    });
-
-    const classJson = JSON.stringify({
-      _id:     classId,
-      id:      classId,
-      name:    (typeof serverClass === "object" ? serverClass?.name    : null) || localClass?.name    || null,
-      level:   (typeof serverClass === "object" ? serverClass?.level   : null) || localClass?.level   || null,
-      section: (typeof serverClass === "object" ? serverClass?.section : null) || localClass?.section || null,
-    });
-
-    const subjectJson = JSON.stringify({
-      _id:  subjectId,
-      id:   subjectId,
-      name: (typeof serverSubject === "object" ? serverSubject?.name : null) || localSubject?.name || null,
-      code: (typeof serverSubject === "object" ? serverSubject?.code : null) || localSubject?.code || null,
-    });
-
-    // ✅ Uses shared upsertAssignment — explicit columns, ON CONFLICT safe
-    await upsertAssignment(db, {
-      id,
-      teacherId,   teacher_id:  teacherId,
-      classId,     class_id:    classId,
-      subjectId,   subject_id:  subjectId,
-      schoolId,    school_id:   schoolId,
-      teacher_json: teacherJson,
-      class_json:   classJson,
-      subject_json: subjectJson,
-      _synced:     1,
-      _synced_at:  now,
-      created_at:  now,
-      updated_at:  now,
-    }, now);
-
-  } catch (dbErr) {
-    console.warn("[assignment.service] createAssignment local save:", dbErr.message);
-  }
-
-  return response.data;
+  const assignment = { _id: id, id, teacherId, classId, subjectId, schoolId };
+  return { assignment, data: assignment, queued: true };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE BULK ASSIGNMENTS
+//
+// One queued create per subject rather than one bulk request: each then has
+// its own id and Idempotency-Key, settles (or is refused) on its own, and is
+// shown and retried on its own. A pair this teacher already holds is skipped.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const createBulkAssignments = async ({ teacherId, assignments }) => {
@@ -1094,83 +1095,18 @@ export const createBulkAssignments = async ({ teacherId, assignments }) => {
     throw new Error("createBulkAssignments: teacherId and assignments[] are required");
   }
 
-  const schoolId = await getStoredSchoolId();
-
-  const response = await withRetry(
-    () => api.post("/admin/teacher-assignments/bulk", { teacherId, assignments, schoolId })
-  );
-
-  try {
-    const db      = await getDatabase();
-    const now     = new Date().toISOString();
-    const created = response.data?.created || [];
-
-    const localTeacher = await db
-      .getFirstAsync("SELECT name, email FROM users WHERE id = ? LIMIT 1", [teacherId])
-      .catch(() => null);
-
-    for (const item of created) {
-      const id        = String(item._id || item.id || `local_${Date.now()}`);
-      const classId   =
-        item.classId ||
-        assignments.find((a) => a.subjectId === item.subjectId)?.classId ||
-        null;
-      const subjectId = item.subjectId || null;
-
-      if (!classId || !subjectId) continue;
-
-      const [localClass, localSubject] = await Promise.all([
-        db.getFirstAsync("SELECT name, level, section FROM classes WHERE id = ? LIMIT 1",  [classId]).catch(() => null),
-        db.getFirstAsync("SELECT name, code FROM subjects WHERE id = ? LIMIT 1", [subjectId]).catch(() => null),
-      ]);
-
-      const serverTeacher = item?.teacher;
-      const serverClass   = item?.class;
-      const serverSubject = item?.subject;
-
-      const teacherJson = JSON.stringify({
-        _id:   teacherId,
-        id:    teacherId,
-        name:  (typeof serverTeacher === "object" ? serverTeacher?.name  : null) || localTeacher?.name  || null,
-        email: (typeof serverTeacher === "object" ? serverTeacher?.email : null) || localTeacher?.email || null,
-      });
-
-      const classJson = JSON.stringify({
-        _id:     classId,
-        id:      classId,
-        name:    (typeof serverClass === "object" ? serverClass?.name    : null) || localClass?.name    || null,
-        level:   (typeof serverClass === "object" ? serverClass?.level   : null) || localClass?.level   || null,
-        section: (typeof serverClass === "object" ? serverClass?.section : null) || localClass?.section || null,
-      });
-
-      const subjectJson = JSON.stringify({
-        _id:  subjectId,
-        id:   subjectId,
-        name: (typeof serverSubject === "object" ? serverSubject?.name : null) || localSubject?.name || null,
-        code: (typeof serverSubject === "object" ? serverSubject?.code : null) || localSubject?.code || null,
-      });
-
-      // ✅ Uses shared upsertAssignment — explicit columns, ON CONFLICT safe
-      await upsertAssignment(db, {
-        id,
-        teacherId,   teacher_id:  teacherId,
-        classId,     class_id:    classId,
-        subjectId,   subject_id:  subjectId,
-        schoolId,    school_id:   schoolId,
-        teacher_json: teacherJson,
-        class_json:   classJson,
-        subject_json: subjectJson,
-        _synced:     1,
-        _synced_at:  now,
-        created_at:  now,
-        updated_at:  now,
-      }, now).catch(() => {});
+  const created = [];
+  const skipped = [];
+  for (const a of assignments) {
+    try {
+      const res = await createAssignment({ teacherId, classId: a.classId, subjectId: a.subjectId });
+      created.push(res.assignment);
+    } catch (err) {
+      if (err?.response?.status === 409) skipped.push({ classId: a.classId, subjectId: a.subjectId });
+      else throw err;
     }
-  } catch (dbErr) {
-    console.warn("[assignment.service] createBulkAssignments local save:", dbErr.message);
   }
-
-  return response.data;
+  return { created, skipped, queued: true };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

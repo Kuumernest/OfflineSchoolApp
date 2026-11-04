@@ -295,6 +295,7 @@ const SPECS = [
       code:     row.code || "",
       classId:  row.class_id || row.classId || null,
       schoolId: row.schoolId || row.school_id || schoolId,
+      ...(Number(row.coefficient) > 0 ? { coefficient: Number(row.coefficient) } : {}),
     }),
     skip: (row) => !(row.class_id || row.classId),
   },
@@ -347,7 +348,11 @@ const SPECS = [
     method: "POST",
     reconcile: "assignment",
     resolve: ["teacherId", "classId", "subjectId"],
+    // The device's id goes with it: POST /admin/teacher-assignments keeps it
+    // and answers a repeat with the row it already made, so a retry after a
+    // lost answer is a replay, not a second assignment.
     payload: (row, { schoolId }) => ({
+      id:        row.id,
       teacherId: row.teacherId || row.teacher_id,
       classId:   row.classId   || row.class_id,
       subjectId: row.subjectId || row.subject_id,
@@ -1211,6 +1216,11 @@ export const registerReconcilers = () => {
         `${tempPassword && !emailSent ? " (credentials to share manually)" : ""}`
     );
   });
+
+  // Suspend / restore / move / delete / correct, queued by student.service.
+  try { require("./student.service").registerStudentReconcilers?.(); } catch (err) {
+    console.warn("[backfill] student change handlers unavailable:", err?.message);
+  }
 
   registerReconciler("studentDecision", async ({ response, args }) => {
     const db = await getDatabase();

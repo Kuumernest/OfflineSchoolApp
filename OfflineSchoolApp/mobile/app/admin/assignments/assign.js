@@ -12,8 +12,7 @@ import {
   getTeachersList, getClassesList, getSubjectsByClass,
   createAssignment, createBulkAssignments, getTeacherAssignments,
 } from "../../../src/services/assignment.service";
-import { useNeedsInternet } from "../../../src/hooks/useNeedsInternet";
-import { NeedsInternetNote } from "../../../src/components/NeedsInternetNote";
+import { errorText } from "../../../src/utils/appError";
 
 const normalizeId = (item) => {
   if (!item || typeof item !== "object") return null;
@@ -165,9 +164,9 @@ const ReviewSubjectItem = React.memo(({ subject, onRemove }) => (
 
 export default function AssignTeacher() {
   const { t } = useTranslation();
-  // Assigning a teacher writes straight to the server (online-only until it
-  // is made offline-capable): said up front, not as a network error.
-  const { isOnline, requireOnline, failureText } = useNeedsInternet();
+  // Assigning works offline: each assignment is written here at once and
+  // queued (outbox), sent once when there is a connection — after the
+  // teacher, class or subject it names if those were made offline too.
   const router = useRouter();
   const params = useLocalSearchParams();
 
@@ -355,7 +354,6 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       return;
     }
     if (submitting) return;
-    if (!(await requireOnline())) return;
 
     try {
       setSubmitting(true);
@@ -417,13 +415,13 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           [{ text: t("assignWork.ok"), onPress: () => router.back() }]
         );
       } else {
-        const message = failureText(err, "assignWork.errCreate");
+        const message = errorText(t, err, "assignWork.errCreate");
         Alert.alert(t("assignWork.failedTitle"), message);
       }
     } finally {
       if (isMountedRef.current) setSubmitting(false);
     }
-  }, [selectedTeacher, selectedClass, selectedSubjects, submitting, t, refreshExistingAssignments, router, requireOnline, failureText]);
+  }, [selectedTeacher, selectedClass, selectedSubjects, submitting, t, refreshExistingAssignments, router]);
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>
@@ -670,8 +668,6 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         </View>
       )}
 
-      <NeedsInternetNote online={isOnline} />
-
       <View style={styles.reviewActions}>
         <TouchableOpacity style={styles.backStepButton} onPress={() => setCurrentStep(3)} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={18} color="#4F46E5" />
@@ -681,10 +677,10 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         <TouchableOpacity
           style={[
             styles.confirmButton,
-            (submitting || selectedSubjects.length === 0 || !isOnline) && styles.confirmButtonDisabled,
+            (submitting || selectedSubjects.length === 0) && styles.confirmButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={submitting || selectedSubjects.length === 0 || !isOnline}
+          disabled={submitting || selectedSubjects.length === 0}
           activeOpacity={0.8}
         >
           {submitting ? (
