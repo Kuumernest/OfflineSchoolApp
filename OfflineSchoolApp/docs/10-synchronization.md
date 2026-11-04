@@ -72,7 +72,9 @@ that arrives without it is upserted and un-deleted.
 | **Incremental** (`lastSync` sent) | every row changed since the cursor, **including** soft-deleted ones (classes, periods, teachers); students who left the roster (no longer approved and active) as `{ _id, schoolId, deletedAt }`; and **hard deletes** from their tombstones, in the same shape. `deletedItems` lists every removal as `{ collection, id, deletedAt }` (informational). |
 
 **Hard deletes** (subjects, teacher assignments, students — including the
-subjects and assignments a class delete cascades to) leave no row, so the
+subjects and assignments a class delete cascades to — and, on the desktop feed,
+users, result summaries / term / annual results, enrolments, promotion runs and
+decisions; `SyncTombstone.ENTITIES`) leave no row, so the
 `syncTombstones` plugin (`src/db/plugins/syncTombstones.js`) writes a
 `SyncTombstone` (`schoolId, entity, docId, deletedAt`) **before** each delete,
 on the model, for every delete path. A tombstone whose row still exists (a
@@ -98,12 +100,16 @@ dropped. Only raw driver writes (`Model.collection.*`) bypass both.
 ### Desktop: hard deletes reach the mirror (2026-10-17)
 
 `/sync/changes` carries a `syncTombstone` collection: one row per hard-deleted
-subject, teacher assignment or pupil, paged on `(updatedAt, _id)` like every
-collection. Scoped to what the caller may mirror — subject and assignment
-tombstones with `subjects.view`; pupils with `students.view`, or for a teacher
-with only `students.viewTaught` the pupils of the classes they teach (the
-tombstone keeps `classId`); refused by name to anyone else. A tombstone whose
-row still exists is not sent (`postFilter`), and the cursor still passes it.
+row of any entity in `SyncTombstone.ENTITIES`, paged on `(updatedAt, _id)` like
+every collection. Scoped to what the caller may mirror, derived from each
+entity's own FEED entry (`tombstonesVisible`, `syncFeed.js`): the same
+capability, and for pupils of a teacher with only `students.viewTaught` the
+classes they teach (the tombstone keeps `classId`); refused by name to anyone
+else. Results are also tombstoned with reason **`"unpublished"`** when
+unpublished: non-admins mirror published results only, so their copy must go;
+admins hear only of deletions. A tombstone whose row still exists — or an
+"unpublished" one whose row is published again — is not sent, and the cursor
+still passes it.
 
 The desktop engine **removes** the named row (`store.applyTombstones`) — the
 server no longer has it, and some endpoints the mirror answers for apply no
