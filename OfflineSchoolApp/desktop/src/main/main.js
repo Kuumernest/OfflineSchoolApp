@@ -332,7 +332,7 @@ const registerHandlers = () => {
    * nothing.
    */
   const ownActions = ownOutboxActions({
-    queue, docs, currentUser: () => session?.userId ?? null,
+    queue, docs, state: syncState, currentUser: () => session?.userId ?? null,
   });
 
   ipcMain.handle("outbox:unblock", (_e, seq) => { ownActions.unblock(seq); return summaryForSession(); });
@@ -363,8 +363,8 @@ const registerHandlers = () => {
   });
 
   ipcMain.handle("outbox:discard", (_e, seq) => {
-    // The local rows this request wrote go with it (ownOutboxActions), or the
-    // desktop keeps showing something the server has never heard of.
+    // The local rows this request wrote are undone with it (ownOutboxActions):
+    // a created row removed, an edited one put back to the server's version.
     ownActions.discard(seq);
     return summaryForSession();
   });

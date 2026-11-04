@@ -243,6 +243,24 @@ const outbox = (db) => {
     },
 
     /**
+     * Is any request still queued (pending or blocked) that wrote this row —
+     * as its primary document or among its extra_docs? While one is, the row
+     * stays pending: settling it early let the next pull overwrite the latest
+     * local change with the server's older copy.
+     */
+    queuedFor(collection, docId) {
+      return Boolean(db.prepare(`
+        SELECT 1 FROM outbox
+        WHERE (collection = ? AND doc_id = ?)
+           OR (extra_docs IS NOT NULL AND EXISTS (
+                SELECT 1 FROM json_each(CASE WHEN json_valid(extra_docs) THEN extra_docs ELSE '[]' END) AS e
+                WHERE json_extract(e.value, '$.collection') = ?
+                  AND CAST(json_extract(e.value, '$.docId') AS TEXT) = ?))
+        LIMIT 1
+      `).get(collection, String(docId), collection, String(docId)));
+    },
+
+    /**
      * Let a blocked entry try again — after a person has done something about
      * whatever the server objected to.
      */
@@ -268,10 +286,11 @@ const outbox = (db) => {
      * mirror keeps a change the server will never have.
      */
     discard(seq) {
-      const row = db.prepare("SELECT collection, doc_id, extra_docs FROM outbox WHERE seq = ?").get(seq);
+      const row = db.prepare("SELECT method, collection, doc_id, extra_docs FROM outbox WHERE seq = ?").get(seq);
       db.prepare("DELETE FROM outbox WHERE seq = ?").run(seq);
       if (!row) return null;
       return {
+        method:     row.method,
         collection: row.collection,
         docId:      row.doc_id,
         extraDocs:  row.extra_docs ? JSON.parse(row.extra_docs) : [],
@@ -384,9 +403,10 @@ const REFUSALS = {
  * @param {object}   o
  * @param {object}   o.queue        outbox(db)
  * @param {object}   [o.docs]       store.documents(db), to undo a discard's local rows
+ * @param {object}   [o.state]      store.state(db), to re-pull a row whose server copy was not kept
  * @param {Function} o.currentUser  () => the signed-in account's id, or null
  */
-const ownOutboxActions = ({ queue, docs = null, currentUser }) => {
+const ownOutboxActions = ({ queue, docs = null, state = null, currentUser }) => {
   /** The entry if it is this account's; null if there is no such entry. */
   const own = (seq) => {
     const userId = currentUser() ?? null;
@@ -407,18 +427,41 @@ const ownOutboxActions = ({ queue, docs = null, currentUser }) => {
     },
 
     /**
-     * Discard, and forget the local rows it wrote — or the desktop keeps showing
+     * Discard, and undo the local rows it wrote — or the desktop keeps showing
      * something the server has never heard of. Throws OutboxRefusal, before
      * anything is removed, for an entry that is not this account's.
+     *
+     * Undo, not delete. A row this request CREATED goes. A row it EDITED goes
+     * back to the server's version kept under it (store.put, migration 5):
+     * deleting it, as this used to, made an existing pupil or payment vanish
+     * until the server next changed it, since the cursor is already past it.
+     *
+     * A row another queued request also wrote is left as it is — still
+     * pending, showing that later change, which carries on. A row written
+     * before its server version was kept (base unknown): a POST's own new row
+     * goes as before; anything else is un-pended and its collection re-pulled
+     * from the start, so the server's copy comes back rather than nothing.
      */
     discard(seq) {
       if (!own(seq)) return null;
-      const undo = queue.discard(seq);
-      if (docs && undo?.collection && undo?.docId) docs.forget(undo.collection, undo.docId);
-      for (const extra of undo?.extraDocs ?? []) {
-        if (docs && extra?.collection && extra?.docId) docs.forget(extra.collection, extra.docId);
-      }
-      return undo;
+      const undoRows = () => {
+        const undo = queue.discard(seq);
+        if (!docs || !undo) return undo;
+        const rows = [
+          ...(undo.collection && undo.docId ? [{ collection: undo.collection, docId: undo.docId, primary: true }] : []),
+          ...(undo.extraDocs ?? []).filter((e) => e?.collection && e?.docId),
+        ];
+        for (const { collection, docId, primary } of rows) {
+          if (queue.queuedFor(collection, docId)) continue;
+          if (docs.restore(collection, docId) !== "unknown") continue;
+          if (primary && undo.method === "POST") { docs.forget(collection, docId); continue; }
+          docs.settle(collection, docId);
+          state?.resetCursor(collection);
+        }
+        return undo;
+      };
+      // One commit: the entry gone and its rows undone, or neither.
+      return docs ? docs.tx(undoRows) : undoRows();
     },
 
     /** The whole entry, to save a copy of. Throws OutboxRefusal as above. */
