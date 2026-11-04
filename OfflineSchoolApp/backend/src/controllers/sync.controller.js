@@ -73,6 +73,36 @@ const sinceFilter = (lastSyncDate) => {
   return { updatedAt: { $gte: lastSyncDate } };
 };
 
+/**
+ * How many rows of ONE collection a single pull may carry.
+ *
+ * The pull used to answer with every changed row of all six collections in
+ * one body, so a first sync of a large school was one unbounded response —
+ * tens of thousands of students over a phone link that may not last a minute.
+ *
+ * Now each collection is read in (updatedAt, _id) order and cut at the limit.
+ * When any collection is cut, `timestamp` is pulled back to the updatedAt of
+ * the last row sent from the cut collection(s), and `hasMore: true` says so.
+ * A client that knows nothing of paging — every phone build before the feed
+ * moved to /sync/changes — stores `timestamp` as it always has, and its next
+ * pull (inclusive `$gte`) continues from there. The data arrives over several
+ * syncs instead of one, and nothing is skipped: every row after the cursor is
+ * either in this answer or after the cursor that goes back.
+ *
+ * Known edge, documented rather than fixed: more than `limit` rows of one
+ * collection sharing ONE millisecond cannot be split by a plain timestamp, so
+ * an old client would be offered the same first `limit` of them every time.
+ * New clients read /sync/changes, whose (updatedAt, _id) cursor has no such
+ * edge; logged when it happens.
+ */
+const PULL_LIMIT_DEFAULT = 2000;
+const PULL_LIMIT_MAX     = 2000;
+
+const pullLimit = (raw) => {
+  const n = Number.parseInt(raw, 10);
+  return Math.min(Math.max(Number.isFinite(n) ? n : PULL_LIMIT_DEFAULT, 1), PULL_LIMIT_MAX);
+};
+
 /** Excludes soft-deleted documents from any query. */
 const NOT_DELETED = {
   $or: [
@@ -227,38 +257,62 @@ exports.pullChanges = async (req, res) => {
     };
     if (!studentFilter.$and.length) delete studentFilter.$and;
 
-    // ── Fetch all entity types in parallel ───────────────────────────────
-    const [classes, teachers, subjects, periods, assignments, rawStudents, tombstones] =
-      await Promise.all([
-        Class.find({ schoolId, ...since, ...live }).lean(),
+    // ── Fetch all entity types in parallel, one bounded page each ────────
+    const limit = pullLimit(req.query.limit);
+    const page  = (q, key = "updatedAt") => q.sort({ [key]: 1, _id: 1 }).limit(limit + 1);
 
-        User.find({ schoolId, role: "teacher", ...since })
-          .select(teacherFields)
+    const [rawClasses, rawTeachers, rawSubjects, rawPeriods, rawAssignments, rawStudentsPage, rawTombstones] =
+      await Promise.all([
+        page(Class.find({ schoolId, ...since, ...live })).lean(),
+
+        page(User.find({ schoolId, role: "teacher", ...since })
+          .select(teacherFields))
           .lean(),
 
-        Subject.find({ schoolId, ...since, ...live }).lean(),
+        page(Subject.find({ schoolId, ...since, ...live })).lean(),
 
-        Period.find({ schoolId, ...since, ...live }).lean(),
+        page(Period.find({ schoolId, ...since, ...live })).lean(),
 
-        TeacherAssignment.find({ schoolId, ...since, ...live })
+        page(TeacherAssignment.find({ schoolId, ...since, ...live })
           // Name only for a student: teacherFields above keeps staff emails
           // off a pupil's device, and this join handed them back.
           .populate("teacher", isStudent ? "name" : "name email")
           .populate("class",   "name")
-          .populate("subject", "name")
+          .populate("subject", "name"))
           .lean(),
 
         // Their own row is still sent to a student rather than dropped,
         // because the local students table is what several student screens
         // read their class and admission number from.
-        Student ? Student.find(studentFilter).lean() : Promise.resolve([]),
+        Student ? page(Student.find(studentFilter)).lean() : Promise.resolve([]),
 
         incremental
           // The same bound as every row above (sinceFilter: a cursor from the
           // future reads from the beginning), on the deletion's own time.
-          ? SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }).lean()
+          ? page(SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }), "deletedAt").lean()
           : Promise.resolve([]),
       ]);
+
+    // Cut each collection at the limit. The cursor handed back may not pass
+    // the last row SENT of any cut collection, or the rows after it in that
+    // collection would sort before the next pull's `since` and never come.
+    let hasMore  = false;
+    let boundary = null;
+    const cut = (rows, key = "updatedAt") => {
+      if (rows.length <= limit) return rows;
+      hasMore = true;
+      const kept = rows.slice(0, limit);
+      const at   = new Date(kept[kept.length - 1][key]);
+      if (!boundary || at < boundary) boundary = at;
+      return kept;
+    };
+    const classes     = cut(rawClasses);
+    const teachers    = cut(rawTeachers);
+    const subjects    = cut(rawSubjects);
+    const periods     = cut(rawPeriods);
+    const assignments = cut(rawAssignments);
+    const rawStudents = cut(rawStudentsPage);
+    const tombstones  = cut(rawTombstones, "deletedAt");
 
     // Students: on the roster → the full row; off it → a removal.
     const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
@@ -301,8 +355,19 @@ exports.pullChanges = async (req, res) => {
       `📦 Pull results (${role ?? "unknown"}) — classes: ${classes.length}, ` +
       `teachers: ${teachers.length}, subjects: ${subjects.length}, ` +
       `periods: ${periods.length}, assignments: ${assignments.length}, ` +
-      `students: ${students.length}`
+      `students: ${students.length}` + (hasMore ? ` — page cut at ${limit}, more to come` : "")
     );
+
+    // The cursor: the earlier of "before the queries ran" and the last row
+    // sent from a collection that was cut (see PULL_LIMIT_DEFAULT).
+    let timestamp = pulledAt;
+    if (boundary && boundary < new Date(timestamp)) timestamp = boundary.toISOString();
+    if (hasMore && boundary && boundary.getTime() <= effectiveDate.getTime()) {
+      console.warn(
+        `[sync] ⚠️  more than ${limit} rows share updatedAt ${boundary.toISOString()} — ` +
+        "a timestamp cursor cannot split them; /sync/changes can"
+      );
+    }
 
     return res.json({
       success: true,
@@ -315,7 +380,11 @@ exports.pullChanges = async (req, res) => {
         students,
         deletedItems,
       },
-      timestamp: pulledAt,
+      timestamp,
+      // True when a collection was cut at `limit`: pull again from `timestamp`
+      // for the rest. Older clients ignore it and get the rest next sync.
+      hasMore,
+      limit,
     });
 
   } catch (err) {
