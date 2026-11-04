@@ -1688,6 +1688,42 @@ class SyncManagerClass {
   // SECTION 10 — PULL ORCHESTRATION
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * The six collections, through the change feed (services/syncFeed.client.js).
+   * Each page goes through the same apply functions /sync/pull's answer did,
+   * so the pull-protection rule (a pulled row never overwrites one with an
+   * unsent change, _synced != 1) holds for every row the feed writes.
+   */
+  async _pullFeed(schoolId) {
+    const { pullPhoneFeed, tombstonesByCollection } = require("./syncFeed.client");
+    const store = await this._cursorStore();
+    const apply = async (collection, docs) => {
+      switch (collection) {
+        case "classes":     SyncProgress.step("classes",     this._count(docs)); return this.syncClasses(docs);
+        case "subjects":    SyncProgress.step("subjects",    this._count(docs)); return this.syncSubjects(docs);
+        case "teachers":    SyncProgress.step("teachers",    this._count(docs)); return this.syncTeachers(docs);
+        case "periods":     SyncProgress.step("periods",     this._count(docs)); return this.syncPeriods(docs);
+        case "assignments": SyncProgress.step("assignments", this._count(docs)); return this.syncAssignments(docs);
+        case "students":    SyncProgress.step("students",    this._count(docs)); return this.syncStudents(docs);
+        case "tombstones": {
+          const by = tombstonesByCollection(docs);
+          if (by.subjects)    await this.syncSubjects(by.subjects);
+          if (by.assignments) await this.syncAssignments(by.assignments);
+          if (by.students)    await this.syncStudents(by.students);
+          return undefined;
+        }
+        default: return undefined;
+      }
+    };
+    const result = await pullPhoneFeed({
+      api: { get: (p, o) => this._withRetry("pullFeed", () => api.get(p, o)) },
+      store, apply, schoolId,
+    });
+    for (const r of result.refused) console.log(`[SyncManager] Feed refused ${r.collection} (${r.reason})`);
+    console.log(`[SyncManager] Feed pull: ${JSON.stringify(result.counts)} in ${result.pages} page(s)`);
+    return result;
+  }
+
   async pullChanges() {
     if (this._isUnauthenticated()) return;
 
@@ -1716,8 +1752,23 @@ class SyncManagerClass {
     console.log(`[SyncManager] Pulling since ${lastSyncTime}…`);
 
     try {
+      // The six collections come from the change feed (GET /sync/changes,
+      // phone profile): a cursor per collection, bounded pages, hard deletes,
+      // commit-safe positions. /sync/pull below only for a server that does
+      // not have the phone profile yet.
+      let viaFeed = false;
       if (!this.isStudent()) {
         SyncProgress.step("download");
+        try {
+          const feed = await this._pullFeed(schoolId);
+          if (feed.serverTime) cursor = feed.serverTime;
+          viaFeed = true;
+        } catch (err) {
+          if (err?.code !== "FEED_UNAVAILABLE") throw err;
+          console.log("[SyncManager] Server has no phone feed — using /sync/pull");
+        }
+      }
+      if (!this.isStudent() && !viaFeed) {
         const response = await this._withRetry(
           "pullChanges",
           () => api.get(API.sync.pull, {
@@ -2494,6 +2545,12 @@ class SyncManagerClass {
           const id = s.id || s._id;
           if (!id) { fail++; continue; }
 
+          // NOT under the pull-protection rule (syncClasses), and deliberately:
+          // students._synced is added by the admissions code with DEFAULT 0
+          // and this function never sets it, so every pulled pupil reads as
+          // "unsent" — a `_synced = 1` guard would freeze the roster. The
+          // flag has to be made trustworthy first (docs/10, "Pupils and the
+          // pull-protection rule").
           if (s.deletedAt || s.deleted_at) {
             await db.runAsync(
               "UPDATE students SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?",
@@ -2585,6 +2642,20 @@ class SyncManagerClass {
           const subjectId =
             (typeof a.subject === "string" ? a.subject : null) ||
             a.subject?._id || a.subject?.id || a.subjectId || null;
+
+          // The pull-protection rule (see syncClasses): the local row this
+          // would write — by id, or by the (teacher, class, subject) key
+          // upsertAssignmentRow adopts — has an unsent change. Leave it; the
+          // change goes out first and the next pull refreshes the row.
+          const pendingLocal = await db.getFirstAsync(
+            `SELECT id FROM teacher_assignments
+             WHERE (_synced IS NULL OR _synced != 1)
+               AND (id = ? OR (teacher_id = ? AND class_id = ? AND subject_id = ?
+                               AND (deleted_at IS NULL OR deleted_at = '')))
+             LIMIT 1`,
+            [String(id), teacherId, classId, subjectId]
+          ).catch(() => null);
+          if (pendingLocal) { ok++; continue; }
 
           if (a.deletedAt || a.deleted_at) {
             await db.runAsync(
