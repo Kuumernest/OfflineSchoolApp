@@ -491,55 +491,49 @@ class SyncManagerClass {
   // SECTION 3 — LAST-SYNC PERSISTENCE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // On the legacy shared file the cursors are in SecureStore, as they always
-  // were. A per-user store (docs/40) keeps its own inside the file
-  // (db/storeMeta.js), so a new store is a full pull for its account.
-  async _storeMeta() {
-    try { return await require("../db/storeMeta").activeStoreMeta(); } catch { return null; }
+  // The cursors belong to an ACCOUNT (db/syncCursors.js): a per-user store
+  // (docs/40) keeps its own inside the file, as before; on the shared legacy
+  // file they are keyed by server, school and account, so another account on
+  // the same phone starts from its own position rather than this one's.
+  async _cursorStore() {
+    try { return await require("../db/syncCursors").cursorStore(); } catch { return null; }
   }
 
-  async getLastSync() {
+  /** A stored cursor, or the epoch when there is none or it is not a date. */
+  async _readCursor(key) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) return (await meta.get(LAST_SYNC_KEY)) || EPOCH;
-      return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH;
-    }
-    catch { return EPOCH; }
+      const store = await this._cursorStore();
+      const v = store ? await store.get(key) : null;
+      return v && !Number.isNaN(new Date(v).getTime()) ? v : EPOCH;
+    } catch { return EPOCH; }
   }
+
+  async getLastSync() { return this._readCursor(LAST_SYNC_KEY); }
 
   async setLastSync(timestamp) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.set(LAST_SYNC_KEY, timestamp);
-      else await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp);
+      const store = await this._cursorStore();
+      if (store) await store.set(LAST_SYNC_KEY, timestamp);
     }
     catch (err) { console.warn("[SyncManager] Could not persist lastSync:", err.message); }
     this.lastSync = timestamp;
   }
 
+  /** Forget where this account had got to — every cursor, so the next pull is a full one. */
   async resetLastSync() {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.del(LAST_SYNC_KEY);
-      else await SecureStore.deleteItemAsync(LAST_SYNC_KEY);
+      const store = await this._cursorStore();
+      if (store) await store.clear();
     } catch { /* ignore */ }
     this.lastSync = null;
   }
 
-  async getLastQuizSync() {
-    try {
-      const meta = await this._storeMeta();
-      if (meta) return (await meta.get(QUIZ_LAST_SYNC_KEY)) || EPOCH;
-      return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH;
-    }
-    catch { return EPOCH; }
-  }
+  async getLastQuizSync() { return this._readCursor(QUIZ_LAST_SYNC_KEY); }
 
   async setLastQuizSync(timestamp) {
     try {
-      const meta = await this._storeMeta();
-      if (meta) await meta.set(QUIZ_LAST_SYNC_KEY, timestamp);
-      else await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp);
+      const store = await this._cursorStore();
+      if (store) await store.set(QUIZ_LAST_SYNC_KEY, timestamp);
     }
     catch (err) { console.warn("[SyncManager] Could not persist quiz lastSync:", err.message); }
   }
