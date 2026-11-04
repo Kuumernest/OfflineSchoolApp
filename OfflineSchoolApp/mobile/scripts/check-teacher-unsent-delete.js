@@ -97,7 +97,10 @@ const check = (label, actual, expected) => {
   const boot = async (dir) => {
     const http = axios.create({ baseURL: API, timeout: 15_000 });
     let phone = null;
-    http.interceptors.request.use((cfg) => {
+    http.interceptors.request.use(async (cfg) => {
+      // Case 5b holds the phone's pull in flight while the teacher is deleted.
+      const hold = globalThis.__holdPull;
+      if (hold && !hold.held && /\/sync\/pull/.test(cfg.url || "")) { hold.held = true; hold.onStart(); await hold.gate; }
       if (!phone.net.connected) { const e = new Error("Network Error"); e.code = "ERR_NETWORK"; e.isOffline = true; throw e; }
       cfg.headers.Authorization = `Bearer ${phone.useAuthStore.getState().token}`;
       // A request that times out before it reaches the server: the phone
@@ -136,7 +139,14 @@ const check = (label, actual, expected) => {
   const sync = (phone) => quietly(async () => {
     const { SyncManager } = phone.load("src/services/syncManager");
     await SyncManager.ensureStarted();
+    // Wait out a sync already running (the phone starts one 3 s after any
+    // save), or syncAll returns at once ("Already syncing") and the check
+    // looks before anything was sent. Waiting again after covers one that
+    // started in between — it began after the change, so it carries it.
+    const idle = async () => { for (let i = 0; i < 6000 && SyncManager.isSyncing; i++) await new Promise((r) => setTimeout(r, 10)); };
+    await idle();
     await SyncManager.syncAll({ force: true });
+    await idle();
   })();
   // Due now: what a later sync would find once its backoff has passed.
   const dueNow = async (phone) => {
@@ -167,6 +177,10 @@ const check = (label, actual, expected) => {
     return u ? { active: u.isActive } : null;
   };
   const teacherSvc = (phone) => phone.load("src/services/teacher.service").TeacherService;
+  const keptDeleted = (phone, id) => {
+    const d = phone.inspect("schoolapp.db");
+    try { return Boolean(d.one("SELECT 1 AS k FROM users WHERE id = ? AND deleted_at IS NOT NULL", [id])); } finally { d.close(); }
+  };
   const create = (phone, name, email) => quietly(() => teacherSvc(phone).create(name, email))();
   const del = (phone, id) => quietly(async () => {
     try { return await teacherSvc(phone).delete(id); } catch (e) { return `threw: ${e.message}`; }
@@ -314,10 +328,44 @@ const check = (label, actual, expected) => {
     check("the create reached the server", await serverTeacher("ama5@drop.test"), { active: true });
     phone.net.connected = false;
     check("the delete succeeds", await del(phone, id), true);
-    check("the DELETE is queued, not dropped", outbox(phone).map((r) => r.entity_key), [`teacher-delete:${id}`]);
+    // Not dropped. Which way depends on whether the phone's own sync (3 s
+    // after a save) confirmed the create first: then the delete waits on the
+    // row for the sweep, otherwise it is queued now. Either keeps it; the
+    // server's state below is what must hold.
+    check("the delete is kept, not dropped",
+      outbox(phone).some((r) => r.entity_key === `teacher-delete:${id}`) || keptDeleted(phone, id), true);
     phone.net.connected = true;
     await settle(phone);
     check("the teacher is removed on the server", await serverTeacher("ama5@drop.test"), { active: false });
+    check("nothing left in the outbox", outbox(phone), []);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- 5b. deleted while a sync's pull is in flight ---");
+  {
+    // Found by CI: the phone's pull left the server before the delete and
+    // was written after it, and overwrote the deleted row with the server's
+    // active copy, marked synced — so the delete was never sent.
+    sent.length = 0;
+    const id = await create(phone, "Ama Five B", "ama5b@drop.test");
+    await settle(phone);
+    check("created on the server", await serverTeacher("ama5b@drop.test"), { active: true });
+    // Changed on the web console since the phone's last sync, so the next
+    // pull carries this teacher — the case where it can overwrite the row.
+    await User.updateOne({ email: "ama5b@drop.test" }, { $set: { name: "Ama Five B (renamed)" } });
+    let onStart, open;
+    const started = new Promise((r) => { onStart = r; });
+    const gate    = new Promise((r) => { open = r; });
+    globalThis.__holdPull = { onStart, gate, held: false };
+    const bg = sync(phone);
+    await started;                      // the pull is out, its answer not yet written
+    phone.net.connected = false;
+    check("the delete succeeds", await del(phone, id), true);
+    phone.net.connected = true;
+    open(); await bg; globalThis.__holdPull = null;
+    check("the pull did not undo the delete", keptDeleted(phone, id), true);
+    await settle(phone);
+    check("the teacher is removed on the server", await serverTeacher("ama5b@drop.test"), { active: false });
     check("nothing left in the outbox", outbox(phone), []);
   }
 
