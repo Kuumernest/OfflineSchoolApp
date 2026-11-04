@@ -6,7 +6,8 @@ import {
   HEALTH_METRIC_ROWS,
   type HealthMetric,
 } from "@/constants/dashboard.constants";
-import { CARD_SHELL, SEMANTIC, iconBox, type Semantic } from "@/config/sections";
+import { CARD_SHELL, SEMANTIC, type Semantic } from "@/config/sections";
+import { dashTint, healthLook } from "@/config/dashboardTint";
 import { cn } from "@/utils/cn";
 
 // Flatten the grouped rows into one list; the grid handles wrapping.
@@ -21,12 +22,14 @@ const METRICS: HealthMetric[] = HEALTH_METRIC_ROWS.flat();
  * timetable conflict, an unassigned teacher) were invisible among the twelve
  * that were merely counts.
  *
- * Each reading is a white card with an accented icon box, so a count reads
- * as a count. A metric that is a problem only when non-zero stays white at
- * zero and takes a status tint above it: pending applications the warning
- * tint, a missing teacher, timetable gap or conflict the error tint. Notices
- * are informational and always take the info tint. When nothing is wrong the
- * header pill is the success tint.
+ * Each count takes its kind's tinted card (config/dashboardTint.ts) — the
+ * same colour as that kind's headline card above. A metric that is a problem
+ * only when non-zero stays a plain white card at zero, and above zero turns
+ * amber (red for a timetable conflict). Notices are informational and keep
+ * the info tint. When nothing is wrong the header pill is the success tint.
+ *
+ * The tile colours are styling only: the header's count of faults is still
+ * each metric's own `alert`, as before.
  */
 export default function SystemHealthGrid({
   stats,
@@ -36,7 +39,7 @@ export default function SystemHealthGrid({
   const { t } = useTranslation();
   const s = stats as unknown as Record<string, number>;
 
-  /** The status tint a metric takes right now, or null for a white card. */
+  /** Whether a metric is a fault right now (the header's count), or null. */
   const toneOf = (m: HealthMetric): Semantic | null => {
     if (m.alertOnNonZero) return (s[m.key] ?? 0) > 0 ? (m.alert ?? "error") : null;
     return m.semantic ?? null;
@@ -82,25 +85,30 @@ export default function SystemHealthGrid({
         {METRICS.map((metric) => {
           const Icon  = metric.icon;
           const value = s[metric.key] ?? 0;
-          const tone  = toneOf(metric);
-          const sem   = tone ? SEMANTIC[tone] : null;
+          const look  = healthLook(metric, value);
+          const sem   = look.kind === "status" ? SEMANTIC[look.status] : null;
+          const tint  = look.kind === "kind" ? dashTint(metric.tone) : null;
+          // A warning metric at zero: a white card, a quiet slate box.
+          const card   = sem ? sem.card : tint ? tint.card : CARD_SHELL;
+          const box    = sem ? sem.box  : tint ? tint.box  : "bg-accent-slate-soft text-accent-slate";
+          const number = sem ? sem.text : tint ? tint.number : "text-ink";
 
           return (
             <div
               key={metric.key}
-              className={cn("p-4 transition-colors", sem ? sem.card : CARD_SHELL)}
+              className={cn("p-4 transition-colors", card)}
             >
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
                     "flex h-10 w-10 shrink-0 items-center justify-center rounded-control",
-                    sem ? sem.box : iconBox(metric.tone)
+                    box
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
 
-                <p className={cn("text-[28px] font-bold leading-none tabular", sem ? sem.text : "text-ink")}>
+                <p className={cn("text-[28px] font-bold leading-none tabular", number)}>
                   {value}
                 </p>
               </div>
@@ -113,7 +121,7 @@ export default function SystemHealthGrid({
               </p>
               {/* B4: the pairs, then how many distinct subjects they are. */}
               {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
-                <p className={cn("text-xs", sem ? sem.text : "text-ink-faint")}>
+                <p className={cn("text-xs", sem ? sem.text : tint ? "text-ink-muted" : "text-ink-faint")}>
                   {t("health.distinctSubjects", { count: stats.distinctSubjects })}
                 </p>
               )}

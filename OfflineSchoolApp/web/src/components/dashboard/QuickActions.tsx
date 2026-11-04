@@ -3,6 +3,7 @@ import { useNavigate }      from "react-router-dom";
 import { useTranslation }    from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { QUICK_ACTIONS }    from "@/constants/dashboard.constants";
+import { dashBox }          from "@/config/dashboardTint";
 import { cn }               from "@/utils/cn";
 
 /**
@@ -14,8 +15,10 @@ import { cn }               from "@/utils/cn";
  * landing page is not a feature, it is why the page needed scrolling.
  *
  * What is left is only the actions that *start* something. They are white
- * cards with a blue icon box, all at one weight — except Create exam, the one
- * filled primary action, so the page has a single obvious next step.
+ * cards, all at one weight, each with a solid icon square in the colour of
+ * what it is about (the same colour as that kind's card above) — except
+ * Create exam, the one filled primary action, so the page has a single
+ * obvious next step.
  */
 export default function QuickActions() {
   const { t }    = useTranslation();
@@ -26,7 +29,7 @@ export default function QuickActions() {
       <CardHeader title={t("dashboard.quickActions")} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, primary }) => (
+        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, primary, tone }) => (
           <button
             key={path}
             type="button"
@@ -42,7 +45,7 @@ export default function QuickActions() {
             <span
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-control",
-                primary ? "bg-white/15 text-white" : "bg-accent-blue-soft text-accent-blue",
+                primary ? "bg-white/15 text-white" : dashBox(tone ?? "neutral"),
               )}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />

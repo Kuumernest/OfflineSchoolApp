@@ -31,6 +31,8 @@ export interface QuickAction {
   path:     string;
   /** The page's one filled action (Create exam). Everything else is white. */
   primary?: boolean;
+  /** What the action is about — picks its icon square's colour (config/dashboardTint.ts). */
+  tone?:    TileTone;
 }
 
 export interface Module {
@@ -73,15 +75,15 @@ export interface HealthMetric {
 // colour or weight, and put a cartoon next to a table of student records —
 // they were the single loudest thing making this screen look unserious.
 export const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Add student",       labelKey: "quickActions.addStudent",       icon: GraduationCap,  path: "/students/new" },
-  { label: "Add teacher",       labelKey: "quickActions.addTeacher",       icon: Users,          path: "/teachers/new" },
-  { label: "Create exam",       labelKey: "quickActions.createExam",       icon: FileText,       path: "/exams/new", primary: true },
-  { label: "Take attendance",   labelKey: "quickActions.takeAttendance",   icon: ClipboardCheck, path: "/attendance" },
-  { label: "Post announcement", labelKey: "quickActions.postAnnouncement", icon: Megaphone,      path: "/announcements" },
-  { label: "View reports",      labelKey: "quickActions.viewReports",      icon: BarChart3,      path: "/reports" },
-  { label: "Add class",         labelKey: "quickActions.addClass",         icon: School,         path: "/classes" },
-  { label: "Assign teacher",    labelKey: "quickActions.assignTeacher",    icon: GitBranch,      path: "/teachers/assignments/assign" },
-  { label: "Report templates",  labelKey: "quickActions.reportTemplates",  icon: LayoutTemplate, path: "/reports/templates" },
+  { label: "Add student",       labelKey: "quickActions.addStudent",       icon: GraduationCap,  path: "/students/new", tone: "students" },
+  { label: "Add teacher",       labelKey: "quickActions.addTeacher",       icon: Users,          path: "/teachers/new", tone: "teachers" },
+  { label: "Create exam",       labelKey: "quickActions.createExam",       icon: FileText,       path: "/exams/new", primary: true, tone: "exams" },
+  { label: "Take attendance",   labelKey: "quickActions.takeAttendance",   icon: ClipboardCheck, path: "/attendance", tone: "attendance" },
+  { label: "Post announcement", labelKey: "quickActions.postAnnouncement", icon: Megaphone,      path: "/announcements", tone: "comms" },
+  { label: "View reports",      labelKey: "quickActions.viewReports",      icon: BarChart3,      path: "/reports", tone: "reports" },
+  { label: "Add class",         labelKey: "quickActions.addClass",         icon: School,         path: "/classes", tone: "classes" },
+  { label: "Assign teacher",    labelKey: "quickActions.assignTeacher",    icon: GitBranch,      path: "/teachers/assignments/assign", tone: "teachers" },
+  { label: "Report templates",  labelKey: "quickActions.reportTemplates",  icon: LayoutTemplate, path: "/reports/templates", tone: "reports" },
 ];
 
 // ─────────────────────────────────────────────────────────
