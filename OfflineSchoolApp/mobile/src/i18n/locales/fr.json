@@ -6081,7 +6081,8 @@
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
     "invalidCredentials": "Identifiants invalides",
-    "deviceFullOfAccounts": "Ce téléphone contient déjà des modifications non envoyées de cinq autres comptes. L’un d’eux doit se connecter et les envoyer avant qu’un autre compte puisse utiliser ce téléphone."
+    "deviceFullOfAccounts": "Ce téléphone contient déjà des modifications non envoyées de cinq autres comptes. L’un d’eux doit se connecter et les envoyer avant qu’un autre compte puisse utiliser ce téléphone.",
+    "appUpdateRequired": "Mettez l’application à jour pour continuer la synchronisation. Les données de cette école demandent désormais une version plus récente de l’application."
   },
   "syncStep": {
     "prepare": "Préparation",
@@ -7562,5 +7563,12 @@
     "pending": "En attente — attribué par l'établissement à la synchronisation",
     "none": "Pas encore attribué",
     "fromSchool": "Attribué par l'établissement. Il ne peut pas être modifié sur le téléphone."
+  },
+  "updateRequired": {
+    "title": "Mettez l’application à jour pour continuer la synchronisation",
+    "bodyServer": "Les données de votre école demandent désormais une version plus récente de cette application. Installez la dernière version, puis rouvrez l’application.",
+    "bodyLocal": "Une version plus récente de cette application a enregistré les données de ce téléphone. Cette version ne peut pas les lire sans risque. Installez la dernière version pour continuer.",
+    "kept": "Rien n’a été supprimé. Votre travail enregistré et les modifications non envoyées restent sur ce téléphone et seront envoyés après la mise à jour.",
+    "checkAgain": "Vérifier à nouveau"
   }
 }

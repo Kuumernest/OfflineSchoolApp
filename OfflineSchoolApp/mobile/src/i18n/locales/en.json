@@ -6081,7 +6081,8 @@
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
     "invalidCredentials": "Invalid credentials",
-    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone."
+    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone.",
+    "appUpdateRequired": "Update the app to keep syncing. This school's data now needs a newer version of the app."
   },
   "syncStep": {
     "prepare": "Preparing",
@@ -7562,5 +7563,12 @@
     "pending": "Pending — the school issues it when this syncs",
     "none": "Not assigned yet",
     "fromSchool": "Issued by the school. It cannot be changed on the phone."
+  },
+  "updateRequired": {
+    "title": "Update the app to keep syncing",
+    "bodyServer": "Your school's data now needs a newer version of this app. Install the latest version, then open the app again.",
+    "bodyLocal": "A newer version of this app saved the data on this phone. This version cannot read it safely. Install the latest version to go on.",
+    "kept": "Nothing has been deleted. Your saved work and unsent changes stay on this phone and are sent after the update.",
+    "checkAgain": "Check again"
   }
 }

@@ -5,7 +5,8 @@
  * device.db — what a shared phone knows that belongs to no single account
  * (docs/40 §8, per-user local data).
  *
- *   meta          k/v: when the migration started, schema version
+ *   meta          k/v: when the migration started, schema version, and
+ *                 data_format — the newest LOCAL_DATA_FORMAT that wrote here
  *   journal       one row per migration step; a step is done when its row says
  *                 so, and every step can be re-run (see perUserData.service)
  *   credentials   offline sign-in: salt + hash per account, copied from the
@@ -29,6 +30,7 @@
 
 import * as SQLite from "expo-sqlite";
 import * as SecureStore from "expo-secure-store";
+import { LOCAL_DATA_FORMAT } from "../config/appBuild";
 
 export const DEVICE_DB_NAME = "device.db";
 const MARKER_KEY = "peruser_device_db";
@@ -114,16 +116,86 @@ export const deviceDbExists = async () => {
   try { return (await SecureStore.getItemAsync(MARKER_KEY)) === "1"; } catch { return false; }
 };
 
-/** Opens (creating if need be) device.db. Only the per-user migration calls this. */
+/**
+ * The data format a build stamped into device.db (meta.data_format), read
+ * without creating or changing anything. A file from before the stamp holds
+ * format 1: device.db exists only from per-user local data on.
+ */
+const DATA_FORMAT_KEY = "data_format";
+const readStampedFormat = async (db) => {
+  const hasMeta = await db.getFirstAsync(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'"
+  );
+  if (!hasMeta) return null;
+  const row = await db.getFirstAsync("SELECT v FROM meta WHERE k = ?", [DATA_FORMAT_KEY]);
+  const n = Number(row?.v);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+};
+
+/** Thrown when device.db was written by a newer build than this one. */
+export const DATA_FORMAT_TOO_NEW = "LOCAL_DATA_FORMAT_TOO_NEW";
+const tooNew = (stored) => {
+  const err = new Error(
+    `device.db holds local data format ${stored}; this build understands up to ${LOCAL_DATA_FORMAT}`
+  );
+  err.code = DATA_FORMAT_TOO_NEW;
+  err.storedFormat = stored;
+  return err;
+};
+
+/**
+ * Before anything on this phone is opened for an account: was the local data
+ * written by a newer build (a downgrade, a sideloaded older APK)? Then this
+ * build must not read, change or send any of it (docs/40 §8.9).
+ * Never creates device.db, never writes. Offline.
+ *
+ * @returns {Promise<{ok: boolean, stored: number|null, understood: number}>}
+ */
+export const checkLocalDataFormat = async () => {
+  const understood = LOCAL_DATA_FORMAT;
+  if (_dev) return { ok: true, stored: understood, understood };
+  if (!(await deviceDbExists())) return { ok: true, stored: null, understood };
+  let db = null;
+  try {
+    // Its own connection, closed below: the cached one is openDeviceDb's.
+    db = await SQLite.openDatabaseAsync(DEVICE_DB_NAME, { useNewConnection: true });
+    const stored = await readStampedFormat(db);
+    return { ok: stored == null || stored <= understood, stored, understood };
+  } catch (err) {
+    // Unreadable is not "too new": the per-user code has its own fallbacks.
+    console.warn("[deviceDb] could not read the data format:", err?.message);
+    return { ok: true, stored: null, understood };
+  } finally {
+    try { await db?.closeAsync?.(); } catch { /* closed */ }
+  }
+};
+
+/**
+ * Opens (creating if need be) device.db. Only the per-user migration calls this.
+ * Refuses (DATA_FORMAT_TOO_NEW) a file a newer build wrote, before changing it.
+ */
 export const openDeviceDb = async () => {
   if (_dev) return _dev;
   if (_devPromise) return _devPromise;
   _devPromise = (async () => {
     const db = await SQLite.openDatabaseAsync(DEVICE_DB_NAME);
+    const stored = await readStampedFormat(db);
+    if (stored != null && stored > LOCAL_DATA_FORMAT) {
+      try { await db.closeAsync?.(); } catch { /* closed */ }
+      throw tooNew(stored);
+    }
     await db.execAsync("PRAGMA journal_mode = WAL;").catch(() => {});
     for (const sql of SCHEMA) await db.execAsync(sql);
     await db.runAsync(
       "INSERT OR IGNORE INTO meta (k, v) VALUES ('schema_version', ?)", [SCHEMA_VERSION]
+    );
+    // Written when missing, raised, never lowered: the newest build that
+    // wrote here decides.
+    await db.runAsync(
+      `INSERT INTO meta (k, v) VALUES (?, ?)
+       ON CONFLICT(k) DO UPDATE SET v = excluded.v
+       WHERE CAST(meta.v AS INTEGER) < CAST(excluded.v AS INTEGER)`,
+      [DATA_FORMAT_KEY, String(LOCAL_DATA_FORMAT)]
     );
     await SecureStore.setItemAsync(MARKER_KEY, "1");
     _dev = db;
@@ -163,5 +235,6 @@ export const stepReset = (dev, prefix) =>
 
 export default {
   DEVICE_DB_NAME, deviceDbExists, openDeviceDb, resetDeviceDbSingleton,
+  checkLocalDataFormat, DATA_FORMAT_TOO_NEW,
   getMeta, setMeta, stepDone, stepStart, stepFinish, stepReset,
 };
