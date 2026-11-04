@@ -97,7 +97,13 @@ const main = async () => {
 
   // Each caller reads the feed from its own cursor, as a desktop does.
   const cursors = { adm: null, bur: null, tea: null, pup: null };
+  // What each reader already has. The feed re-sends rows changed within its
+  // safety window (commit-safe cursors, 58b1a0a) and a desktop applies them
+  // as no-ops; "hears of" means news to that reader. A reader whose cursor is
+  // reset starts fresh, as a desktop that had not synced.
+  const seen = { adm: new Set(), bur: new Set(), tea: new Set(), pup: new Set() };
   const feed = async (who) => {
+    if (!cursors[who]) seen[who] = new Set();
     const out = [];
     for (let page = 0; page < 50; page++) {
       const qs = new URLSearchParams({ collections: "syncTombstone", limit: "200",
@@ -105,7 +111,10 @@ const main = async () => {
       const r = await call(who, "GET", `/sync/changes?${qs}`);
       const slice = r.body?.collections?.syncTombstone;
       if (!slice) return { refused: (r.body?.refused || []).some((x) => x.collection === "syncTombstone"), rows: out };
-      out.push(...slice.documents);
+      for (const t of slice.documents) {
+        const k = `${t.entity}:${t.docId}:${t.reason || ""}`;
+        if (!seen[who].has(k)) { seen[who].add(k); out.push(t); }
+      }
       cursors[who] = slice.cursor;
       if (!slice.hasMore) break;
     }
