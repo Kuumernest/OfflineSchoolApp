@@ -105,6 +105,7 @@ export default function TeachersPage() {
     return teachers.filter((t) =>
       t.name?.toLowerCase().includes(q) ||
       t.email?.toLowerCase().includes(q) ||
+      t.staffNo?.toLowerCase().includes(q) ||
       t.phone?.toLowerCase().includes(q),
     );
   }, [teachers, deferredSearch]);
@@ -342,7 +343,18 @@ export default function TeachersPage() {
                             {initials(teacher.name)}
                           </span>
                         </div>
-                        <p className="font-medium text-gray-800">{teacher.name}</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-800">{teacher.name}</p>
+                          {/* The school's staff number, issued by the server. */}
+                          <p
+                            className="text-xs text-gray-500 font-mono"
+                            title={t("teachers.staffNo")}
+                          >
+                            {teacher.staffNo || (
+                              <span className="font-sans italic text-gray-400">{t("teachers.staffNoNone")}</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </td>
 

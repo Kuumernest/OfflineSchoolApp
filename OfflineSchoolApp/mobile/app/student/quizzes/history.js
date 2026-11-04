@@ -312,11 +312,11 @@ export default function QuizHistoryScreen() {
         <View style={styles.statsRow}>
           {[
             { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total },
-            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed },
-            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed },
+            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed, tone: "success" },
+            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed, tone: "error" },
             { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—" },
           ].map((s) => (
-            <StatTile key={s.key} kind="quizzes" value={s.value} label={s.label} />
+            <StatTile key={s.key} kind="quizzes" tone={s.tone} value={s.value} label={s.label} />
           ))}
         </View>
       )}

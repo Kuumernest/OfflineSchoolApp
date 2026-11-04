@@ -22,7 +22,7 @@ import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
-import { TILE_TONE, type TileTone } from "@/config/sections";
+import { CARD_SHELL, iconBox, type TileTone } from "@/config/sections";
 import { cn }                 from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
@@ -157,7 +157,7 @@ const StatCard = ({
   value:      number | string;
   sub?:       string;
   icon:       React.ElementType;
-  /** What the figure is about: exams burnt orange, results plum. */
+  /** What the figure is about: exams blue, results violet (icon box only). */
   tone:       TileTone;
   onClick?:   () => void;
   highlight?: boolean;
@@ -182,26 +182,25 @@ const StatCard = ({
     onClick={onClick}
     aria-pressed={highlight}
     className={cn(
-      "rounded-tile p-4 flex flex-col gap-2 shadow-tile text-left w-full",
-      "transition duration-150 ease-[var(--ease-out-quiet)] hover:-translate-y-0.5 hover:shadow-tile-lift",
-      TILE_TONE[tone].fill,
-      // The filter in force: a ring in the interaction accent, offset off the
-      // fill so it reads on every tone.
+      CARD_SHELL,
+      "p-4 flex flex-col gap-2 text-left w-full",
+      "transition duration-150 ease-[var(--ease-out-quiet)] hover:border-line-strong hover:shadow-lift",
+      // The filter in force: a ring in the interaction accent.
       highlight && "ring-2 ring-primary-600 ring-offset-2 ring-offset-canvas",
     )}
   >
     <div className="flex items-center gap-3">
-      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", TILE_TONE[tone].well)}>
+      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", iconBox(tone))}>
         <Icon className="w-5 h-5" />
       </div>
       {/* tabular-nums so the counts line up across the seven cards. */}
-      <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{value}</p>
+      <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums text-ink">{value}</p>
     </div>
     <div className="min-w-0">
-      <p className="text-xs font-semibold leading-tight">
+      <p className="text-xs font-semibold leading-tight text-ink-muted">
         {label}
       </p>
-      {sub && <p className="text-[11px] mt-0.5 leading-tight">{sub}</p>}
+      {sub && <p className="text-[11px] mt-0.5 leading-tight text-ink-faint">{sub}</p>}
     </div>
   </button>
 );
@@ -509,7 +508,7 @@ const ExamRow = ({
                     <Pencil className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.edit")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=marks`}
-                    className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+                    className="block px-4 py-2 text-sm text-primary-600 hover:bg-primary-50"
                     onClick={() => setMenuOpen(false)}>
                     <PenLine className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.enterMarks")}
                   </Link>
@@ -932,8 +931,8 @@ const ExamDetailSlideOver = ({
           {canManage && (
             <button
               onClick={() => { navigate(`/exams/${exam._id}?tab=marks`); onClose(); }}
-              className="flex-1 py-2 bg-indigo-50 text-indigo-700 rounded-xl
-                         text-sm font-semibold hover:bg-indigo-100 transition-colors">
+              className="flex-1 py-2 bg-primary-50 text-primary-700 rounded-xl
+                         text-sm font-semibold hover:bg-primary-100 transition-colors">
               {t("exams.enterMarks")}
             </button>
           )}

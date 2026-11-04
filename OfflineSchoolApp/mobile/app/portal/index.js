@@ -25,6 +25,10 @@ import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatDateShort } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
+import {
+  isOnlineNow, needsInternetFailureText,
+  NEEDS_INTERNET_KEY, NEEDS_INTERNET_TITLE_KEY,
+} from "../../src/hooks/useNeedsInternet";
 import BottomTabs     from "../../src/components/portal/BottomTabs";
 import ChildSwitcher  from "../../src/components/portal/ChildSwitcher";
 import HomeScreen     from "../../src/components/portal/HomeScreen";
@@ -252,16 +256,21 @@ export default function ParentPortalScreen() {
   /**
    * Acknowledge one notice.
    *
-   * Optimistic: the card and the badge settle before the request returns,
-   * because a parent tapping a card should see it stop being new immediately
-   * and the round trip is not theirs to wait for.
+   * Optimistic while online: the card and the badge settle before the
+   * request returns, and are corrected from the server's own count when it
+   * answers.
    *
-   * Both pieces of local state are corrected from the server's own count when
-   * it answers, and a failure needs no handling — the 25s poll re-reads both
-   * and the worst case is a badge one too high until then. Nothing is lost:
-   * the receipt either landed or it did not, and the notice is still there.
+   * Honest offline: the read receipt lives on the server and the guardian
+   * portal has no outbox, so with no connection nothing is flipped — the
+   * parent is told it needs a connection instead of seeing a "read" that
+   * was never recorded. A request that fails is undone and said, too; it
+   * used to be swallowed and the card stayed "read" until the next poll.
    */
   const markNotice = useCallback(async (noticeId) => {
+    if (!(await isOnlineNow())) {
+      Alert.alert(t(NEEDS_INTERNET_TITLE_KEY), t(NEEDS_INTERNET_KEY));
+      return;
+    }
     setSection((prev) => (prev?.tab !== "notices" ? prev : {
       ...prev,
       data: (prev.data ?? []).map((n) => (n._id === noticeId ? { ...n, read: true } : n)),
@@ -273,10 +282,16 @@ export default function ParentPortalScreen() {
       if (count != null) {
         setMe((prev) => (prev ? { ...prev, unreadNotices: count } : prev));
       }
-    } catch {
-      // Left to the poll. See above.
+    } catch (err) {
+      // Not recorded: put the card and the badge back, and say so.
+      setSection((prev) => (prev?.tab !== "notices" ? prev : {
+        ...prev,
+        data: (prev.data ?? []).map((n) => (n._id === noticeId ? { ...n, read: false } : n)),
+      }));
+      setMe((prev) => (prev ? { ...prev, unreadNotices: (prev.unreadNotices ?? 0) + 1 } : prev));
+      Alert.alert(t("common.error"), needsInternetFailureText(t, err));
     }
-  }, []);
+  }, [t]);
 
   /**
    * Acknowledge the lot.
@@ -287,6 +302,10 @@ export default function ParentPortalScreen() {
    * twelve cards to clear a badge.
    */
   const markAllNotices = useCallback(async () => {
+    if (!(await isOnlineNow())) {
+      Alert.alert(t(NEEDS_INTERNET_TITLE_KEY), t(NEEDS_INTERNET_KEY));
+      return;
+    }
     setSection((prev) => (prev?.tab !== "notices" ? prev : {
       ...prev,
       data: (prev.data ?? []).map((n) => (n.conversationId ? n : { ...n, read: true })),
@@ -296,10 +315,13 @@ export default function ParentPortalScreen() {
     try {
       const count = await PortalService.markAllNoticesRead();
       if (count != null) setMe((prev) => (prev ? { ...prev, unreadNotices: count } : prev));
-    } catch {
-      // Left to the poll, like one card.
+    } catch (err) {
+      // Not recorded. The poll re-reads the true list and badge; say so now
+      // rather than leaving them all looking read.
+      Alert.alert(t("common.error"), needsInternetFailureText(t, err));
+      loadAll({ quiet: true });
     }
-  }, []);
+  }, [t, loadAll]);
 
   /** To a section, and from a Home card to that child's page. */
   const open = useCallback((id, next, view = null) => {
@@ -338,7 +360,7 @@ export default function ParentPortalScreen() {
       await Print.printAsync({ html });
     } catch (err) {
       if (!(await handle401(err))) {
-        Alert.alert(t("portal.receipt"), errorText(t, err) || String(err));
+        Alert.alert(t("portal.receipt"), needsInternetFailureText(t, err) || String(err));
       }
     } finally {
       setPrinting(null);
@@ -361,7 +383,7 @@ export default function ParentPortalScreen() {
             : errorText(t, err) || String(err)
         );
       } else if (!(await handle401(err))) {
-        Alert.alert(t("portal.reportCardView"), errorText(t, err) || String(err));
+        Alert.alert(t("portal.reportCardView"), needsInternetFailureText(t, err) || String(err));
       }
     } finally {
       setPrinting(null);

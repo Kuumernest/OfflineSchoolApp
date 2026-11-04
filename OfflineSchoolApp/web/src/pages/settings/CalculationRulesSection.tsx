@@ -76,7 +76,7 @@ export default function CalculationRulesSection({ schoolId }: { schoolId: string
       {query.isLoading ? (
         <PageSpinner />
       ) : query.error || !query.data ? (
-        <p className="mt-4 text-sm text-danger">
+        <p className="mt-4 text-sm text-danger-text">
           {query.error ? getErrorMessage(query.error) : t("academicRules.unavailable")}
         </p>
       ) : (

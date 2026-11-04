@@ -61,6 +61,19 @@ const userSchema = new mongoose.Schema(
       trim:    true,
     },
 
+    // ── Staff number (CODE-STF-NNN) ─────────────────────────────────────────
+    // The school's number for a member of staff, as enrollmentNo is a pupil's.
+    // Issued by the server only (services/staffNumber.service.js) — at
+    // creation, by the boot backfill for older accounts — and changeable by an
+    // administrator (PUT /admin/teachers/:id). No default: absent until issued,
+    // and unique per school over the rows that have one (index below).
+    staffNo: {
+      type:      String,
+      trim:      true,
+      uppercase: true,
+      maxlength: [32, "Staff number cannot exceed 32 characters"],
+    },
+
     // ── Authorization ─────────────────────────────────────────────────────────
     // The list lives in config/roles.js, which is also what every route guard
     // reads. A role added here and nowhere else would be storable and
@@ -185,6 +198,19 @@ userSchema.index(
   }
 );
 
+// staffNo — unique within a school, over the rows that have one. Partial on
+// $type "string" for the reason enrollmentNo is: a sparse index would still
+// index an explicit null. Built at boot by db/ensureStaffNoIndex.js (autoIndex
+// is off in production), which also reports it if it cannot be.
+userSchema.index(
+  { schoolId: 1, staffNo: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { staffNo: { $type: "string" } },
+    name: "schoolId_staffNo_unique_present",
+  }
+);
+
 // email lookup — non-unique sparse (matches "email_lookup_sparse" in DB)
 userSchema.index(
   { email: 1 },
@@ -270,6 +296,7 @@ userSchema.methods.toSafeObject = function () {
     name:              this.name,
     email:             this.email        ?? null,
     enrollmentNo:      this.enrollmentNo ?? null,
+    staffNo:           this.staffNo      ?? null,
     role:              this.role,
     schoolId:          this.schoolId     ?? null,
     classId:           this.classId      ?? null,

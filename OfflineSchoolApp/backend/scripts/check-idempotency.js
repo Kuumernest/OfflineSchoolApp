@@ -94,6 +94,18 @@ const main = async () => {
   // can be demonstrated rather than asserted from reading the source.
   app.use("/api/echo", (req, res) => res.status(200).json({ where: "echo" }));
 
+  // A handler that answers with a LIVE mongoose document, as the quiz routes do
+  // (res.json({ question }) straight from Question.create — a document whose
+  // subdocuments point back at their parent). See below.
+  const { Question } = require("../src/db/models/QuizModule");
+  app.use("/api/live-doc", async (req, res) => {
+    const question = await Question.create({
+      schoolId: SCHOOL, subject_id: "sub-1", question_text: "Live?", question_type: "true_false",
+      options: [{ option_text: "Yes", is_correct: true }, { option_text: "No" }],
+    });
+    res.status(201).json({ success: true, question });
+  });
+
   /**
    * ── The index IS the mechanism ───────────────────────────────────────────
    *
@@ -319,6 +331,30 @@ const main = async () => {
   check("and a 409 like that stops the queue",
     isRetryable(otherSchool.status, otherSchool.body.code), false);
   actor = { ...actor, schoolId: SCHOOL };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a response holding a live mongoose document is stored ---");
+
+  /**
+   * The stored copy is made by walking the body. A mongoose document is a
+   * graph with cycles, and the walk recursed until the stack overflowed —
+   * after the handler had committed. The phone saw a 500, the key stayed
+   * "processing", and its retries were told IDEMPOTENCY_IN_PROGRESS for
+   * eleven minutes: every quiz and question written offline (offline P0 #3).
+   */
+  const liveDoc = async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/live-doc`, {
+      method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": "op-live" }, body: "{}",
+    });
+    return { status: res.status, body: await res.json() };
+  };
+  const live = await liveDoc();
+  check("a live document in the answer: 201, not 500", live.status, 201);
+  const liveReplay = await liveDoc();
+  check("and the replay answers from the stored copy, the same document",
+    [liveReplay.status, liveReplay.body.question?._id], [201, live.body.question?._id]);
+  check("  without running the handler again",
+    await Question.countDocuments({ question_text: "Live?" }), 1);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- a completed attempt keeps what it needs to answer with ---");

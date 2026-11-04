@@ -215,7 +215,7 @@ export default function SchoolDetailPage() {
 
       {!school.isActive && (
         <div role="status" className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-ink">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <span>{s("inactiveBanner")}</span>
         </div>
       )}

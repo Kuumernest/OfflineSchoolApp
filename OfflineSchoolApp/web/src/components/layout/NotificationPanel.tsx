@@ -47,7 +47,7 @@ const TYPE_CONFIG: Record<
   },
   message: {
     icon:  <MessageSquare  className="w-4 h-4" />,
-    color: "bg-indigo-100 text-indigo-600",
+    color: "bg-primary-100 text-primary-600",
   },
   alert: {
     icon:  <ShieldAlert    className="w-4 h-4" />,

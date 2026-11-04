@@ -203,7 +203,7 @@ export default function SalariesPage() {
             type="button"
             onClick={() => removeComponent(kind, i)}
             aria-label={t("common.delete")}
-            className="mb-1 rounded-control p-2 text-ink-faint transition-colors hover:bg-canvas hover:text-danger"
+            className="mb-1 rounded-control p-2 text-ink-faint transition-colors hover:bg-canvas hover:text-danger-text"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>

@@ -17,7 +17,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Send, Loader2, AlertCircle, Users, Hash, Trash2,
-  Plus, Search, X, Paperclip,
+  Plus, Search, X, Paperclip, Clock, WifiOff,
 } from "lucide-react";
 
 import {
@@ -36,10 +36,14 @@ import {
   type ParticipantReadState,
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
 import { conversationMatches, participantName } from "./participants";
+import { threadOrder, newestSeq } from "./order";
+import { clientIds } from "./clientId";
 import { formatDay, formatTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,7 +113,7 @@ function ReadReceipt({
   if (String(msg.sender?.id) !== myId) return null;
   // Only meaningful in direct threads for now.
   if (conversationKind !== "direct") return null;
-  // Queued messages (no seq yet) have their own state mark.
+  // Queued messages (no seq yet) have their own state mark, drawn by the caller.
   if (msg.seq == null) return null;
 
   // Find the other participant's read state: anyone who is not me.
@@ -128,28 +132,28 @@ function ReadReceipt({
   // Read = blue double check, delivered = gray double check, sent = gray single check.
   if (isRead) {
     return (
-      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5 text-primary-500">
         <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
-              fill="#3B82F6" />
+              fill="currentColor" />
         <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
-              fill="#3B82F6" />
+              fill="currentColor" />
       </svg>
     );
   }
   if (isDelivered) {
     return (
-      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5 text-ink-placeholder">
         <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
-              fill="#9CA3AF" />
+              fill="currentColor" />
         <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
-              fill="#9CA3AF" />
+              fill="currentColor" />
       </svg>
     );
   }
   // Sent (single check).
   return (
-    <svg viewBox="0 0 10 8" width="10" height="8" className="inline-block ml-0.5">
-      <path d="M3.5 7.3L.2 4l-.7.7L3.5 8.7l7-7L9.8 1z" fill="#9CA3AF" />
+    <svg viewBox="0 0 10 8" width="10" height="8" className="inline-block ml-0.5 text-ink-placeholder">
+      <path d="M3.5 7.3L.2 4l-.7.7L3.5 8.7l7-7L9.8 1z" fill="currentColor" />
     </svg>
   );
 }
@@ -161,6 +165,12 @@ export default function MessagesPage() {
   const user   = useUser();
   const myId   = String(user?._id ?? "");
   const client = useQueryClient();
+  // On an offline desktop a message in an existing conversation is kept on
+  // this computer and queued (desktop/src/main/api/handlers/messages.js), so
+  // the composer stays usable. Two things still need the server and are
+  // switched off with the reason: starting a conversation (who may be written
+  // to is the server's policy) and uploading an attachment (a file).
+  const net    = useNeedsInternet();
 
   const [activeId, setActiveId] = useState<string | null>(null);
   // Below md the list and the thread take the whole width in turn: side by
@@ -238,9 +248,9 @@ export default function MessagesPage() {
   });
 
   // The server returns newest first; a thread reads oldest at the top.
-  // Sorted by seq — see the header note.
+  // Sorted by seq — see the header note — with unsent ones last (order.ts).
   const messages = useMemo(
-    () => [...(messagesQuery.data?.messages ?? [])].sort((a, b) => a.seq - b.seq),
+    () => [...(messagesQuery.data?.messages ?? [])].sort(threadOrder),
     [messagesQuery.data],
   );
 
@@ -256,7 +266,9 @@ export default function MessagesPage() {
   // Advance the read marker to whatever is now on screen.
   useEffect(() => {
     if (!activeId || !messages.length) return;
-    const newest = messages[messages.length - 1].seq;
+    // Not the last message's seq: an unsent one has none (order.ts).
+    const newest = newestSeq(messages);
+    if (newest == null) return;
     markRead(activeId, newest)
       .then(() => client.invalidateQueries({ queryKey: ["conversations"] }))
       .catch(() => { /* a read receipt failing is not worth interrupting anyone */ });
@@ -264,10 +276,15 @@ export default function MessagesPage() {
 
   // ── Send ──────────────────────────────────────────────────────────────────
 
+  const attemptIds = useRef(clientIds());
+
   const sendMutation = useMutation({
-    mutationFn: (payload: { body: string; attachments: Attachment[] }) =>
+    // Sent under a clientId (clientId.ts), so a retry cannot post twice — and
+    // so the desktop, offline, can queue it and replay it under the same id.
+    mutationFn: (payload: { body: string; attachments: Attachment[]; clientId: string }) =>
       sendMessage(activeId as string, payload),
     onSuccess: () => {
+      attemptIds.current.sent();
       setDraft("");
       setPending([]);
       setSendError(null);
@@ -281,7 +298,11 @@ export default function MessagesPage() {
     const body = draft.trim();
     // An attachment on its own is a message; text is not required.
     if ((!body && pending.length === 0) || !activeId || sendMutation.isPending) return;
-    sendMutation.mutate({ body, attachments: pending });
+    const payload = { body, attachments: pending };
+    sendMutation.mutate({
+      ...payload,
+      clientId: attemptIds.current.forAttempt({ conversationId: activeId, ...payload }),
+    });
   }, [draft, pending, activeId, sendMutation]);
 
   const handleAttach = useCallback(async (file: File | undefined) => {
@@ -320,9 +341,11 @@ export default function MessagesPage() {
         </div>
         <button
           onClick={() => setComposing(true)}
+          disabled={net.blocked}
+          title={net.hint}
           className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2
                      text-sm font-semibold text-white transition-colors
-                     hover:bg-primary-700"
+                     hover:bg-primary-700 disabled:opacity-50"
         >
           <Plus size={16} />
           {t("messages.newConversation")}
@@ -524,6 +547,12 @@ export default function MessagesPage() {
                           )}
                         >
                           <span>{timeLabel(m.createdAt)}</span>
+                          {mine && m._pending && (
+                            <span title={t("messages.pendingSend")} className="inline-flex items-center gap-0.5">
+                              <Clock size={11} aria-hidden="true" />
+                              <span className="sr-only">{t("messages.pendingSend")}</span>
+                            </span>
+                          )}
                           {mine && !m.isDeleted && (
                             <ReadReceipt
                               msg={m}
@@ -532,7 +561,8 @@ export default function MessagesPage() {
                               conversationKind={active.kind}
                             />
                           )}
-                          {mine && !m.isDeleted && (
+                          {/* Not on an unsent message: the server has nothing to delete yet. */}
+                          {mine && !m.isDeleted && m.seq != null && (
                             <button
                               onClick={() => deleteMutation.mutate(m._id)}
                               // Hover-revealed on purpose here — a delete button on every message
@@ -592,6 +622,12 @@ export default function MessagesPage() {
                     </div>
                   )}
 
+                  {net.blocked && (
+                    <p role="status" className="mb-2 flex items-center gap-1.5 text-xs text-gray-500">
+                      <WifiOff size={12} className="shrink-0" aria-hidden="true" />
+                      {t("messages.offlineQueued")}
+                    </p>
+                  )}
                   <div className="flex items-end gap-2">
                     <input
                       ref={fileRef}
@@ -601,8 +637,9 @@ export default function MessagesPage() {
                     />
                     <button
                       onClick={() => fileRef.current?.click()}
-                      disabled={attaching || sendMutation.isPending}
-                      title={t("messages.attach")}
+                      // Uploading is a file going to the server: online only.
+                      disabled={attaching || sendMutation.isPending || net.blocked}
+                      title={net.hint ?? t("messages.attach")}
                       className="flex h-[42px] w-[42px] shrink-0 items-center justify-center
                                  rounded-xl text-gray-500 transition-colors
                                  hover:bg-gray-100 disabled:opacity-50"
@@ -681,6 +718,11 @@ function NewConversationModal({
   onOpened: (c: Conversation) => void;
 }) {
   const { t } = useTranslation();
+  // Starting a conversation is online-only (the recipients are the server's
+  // policy, and the thread does not exist until the server makes it). The
+  // button that opens this is off while offline; this covers the connection
+  // dropping with the dialog already open.
+  const net = useNeedsInternet();
   const [q,       setQ]       = useState("");
   const [opening, setOpening] = useState<string | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -728,6 +770,8 @@ function NewConversationModal({
           </button>
         </div>
 
+        <NeedsInternet className="mx-5 mt-3 mb-0" />
+
         <div className="border-b border-gray-100 px-5 py-3">
           <div className="flex items-center gap-2 rounded-xl border-2 border-gray-200
                           bg-gray-50 px-3 py-2 focus-within:border-blue-500
@@ -737,6 +781,7 @@ function NewConversationModal({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              disabled={net.blocked}
               placeholder={t("messages.searchPh")}
               className="flex-1 bg-transparent text-sm outline-none"
             />
@@ -771,7 +816,8 @@ function NewConversationModal({
               <button
                 key={key}
                 onClick={() => handlePick(r)}
-                disabled={opening !== null}
+                disabled={opening !== null || net.blocked}
+                title={net.hint}
                 className="flex w-full items-center gap-3 border-b border-gray-50
                            px-5 py-3 text-left transition-colors hover:bg-gray-50
                            disabled:opacity-50"

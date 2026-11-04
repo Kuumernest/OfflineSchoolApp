@@ -21,6 +21,8 @@ import { FormField, Input, SelectField } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
 import { cn }          from "@/utils/cn";
 import { getErrorMessage } from "@/lib/axios";
+import NeedsInternet       from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 
 import { fetchClasses } from "@/services/class.service";
 import {
@@ -53,6 +55,7 @@ export default function ExportsPage() {
   const [selected, setSelected] = useState<ExportKind | null>(null);
   const [params, setParams]     = useState<ExportParams>({});
   const [busy, setBusy]         = useState(false);
+  const net                     = useNeedsInternet();
 
   const kindsQ = useQuery({
     queryKey: ["exports", "kinds"],
@@ -103,7 +106,8 @@ export default function ExportsPage() {
           <Button
             icon={<Download className="h-4 w-4" />}
             loading={busy}
-            disabled={!selected}
+            disabled={!selected || net.blocked}
+            title={net.hint}
             onClick={run}
           >
             {/* A spinner alone on an unchanged label read as nothing
@@ -112,6 +116,9 @@ export default function ExportsPage() {
           </Button>
         }
       />
+
+      {/* The workbook is built by the server: online-only on the desktop. */}
+      <NeedsInternet />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {kinds.map((kind) => (

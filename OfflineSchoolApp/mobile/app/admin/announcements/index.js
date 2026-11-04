@@ -75,11 +75,11 @@ const formatDate = (dateStr, t) => {
 
 const isExpired = (d) => d && new Date(d) < new Date();
 
-// All announcements, so all slate; unread and urgent carry the alert dot.
-function StatCard({ icon, label, value, alert = false }) {
+// Plain announcement cards, except unread (info) and urgent (error) when any.
+function StatCard({ icon, label, value, tone }) {
   return (
-    <StatTile kind="announcements" icon={icon} value={value ?? 0} label={label}
-      alert={alert} style={styles.statCard} />
+    <StatTile kind="announcements" tone={tone} icon={icon} value={value ?? 0} label={label}
+      style={styles.statCard} />
   );
 }
 
@@ -255,13 +255,13 @@ export default function AdminAnnouncementsScreen() {
             icon="mail-unread-outline"
             label={t("annAdmin.filterUnread")}
             value={stats.unread}
-            alert={(stats.unread ?? 0) > 0}
+            tone={(stats.unread ?? 0) > 0 ? "info" : undefined}
           />
           <StatCard
             icon="warning-outline"
             label={t("annAdmin.filterUrgent")}
             value={stats.urgentUnack}
-            alert={(stats.urgentUnack ?? 0) > 0}
+            tone={(stats.urgentUnack ?? 0) > 0 ? "error" : undefined}
           />
           <StatCard
             icon="pin-outline"

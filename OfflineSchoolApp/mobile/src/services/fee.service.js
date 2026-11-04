@@ -237,6 +237,17 @@ export const getStudentAccount = async (studentId, academicYear = null) => {
   };
 };
 
+/** One payment as this device holds it, or null. For printing its receipt. */
+export const getPayment = async (paymentId) => {
+  if (!paymentId) return null;
+  const db = await getDatabase();
+  await ensureSchema(db);
+  const row = await db.getFirstAsync(
+    `SELECT * FROM ${PAYMENTS} WHERE id = ?`, [String(paymentId)]
+  );
+  return row ? { ...mapPayment(row), schoolId: row.school_id } : null;
+};
+
 /** Payments this device has taken that the server has not acknowledged. */
 export const listPendingPayments = async () => {
   const db = await getDatabase();
@@ -346,6 +357,7 @@ export const pullStudentAccount = async ({ schoolId, studentId, academicYear }) 
 export default {
   recordPayment,
   getStudentAccount,
+  getPayment,
   listPendingPayments,
   pullStudentAccount,
   pullOutstanding,

@@ -20,7 +20,8 @@ import { useAuthStore } from "../../src/store/auth.store";
 import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
-import { errorText } from "../../src/utils/appError";
+import { useSafeLogout } from "../../src/hooks/useSafeLogout";
+import { needsInternetFailureText } from "../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS & VALIDATION RULES
@@ -93,7 +94,7 @@ export default function SetPasswordScreen() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const updateUser = useAuthStore((s) => s.updateUser);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
 
   // Two flows share this screen:
   //   - forced reset: the admin created the account, so there is no current
@@ -210,9 +211,8 @@ export default function SetPasswordScreen() {
       );
     } catch (err) {
       console.error("set-password error:", err.message);
-      const msg =
-        err?.response?.data?.message ||
-        errorText(t, err, "setPassword.genericError");
+      // Setting a password is online-only: offline, said as such.
+      const msg = needsInternetFailureText(t, err, "setPassword.genericError");
       setError(msg);
     } finally {
       setLoading(false);
@@ -232,19 +232,15 @@ export default function SetPasswordScreen() {
   ]);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
+  // Warns first when this account has changes not yet sent.
   const handleLogout = useCallback(() => {
-    Alert.alert(t("setPassword.signOutTitle"), t("setPassword.signOutBody"), [
-      { text: t("setPassword.cancel"), style: "cancel" },
-      {
-        text: t("setPassword.signOut"),
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/auth/login");
-        },
-      },
-    ]);
-  }, [logout, router, t]);
+    safeLogout({
+      title:        t("setPassword.signOutTitle"),
+      body:         t("setPassword.signOutBody"),
+      confirmLabel: t("setPassword.signOut"),
+      cancelLabel:  t("setPassword.cancel"),
+    });
+  }, [safeLogout, t]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER

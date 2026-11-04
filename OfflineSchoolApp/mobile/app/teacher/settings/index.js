@@ -17,9 +17,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import TeacherProfile from "../../../src/services/teacherProfile.service";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { loadOwnStaffNo } from "../../../src/services/staffNumber.service";
+import { staffNoText } from "../../../src/utils/staffNumber";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 
 // ─────────────────────────────────────────────────────────
@@ -216,7 +219,6 @@ function ProfileProgress({ profile }) {
     profile?.lastName,
     profile?.gender,
     profile?.phone,
-    profile?.staffId,
     profile?.qualification,
     profile?.address,
     profile?.emergencyName,
@@ -283,12 +285,20 @@ const pp = StyleSheet.create({
 export default function TeacherSettingsScreen() {
   const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const userId = String(user?._id || user?.id || "");
 
   const [profile,         setProfile]         = useState(null);
   const [loading,         setLoading]         = useState(true);
   const [profileComplete, setProfileComplete] = useState(false);
+  // The school's staff number (server-issued), not anything the teacher typed.
+  const [staffNo,         setStaffNo]         = useState({ kind: "none", value: null });
+
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   // ✅ Fix 2 — notification preference loaded from AsyncStorage
   const [notifEnabled, setNotifEnabled] = useState(true);
@@ -355,23 +365,15 @@ export default function TeacherSettingsScreen() {
   }, [userId]);
 
   // ── Logout ───────────────────────────────────────────
+  // Warns first when this account has changes not yet sent.
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      t("teacherSettings.logout"),
-      t("teacherSettings.logoutConfirm"),
-      [
-        { text: t("teacherSettings.cancel"), style: "cancel" },
-        {
-          text:  t("teacherSettings.logout"),
-          style: "destructive",
-          onPress: async () => {
-            try { await logout(); } catch { /* ignore */ }
-            router.replace("/auth/login");
-          },
-        },
-      ]
-    );
-  }, [logout, t]);
+    safeLogout({
+      title:        t("teacherSettings.logout"),
+      body:         t("teacherSettings.logoutConfirm"),
+      confirmLabel: t("teacherSettings.logout"),
+      cancelLabel:  t("teacherSettings.cancel"),
+    });
+  }, [safeLogout, t]);
 
   // ── Derived display values ────────────────────────────
   const displayName = profile
@@ -381,7 +383,7 @@ export default function TeacherSettingsScreen() {
 
   const profileSubtitle =
     [
-      profile?.staffId ? t("teacherSettings.idLabel", { id: profile.staffId }) : null,
+      staffNo.value ? t("teacherSettings.idLabel", { id: staffNo.value }) : null,
       profile?.qualification || null,
     ]
       .filter(Boolean)
@@ -498,16 +500,14 @@ export default function TeacherSettingsScreen() {
         {/* ── My Details (shown once profile has data) ── */}
         {profile && (
           <Section title={t("teacherSettings.myDetails")}>
-            {!!profile.staffId && (
-              <SettingRow
-                icon="id-card-outline"
-                iconBg="#EDE9FE"
-                iconColor="#7C3AED"
-                title={t("teacherSettings.staffId")}
-                type="value"
-                value={profile.staffId}
-              />
-            )}
+            <SettingRow
+              icon="id-card-outline"
+              iconBg="#EDE9FE"
+              iconColor="#7C3AED"
+              title={t("staffNo.labelLong")}
+              type="value"
+              value={staffNoText(t, staffNo)}
+            />
             {!!profile.qualification && (
               <SettingRow
                 icon="ribbon-outline"

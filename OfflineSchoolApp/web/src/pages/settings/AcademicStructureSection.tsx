@@ -263,7 +263,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
       </div>
     );
   }
@@ -294,7 +294,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
           <select
             value={academicYear}
             onChange={(e) => setAcademicYear(e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {yearOptions.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -314,7 +314,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
               className="flex w-full items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <Calendar className="h-5 w-5 text-indigo-500" />
+                <Calendar className="h-5 w-5 text-primary-500" />
                 <span className="text-base font-semibold text-gray-900">
                   {t("academicStructure.term")} {term.number}: {term.name}
                 </span>
@@ -332,7 +332,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                     <input
                       value={term.name}
                       onChange={(e) => updateTerm(termIdx, { name: e.target.value })}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                     />
                   </div>
                   <div>
@@ -345,7 +345,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                         step="0.01"
                         value={term.weight}
                         onChange={(e) => updateTerm(termIdx, { weight: Number(e.target.value) })}
-                        className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                       />
                       <span className="text-sm text-gray-500">%</span>
                     </div>
@@ -369,7 +369,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                             <input
                               value={seq.name}
                               onChange={(e) => updateSequence(termIdx, seqIdx, { name: e.target.value })}
-                              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400"
+                              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-primary-400"
                             />
                           </div>
 
@@ -386,7 +386,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                                 step="1"
                                 value={seq.weight}
                                 onChange={(e) => updateSequence(termIdx, seqIdx, { weight: Number(e.target.value) })}
-                                className="w-16 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400"
+                                className="w-16 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-primary-400"
                               />
                               <span className="text-xs text-gray-500">%</span>
                             </div>
@@ -404,7 +404,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                                   assessment: { ...seq.assessment, type: e.target.value as typeof ASSESSMENT_TYPES[number] },
                                 })
                               }
-                              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400"
+                              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-primary-400"
                             >
                               {ASSESSMENT_TYPES.map((tp) => (
                                 <option key={tp} value={tp}>
@@ -423,7 +423,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                               className={cn(
                                 "rounded-lg px-2 py-1.5 text-xs font-medium transition",
                                 isPromo
-                                  ? "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300"
+                                  ? "bg-primary-100 text-primary-700 ring-1 ring-primary-300"
                                   : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                               )}
                             >
@@ -510,7 +510,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                   step="0.5"
                   value={structure.passMark ?? 10}
                   onChange={(e) => setStructure({ ...structure, passMark: Number(e.target.value) })}
-                  className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 <span className="text-sm text-gray-500">/ 20</span>
               </div>
@@ -529,7 +529,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                 onChange={(e) =>
                   setStructure({ ...structure, maxAbsences: e.target.value === "" ? null : Number(e.target.value) })
                 }
-                className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="w-24 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
               />
             </div>
           </div>

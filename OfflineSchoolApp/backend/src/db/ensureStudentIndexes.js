@@ -153,6 +153,10 @@ async function ensureIdempotencyIndex() {
     );
   };
 
+  // First, so createIndexes below does not trip over an old TTL with
+  // IndexOptionsConflict. Never throws.
+  await ensureIdempotencyTtl();
+
   try {
     // Creates whatever the model declares, so the shape lives in the model and
     // not in a second copy here that can drift from it.
@@ -165,6 +169,8 @@ async function ensureIdempotencyIndex() {
         err.message
     );
   }
+
+  await reportIdempotencyTtl();
 
   if (await present()) {
     console.log("[indexes] idempotencykeys (key, userId) is unique ✅");
@@ -193,11 +199,102 @@ async function ensureIdempotencyIndex() {
     db.idempotencykeys.deleteMany({})
     db.idempotencykeys.createIndex({ key: 1, userId: 1 }, { unique: true })
 
-  Dropping the collection is safe: it holds a fortnight of cached
+  Dropping the collection is safe: it holds ~45 days of cached
   responses, not records of anything. The cost is that writes already
   in flight lose their protection.
 ════════════════════════════════════════════════════════════════════
 `);
 }
 
-module.exports = { ensureStudentGateTokenIndex, ensureIdempotencyIndex };
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * REQUIRED: idempotencykeys TTL = IdempotencyKey.TTL_SECONDS (45 days)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The supported offline period is 30 days, so a key must outlive it (see
+ * models/IdempotencyKey.js). Mongo does not change an existing TTL index when
+ * the schema's expireAfterSeconds changes, and createIndexes on the same key
+ * with another TTL fails with IndexOptionsConflict — so a database built when
+ * the TTL was 14 days would keep expiring keys after 14 days forever, and a
+ * device back from three weeks offline would replay writes unprotected.
+ *
+ * Brought to the declared value here, at every boot, before createIndexes:
+ *   no collection / no createdAt index  → nothing (createIndexes builds it)
+ *   TTL already right                   → nothing (idempotent)
+ *   TTL different                       → collMod (in place, no rebuild)
+ *   collMod refused, or a plain index   → drop + recreate THAT index only
+ * Dropping the TTL index for a moment only delays expiry; the unique
+ * (key, userId) index — the one that deduplicates — is never touched.
+ *
+ * Never throws: an expiry setting must not stop the school's server. A
+ * failure is reported, loudly, by reportIdempotencyTtl().
+ *
+ * @returns {Promise<"absent"|"ok"|"updated"|"rebuilt"|"failed">}
+ */
+const isCreatedAtIndex = (i) =>
+  Boolean(i.key) && Object.keys(i.key).length === 1 && i.key.createdAt === 1;
+
+async function ensureIdempotencyTtl() {
+  const IdempotencyKey = require("./models/IdempotencyKey");
+  const ttl  = IdempotencyKey.TTL_SECONDS;
+  const coll = IdempotencyKey.collection;
+
+  let live;
+  try {
+    live = await coll.indexes();
+  } catch {
+    return "absent"; // no collection yet: createIndexes builds it right
+  }
+  const ix = live.find(isCreatedAtIndex);
+  if (!ix) return "absent";
+  if (ix.expireAfterSeconds === ttl) return "ok";
+
+  const was = ix.expireAfterSeconds ?? "none";
+  if (ix.expireAfterSeconds != null) {
+    try {
+      await IdempotencyKey.db.db.command({
+        collMod: coll.collectionName,
+        index: { name: ix.name, expireAfterSeconds: ttl },
+      });
+      console.log(`[indexes] idempotencykeys TTL ${was}s → ${ttl}s (collMod)`);
+      return "updated";
+    } catch (err) {
+      console.warn(`[indexes] idempotencykeys TTL collMod refused (${err.message}); rebuilding that index`);
+    }
+  }
+  try {
+    await coll.dropIndex(ix.name);
+    await coll.createIndex({ createdAt: 1 }, { name: ix.name, expireAfterSeconds: ttl });
+    console.log(`[indexes] idempotencykeys TTL ${was} → ${ttl}s (index rebuilt)`);
+    return "rebuilt";
+  } catch (err) {
+    console.error(`[indexes] idempotencykeys: could not set the TTL to ${ttl}s — ${err.message}`);
+    return "failed";
+  }
+}
+
+/** Says, after the build, whether the live TTL is the declared one. */
+async function reportIdempotencyTtl() {
+  const IdempotencyKey = require("./models/IdempotencyKey");
+  const ttl = IdempotencyKey.TTL_SECONDS;
+  let live = [];
+  try { live = await IdempotencyKey.collection.indexes(); } catch { /* reported below */ }
+  const ix = live.find(isCreatedAtIndex);
+  if (ix?.expireAfterSeconds === ttl) {
+    console.log(`[indexes] idempotencykeys TTL is ${IdempotencyKey.TTL_DAYS} days ✅`);
+    return true;
+  }
+  console.error(
+    `[indexes] idempotencykeys TTL is ${ix?.expireAfterSeconds ?? "missing"}, expected ${ttl}s ` +
+      `(${IdempotencyKey.TTL_DAYS} days, above the 30-day offline period). Fix: ` +
+      `db.runCommand({ collMod: "idempotencykeys", index: { keyPattern: { createdAt: 1 }, expireAfterSeconds: ${ttl} } })`
+  );
+  return false;
+}
+
+module.exports = {
+  ensureStudentGateTokenIndex,
+  ensureIdempotencyIndex,
+  ensureIdempotencyTtl,
+  reportIdempotencyTtl,
+};

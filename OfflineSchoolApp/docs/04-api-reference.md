@@ -585,7 +585,7 @@ Read the top of each router for its aliases.
 |---|---|---|
 | GET | `/changes` | `authenticate`, `feedCtrl.changes` |
 | GET | `/pull` | `authenticate`, `syncCtrl.pullChanges` |
-| POST | `/push` | `authenticate`, `requirePermission("sync.push")`, `syncCtrl.pushChanges` |
+| POST | `/push` | `authenticate`, `syncCtrl.pushRetired` — retired, always 410 `SYNC_PUSH_RETIRED` |
 
 ### `/api/teacher` — `teacher.routes.js` — 31 routes
 

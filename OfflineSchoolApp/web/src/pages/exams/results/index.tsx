@@ -208,7 +208,7 @@ const StatsOverview = ({ stats }: { stats: Stats }) => {
     { id: "passed",   label: t("results.passed"),         value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
     { id: "failed",   label: t("results.failed"),         value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
     { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             color: "text-indigo-600",  bg: "bg-indigo-50"   },
+    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             color: "text-primary-600",  bg: "bg-primary-50"   },
     { id: "highest",  label: t("results.highest"),        value: on20(stats.highest),             color: "text-emerald-600", bg: "bg-emerald-50"  },
     { id: "lowest",   label: t("results.lowest"),         value: on20(stats.lowest),              color: "text-rose-600",    bg: "bg-rose-50"     },
   ];
@@ -301,7 +301,7 @@ const ScoreDistributionBar = ({
   return <div className="space-y-3">
     {[
       { id: "highest", label: t("results.highest"),  value: highest, color: "bg-emerald-500" },
-      { id: "average", label: t("academic.average"), value: average, color: "bg-indigo-500"  },
+      { id: "average", label: t("academic.average"), value: average, color: "bg-primary-500"  },
       { id: "lowest",  label: t("results.lowest"),   value: lowest,  color: "bg-red-500"     },
     ].map(({ id, label, value, color }) => (
       <div key={id} className="flex items-center gap-3">
@@ -430,7 +430,7 @@ const SubjectPerformanceTable = ({
                 <td className="px-4 py-2.5 font-medium text-gray-900">
                   {s.subjectName}
                 </td>
-                <td className="px-4 py-2.5 text-right font-semibold text-indigo-600">
+                <td className="px-4 py-2.5 text-right font-semibold text-primary-600">
                   {on20(s.average)}
                 </td>
                 <td className="px-4 py-2.5 text-right text-emerald-600 font-semibold">

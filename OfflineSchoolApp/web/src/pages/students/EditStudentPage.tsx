@@ -251,7 +251,7 @@ export default function EditStudentPage() {
     return (
       <Card>
         <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <AlertCircle className="h-8 w-8 text-danger" aria-hidden="true" />
+          <AlertCircle className="h-8 w-8 text-danger-text" aria-hidden="true" />
           <p className="text-sm text-ink-muted">{t("studentDetail.notFound")}</p>
           <Link to="/students"><Button variant="secondary">{t("notFound.goBack")}</Button></Link>
         </div>

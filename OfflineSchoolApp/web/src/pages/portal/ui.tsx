@@ -38,8 +38,8 @@ export function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title
 
 const AVATAR_TONES = [
   "bg-primary-100 text-primary-800",
-  "bg-success-soft text-success",
-  "bg-warning-soft text-warning",
+  "bg-success-soft text-success-text",
+  "bg-warning-soft text-warning-text",
 ];
 
 /** Initials in a circle; the same child keeps the same colour everywhere. */

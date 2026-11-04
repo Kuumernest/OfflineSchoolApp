@@ -349,6 +349,8 @@ class SyncManagerClass {
     this.LIST_REFRESH_MS       = 30 * 60 * 1_000;
     this._listPulledAt         = new Map();
     this._fullRun              = false;
+    // How the last syncAll that got as far as taking the lock ended.
+    this.lastOutcome           = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -489,29 +491,56 @@ class SyncManagerClass {
   // SECTION 3 — LAST-SYNC PERSISTENCE
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // On the legacy shared file the cursors are in SecureStore, as they always
+  // were. A per-user store (docs/40) keeps its own inside the file
+  // (db/storeMeta.js), so a new store is a full pull for its account.
+  async _storeMeta() {
+    try { return await require("../db/storeMeta").activeStoreMeta(); } catch { return null; }
+  }
+
   async getLastSync() {
-    try { return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH; }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) return (await meta.get(LAST_SYNC_KEY)) || EPOCH;
+      return (await SecureStore.getItemAsync(LAST_SYNC_KEY)) || EPOCH;
+    }
     catch { return EPOCH; }
   }
 
   async setLastSync(timestamp) {
-    try { await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp); }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.set(LAST_SYNC_KEY, timestamp);
+      else await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp);
+    }
     catch (err) { console.warn("[SyncManager] Could not persist lastSync:", err.message); }
     this.lastSync = timestamp;
   }
 
   async resetLastSync() {
-    try { await SecureStore.deleteItemAsync(LAST_SYNC_KEY); } catch { /* ignore */ }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.del(LAST_SYNC_KEY);
+      else await SecureStore.deleteItemAsync(LAST_SYNC_KEY);
+    } catch { /* ignore */ }
     this.lastSync = null;
   }
 
   async getLastQuizSync() {
-    try { return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH; }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) return (await meta.get(QUIZ_LAST_SYNC_KEY)) || EPOCH;
+      return (await SecureStore.getItemAsync(QUIZ_LAST_SYNC_KEY)) || EPOCH;
+    }
     catch { return EPOCH; }
   }
 
   async setLastQuizSync(timestamp) {
-    try { await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp); }
+    try {
+      const meta = await this._storeMeta();
+      if (meta) await meta.set(QUIZ_LAST_SYNC_KEY, timestamp);
+      else await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp);
+    }
     catch (err) { console.warn("[SyncManager] Could not persist quiz lastSync:", err.message); }
   }
 
@@ -573,6 +602,39 @@ class SyncManagerClass {
       .finally(() => { this._initInFlight = null; });
 
     return this._initInFlight;
+  }
+
+  /**
+   * One full sync of the active file, with no timers left running — the
+   * first sync of a per-user store (docs/40, perUserData.service). Answers the
+   * outcome: "completed" only when every step of syncAll ran; anything else
+   * (offline, signed out, a failed pull, a cancel) means the store is not
+   * ready to be read and the account stays on the shared file.
+   */
+  async primeOnce() {
+    if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
+    if (this.syncInterval)  { clearTimeout(this.syncInterval);  this.syncInterval  = null; }
+    this._destroyed            = false;
+    this.isSyncing             = false;
+    this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
+    this._repairsDone          = false;
+    this._listPulledAt.clear();
+    this._migrationsDone       = false;
+    await this.runAllMigrations();
+    this._migrationsDone       = true;
+    try { require("./syncBackfill.service").registerReconcilers(); } catch { /* registered on use */ }
+    try { require("./message.service").registerMessageReconcilers(); } catch { /* optional */ }
+    this.lastOutcome = null;
+    try {
+      await this.syncAll({ force: true, full: true });
+    } finally {
+      const outcome = this.lastOutcome;
+      // Stopped until the app starts it for the session (ensureStarted).
+      this._destroyed = true;
+      this.lastOutcome = outcome;
+    }
+    return this.lastOutcome ?? "aborted";
   }
 
   destroy() {
@@ -1187,7 +1249,15 @@ class SyncManagerClass {
       if (this._isUnauthenticated()) { console.log("[SyncManager] User logged out — aborting"); return; }
 
       if (!this.isStudent()) {
-        await this.markOrphanedRecordsAsSynced();
+        // markOrphanedRecordsAsSynced used to run here: it set _synced = 1 on
+        // EVERY dirty class and subject, before the backfill below could
+        // queue them — so a class or subject created, edited, toggled or
+        // deleted offline was silently dropped. Its repair (stale dirty flags
+        // on rows the server already has, being re-sent every sync) is now
+        // done by the send itself: classes and subjects are POSTed under
+        // their own id, the server answers a repeat with the row it holds,
+        // and the reconciler clears the flag. Name collisions are mapped by
+        // repairClassIds below.
 
         // Class-ID repair needs /admin/classes, so it belongs here rather than
         // in the student branch it used to sit in — where it could only 403.
@@ -1255,6 +1325,7 @@ class SyncManagerClass {
       // was built to remove.
       SyncProgress.end(outcome);
       releaseSyncLock();
+      this.lastOutcome = outcome;
     }
   }
 
@@ -1400,27 +1471,6 @@ class SyncManagerClass {
         console.warn("[SyncManager] clearStaleSubjectsAndRepull failed:", err.message);
       }
     });
-  }
-
-  async markOrphanedRecordsAsSynced() {
-    const db = await getDatabase();
-    const ts = new Date().toISOString();
-    try {
-      const classR = await db.runAsync(
-        "UPDATE classes  SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
-      const subjectR = await db.runAsync(
-        "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
-
-      const cc = classR?.changes   ?? 0;
-      const sc = subjectR?.changes ?? 0;
-      if (cc > 0 || sc > 0) {
-        console.log(`[SyncManager] Orphaned records marked synced — classes: ${cc}, subjects: ${sc}`);
-      }
-    } catch (err) {
-      console.warn("[SyncManager] markOrphanedRecordsAsSynced failed:", err.message);
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2236,6 +2286,12 @@ class SyncManagerClass {
     console.log(`[SyncManager] Periods: ${ok} synced, ${fail} failed`);
   }
 
+  // A pulled row never overwrites one with an unsent local change (_synced
+  // != 1): the pull may have left the server before the change was made, and
+  // overwriting would undo it silently — a delete made while a pull was in
+  // flight came back active and was never sent. The change goes out first;
+  // the next pull refreshes the row. Same rule as the desktop's merge(), and
+  // the same rows the backfill treats as pending. Classes, teachers, subjects.
   async syncClasses(classes) {
     if (!classes?.length) return;
     const db = await getDatabase();
@@ -2254,7 +2310,7 @@ class SyncManagerClass {
 
           if (c.deletedAt || c.deleted_at) {
             await db.runAsync(
-              "UPDATE classes SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE classes SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [c.deletedAt || c.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2271,7 +2327,8 @@ class SyncManagerClass {
                classTeacherId   = excluded.classTeacherId,
                classTeacherName = excluded.classTeacherName,
                is_active = excluded.is_active, _synced = 1, deleted_at = NULL,
-               updated_at = excluded.updated_at`,
+               updated_at = excluded.updated_at
+             WHERE classes._synced = 1`,
             [
               String(id), c.schoolId, c.schoolId,
               c.name, c.level || null, c.section || "",
@@ -2311,7 +2368,7 @@ class SyncManagerClass {
 
           if (t.deletedAt || t.deleted_at) {
             await db.runAsync(
-              "UPDATE users SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE users SET deleted_at = ?, is_active = 0, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [t.deletedAt || t.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2320,15 +2377,17 @@ class SyncManagerClass {
           await db.runAsync(
             `INSERT INTO users
                (id, schoolId, school_id, name, email, role, is_active,
-                must_reset_password, _synced, _synced_at, deleted_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 'teacher', ?, ?, 1, ?, NULL, ?, ?)
+                must_reset_password, _synced, _synced_at, deleted_at, created_at, updated_at, staff_no)
+             VALUES (?, ?, ?, ?, ?, 'teacher', ?, ?, 1, ?, NULL, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId = excluded.schoolId, school_id = excluded.school_id,
                name = excluded.name, email = excluded.email,
+               staff_no = COALESCE(excluded.staff_no, users.staff_no),
                is_active = excluded.is_active,
                must_reset_password = excluded.must_reset_password,
                _synced = 1, _synced_at = excluded._synced_at,
-               deleted_at = NULL, updated_at = excluded.updated_at`,
+               deleted_at = NULL, updated_at = excluded.updated_at
+             WHERE users._synced = 1`,
             [
               String(id), t.schoolId, t.schoolId,
               t.name || "Unknown", t.email.toLowerCase().trim(),
@@ -2337,6 +2396,9 @@ class SyncManagerClass {
               ts,
               t.createdAt?.$date || t.createdAt || ts,
               t.updatedAt?.$date || t.updatedAt || ts,
+              // The school's staff number. A feed that does not carry it (an
+              // older server) leaves the stored one alone.
+              String(t.staffNo ?? "").trim() || null,
             ]
           );
           ok++;
@@ -2367,7 +2429,7 @@ class SyncManagerClass {
 
           if (s.deletedAt || s.deleted_at) {
             await db.runAsync(
-              "UPDATE subjects SET deleted_at = ?, teacher_id = NULL, _synced = 1, updated_at = ? WHERE id = ?",
+              "UPDATE subjects SET deleted_at = ?, teacher_id = NULL, _synced = 1, updated_at = ? WHERE id = ? AND _synced = 1",
               [s.deletedAt || s.deleted_at, ts, String(id)]
             );
             ok++; continue;
@@ -2392,7 +2454,8 @@ class SyncManagerClass {
                name = excluded.name, code = excluded.code,
                teacher_id = excluded.teacher_id, teacher_name = excluded.teacher_name,
                coefficient = excluded.coefficient,
-               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at`,
+               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at
+             WHERE subjects._synced = 1`,
             [
               String(id), s.schoolId, s.schoolId,
               String(classId), String(classId),

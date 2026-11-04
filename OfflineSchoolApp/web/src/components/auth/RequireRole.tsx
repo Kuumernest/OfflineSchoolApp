@@ -54,7 +54,7 @@ export default function RequireRole({
     <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
       <Card className="max-w-md text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-warning-soft">
-          <ShieldAlert className="h-6 w-6 text-warning" aria-hidden="true" />
+          <ShieldAlert className="h-6 w-6 text-warning-text" aria-hidden="true" />
         </div>
 
         <h1 className="mt-4 text-base font-semibold text-ink">

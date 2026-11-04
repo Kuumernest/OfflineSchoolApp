@@ -217,7 +217,7 @@ function ActionButton({
   disabled?:   boolean;
 }) {
   const variants = {
-    default: "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+    default: "border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100",
     warning: "border-amber-200  bg-amber-50  text-amber-700  hover:bg-amber-100",
     danger:  "border-red-200    bg-red-50    text-red-700    hover:bg-red-100",
     success: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
@@ -313,19 +313,19 @@ function EnrollmentCard({
   if (!enrollmentNo) return null;
 
   return (
-    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+    <div className="rounded-2xl border border-primary-200 bg-primary-50 p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-3">
-        <IdCard className="h-4 w-4 text-indigo-600" />
-        <h2 className="text-sm font-bold text-indigo-900">{t("studentDetail.credentials")}</h2>
+        <IdCard className="h-4 w-4 text-primary-600" />
+        <h2 className="text-sm font-bold text-primary-900">{t("studentDetail.credentials")}</h2>
       </div>
 
-      <p className="text-xs text-indigo-600 mb-3 leading-relaxed">
+      <p className="text-xs text-primary-600 mb-3 leading-relaxed">
         {t("studentDetail.credentialsHint")}
       </p>
 
       {/* Enrollment number display */}
-      <div className="flex items-center gap-2 rounded-xl bg-white border border-indigo-200 px-4 py-3">
-        <span className="flex-1 font-mono text-base font-bold tracking-widest text-indigo-800 select-all">
+      <div className="flex items-center gap-2 rounded-xl bg-white border border-primary-200 px-4 py-3">
+        <span className="flex-1 font-mono text-base font-bold tracking-widest text-primary-800 select-all">
           {enrollmentNo}
         </span>
         <button
@@ -334,7 +334,7 @@ function EnrollmentCard({
             "shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
             copied
               ? "bg-emerald-100 text-emerald-700"
-              : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+              : "bg-primary-100 text-primary-700 hover:bg-primary-200"
           )}
         >
           {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
@@ -357,7 +357,7 @@ function EnrollmentCard({
         <button
           onClick={() => setConfirming(true)}
           disabled={!studentId}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 transition disabled:opacity-50"
         >
           <KeyRound className="h-3.5 w-3.5" />
           {t("studentDetail.resetPassword")}
@@ -451,7 +451,7 @@ function MoveClassPicker({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
-          <ArrowRightLeft className="h-5 w-5 text-indigo-600" />
+          <ArrowRightLeft className="h-5 w-5 text-primary-600" />
           <h3 className="text-lg font-bold text-gray-900">{t("studentDetail.moveToClass")}</h3>
         </div>
 
@@ -467,11 +467,11 @@ function MoveClassPicker({
                 key={cls._id ?? cls.id}
                 onClick={() => onSelect(cls)}
                 className={cn(
-                  "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 transition-colors",
+                  "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary-50 transition-colors",
                   i < others.length - 1 && "border-b border-gray-100"
                 )}
               >
-                <School className="h-4 w-4 shrink-0 text-indigo-500" />
+                <School className="h-4 w-4 shrink-0 text-primary-500" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900">
                     {cls.name}
@@ -570,10 +570,10 @@ function PhotoCard({
 
   return (
     <div className="flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-indigo-500 bg-indigo-50">
+      <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-primary-500 bg-primary-50">
         {src
           ? <img src={src} alt="" className="h-full w-full object-cover" />
-          : <IdCard className="h-8 w-8 text-indigo-300" aria-hidden="true" />}
+          : <IdCard className="h-8 w-8 text-primary-300" aria-hidden="true" />}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -746,7 +746,7 @@ function VerificationsCard({ studentId, schoolId }: {
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       placeholder={t("verif.reasonPh")}
-                      className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
+                      className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary-400 focus:outline-none"
                       maxLength={200}
                       autoFocus
                     />
@@ -968,7 +968,7 @@ export default function StudentDetailPage() {
   if (studentQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("studentDetail.loading")}</p>
       </div>
     );
@@ -1041,7 +1041,7 @@ export default function StudentDetailPage() {
               "flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold",
               isSuspended
                 ? "bg-red-100 text-red-600"
-                : "bg-indigo-100 text-indigo-600"
+                : "bg-primary-100 text-primary-600"
             )}
           >
             {firstLetter}
@@ -1055,7 +1055,7 @@ export default function StudentDetailPage() {
 
             {/* Show enrollment number under the name if available */}
             {enrollmentNo && (
-              <p className="mt-0.5 font-mono text-sm font-semibold text-indigo-600 tracking-widest">
+              <p className="mt-0.5 font-mono text-sm font-semibold text-primary-600 tracking-widest">
                 {enrollmentNo}
               </p>
             )}
@@ -1083,7 +1083,7 @@ export default function StudentDetailPage() {
 
               {/* Class badge */}
               {classNameDisplay && classNameDisplay !== "Unassigned" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-bold text-primary-700">
                   <School className="h-3 w-3" />
                   {classNameDisplay}
                 </span>
@@ -1115,7 +1115,7 @@ export default function StudentDetailPage() {
             icon={Mail}
             label={t("common.email")}
             value={student.email}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Phone}
@@ -1133,7 +1133,7 @@ export default function StudentDetailPage() {
             icon={IdCard}
             label={t("academic.enrollmentNo")}
             value={enrollmentNo}
-            iconColor="text-indigo-600"
+            iconColor="text-primary-600"
             mono
           />
           <InfoRow
@@ -1162,37 +1162,37 @@ export default function StudentDetailPage() {
             icon={School}
             label={t("studentDetail.schoolName")}
             value={school?.name ?? null}
-            iconColor="text-indigo-600"
+            iconColor="text-primary-600"
           />
           <InfoRow
             icon={School}
             label={t("settings.motto")}
             value={school?.motto ?? null}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("settings.schoolType")}
             value={schoolTypeLabel}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={School}
             label={t("settings.termSystem")}
             value={termSystemLabel}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Calendar}
             label={t("studentDetail.academicYear")}
             value={academicYear}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("studentDetail.schoolAddress")}
             value={schoolAddress}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Phone}
@@ -1234,19 +1234,19 @@ export default function StudentDetailPage() {
             icon={Calendar}
             label={t("settings.schoolDays")}
             value={schoolDays}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Calendar}
             label={t("settings.startTime")}
             value={schoolHours}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("academic.class")}
             value={classNameDisplay}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Users}
@@ -1264,7 +1264,7 @@ export default function StudentDetailPage() {
             icon={Calendar}
             label={t("studentDetail.enrolledOn")}
             value={formatDate(student.enrolledAt)}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Calendar}

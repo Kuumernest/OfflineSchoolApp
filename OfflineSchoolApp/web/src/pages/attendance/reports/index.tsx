@@ -238,8 +238,8 @@ function SummaryPanel({
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-sec-attendance-soft flex items-center justify-center">
-            <Icon className="w-4 h-4 text-sec-attendance" />
+          <div className="w-9 h-9 rounded-lg bg-accent-teal-soft flex items-center justify-center">
+            <Icon className="w-4 h-4 text-accent-teal" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
@@ -346,7 +346,8 @@ function TrendChart({ points }: { points: { date: string; rate: number | null }[
             <line
               key={pct}
               x1={PAD} y1={y} x2={W - PAD} y2={y}
-              stroke="#f3f4f6"
+              stroke="currentColor"
+              className="text-gray-100"
               strokeWidth="0.3"
               vectorEffect="non-scaling-stroke"
             />

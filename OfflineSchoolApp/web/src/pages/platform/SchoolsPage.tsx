@@ -239,7 +239,7 @@ export default function SchoolsPage() {
               <Input value={form.country ?? ""} onChange={field("country")} />
             </FormField>
           </div>
-          {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
+          {formError && <p role="alert" className="text-sm text-danger-text">{formError}</p>}
           <div className="flex flex-wrap justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setCreating(false)}>{t("common.cancel")}</Button>
             <Button type="submit" loading={saving}>{s("create")}</Button>

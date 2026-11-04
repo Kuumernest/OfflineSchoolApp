@@ -2,7 +2,6 @@
 import { useTranslation }   from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useFormat }        from "@/i18n/format";
-import { TILE_TONE }        from "@/config/sections";
 import { cn }               from "@/utils/cn";
 
 interface Props {
@@ -17,10 +16,8 @@ interface Props {
 /**
  * Today's attendance.
  *
- * The rate is the headline, on an olive tile: olive is attendance everywhere
- * (config/sections.ts), so it matches the attendance stat tile and quick
- * action. The bar under it is the only status colour — green or amber says
- * whether the rate is healthy, which the olive never does. Present and absent
+ * The rate is the headline, in ink. The bar under it is the only status
+ * colour — green or amber says whether the rate is healthy. Present and absent
  * are figures, not alarms, so they are set in ink rather than in matching
  * green and red boxes competing with the bar for the same message.
  */
@@ -46,21 +43,16 @@ export default function AttendanceWidget({
 
       {loading ? (
         <div className="space-y-3">
-          <div className={cn("h-[76px] w-full animate-pulse rounded-tile", TILE_TONE.attendance.fill)} />
+          <div className="h-[76px] w-full animate-pulse rounded-card bg-canvas" />
           <div className="h-1.5 w-full animate-pulse rounded-full bg-canvas" />
         </div>
       ) : (
         <>
-          <div
-            className={cn(
-              "flex items-baseline gap-2 rounded-tile px-5 py-4 shadow-tile",
-              TILE_TONE.attendance.fill
-            )}
-          >
-            <span className="text-[34px] font-bold leading-none tracking-tight tabular">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular">
               {rate == null ? "–" : `${fmt.number(rate)}%`}
             </span>
-            <span className="text-sm font-medium">{t("dashboard.presentShort")}</span>
+            <span className="text-sm font-medium text-ink-muted">{t("dashboard.presentShort")}</span>
           </div>
 
           <div

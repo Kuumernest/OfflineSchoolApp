@@ -6,7 +6,6 @@ const router     = express.Router();
 const syncCtrl   = require("../controllers/sync.controller");
 const feedCtrl   = require("../controllers/syncFeed.controller");
 const { authenticate } = require("../../middleware/auth");
-const { requirePermission } = require("../../middleware/permissions");
 
 /**
  * The offline engine.
@@ -25,15 +24,12 @@ const { requirePermission } = require("../../middleware/permissions");
  * would take every student device offline for good. Worth fixing; not
  * fixable in a role audit.
  *
- * PUSH is a different matter and is closed now. It writes period definitions
- * and student promotion decisions — the shape of the school day, and which
- * children move up a class. Behind authenticate alone, any signed-in account
- * could send either, a student's included. No client calls it: both apps only
- * hold the endpoint constant, and the mobile engine pulls. So the guard costs
- * nothing today and shuts a write path that should never have been open.
- *
- * The bursar is out of both writes for the ordinary reason: neither periods nor
- * promotion is a finance decision.
+ * PUSH is retired (410 Gone, code SYNC_PUSH_RETIRED). It wrote period
+ * definitions and student approve/reject decisions, found a pupil's login by
+ * the shared parent email (approving one sibling took over another's account),
+ * dropped client UUIDs on periods and reported success whatever happened. No
+ * client calls it: both apps only held the endpoint constant, the phone drains
+ * its outbox through the real routes and the desktop replays them too.
  */
 /**
  * The desktop change feed.
@@ -52,6 +48,10 @@ const { requirePermission } = require("../../middleware/permissions");
 router.get( "/changes", authenticate, feedCtrl.changes);
 
 router.get( "/pull", authenticate, syncCtrl.pullChanges);
-router.post("/push", authenticate, requirePermission("sync.push"), syncCtrl.pushChanges);
+// Retired: 410 Gone with code SYNC_PUSH_RETIRED (see pushRetired). Kept as a
+// route so an old client gets that answer rather than a 404. The sync.push
+// permission that used to guard it is gone (config/permissions.js
+// RETIRED_KEYS), so any authenticated caller gets the 410; nothing is written.
+router.post("/push", authenticate, syncCtrl.pushRetired);
 
 module.exports = router;

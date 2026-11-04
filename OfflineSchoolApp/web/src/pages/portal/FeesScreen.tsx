@@ -70,12 +70,12 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-medium text-ink-muted">{t("portal.feesScreen.balance")}</p>
               {overdue && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-danger-line bg-danger-soft px-2.5 py-0.5 text-xs font-semibold text-danger">
+                <span className="inline-flex items-center gap-1 rounded-full border border-danger-line bg-danger-soft px-2.5 py-0.5 text-xs font-semibold text-danger-text">
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />{t("portal.feesScreen.overdue")}
                 </span>
               )}
             </div>
-            <p className={cn("mt-1 text-3xl font-semibold tabular-nums", overdue ? "text-danger" : "text-ink")}>{fmt.money(fees.totals.balance)}</p>
+            <p className={cn("mt-1 text-3xl font-semibold tabular-nums", overdue ? "text-danger-text" : "text-ink")}>{fmt.money(fees.totals.balance)}</p>
             {status?.dueDate && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-body">
                 <CalendarClock className="h-4 w-4 text-ink-muted" aria-hidden="true" />
@@ -85,7 +85,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
           </>
         ) : (
           <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-9 w-9 shrink-0 text-success" aria-hidden="true" />
+            <CheckCircle2 className="h-9 w-9 shrink-0 text-success-text" aria-hidden="true" />
             <div>
               <p className="text-lg font-semibold text-ink">{t("portal.feesScreen.paidUp")}</p>
               <p className="text-sm text-ink-muted">{t("portal.feesScreen.paidUpHint", { name: childName ?? "" })}</p>
@@ -97,7 +97,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
           {fees.totals.waived > 0 && (
             <div className="flex justify-between gap-3"><dt className="text-ink-muted">{t("portal.feesScreen.waived")}</dt><dd className="font-medium tabular-nums text-ink">−{fmt.money(fees.totals.waived)}</dd></div>
           )}
-          <div className="flex justify-between gap-3"><dt className="text-ink-muted">{t("portal.feesScreen.paid")}</dt><dd className="font-medium tabular-nums text-success">−{fmt.money(fees.totals.paid)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-ink-muted">{t("portal.feesScreen.paid")}</dt><dd className="font-medium tabular-nums text-success-text">−{fmt.money(fees.totals.paid)}</dd></div>
         </dl>
       </PortalCard>
 
@@ -145,7 +145,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
               <li key={p._id} className="border-t border-line px-4 py-3 first:border-t-0">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className={cn("font-semibold tabular-nums", p.isReversal ? "text-danger" : "text-ink")}>
+                    <p className={cn("font-semibold tabular-nums", p.isReversal ? "text-danger-text" : "text-ink")}>
                       {p.isReversal ? "−" : ""}{fmt.money(Math.abs(p.amount))}
                     </p>
                     <p className="text-xs text-ink-muted">
@@ -163,7 +163,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
                     </button>
                   )}
                 </div>
-                {failed === p._id && <p role="alert" className="mt-1 text-xs text-danger">{t("portal.feesScreen.receiptFailed")}</p>}
+                {failed === p._id && <p role="alert" className="mt-1 text-xs text-danger-text">{t("portal.feesScreen.receiptFailed")}</p>}
               </li>
             ))}
           </ul>

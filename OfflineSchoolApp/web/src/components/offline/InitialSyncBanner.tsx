@@ -17,12 +17,59 @@
 // ── It renders nothing in a browser ───────────────────────────────────────
 //
 // A browser reads from the server directly; there is no mirror to wait for.
+//
+// ── After the first sync: the 30-day offline period ─────────────────────
+//
+// Once the mirror is filled this same strip says, from day 21 without a
+// successful sync, "Connect to the internet soon", and from day 30 "Connect
+// now" (config/offlinePeriod.ts; engine.js lastSyncedAt). Never blocking.
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { desktop, type SyncStatus } from "@/lib/offline/bridge";
+import { OFFLINE_LIMIT_DAYS, offlineAge } from "@/config/offlinePeriod";
+
+// Re-evaluated hourly, so a machine left open across midnight crosses day 21
+// or 30 without waiting for the next sync status.
+const RECHECK_MS = 60 * 60 * 1000;
+
+/**
+ * "Connect to the internet soon — this device last synced N days ago", from
+ * day 21; "Connect now: …" from day 30. No button that blocks, nothing to
+ * dismiss into a broken state: it disappears on the next successful sync.
+ */
+function OfflinePeriodNotice({ lastSyncedAt }: { lastSyncedAt: string | null }) {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), RECHECK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const age = offlineAge(lastSyncedAt, now);
+  if (age.level === "none") return null;
+
+  const warning = age.level === "warning";
+  const text = t(warning ? "offlinePeriod.warning" : "offlinePeriod.notice", {
+    count: age.days ?? 0,
+    limit: OFFLINE_LIMIT_DAYS,
+  });
+
+  return warning ? (
+    <div role="alert" className="flex items-start gap-3 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <p className="min-w-0 flex-1">{text}</p>
+    </div>
+  ) : (
+    <div role="status" className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <p className="min-w-0 flex-1">{text}</p>
+    </div>
+  );
+}
 
 export default function InitialSyncBanner() {
   const { t } = useTranslation();
@@ -54,7 +101,14 @@ export default function InitialSyncBanner() {
     return () => { cancelled = true; unsubscribe(); };
   }, [bridge]);
 
-  if (!bridge || !status || status.initialSync !== "pending") return null;
+  if (!bridge || !status) return null;
+
+  // Once the mirror is filled, the same place says how long it is since this
+  // machine last synced — from day 21, and more strongly from day 30
+  // (config/offlinePeriod.ts). It informs; nothing is blocked.
+  if (status.initialSync !== "pending") {
+    return <OfflinePeriodNotice lastSyncedAt={status.lastSyncedAt ?? null} />;
+  }
 
   const failed =
     status.phase === "offline" || status.phase === "error" || status.phase === "unauthenticated";

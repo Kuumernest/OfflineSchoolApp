@@ -18,8 +18,13 @@ import {
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { MutationQueue } from "../../src/services/mutationQueue.service";
-import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+
+
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { getDatabase } from "../../src/db/database";
+import { countHeldChanges } from "../../src/db/heldChanges";
+import { reviewCounts } from "../../src/services/perUserData.service";
 
 const C = {
   bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB",
@@ -27,6 +32,52 @@ const C = {
   conflict: "#B45309", conflictBg: "#FEF3C7",
   failed: "#B91C1C", failedBg: "#FEE2E2",
   primary: "#2563EB", success: "#059669",
+  heldBg: "#EFF6FF", held: "#1E40AF",
+};
+
+/**
+ * Changes on this phone that the signed-in account does not send: another
+ * account's, or nobody's (queued before ownership was recorded). Read-only —
+ * there is no action here on purpose. Sending them as this account would put
+ * someone else's work under this name; discarding them is not this person's
+ * decision to make. See docs/40-per-user-local-data.md.
+ */
+const HeldNotice = ({ held }) => {
+  const { t } = useTranslation();
+  if (!held.otherAccounts && !held.ownerlessQueued) return null;
+  return (
+    <View style={styles.held} accessibilityRole="summary">
+      <Ionicons name="people-outline" size={16} color={C.held} />
+      <View style={{ flex: 1, gap: 4 }}>
+        {held.otherAccounts > 0 && (
+          <Text style={styles.heldText}>
+            {t("syncScreens.heldOtherAccount", { count: held.otherAccounts })}
+          </Text>
+        )}
+        {held.ownerlessQueued > 0 && (
+          <Text style={styles.heldText}>
+            {t("syncScreens.heldOwnerless", { count: held.ownerlessQueued })}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+/**
+ * Per-user local data (docs/40): changes held in the review store because
+ * nobody could tell whose they are. Opens the review list.
+ */
+const ReviewLink = ({ count, onOpen }) => {
+  const { t } = useTranslation();
+  if (!count) return null;
+  return (
+    <TouchableOpacity style={styles.held} onPress={onOpen} accessibilityRole="button">
+      <Ionicons name="hand-left-outline" size={16} color={C.held} />
+      <Text style={[styles.heldText, { flex: 1 }]}>{t("localData.reviewLink", { count })}</Text>
+      <Ionicons name="chevron-forward" size={16} color={C.held} />
+    </TouchableOpacity>
+  );
 };
 
 /** Turns "POST /homework" into something a non-engineer can read. */
@@ -74,12 +125,16 @@ export default function PendingChangesScreen() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState({ otherAccounts: 0, ownerlessQueued: 0 });
+  const [reviewHeld, setReviewHeld] = useState(0);
   const { stats, refresh: refreshStats } = useSyncStatus({ poll: false });
 
   const load = useCallback(async () => {
     try {
       const list = await MutationQueue.listUnresolved();
       setRows(list);
+      setHeld(await countHeldChanges(await getDatabase()));
+      setReviewHeld((await reviewCounts().catch(() => ({ held: 0 }))).held);
     } catch (err) {
       console.warn("[pending] load failed:", err.message);
       setRows([]);
@@ -221,6 +276,9 @@ export default function PendingChangesScreen() {
         </TouchableOpacity>
       </View>
 
+      <HeldNotice held={held} />
+      <ReviewLink count={reviewHeld} onOpen={() => router.push("/sync/review")} />
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={C.primary} />
       ) : (
@@ -272,6 +330,13 @@ const styles = StyleSheet.create({
   summaryText: { flex: 1, fontSize: 12.5, color: C.muted, fontWeight: "600" },
   syncBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 12 },
   syncBtnText: { color: C.primary, fontWeight: "700", fontSize: 13 },
+
+  held: {
+    flexDirection: "row", gap: 8, alignItems: "flex-start",
+    marginHorizontal: 14, marginTop: 12, padding: 12, borderRadius: 10,
+    backgroundColor: C.heldBg,
+  },
+  heldText: { fontSize: 12.5, color: C.held, lineHeight: 18 },
 
   list: { padding: 14, gap: 12 },
   listEmpty: { flexGrow: 1, justifyContent: "center" },

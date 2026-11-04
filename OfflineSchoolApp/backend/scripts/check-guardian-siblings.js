@@ -16,6 +16,10 @@
  *                To do count and amount add up the children (C6, C11)
  *   reminders    one reminder per owing child, each to Mrs Bate, each naming
  *                its child
+ *   routes       three children enrolled on her email, a child edited to it,
+ *                three siblings on it approved (both approve routes) — every
+ *                one succeeds, each with its own login; and Mrs Bate, who also
+ *                teaches here, still signs in and keeps it on her profile
  *
  *   node scripts/check-guardian-siblings.js
  */
@@ -126,6 +130,134 @@ const SRC = path.join(__dirname, "..", "src");
   check("one reminder per owing child, none merged or skipped", [sent.queued, sent.skippedUnreachable], [2, 0]);
   check("each to Mrs Bate, each about its own child",
     notes.map((x) => [x.studentId, x.to]).sort(), [["eve", "bate@gmail.com"], ["gus", "bate@gmail.com"]]);
+
+  // ── The routes: enrol, edit, approve ────────────────────────────────────────
+  //
+  // Everything above is service-level. The office reaches these records
+  // through HTTP, and that is where a pupil email that is really the parent's
+  // used to be refused: PATCH /students/:id answered 409 "Another student in
+  // this school already uses that email address". A pupil logs in with their
+  // own admission number, never the email, so nothing needs that address to be
+  // unique across pupils.
+  console.log("\n--- the routes: enrol, edit, approve ---");
+  {
+    const express = require("express");
+    const jwt     = require("jsonwebtoken");
+    const auth    = require(path.join(__dirname, "..", "middleware/auth"));
+    process.env.NODE_ENV = process.env.NODE_ENV || "test";
+
+    await M("User").create({ _id: "adm-bf", name: "Registrar", email: "registrar@bf.example.test",
+      password: "check-only-password", role: "school_admin", schoolId: S, isActive: true });
+    await M("Class").create({ _id: "bf-f1", schoolId: S, name: "Form 1" });
+
+    const app = express(); app.use(express.json());
+    app.use("/api/students", auth.authenticate, require(path.join(SRC, "routes/students.routes")));
+    app.use("/api/admin",    auth.authenticate, require(path.join(SRC, "routes/admin.routes")));
+    app.use((err, _req, res, _next) => res.status(err.status || 500).json({ success: false, message: err.message }));
+    const server = app.listen(0);
+    const API   = `http://127.0.0.1:${server.address().port}/api`;
+    const token = jwt.sign({ id: "adm-bf", role: "school_admin", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const call  = async (method, url, body) => {
+      const r = await fetch(`${API}${url}`, {
+        method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      let json = null; try { json = await r.json(); } catch {}
+      return { status: r.status, body: json };
+    };
+    const MUM = "bate@gmail.com";
+
+    // Enrolled directly, three children, all on the parent's address.
+    const enrolled = [];
+    for (const [first] of [["Hal"], ["Ivy"], ["Jon"]]) {
+      const r = await call("POST", "/students", {
+        firstName: first, lastName: "Bate", classId: "bf-f1", schoolId: S,
+        email: MUM, guardianName: "Mrs Bate", guardianEmail: MUM, guardianPhone: "677000001",
+      });
+      enrolled.push([r.status, r.body?.message ?? null]);
+    }
+    check("three children enrolled directly on the parent's email all succeed",
+      enrolled.map(([s]) => s), [201, 201, 201]);
+    const direct = await M("Student").find({ schoolId: S, lastName: "Bate", firstName: { $in: ["Hal", "Ivy", "Jon"] } }).lean();
+    check("  each with its own record, admission number and login",
+      [direct.length, new Set(direct.map((s) => s.enrollmentNo)).size, new Set(direct.map((s) => s.userId)).size,
+       direct.every((s) => s.email === MUM)],
+      [3, 3, 3, true]);
+
+    // Edited: Gus had no email; the office sets the parent's, which Eve and Fay
+    // already carry. Then Fay's is cleared and set back.
+    let r = await call("PATCH", "/students/gus", { schoolId: S, email: MUM });
+    check("editing a child to the email two siblings already carry succeeds",
+      [r.status, r.body?.changed ?? null], [200, ["email"]]);
+    r = await call("PATCH", "/students/fay", { schoolId: S, email: "" });
+    const cleared = r.status;
+    r = await call("PATCH", "/students/fay", { schoolId: S, email: "BATE@gmail.com " });
+    check("  and clearing then re-setting it on another sibling succeeds too",
+      [cleared, r.status], [200, 200]);
+    check("  all three now carry it",
+      (await M("Student").find({ _id: { $in: ["eve", "fay", "gus"] } }).sort({ _id: 1 }).lean()).map((s) => s.email),
+      [MUM, MUM, MUM]);
+
+    // Approved: two pending applications on the Student collection (the
+    // students router), and one on StudentApplication (the admin router).
+    for (const [id, name] of [["kim", "Kim Bate"], ["lea", "Lea Bate"]]) {
+      await M("Student").create({ _id: id, schoolId: S, studentName: name, email: MUM,
+        guardianName: "Mrs Bate", guardianEmail: MUM, status: "pending" });
+    }
+    await M("StudentApplication").create({ _id: "app-max", schoolId: S, studentName: "Max Bate",
+      email: MUM, guardianName: "Mrs Bate", phone: "+237677000001", classId: "bf-f1", status: "pending" });
+    const approvals = [
+      (await call("POST", "/students/kim/approve", { classId: "bf-f1", schoolId: S })).status,
+      (await call("POST", "/students/lea/approve", { classId: "bf-f1", schoolId: S })).status,
+      (await call("PUT",  "/admin/students/app-max/approve", { classId: "bf-f1", schoolId: S })).status,
+    ];
+    check("three siblings sharing the parent's email are approved, every one", approvals, [200, 200, 200]);
+    const approved = await M("Student").find({ schoolId: S, studentName: { $in: ["Kim Bate", "Lea Bate", "Max Bate"] } }).lean();
+    check("  each approved with its own login and admission number",
+      [approved.length, approved.every((s) => s.status === "approved"),
+       new Set(approved.map((s) => String(s.userId))).size, new Set(approved.map((s) => s.enrollmentNo)).size],
+      [3, true, 3, 3]);
+
+    // A pupil account no record is linked to (legacy data) whose email is the
+    // parent's. The resolver's last-resort email match used to hand it the
+    // first sibling carrying that address — to read, and to edit as "their"
+    // profile.
+    await M("User").create({ _id: "stu-unlinked", name: "Unlinked", email: MUM, password: "check-only-password",
+      role: "student", schoolId: S, isActive: true, enrollmentNo: "BF-LEGACY-1" });
+    const stuToken = jwt.sign({ id: "stu-unlinked", role: "student", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const me = await fetch(`${API}/students/me`, { headers: { Authorization: `Bearer ${stuToken}` } });
+    const meBody = await me.json().catch(() => ({}));
+    const meName = meBody?.data?.studentName ?? meBody?.data?.name ?? meBody?.data?.student?.studentName ?? null;
+    check("an unlinked pupil account on the parent's email is not handed a sibling's record",
+      [me.status, /Bate/.test(String(meName ?? ""))], [200, false]);
+
+    // Mrs Bate also teaches here. Her children's logins carry her address, and
+    // that must not stop her own staff sign-in (or her profile keeping it).
+    await M("User").create({ _id: "tea-bate", name: "Mrs Bate", email: MUM, password: "Teacher-pass-1",
+      role: "teacher", schoolId: S, isActive: true });
+    process.env.DISABLE_LOGIN_RATE_LIMIT = "1";
+    const authApp = express(); authApp.use(express.json());
+    authApp.use("/api/auth", require(path.join(SRC, "routes/auth.routes")));
+    authApp.use("/api/teacher", auth.authenticate, require(path.join(SRC, "routes/teacher.routes")));
+    const authServer = authApp.listen(0);
+    const AUTH = `http://127.0.0.1:${authServer.address().port}/api`;
+    const login = await fetch(`${AUTH}/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: MUM, password: "Teacher-pass-1" }),
+    });
+    const loginBody = await login.json().catch(() => ({}));
+    check("a teacher who is also the parent signs in with the address her children's logins carry",
+      [login.status, loginBody?.user?.role ?? null, loginBody?.user?.id ?? null], [200, "teacher", "tea-bate"]);
+    const teacherToken = jwt.sign({ id: "tea-bate", role: "teacher", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const prof = await fetch(`${AUTH}/teacher/profile`, {
+      method: "PUT", headers: { Authorization: `Bearer ${teacherToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Mrs Bate", email: MUM }),
+    });
+    check("  and keeps it on her profile (a pupil holding it is not a clash)", prof.status, 200);
+    authServer.close();
+
+    server.close();
+  }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await stopQuietly(mongo);

@@ -388,7 +388,7 @@ const checkPermissions = () => {
   const mustBeLocked = [
     "results.edit", "results.publish", "exams.manage", "reports.manage",
     "users.manage", "teachers.manage", "permissions.manage",
-    "promotion.run", "messages.audit", "sync.push", "settings.manage",
+    "promotion.run", "messages.audit", "settings.manage",
     "students.admit", "students.delete", "payroll.setSalary",
     "documents.manage",
     // The countersignature. A school that could grant approvals.decide to the
@@ -424,6 +424,24 @@ const checkPermissions = () => {
   });
   check("granted and revoked together resolves to revoked",
     [both.bursar.granted, both.bursar.revoked], [[], ["gate.scan"]]);
+
+  // Retired keys (owner decision: sync.push removed with POST /sync/push). A
+  // school may still have one stored from a hand edit or an old build; it must
+  // be dropped on read like any unknown key, and never come back as a key.
+  console.log("--- a retired permission is gone, and harmless where it lingers ---");
+  check("sync.push is not a permission any more", PERMS.isPermission("sync.push"), false);
+  check("sync.push is listed as retired", (PERMS.RETIRED_KEYS ?? []).includes("sync.push"), true);
+  check("no retired key is also a live one",
+    (PERMS.RETIRED_KEYS ?? []).filter((k) => PERMS.isPermission(k)), []);
+  check("no role holds it by default",
+    Object.entries(PERMS.DEFAULTS_BY_ROLE).filter(([, ks]) => ks.includes("sync.push")).map(([r]) => r), []);
+  check("the sync module went with it", PERMS.MODULES.includes("sync"), false);
+  const stale = perms.cleanOverrides({
+    bursar:  { granted: ["sync.push", "gate.scan"], revoked: ["sync.push"] },
+    teacher: { granted: ["sync.push"] },
+  });
+  check("a stored sync.push is dropped on read",
+    [stale.bursar.granted, stale.bursar.revoked, stale.teacher.granted], [["gate.scan"], [], []]);
 
   console.log("--- the write path refuses what it should ---");
 
@@ -584,6 +602,15 @@ checkPermissionUsage();
   await rejects("an unknown permission is reported, not ignored",
     { schoolId: "s1", role: "bursar", desired: ["fees.view", "nope.nope"] },
     "UNKNOWN_PERMISSION");
+  // A retired key next to a real typo: the typo is still reported, and only
+  // the typo — the retired key is forgiven, not named.
+  try {
+    await perms.setRolePermissions({ schoolId: "s1", role: "bursar", desired: ["sync.push", "nope.nope"] });
+    check("a typo beside a retired key is still reported", "no error", "UNKNOWN_PERMISSION");
+  } catch (err) {
+    check("a typo beside a retired key is still reported, and only the typo",
+      [err.code, /sync\.push/.test(err.message)], ["UNKNOWN_PERMISSION", false]);
+  }
   // The bursar does not hold results.edit, so asking for it is an attempt to
   // grant a locked capability.
   await rejects("granting a locked capability is refused",

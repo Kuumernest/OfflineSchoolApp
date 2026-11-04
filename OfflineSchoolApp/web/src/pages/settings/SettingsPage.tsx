@@ -12,6 +12,7 @@ import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
 import AcademicStructureSection from "@/pages/settings/AcademicStructureSection";
 import CalculationRulesSection  from "@/pages/settings/CalculationRulesSection";
 import ReportLayoutSection      from "@/pages/settings/ReportLayoutSection";
+import NeedsInternet            from "@/components/offline/NeedsInternet";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
@@ -181,7 +182,7 @@ const ROLE_COLORS: Record<string, string> = {
   super_admin:  "bg-red-100 text-red-700",
   school_admin: "bg-purple-100 text-purple-700",
   bursar:       "bg-amber-100 text-amber-700",
-  admin:        "bg-indigo-100 text-indigo-700",
+  admin:        "bg-primary-100 text-primary-700",
   teacher:      "bg-emerald-100 text-emerald-700",
 };
 
@@ -271,7 +272,7 @@ function Input({
       className={cn(
         "w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5",
         "text-sm text-gray-900 outline-none transition",
-        "focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100",
+        "focus:border-primary-400 focus:ring-2 focus:ring-primary-100",
         "disabled:opacity-50",
         className
       )}
@@ -299,7 +300,7 @@ function Textarea({
       className="
         w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5
         text-sm text-gray-900 outline-none transition resize-none
-        focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+        focus:border-primary-400 focus:ring-2 focus:ring-primary-100
       "
     />
   );
@@ -486,7 +487,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
       </div>
     );
   }
@@ -527,7 +528,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <label className="
               flex cursor-pointer items-center gap-2 rounded-xl border
               border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-semibold
-              text-indigo-600 hover:bg-indigo-50 transition
+              text-primary-600 hover:bg-primary-50 transition
             ">
               <Upload className="h-4 w-4" />
               {logoPreview ? t("settings.changeLogo") : t("settings.uploadLogo")}
@@ -586,8 +587,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
                   className={cn(
                     "rounded-full border px-4 py-1.5 text-sm font-medium transition",
                     form.schoolType === opt.value
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                      : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300"
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
+                      : "border-gray-200 bg-white text-gray-500 hover:border-primary-300"
                   )}
                 >
                   {t(opt.labelKey)}
@@ -732,7 +733,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <select
                 value={form.defaultLanguage}
                 onChange={(e) => set("defaultLanguage", e.target.value === "fr" ? "fr" : "en")}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400"
               >
                 {/* Each language named in itself. */}
                 <option value="en">English</option>
@@ -753,7 +754,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
                   className={cn(
                     "rounded-xl border px-4 py-1.5 text-sm font-medium transition",
                     form.schoolDays.includes(day.value)
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
                       : "border-gray-200 bg-white text-gray-400 hover:border-gray-300"
                   )}
                 >
@@ -964,7 +965,7 @@ function ProfileSection() {
           <h3 className="text-base font-bold text-gray-900">{t("common.password")}</h3>
           <button
             onClick={() => setShowPwForm((v) => !v)}
-            className="text-sm font-medium text-indigo-600 hover:underline"
+            className="text-sm font-medium text-primary-600 hover:underline"
           >
             {showPwForm ? t("common.cancel") : t("settings.changePassword")}
           </button>
@@ -983,7 +984,7 @@ function ProfileSection() {
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50
                     px-4 py-2.5 pr-11 text-sm outline-none
-                    focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                    focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                   "
                   placeholder="••••••••"
                 />
@@ -1008,7 +1009,7 @@ function ProfileSection() {
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50
                     px-4 py-2.5 pr-11 text-sm outline-none
-                    focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                    focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                   "
                   placeholder={t("settings.min8")}
                 />
@@ -1032,7 +1033,7 @@ function ProfileSection() {
                 className="
                   w-full rounded-xl border border-gray-200 bg-gray-50
                   px-4 py-2.5 text-sm outline-none
-                  focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                  focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                 "
                 placeholder={t("settings.reenterPassword")}
               />
@@ -1131,7 +1132,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
@@ -1162,8 +1163,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               type="checkbox"
               checked={config.showGrades !== false}
               onChange={(e) => setConfig({ ...config, showGrades: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
-                         focus:ring-2 focus:ring-indigo-200"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600
+                         focus:ring-2 focus:ring-primary-200"
             />
             <span>
               <span className="block text-sm font-semibold text-gray-800">
@@ -1187,8 +1188,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               type="checkbox"
               checked={config.caEnabled !== false}
               onChange={(e) => setConfig({ ...config, caEnabled: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
-                         focus:ring-2 focus:ring-indigo-200"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600
+                         focus:ring-2 focus:ring-primary-200"
             />
             <span>
               <span className="block text-sm font-semibold text-gray-800">
@@ -1218,8 +1219,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                       setConfig({ ...config, caWeight: Number(e.target.value) })
                     }
                     className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                               text-sm outline-none focus:border-indigo-400
-                               focus:ring-2 focus:ring-indigo-100"
+                               text-sm outline-none focus:border-primary-400
+                               focus:ring-2 focus:ring-primary-100"
                   />
                   <span className="text-sm text-gray-500">%</span>
                 </div>
@@ -1235,8 +1236,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                       setConfig({ ...config, testWeight: Number(e.target.value) })
                     }
                     className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                               text-sm outline-none focus:border-indigo-400
-                               focus:ring-2 focus:ring-indigo-100"
+                               text-sm outline-none focus:border-primary-400
+                               focus:ring-2 focus:ring-primary-100"
                   />
                   <span className="text-sm text-gray-500">%</span>
                 </div>
@@ -1261,8 +1262,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               }
               className="
                 w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                text-sm outline-none focus:border-indigo-400 focus:ring-2
-                focus:ring-indigo-100
+                text-sm outline-none focus:border-primary-400 focus:ring-2
+                focus:ring-primary-100
               "
             />
             <span className="text-sm text-gray-500">/ 20</span>
@@ -1286,7 +1287,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                   <tbody className="divide-y divide-gray-100">
                     {config.grades.map((g, i) => (
                       <tr key={i} className="bg-white">
-                        <td className="px-4 py-2.5 font-semibold text-indigo-700">
+                        <td className="px-4 py-2.5 font-semibold text-primary-700">
                           {g.grade}
                         </td>
                         <td className="px-4 py-2.5">
@@ -1301,7 +1302,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], minMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         <td className="px-4 py-2.5">
@@ -1316,7 +1317,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], maxMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         {/* Both remarks, both editable. A report card prints the
@@ -1333,7 +1334,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], remark: e.target.value };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         <td className="px-4 py-2.5">
@@ -1346,7 +1347,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], remarkFr: e.target.value };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                       </tr>
@@ -1573,7 +1574,7 @@ function AdminsSection({
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
@@ -1587,8 +1588,8 @@ function AdminsSection({
           <button
             onClick={() => setShowModal(true)}
             className="
-              flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2
-              text-sm font-semibold text-indigo-600 hover:bg-indigo-100 transition
+              flex items-center gap-1.5 rounded-xl bg-primary-50 px-3 py-2
+              text-sm font-semibold text-primary-600 hover:bg-primary-100 transition
             "
           >
             <Plus className="h-4 w-4" />
@@ -1608,7 +1609,7 @@ function AdminsSection({
             <div key={a._id} className={cn("flex items-center gap-3 py-3", removed && "opacity-60")}>
               <div className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                removed ? "bg-gray-100 text-gray-400" : "bg-indigo-50 text-indigo-600"
+                removed ? "bg-gray-100 text-gray-400" : "bg-primary-50 text-primary-600"
               )}>
                 {(a.name || "?").charAt(0).toUpperCase()}
               </div>
@@ -1640,7 +1641,7 @@ function AdminsSection({
               {removed ? (
                 <button
                   onClick={() => handleRestore(a)}
-                  className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                  className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
                 >
                   {t("settings.restore")}
                 </button>
@@ -1652,7 +1653,7 @@ function AdminsSection({
                   <button
                     onClick={() => handleReset(a)}
                     title={t("settings.resetPassword")}
-                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-primary-50 hover:text-primary-600"
                   >
                     <KeyRound className="h-4 w-4" />
                   </button>
@@ -1823,7 +1824,7 @@ function AdminsSection({
                   onChange={(e) => setNewRole(e.target.value)}
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5
-                    text-sm outline-none focus:border-indigo-400
+                    text-sm outline-none focus:border-primary-400
                   "
                 >
                   {/* Values are the role identifiers the API stores. */}
@@ -1898,7 +1899,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
@@ -1914,7 +1915,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
   // `id` is the React key — a translated label would remount every tile on a
   // language switch.
   const stats = [
-    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-indigo-50",   text: "text-indigo-700"  },
+    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-primary-50",   text: "text-primary-700"  },
     { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-emerald-50",  text: "text-emerald-700" },
     { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-purple-50",   text: "text-purple-700"  },
     { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-amber-50",    text: "text-amber-700"   },
@@ -2004,7 +2005,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
@@ -2045,7 +2046,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                 onChange={(e) =>
                   setSettings({ ...settings, idCard: { ...idCard, validUntil: e.target.value } })
                 }
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
               />
               {!usingDefault && (
                 <button
@@ -2053,7 +2054,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onClick={() =>
                     setSettings({ ...settings, idCard: { ...idCard, validUntil: "" } })
                   }
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                 >
                   {t("settings.useDefaultDate")}
                 </button>
@@ -2085,14 +2086,14 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition",
                   gate.notify === choice.value
-                    ? "border-indigo-300 bg-indigo-50"
+                    ? "border-primary-300 bg-primary-50"
                     : "border-gray-100 bg-gray-50 hover:border-gray-200"
                 )}
               >
                 <input
                   type="radio"
                   name="gateNotify"
-                  className="mt-0.5 h-4 w-4 accent-indigo-600"
+                  className="mt-0.5 h-4 w-4 accent-primary-600"
                   checked={gate.notify === choice.value}
                   onChange={() =>
                     setSettings({
@@ -2121,7 +2122,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onChange={(e) =>
                     setSettings({ ...settings, gate: { ...gate, lateAfter: e.target.value } })
                   }
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">{t("settings.lateAfterHint")}</p>
               </div>
@@ -2133,7 +2134,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onChange={(e) =>
                     setSettings({ ...settings, gate: { ...gate, earlyBefore: e.target.value } })
                   }
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">{t("settings.earlyBeforeHint")}</p>
               </div>
@@ -2195,13 +2196,13 @@ export default function SettingsPage() {
                       "flex w-full items-center gap-3 rounded-xl px-3 py-2.5",
                       "text-sm font-medium transition",
                       active
-                        ? "bg-indigo-50 text-indigo-700"
+                        ? "bg-primary-50 text-primary-700"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     )}
                   >
-                    <Icon className={cn("h-4 w-4", active ? "text-indigo-600" : "text-gray-400")} />
+                    <Icon className={cn("h-4 w-4", active ? "text-primary-600" : "text-gray-400")} />
                     {t(s.labelKey)}
-                    {active && <ChevronRight className="ml-auto h-3 w-3 text-indigo-400" />}
+                    {active && <ChevronRight className="ml-auto h-3 w-3 text-primary-400" />}
                   </button>
                 </li>
               );
@@ -2223,7 +2224,7 @@ export default function SettingsPage() {
                     "flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2",
                     "text-xs font-medium transition whitespace-nowrap",
                     active
-                      ? "bg-indigo-50 text-indigo-700"
+                      ? "bg-primary-50 text-primary-700"
                       : "text-gray-500 hover:text-gray-700"
                   )}
                 >
@@ -2239,13 +2240,16 @@ export default function SettingsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
             {activeSection === "school"    && <SchoolSection    schoolId={schoolId} />}
-            {activeSection === "profile"   && <ProfileSection />}
+            {/* Profile (with the password), admins and permissions are
+                online-only: on a desktop that is offline they are shown
+                switched off, with the reason, rather than filled in to fail. */}
+            {activeSection === "profile"   && <NeedsInternet><ProfileSection /></NeedsInternet>}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "academicStructure" && <AcademicStructureSection schoolId={schoolId} />}
             {activeSection === "calculationRules"  && <CalculationRulesSection  schoolId={schoolId} />}
             {activeSection === "reportLayout"      && <ReportLayoutSection      schoolId={schoolId} />}
-            {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
-            {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
+            {activeSection === "admins"    && <NeedsInternet><AdminsSection schoolId={schoolId} currentUserId={currentUserId} /></NeedsInternet>}
+            {activeSection === "permissions" && <NeedsInternet><PermissionsSection schoolId={schoolId} /></NeedsInternet>}
             {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}
             {activeSection === "idcards"   && <IdCardSection    schoolId={schoolId} />}
             {activeSection === "analytics" && <AnalyticsSection schoolId={schoolId} />}

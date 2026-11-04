@@ -20,6 +20,8 @@ import {
 } from "@/print/document";
 import { isDesktop }      from "@/lib/offline/bridge";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -110,6 +112,9 @@ export default function ReportCardsPage() {
   const { toast, confirm } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);
+  // Every card is rendered by the server (a PDF, an issued and counted
+  // copy): online-only on the desktop, so the actions say so up front.
+  const net      = useNeedsInternet();
 
   const { data: examsData, isLoading: examsLoading } = useExams();
 
@@ -702,9 +707,9 @@ export default function ReportCardsPage() {
         </div>
         <Link
           to="/exams/results"
-          className="px-4 py-2 bg-indigo-50 text-indigo-700 border
-                     border-indigo-200 rounded-xl text-sm font-semibold
-                     hover:bg-indigo-100 transition-colors"
+          className="px-4 py-2 bg-primary-50 text-primary-700 border
+                     border-primary-200 rounded-xl text-sm font-semibold
+                     hover:bg-primary-100 transition-colors"
         >
           <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.viewResults")}
         </Link>
@@ -925,7 +930,7 @@ export default function ReportCardsPage() {
                  * unfinished.
                  */
                 <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
-                  <p className="text-sm font-semibold text-warning">
+                  <p className="text-sm font-semibold text-warning-text">
                     {cardType !== "sequence"
                       ? t("reportCards.emptyComputed", { type: typeLabel })
                       : noMarks.length > 0
@@ -1064,6 +1069,8 @@ export default function ReportCardsPage() {
               </div>
             )}
 
+            <NeedsInternet />
+
             {/* Generate button */}
             <button
               onClick={handleGenerate}
@@ -1076,7 +1083,8 @@ export default function ReportCardsPage() {
                * set up completely and still not be printable, with nothing on
                * screen to say what was missing.
                */
-              disabled={!periodChosen || !selectedClass || generating}
+              disabled={!periodChosen || !selectedClass || generating || net.blocked}
+              title={net.hint}
               className="w-full py-3 bg-primary-600 hover:bg-primary-700
                          text-white rounded-xl font-semibold text-sm
                          transition-colors disabled:opacity-50
@@ -1104,7 +1112,8 @@ export default function ReportCardsPage() {
             {selectedStudent && cardType === "sequence" && (
               <button
                 onClick={handleReissue}
-                disabled={reissuing || generating}
+                disabled={reissuing || generating || net.blocked}
+                title={net.hint}
                 className="w-full mt-2 py-2.5 border border-amber-300
                            hover:bg-amber-50 text-amber-800 rounded-xl
                            font-semibold text-sm transition-colors
@@ -1190,7 +1199,8 @@ export default function ReportCardsPage() {
             <button
               type="button"
               onClick={handlePrintPreview}
-              disabled={!previewCard || printFlight.busy}
+              disabled={!previewCard || printFlight.busy || net.blocked}
+              title={net.hint}
               className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"

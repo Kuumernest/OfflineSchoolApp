@@ -364,7 +364,7 @@ export default function AssignmentsIndex() {
       return [
       { icon: "git-branch",       kind: "teachers", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
       { icon: "checkmark-circle", kind: "teachers", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
-      { icon: "alert-circle",     kind: "teachers", value: stats.unassignedTeachers, labelKey: "assignList.unassigned", alertWhenAny: true },
+      { icon: "alert-circle",     kind: "teachers", value: stats.unassignedTeachers, labelKey: "assignList.unassigned", toneWhenAny: "error" },
       { icon: "school",           kind: "classes",  value: stats.totalClasses,       labelKey: "assignList.classes"     },
     ];
     },
@@ -735,7 +735,7 @@ export default function AssignmentsIndex() {
         <View style={styles.statsContainer}>
           {statCards.map((s) => (
             <StatTile key={s.label} kind={s.kind} icon={s.icon} value={s.value} label={s.label}
-              alert={Boolean(s.alertWhenAny) && Number(s.value) > 0} />
+              tone={s.toneWhenAny && Number(s.value) > 0 ? s.toneWhenAny : undefined} />
           ))}
         </View>
 

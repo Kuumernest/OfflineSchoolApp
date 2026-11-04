@@ -1,95 +1,106 @@
 // src/theme/colors.js
 //
-// The app's warm, earthy palette and the one colour each kind of tile wears.
-// Screens pick a tile by what it shows — TILE.students, TILE.fees — and never
-// by hex, so Students is the same teal on every dashboard and every list.
+// The app's colours: one brand blue, neutral surfaces, and semantic colour
+// only where it carries meaning. Screens use these names, never a hex.
 //
-// The web console keeps the same hues as its --color-sec-* tokens
-// (web/src/index.css); Metro cannot reach that file, so change both together.
+// The web console defines the same values in web/src/index.css (@theme);
+// Metro cannot reach that file, so change both together.
 //
-// Contrast of each tile's text on its fill, measured (WCAG, 4.5:1 for body
-// text; scripts/check-tile-contrast.js re-measures every pair):
-//   cream on teal 4.98 · plum 7.47 · slate 6.85 · terracottaDeep 4.85 · oliveDeep 4.91
-//   ink   on mustard 7.18 · burntOrange 4.97
-// Terracotta (4.35) and olive (3.75) miss 4.5 with white as given, so their
-// tiles fill with the nearest deeper shade of the same hue. The brand values
-// stay below for accents, borders and anything that carries no text.
+// Contrast, measured (WCAG; scripts/check-tile-contrast.js re-measures):
+//   text 17.85 · textSecondary 7.58 · textSubtle 4.76 on white
+//   white on primary 5.17 · contextText on contextBg 9.52
+//   warning text 6.84 · danger text 7.60 · info text 8.01 · success text 6.81 on their tints
+// textMuted (#94A3B8) is 2.56 on white: placeholders and decoration only,
+// never text someone has to read.
 //
 // The app is light-only (app.json userInterfaceStyle), so there is no dark set.
 
-export const PALETTE = {
-  tileTerracotta:     "#C8553D",
-  tileTerracottaDeep: "#BB4C35",
-  tileMustard:        "#E0A526",
-  tileTeal:           "#1F7A74",
-  tilePlum:           "#7B3F61",
-  tileOlive:          "#6B8E4E",
-  tileOliveDeep:      "#5A7741",
-  tileBurntOrange:    "#D9772B",
-  tileSlateBlue:      "#3D5A80",
+export const COLORS = {
+  primary:      "#2563EB",
+  primaryHover: "#1D4ED8",
+  primaryDark:  "#1E40AF",
+  primaryLight: "#EFF6FF",
 
-  pageCream: "#FAF6EF",
-  inkWarm:   "#2B2118",
-  cream:     "#FFFBF5",
-  // Warm-tinted shadow: a brown, not black, so a lifted tile reads as lit
-  // paper rather than a grey smudge.
-  shadowWarm: "#6B3E1F",
+  text:          "#0F172A",
+  textSecondary: "#475569",
+  textSubtle:    "#64748B",
+  textMuted:     "#94A3B8",
+  onPrimary:     "#FFFFFF",
+  onPrimaryBox:  "rgba(255,255,255,0.15)",  // the icon box on a primary action
+
+  page:    "#F8FAFC",
+  surface: "#FFFFFF",
+  border:  "#E2E8F0",
+  shadow:  "#0F172A",
+
+  success: "#16A34A", successBg: "#F0FDF4",
+  warning: "#D97706", warningBg: "#FFFBEB",
+  danger:  "#DC2626", dangerBg:  "#FEF2F2",
+  info:    "#2563EB", infoBg:    "#EFF6FF",
+
+  // The school context bar at the top of a dashboard.
+  contextBg:     "#EFF6FF",
+  contextBorder: "#BFDBFE",
+  contextIcon:   "#2563EB",
+  contextText:   "#1E3A8A",
 };
 
-const light = (bg) => ({ bg, fg: PALETTE.cream });
-const dark  = (bg) => ({ bg, fg: PALETTE.inkWarm });
-
-const TEAL        = light(PALETTE.tileTeal);
-const TERRACOTTA  = light(PALETTE.tileTerracottaDeep);
-const BURNT       = dark(PALETTE.tileBurntOrange);
-const PLUM        = light(PALETTE.tilePlum);
-const OLIVE       = light(PALETTE.tileOliveDeep);
-const MUSTARD     = dark(PALETTE.tileMustard);
-const SLATE       = light(PALETTE.tileSlateBlue);
+/** Icon accents for normal cards: colour on the icon box, nowhere else. */
+export const ACCENT = {
+  blue:   { icon: "#2563EB", box: "#EFF6FF" },
+  indigo: { icon: "#4F46E5", box: "#EEF2FF" },
+  violet: { icon: "#7C3AED", box: "#F5F3FF" },
+  slate:  { icon: "#475569", box: "#F1F5F9" },
+  teal:   { icon: "#0D9488", box: "#F0FDFA" },
+};
 
 /**
- * One colour per kind of thing. Grouped by meaning so the palette stays
- * small: people are teal, set work is terracotta, exams burnt orange,
- * outcomes plum, time olive, money mustard, and slate is kept for
- * communication alone.
+ * One accent per kind of thing, so Students is the same blue box everywhere.
+ * Matches the web console's mapping.
  */
 export const TILE = {
-  // People and groups
-  students:      TEAL,
-  teachers:      TEAL,
-  classes:       TEAL,
-  // Work that is set
-  homework:      TERRACOTTA,
-  quizzes:       TERRACOTTA,
-  content:       TERRACOTTA,
-  subjects:      TERRACOTTA,
-  // Exams and marks
-  exams:         BURNT,
-  marks:         BURNT,
-  // Outcomes
-  results:       PLUM,
-  reports:       PLUM,
-  intelligence:  PLUM,
-  // Time
-  attendance:    OLIVE,
-  timetable:     OLIVE,
-  // Money
-  fees:          MUSTARD,
-  finance:       MUSTARD,
-  // Communication
-  announcements: SLATE,
-  messages:      SLATE,
-  // The machinery: settings, sign-out. Warm ink, quiet on purpose (14.6:1).
-  settings:      light(PALETTE.inkWarm),
+  students:      ACCENT.blue,
+  teachers:      ACCENT.indigo,
+  classes:       ACCENT.violet,
+  subjects:      ACCENT.slate,
+  timetable:     ACCENT.teal,
+  attendance:    ACCENT.teal,
+  exams:         ACCENT.blue,
+  marks:         ACCENT.blue,
+  homework:      ACCENT.indigo,
+  quizzes:       ACCENT.indigo,
+  content:       ACCENT.indigo,
+  results:       ACCENT.violet,
+  reports:       ACCENT.violet,
+  intelligence:  ACCENT.violet,
+  fees:          ACCENT.teal,
+  finance:       ACCENT.teal,
+  announcements: ACCENT.blue,
+  messages:      ACCENT.blue,
+  settings:      ACCENT.slate,
 };
 
-/** The shape every tile shares, so they match from screen to screen. */
+/**
+ * A card that means something: a light tint, never a solid fill. The number
+ * and label take `text`, which is what keeps them readable on the tint.
+ */
+export const SEMANTIC = {
+  warning: { bg: "#FFFBEB", box: "#FEF3C7", icon: "#D97706", text: "#92400E" },
+  error:   { bg: "#FEF2F2", box: "#FEE2E2", icon: "#DC2626", text: "#991B1B" },
+  info:    { bg: "#EFF6FF", box: "#DBEAFE", icon: "#2563EB", text: "#1E40AF" },
+  success: { bg: "#F0FDF4", box: "#DCFCE7", icon: "#16A34A", text: "#166534" },
+};
+
+/** The shape every card shares: white, a hairline border, a faint shadow. */
 export const TILE_SHAPE = {
-  borderRadius: 18,
+  borderRadius: 16,
   padding: 14,
-  shadowColor: PALETTE.shadowWarm,
-  shadowOpacity: 0.14,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 3,
+  backgroundColor: COLORS.surface,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  shadowColor: COLORS.shadow,
+  shadowOpacity: 0.04,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 1 },
+  elevation: 1,
 };

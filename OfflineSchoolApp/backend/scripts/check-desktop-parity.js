@@ -269,6 +269,20 @@ const main = async () => {
     schoolId: SCHOOL, isActive: true, password: "x",
   });
 
+  // The desktop side of a default request is the same person as the server
+  // side: the head, signed in, carrying the permissions sign-in hands the
+  // desktop (desktop/src/main/main.js builds the session from the login
+  // user). Local reads now check them the way the server routes do, so a call
+  // with no session at all would be declined where the real app answers. A
+  // check that means "no identity" still passes `session: null` explicitly.
+  const headSession = {
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+    permissions: require("../src/services/permissions.service").defaultsFor(ROLES.SCHOOL_ADMIN),
+  };
+  const rawHandle = api.handle.bind(api);
+  api.handle = (req, ctx = {}) =>
+    rawHandle(req, "session" in ctx ? ctx : { ...ctx, session: headSession });
+
   const { authenticate } = require("../middleware/auth");
   const app = express();
   app.use(express.json());
@@ -324,7 +338,7 @@ const main = async () => {
 
     const local = api.handle(
       { method: "GET", path: pathname, query },
-      { docs, meta: store.meta(db), queue: outbox(db), session: as?.session ?? null }
+      { docs, meta: store.meta(db), queue: outbox(db), session: as?.session ?? headSession }
     );
 
     if (!local) {
@@ -1811,7 +1825,7 @@ const main = async () => {
    *   would write back values nobody touched, reverting whatever another machine
    *   had changed in between.
    */
-  const examSession = { userId: "admin-1", schoolId: SCHOOL, permissions: [] };
+  const examSession = { userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL, permissions: [] };
   const examCtx     = { docs, meta, queue, session: examSession };
 
   const created = api.handle({
@@ -2122,7 +2136,7 @@ const main = async () => {
   await mirrorSubjects();
 
   const marksSession = {
-    userId: "admin-1", schoolId: SCHOOL, permissions: ["exams.manage", "results.view"],
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL, permissions: ["exams.manage", "results.view"],
   };
   const marksCtx = { docs, meta, queue, session: marksSession };
 
@@ -2457,7 +2471,7 @@ const main = async () => {
    * to know a decline is a judgement about the server rather than a guess.
    */
   const feesSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.manage", "fees.plan", "fees.view"],
   };
   const feesCtx = { docs, meta, queue, session: feesSession };
@@ -2685,7 +2699,7 @@ const main = async () => {
   const { DEVICE_RECEIPT } = require("../../shared/receipts");
 
   const reverseSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.manage", "fees.view"],
   };
   const reverseCtx = { docs, meta, queue, session: reverseSession };
@@ -2903,7 +2917,7 @@ const main = async () => {
   const REGISTER_DAY = "2025-10-06";
 
   const teachSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["attendance.mark", "attendance.view", "students.view"],
   };
   const teachCtx = { docs, meta, queue, session: teachSession };
@@ -3124,7 +3138,7 @@ const main = async () => {
   const STAFF_DAY = "2025-10-07";
 
   const staffSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["attendance.markStaff", "attendance.view"],
   };
   const staffCtx = { docs, meta, queue, session: staffSession };
@@ -6606,13 +6620,13 @@ const main = async () => {
    */
   await FinSalaryPayment.collection.insertMany([
     { _id: "fin-slip-rev-orig", schoolId: SCHOOL, userId: "t1", runId: "fin-run-2",
-      periodMonth: "2026-11", gross: 120000, totalDeductions: 20000, net: 100000,
-      status: "reversed", paidAt: new Date("2026-11-05T00:00:00.000Z"),
+      periodMonth: "2025-11", gross: 120000, totalDeductions: 20000, net: 100000,
+      status: "reversed", paidAt: new Date("2025-11-05T00:00:00.000Z"),
       deletedAt: null, updatedAt: new Date() },
     { _id: "fin-slip-rev", schoolId: SCHOOL, userId: "t1", runId: null,
-      periodMonth: "2026-11", gross: -120000, totalDeductions: -20000, net: -100000,
+      periodMonth: "2025-11", gross: -120000, totalDeductions: -20000, net: -100000,
       status: "paid", reversesId: "fin-slip-rev-orig",
-      paidAt: new Date("2026-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
+      paidAt: new Date("2025-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
   ]);
   await finMirror();
 
@@ -6623,7 +6637,12 @@ const main = async () => {
 
   // The reversal pair IS in the monthly series, on both sides, at zero. A
   // handler that dropped either half would report a month that never happened.
-  const finNov = finReport().months.find((m) => m.month === "2026-11");
+  //
+  // In a month that is never "now". This was 2026-11, which was the future
+  // when it was written; from 1 November 2026 it is the current month, and the
+  // expenses this run records through the write routes (stamped now) land in
+  // it too, so the month summed to their 121,999 instead of 0.
+  const finNov = finReport().months.find((m) => m.month === "2025-11");
   check("november exists in the series and cancels", finNov && finNov.expenditure, 0);
 
   // The endpoint's $ifNull, which is not the same as leaving the label out.
@@ -7145,8 +7164,11 @@ const main = async () => {
   app.use("/api/students", require("../src/routes/students.routes"));
 
   const pupilSession = {
-    userId: "admin-1", schoolId: SCHOOL,
-    permissions: ["students.view", "students.manage", "students.admit"],
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+    // dashboard.view and students.viewFull too: the head holds both, and the
+    // local admin stats and pupil-by-id reads now check them the way
+    // GET /admin/students/stats and /admin/students/:id do on the server.
+    permissions: ["students.view", "students.manage", "students.admit", "dashboard.view", "students.viewFull"],
   };
   const pupilCtx = { docs, meta, queue, session: pupilSession };
   const asPupilOffice = { token, session: pupilSession };
@@ -7274,7 +7296,7 @@ const main = async () => {
    * would be a hostage to whatever ran first.
    */
   const planSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.plan", "fees.view", "fees.manage"],
   };
   const planCtx = { docs, meta, queue, session: planSession };
@@ -7446,7 +7468,7 @@ const main = async () => {
   app.use("/api/promotion", authenticate, require("../src/routes/promotion.routes"));
 
   const promoSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["promotion.run", "promotion.view", "classes.view"],
   };
   const promoCtx = { docs, meta, queue, session: promoSession };

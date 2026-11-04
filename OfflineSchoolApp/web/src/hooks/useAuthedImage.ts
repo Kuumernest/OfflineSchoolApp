@@ -13,32 +13,43 @@ import api from "@/lib/axios";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 
 export function useAuthedImage(raw: string | null | undefined): string | null {
-  const [src, setSrc] = useState<string | null>(null);
+  const url    = resolveLogoSrc(raw);
+  // Nothing to fetch: no image, or a data:/blob: value usable as it is.
+  const direct = !url || /^(data|blob):/i.test(url);
+
+  // The last fetched image, remembered with the URL it belongs to. What the
+  // hook returns is derived from it during render — the image only when it
+  // is for the current URL — so a change of URL never has to clear state
+  // synchronously inside the effect (react-hooks/set-state-in-effect), and
+  // the previous pupil's photo is never shown under the next pupil's name.
+  const [loaded, setLoaded] = useState<{ url: string; src: string | null } | null>(null);
 
   useEffect(() => {
-    const url = resolveLogoSrc(raw);
-    if (!url || /^(data|blob):/i.test(url)) {
-      setSrc(url);
-      return;
-    }
+    if (direct || !url) return;
 
     let objectUrl: string | null = null;
     let cancelled = false;
-    setSrc(null);
     // baseURL "": the file lives at the server root, not under /api.
     api.get(url, { baseURL: "", responseType: "blob" })
       .then((res) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(res.data as Blob);
-        setSrc(objectUrl);
+        setLoaded({ url, src: objectUrl });
       })
-      .catch(() => { if (!cancelled) setSrc(null); });
+      .catch(() => { if (!cancelled) setLoaded({ url, src: null }); });
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        // Forget a blob once it is revoked, so returning to this same URL
+        // later shows nothing until the refetch lands, not a dead blob: URL.
+        const revoked = objectUrl;
+        setLoaded((cur) => (cur?.src === revoked ? null : cur));
+      }
     };
-  }, [raw]);
+  }, [url, direct]);
 
-  return src;
+  if (direct) return url ?? null;
+  return loaded?.url === url ? loaded.src : null;
 }

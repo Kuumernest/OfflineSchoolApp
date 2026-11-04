@@ -6,7 +6,7 @@ import {
   HEALTH_METRIC_ROWS,
   type HealthMetric,
 } from "@/constants/dashboard.constants";
-import { TILE_TONE } from "@/config/sections";
+import { CARD_SHELL, SEMANTIC, iconBox, type Semantic } from "@/config/sections";
 import { cn } from "@/utils/cn";
 
 // Flatten the grouped rows into one list; the grid handles wrapping.
@@ -21,12 +21,12 @@ const METRICS: HealthMetric[] = HEALTH_METRIC_ROWS.flat();
  * timetable conflict, an unassigned teacher) were invisible among the twelve
  * that were merely counts.
  *
- * Each reading is a tile in the colour of what it counts — people teal, the
- * timetable olive, subjects terracotta — the same colours as the stat row and
- * the quick actions, so the panel is a map of the school rather than a wall
- * of grey. A problem leaves the palette altogether: it turns into the pale
- * danger tile with red text, so "needs action" is never confused with "this
- * is about the timetable". If nothing is wrong, nothing is red.
+ * Each reading is a white card with an accented icon box, so a count reads
+ * as a count. A metric that is a problem only when non-zero stays white at
+ * zero and takes a status tint above it: pending applications the warning
+ * tint, a missing teacher, timetable gap or conflict the error tint. Notices
+ * are informational and always take the info tint. When nothing is wrong the
+ * header pill is the success tint.
  */
 export default function SystemHealthGrid({
   stats,
@@ -36,9 +36,16 @@ export default function SystemHealthGrid({
   const { t } = useTranslation();
   const s = stats as unknown as Record<string, number>;
 
-  const problems = METRICS.filter(
-    (m) => m.alertOnNonZero && (s[m.key] ?? 0) > 0
-  );
+  /** The status tint a metric takes right now, or null for a white card. */
+  const toneOf = (m: HealthMetric): Semantic | null => {
+    if (m.alertOnNonZero) return (s[m.key] ?? 0) > 0 ? (m.alert ?? "error") : null;
+    return m.semantic ?? null;
+  };
+
+  // Faults only. Pending applications are a queue to work through, not a
+  // setup fault, so they tint their own card but do not turn the panel's
+  // "healthy" pill into "action needed" — the same count as before.
+  const problems = METRICS.filter((m) => toneOf(m) === "error");
 
   return (
     <Card>
@@ -55,8 +62,8 @@ export default function SystemHealthGrid({
               "inline-flex items-center gap-1.5 rounded-control px-2 py-0.5",
               "text-xs font-medium ring-1 ring-inset",
               problems.length
-                ? "bg-warning-soft text-warning ring-warning-line"
-                : "bg-success-soft text-success ring-success-line"
+                ? "bg-warning-soft text-warning-text ring-warning-line"
+                : "bg-success-soft text-success-text ring-success-line"
             )}
           >
             <span
@@ -71,55 +78,42 @@ export default function SystemHealthGrid({
         }
       />
 
-      {/*
-        Tiles, matching Quick actions, rather than a two-column list of rows.
-        Fourteen metrics as ruled rows read as a spreadsheet; as tiles they read
-        as a panel of readings — and a tile gives the problem state somewhere to
-        live, since it can carry a tinted surface and border that a table row
-        cannot without striping the whole grid.
-      */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {METRICS.map((metric) => {
-          const Icon    = metric.icon;
-          const value   = s[metric.key] ?? 0;
-          const isAlert = Boolean(metric.alertOnNonZero) && value > 0;
+          const Icon  = metric.icon;
+          const value = s[metric.key] ?? 0;
+          const tone  = toneOf(metric);
+          const sem   = tone ? SEMANTIC[tone] : null;
 
           return (
             <div
               key={metric.key}
-              className={cn(
-                "rounded-tile p-4 transition-colors",
-                isAlert
-                  ? "border border-danger-line bg-danger-soft text-danger"
-                  : cn(TILE_TONE[metric.tone].fill, "shadow-tile")
-              )}
+              className={cn("p-4 transition-colors", sem ? sem.card : CARD_SHELL)}
             >
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
                     "flex h-10 w-10 shrink-0 items-center justify-center rounded-control",
-                    isAlert
-                      ? "bg-surface ring-1 ring-inset ring-danger-line"
-                      : TILE_TONE[metric.tone].well
+                    sem ? sem.box : iconBox(metric.tone)
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
 
-                <p className="text-[28px] font-bold leading-none tabular">
+                <p className={cn("text-[28px] font-bold leading-none tabular", sem ? sem.text : "text-ink")}>
                   {value}
                 </p>
               </div>
 
               <p
-                className="mt-3 text-sm font-medium leading-snug"
+                className={cn("mt-3 text-sm font-medium leading-snug", sem ? sem.text : "text-ink-muted")}
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
               {/* B4: the pairs, then how many distinct subjects they are. */}
               {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
-                <p className="text-xs">
+                <p className={cn("text-xs", sem ? sem.text : "text-ink-faint")}>
                   {t("health.distinctSubjects", { count: stats.distinctSubjects })}
                 </p>
               )}

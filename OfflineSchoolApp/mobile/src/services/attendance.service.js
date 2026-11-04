@@ -268,6 +268,10 @@ const upsertStudentAttendance = async (db, {
       ]
     );
   }
+  // The row actually written. A re-mark updates the existing row, whose id is
+  // not the fresh one the caller generated, and the outbox's __local must name
+  // the real row or the backfill cannot see it is already queued.
+  return existing?.id ?? id;
 };
 
 const upsertTeacherAttendance = async (db, {
@@ -306,6 +310,7 @@ const upsertTeacherAttendance = async (db, {
       ]
     );
   }
+  return existing?.id ?? id;   // see upsertStudentAttendance
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -688,7 +693,7 @@ export const AttendanceService = {
     const id  = generateUUID();
     const now = nowStr();
 
-    await upsertStudentAttendance(db, {
+    const rowId = await upsertStudentAttendance(db, {
       id, schoolId, classId, subjectId, periodId,
       studentId: resolvedStudentId,
       date, status, note,
@@ -699,7 +704,7 @@ export const AttendanceService = {
       entityKey: `attendance:student:${schoolId}:${classId}:${subjectId || ""}:${resolvedStudentId}:${date}`,
       method: "POST",
       endpoint: "/attendance/students",
-      payload: { schoolId, classId, subjectId, periodId, studentId: resolvedStudentId, date, status, note, __local: { table: "attendance", ids: [id] } },
+      payload: { schoolId, classId, subjectId, periodId, studentId: resolvedStudentId, date, status, note, __local: { table: "attendance", ids: [rowId] } },
     });
 
     return { id, studentId: resolvedStudentId, date, status, source: "local" };
@@ -1122,7 +1127,7 @@ export const AttendanceService = {
     const id  = generateUUID();
     const now = nowStr();
 
-    await upsertTeacherAttendance(db, {
+    const rowId = await upsertTeacherAttendance(db, {
       id, schoolId, teacherId, date, status,
       checkInTime, checkOutTime, note,
       synced: false, now,
@@ -1132,7 +1137,7 @@ export const AttendanceService = {
       entityKey: `attendance:teacher:${schoolId}:${teacherId}:${date}`,
       method: "POST",
       endpoint: "/attendance/teachers",
-      payload: { schoolId, teacherId, date, status, checkInTime, checkOutTime, note, __local: { table: "teacher_attendance", ids: [id] } },
+      payload: { schoolId, teacherId, date, status, checkInTime, checkOutTime, note, __local: { table: "teacher_attendance", ids: [rowId] } },
     });
 
     return { id, teacherId, date, status, source: "local" };

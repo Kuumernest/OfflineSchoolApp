@@ -37,7 +37,7 @@ export function FormField({
       <label className="block text-[13px] font-medium text-ink-body">
         {label}
         {required && (
-          <span className="ml-0.5 text-danger" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-danger-text" aria-hidden="true">*</span>
         )}
       </label>
 
@@ -46,7 +46,7 @@ export function FormField({
       {/* An error replaces the hint rather than stacking under it — two lines
           of guidance under one input reads as noise. */}
       {error ? (
-        <p className="text-xs text-danger" role="alert">{error}</p>
+        <p className="text-xs text-danger-text" role="alert">{error}</p>
       ) : hint ? (
         <p className="text-xs text-ink-muted">{hint}</p>
       ) : null}

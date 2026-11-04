@@ -71,7 +71,7 @@ invariant maintained by discipline and check suites, not by the storage layer.
 
 | Layer | Mechanism |
 |---|---|
-| Header | `Idempotency-Key`, scoped `(key, userId)`, 14-day TTL |
+| Header | `Idempotency-Key`, scoped `(key, userId)`, 45-day TTL (above the 30-day supported offline period) |
 | In-flight | `409 IDEMPOTENCY_IN_PROGRESS` + `Retry-After: 2` |
 | Server error | key **deleted** on 5xx so a genuine retry is possible |
 | Derived ids | attendance and scores compute `_id` from the natural key |
@@ -164,6 +164,84 @@ from the device sync feed, and why:
 
 A blocklist there would leak a temporary password to a guardian's screen the first
 time a new notification kind was added.
+
+### Offline sign-in credentials (mobile)
+
+The phone keeps a value derived from each account's password so the account can
+sign in with no network (`mobile/src/store/auth.store.js`). The server never
+trusts it: every request still carries a server-issued token.
+
+**What was wrong.** The code called `CryptoJS.PBKDF2`, but `crypto-js` was never a
+dependency (not in `package.json` or the lockfile in any commit). The `require`
+failed, and the fallback stored `password + salt`, which is the password in clear
+text, in the `users` table of `schoolapp.db`. The per-user migration's
+`setup:credentials` step then copied those values into `device.db` unchanged. No
+build could have stored a real CryptoJS PBKDF2 value.
+
+**What it is now** (`mobile/src/security/passwordHash.js`):
+
+| | |
+|---|---|
+| KDF | PBKDF2-HMAC-SHA256 (RFC 8018, HMAC per RFC 2104), 32-byte key |
+| Salt | 16 random bytes from `expo-crypto`'s `getRandomBytesAsync` (the native CSPRNG) |
+| Iterations | 10,000, stored in each value so the count can be raised later |
+| Stored form | `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` in `passwordHash` (the salt is repeated in `passwordSalt`) |
+| Compare | constant time over the derived bytes |
+| Self-test | once per launch: known answers for SHA-256 and PBKDF2, and the JS SHA-256 checked against `expo-crypto`'s native digest. If it fails, nothing is hashed and the account is not cached for offline sign-in. |
+
+`expo-crypto` 57 has no KDF and no HMAC, only one digest per call. PBKDF2 is
+therefore built in two ways that produce identical bytes. One runs the loop in plain
+JS with the HMAC pad states precomputed. The other runs each SHA-256 through
+`expo-crypto`'s `digest`, which is two native calls per iteration. The phone times
+both once per launch and uses the faster one. Measured in Node, 10,000 iterations
+take about 15 ms with the JIT, about 720 ms with `--jitless` (the closest stand-in
+for Hermes, which interprets), and about 160 ms through the per-call native digest.
+On a mid-range Android phone a sign-in's hash is **estimated at roughly 0.3–1.5 s.
+This has not been measured on a device.** The loop yields every 1,000 iterations.
+10,000 iterations is far below OWASP's server-side figure of 600,000. That is a
+deliberate trade against sign-in time on a phone: an attacker first needs the
+app-private database, and the value only unlocks the offline cache.
+
+**Old values.** A value in the old `password + salt` form still verifies, so offline
+sign-in keeps working. Offline sign-in does not rewrite it. At the account's next
+**online** sign-in, every copy is replaced with the new form: the active file's
+`users` row, `schoolapp.db`, each per-user store `schoolapp.u_<id>.db` and the
+`device.db` credentials. If the new value cannot be made, the copies are removed
+instead. These writes run with `PRAGMA secure_delete = ON`, so SQLite zeroes the
+freed cell. A TRUNCATE checkpoint then empties the `-wal` file, which still held the
+old pages. `device.db` is also `VACUUM`ed.
+
+**Freed copies from older builds.** Each old sign-in rewrote the clear-text value
+without `secure_delete`, so a data file could hold a *freed* copy from before this
+build, in page space no query reads. Once per file, at app start, the open path
+(`mobile/src/db/database.js` → `src/db/freePageScrub.js`) rebuilds `schoolapp.db` and
+each per-user store with `VACUUM`, which writes every page again from the live rows.
+Overwriting only the freelist would miss copies inside pages still in use.
+
+- **Identifiers are kept.** The SQLite docs say VACUUM *may* change the rowids of
+  tables without an INTEGER PRIMARY KEY. In practice (SQLite's `xferOptimization`,
+  confirmed on node:sqlite 3.53) it renumbers only a table that has **no index at
+  all**. Every table the app creates has a `TEXT PRIMARY KEY`, which brings an
+  automatic index. No code persists a rowid: outbox, id map, entity keys, migration
+  journal, placements and review items all use the `id`/`_id` column. Rowid appears
+  only as a sort tie-break, in a one-statement dedupe and as a list key for a table
+  with no id column, which no build creates. Before the rebuild, a canary on an
+  attached in-memory database checks that the phone's SQLite keeps an indexed table's
+  rowids. If it does not, nothing is done. A table with no index gets a temporary
+  one, and every rowid table's rowids are fingerprinted before and after.
+- **Crash-safe, once.** The rebuild runs before the handle is given to any screen,
+  sync or outbox drain. VACUUM is atomic, so a crash or a refusal (it needs free space
+  up to the file's size) leaves the file as it was and unmarked, and the next launch
+  tries again. The `-wal` is emptied with a TRUNCATE checkpoint before and after. A
+  `_scrub_state` row in the file records completion. A file with no tables when first
+  opened was written only by this build, so it is marked without a rebuild.
+  `device.db` is not included, because it is already VACUUMed when a value is replaced.
+- **Cost.** About 150–200 ms for a 10–12 MB file in Node, once. On a phone it runs
+  behind the startup splash. It has not been timed on a device.
+- An account that has not signed in online since this build still has its clear-text
+  value in its live row until it does.
+
+Tests: `mobile/scripts/check-offline-credentials.js`, `mobile/scripts/check-freed-page-scrub.js`.
 
 ---
 

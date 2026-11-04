@@ -11,6 +11,12 @@
  *   offline login session  → "Signed in offline — sign in again to upload"
  *   queued work            → "N change(s) waiting to upload"
  *   blocked work           → "N change(s) need attention" (tappable)
+ *   no sync for 21+ days   → "Connect to the internet soon — last synced N
+ *                            days ago…"; from day 30 "Connect now: …"
+ *                            (config/offlinePeriod.js; never blocks anything)
+ *   session refused        → "Sign in again to send N unsent changes" [Sign in]
+ *                            (the server would not renew the session; the
+ *                            queued work is kept for this account)
  *
  * Tapping a blocked state opens the pending-changes screen.
  *
@@ -29,11 +35,18 @@ import { useSyncStatus } from "../hooks/useSyncStatus";
 import { useSyncProgress } from "../hooks/useSyncProgress";
 import { ProgressBar } from "./ProgressBar";
 import { useTranslation } from "../i18n/useTranslation";
+import { useAuthStore } from "../store/auth.store";
+import { OFFLINE_LIMIT_DAYS } from "../config/offlinePeriod";
+import { getDatabase } from "../db/database";
+import { countHeldChanges } from "../db/heldChanges";
 
 const C = {
   offline:  "#6B7280",
   pending:  "#B45309",
   blocked:  "#B91C1C",
+  signIn:   "#9A3412",
+  staleNotice:  "#B45309",
+  staleWarning: "#B91C1C",
   syncing:  "#4338CA",
   text:     "#FFFFFF",
   // The strip is a saturated colour, so the track behind the fill has to
@@ -58,8 +71,23 @@ export const SyncStatusBar = ({ style }) => {
   const { t } = useTranslation();
   const router = useRouter();
   const bottomInset = useBottomInset();
-  const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked } = useSyncStatus();
+  const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked, offlineAge } = useSyncStatus();
   const progress = useSyncProgress();
+  const needsSignIn = useAuthStore((s) => Boolean(s.user) && s.needsSignIn);
+  const signInAgain = useAuthStore((s) => s.signInAgain);
+
+  // Queued by another account, or by nobody (docs/40-per-user-local-data.md).
+  // Shown only when nothing else is, and read-only: the pending screen says
+  // what they are. Re-counted whenever the queue's stats change.
+  const [heldCount, setHeldCount] = React.useState(0);
+  React.useEffect(() => {
+    let live = true;
+    getDatabase()
+      .then((db) => countHeldChanges(db))
+      .then((h) => { if (live) setHeldCount(h.otherAccounts + h.ownerlessQueued); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [stats]);
 
   const blockedCount = stats.conflict + stats.failed;
   const waitingCount = pendingCount - blockedCount;
@@ -68,8 +96,21 @@ export const SyncStatusBar = ({ style }) => {
   let icon = "cloud-offline-outline";
   let label = "";
   let tappable = false;
+  let lines = 1;
+  let onPress = () => router.push("/sync/pending");
 
-  if (hasBlocked) {
+  if (needsSignIn) {
+    // Outranks everything: nothing else on this strip can move until the
+    // person signs in again. The outbox is kept for this account.
+    tone = C.signIn;
+    icon = "log-in-outline";
+    label = t("sync.needsSignIn", { count: pendingCount });
+    tappable = true;
+    onPress = async () => {
+      try { await signInAgain(); } catch { /* the layout guard still redirects */ }
+      router.replace("/auth/login");
+    };
+  } else if (hasBlocked) {
     tone = C.blocked;
     icon = "alert-circle-outline";
     // Was an English sentence assembled here, plural "s" and all, in an app
@@ -78,6 +119,15 @@ export const SyncStatusBar = ({ style }) => {
     // keys elsewhere in these locale files use and nothing consults.
     label = t("sync.needAttention", { count: blockedCount });
     tappable = true;
+  } else if (offlineAge.level !== "none" && !(progress.visible && isConnected)) {
+    // Long without a sync outranks "offline" and "N waiting": it is the same
+    // fact with a deadline attached. It only informs — nothing is blocked.
+    const warning = offlineAge.level === "warning";
+    tone = warning ? C.staleWarning : C.staleNotice;
+    icon = warning ? "warning-outline" : "time-outline";
+    label = t(warning ? "sync.staleWarning" : "sync.staleNotice",
+      { count: offlineAge.days, limit: OFFLINE_LIMIT_DAYS });
+    lines = 2;
   } else if (isOfflineSession) {
     tone = C.pending;
     icon = "log-in-outline";
@@ -92,12 +142,17 @@ export const SyncStatusBar = ({ style }) => {
     tone = C.pending;
     icon = "cloud-upload-outline";
     label = t("sync.uploading", { count: waitingCount });
+  } else if (heldCount > 0) {
+    tone = C.offline;
+    icon = "people-outline";
+    label = t("sync.heldElsewhere", { count: heldCount });
+    tappable = true;
   }
 
   // A running sync outranks "N waiting to upload": it is the same work with
   // something concrete to say about it. Blocked rows still win, because they
   // need a person and progress does not.
-  const showProgress = progress.visible && !hasBlocked && !isOfflineSession;
+  const showProgress = progress.visible && !hasBlocked && !isOfflineSession && !needsSignIn;
   if (showProgress && (!tone || tone === C.pending)) tone = C.syncing;
 
   if (!tone) return null;
@@ -112,7 +167,7 @@ export const SyncStatusBar = ({ style }) => {
         style,
       ]}
       {...(tappable
-        ? { onPress: () => router.push("/sync/pending"), activeOpacity: 0.8 }
+        ? { onPress, activeOpacity: 0.8, accessibilityRole: "button" }
         : {})}
     >
       {showProgress ? (
@@ -136,9 +191,15 @@ export const SyncStatusBar = ({ style }) => {
             ? <ActivityIndicator size="small" color={C.text} />
             : <Ionicons name={icon} size={15} color={C.text} />}
 
-          <Text style={styles.text} numberOfLines={1}>{label}</Text>
+          <Text style={styles.text} numberOfLines={lines}>{label}</Text>
 
-          {tappable && <Ionicons name="chevron-forward" size={15} color={C.text} />}
+          {needsSignIn ? (
+            <View style={styles.cta}>
+              <Text style={styles.ctaText}>{t("sync.signInCta")}</Text>
+            </View>
+          ) : tappable ? (
+            <Ionicons name="chevron-forward" size={15} color={C.text} />
+          ) : null}
         </>
       )}
     </Wrapper>
@@ -165,6 +226,13 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "600",
   },
+  cta: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  ctaText: { color: C.signIn, fontSize: 12, fontWeight: "700" },
   // flex: 1 so the bar takes the strip's width. The strip is a row, and an
   // unflexed child would collapse to its content and leave the fill a stub.
   progress: { flex: 1, paddingVertical: 2 },

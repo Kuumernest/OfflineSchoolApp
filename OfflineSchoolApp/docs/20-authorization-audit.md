@@ -100,7 +100,7 @@ message their *own* child — `findCandidateRecipients`/`canMessage` compare a
 | Periods | `findPeriodForCaller` on all five write paths |
 | Terms/annual results, academic structure | `utils/tenant.js` (documented fix) |
 | Sync feed | per-collection permission + scope (`wholeSchool`, `teacherClasses`, …); boot-time classification |
-| Sync push | `requirePermission("sync.push")`; declared unreachable by all four clients (docs/19 E1) |
+| Sync push | retired: `authenticate` only, always 410 `SYNC_PUSH_RETIRED`; `sync.push` permission removed (docs/19 E1) |
 | Uploads | separator-aware path jail; signed-media gate (observe mode; F4 of docs/19) |
 | Super admin (schools, enter, admins, dashboard, audit) | `canManage/canAdmins/canAudit` capability guards; per-request school context only |
 | User profile by id | school-scoped, 404-uniform (`user.routes.js:98-145`) |

@@ -207,7 +207,7 @@ export default function IntelligenceReviewPage() {
         <Card className="ring-warning-line">
           {apiErrorCode(sheetQ.error) === "ANALYSIS_FAILED" || sheetQ.error instanceof AnalysisPendingError
             ? <AnalysisState query={sheetQ} />
-            : <p className="text-sm text-warning">{t("intelReview.stale")}</p>}
+            : <p className="text-sm text-warning-text">{t("intelReview.stale")}</p>}
         </Card>
       )}
       {sheetQ.isLoading && <PageSpinner />}
@@ -928,7 +928,7 @@ function PilotPanel({
             <p className="mt-1">{engineList(pilot.engineVersions)}</p>
           </details>
           {pilot.engineDrift.length > 0 && (
-            <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
+            <p className="text-xs text-warning-text">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
           )}
 
           {!pilot.evidence && <AnalysisState query={evidenceQ} />}
@@ -1118,7 +1118,7 @@ function Readiness({ pre, attest, setAttest }: { pre: Preflight; attest: Attesta
                   <Checkbox label={t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })} checked={attest[c.key as AttestationKey] ?? false}
                             onChange={(e) => setAttest((a) => ({ ...a, [c.key]: e.target.checked }))} />
                 ) : (
-                  <span className={c.ok ? "text-ink" : "text-warning"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
+                  <span className={c.ok ? "text-ink" : "text-warning-text"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
                 )}
                 <span className="text-right text-xs text-ink-muted">{c.kind === "manual" && g === "privacy" ? t("intelReview.readiness.confirmNote") : c.detail}</span>
               </li>
@@ -1126,7 +1126,7 @@ function Readiness({ pre, attest, setAttest }: { pre: Preflight; attest: Attesta
           </ul>
         </div>
       ))}
-      <p className={pre.ready ? "text-xs text-ink-muted" : "text-xs font-medium text-warning"}>
+      <p className={pre.ready ? "text-xs text-ink-muted" : "text-xs font-medium text-warning-text"}>
         {pre.ready ? t("intelReview.readiness.awaiting") : t("intelReview.readiness.blocked", { missing: pre.missing.join(", ") })}
       </p>
       <p className="text-xs text-ink-muted">{t("intelReview.readiness.note")}</p>
@@ -1205,7 +1205,7 @@ function PilotReport({ report, classes }: { report: PilotReport; classes: Array<
         </p>
         <p className="text-xs text-ink-muted">{t("intelReview.report.casesReviewers", { cases: report.scope.cases, reviewers: report.scope.reviewers, students: report.scope.students })}</p>
         <p className="text-xs text-ink-muted">{report.scope.engineVersions ? ENGINE_KEYS.map((k) => `${t(`intelReview.pilot.engineName.${k}`)} ${report.scope.engineVersions![k]}`).join(" · ") : "—"}</p>
-        {report.scope.engineDrift.length > 0 && <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: report.scope.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>}
+        {report.scope.engineDrift.length > 0 && <p className="text-xs text-warning-text">{t("intelReview.pilot.drift", { list: report.scope.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>}
       </ReportSection>
 
       <ReportSection title={t("intelReview.report.coverage")}>
@@ -1292,7 +1292,7 @@ function ConsistencyCheck({ studentId, schoolId }: { studentId: string; schoolId
     <div className="mt-3 space-y-1">
       <Button variant="ghost" size="sm" disabled={q.isFetching} onClick={() => q.refetch()}>{t("intelReview.consistency.check")}</Button>
       {q.data && (
-        <p className={q.data.identical ? "text-xs text-ink-muted" : "text-xs text-warning"}>
+        <p className={q.data.identical ? "text-xs text-ink-muted" : "text-xs text-warning-text"}>
           {q.data.identical
             ? t("intelReview.consistency.identical", { v: q.data.engineVersion.live })
             : t("intelReview.consistency.differs", { n: q.data.differences.length })}
@@ -1330,7 +1330,7 @@ function AnalysisState({ query }: { query: { failureReason: unknown; error: unkn
   const timedOut = query.isError && query.error instanceof AnalysisPendingError;
   const failed = query.isError && apiErrorCode(query.error) === "ANALYSIS_FAILED";
   if (pending) return <p className="text-sm text-ink-muted">{t("intelReview.analysis.pending")}</p>;
-  if (timedOut) return <p className="text-sm text-warning">{t("intelReview.analysis.stillPending")}</p>;
-  if (failed) return <p className="text-sm text-warning">{t("intelReview.analysis.failed")}</p>;
+  if (timedOut) return <p className="text-sm text-warning-text">{t("intelReview.analysis.stillPending")}</p>;
+  if (failed) return <p className="text-sm text-warning-text">{t("intelReview.analysis.failed")}</p>;
   return null;
 }

@@ -204,7 +204,7 @@ const SubjectCard = ({
 
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {!hideClassBadge && (
-          <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+          <span className="inline-flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
             <School size={11} />
             {subject.className}
           </span>
@@ -228,7 +228,7 @@ const SubjectCard = ({
       <div className="flex shrink-0 items-center gap-1">
         <button
           onClick={() => onEdit(subject)}
-          className="rounded-lg p-2 text-indigo-500 transition-colors hover:bg-indigo-50"
+          className="rounded-lg p-2 text-primary-500 transition-colors hover:bg-primary-50"
           title={t("subjects.edit")}
         >
           <Pencil size={17} />
@@ -265,22 +265,22 @@ const ClassSection = ({
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex w-full items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5",
-          "text-left transition-colors hover:bg-indigo-100"
+          "flex w-full items-center gap-2 rounded-xl bg-primary-50 px-4 py-2.5",
+          "text-left transition-colors hover:bg-primary-100"
         )}
       >
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white">
-          <GraduationCap size={14} className="text-indigo-500" />
+          <GraduationCap size={14} className="text-primary-500" />
         </div>
-        <span className="flex-1 truncate text-sm font-bold text-indigo-900">
+        <span className="flex-1 truncate text-sm font-bold text-primary-900">
           {className}
         </span>
-        <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-bold text-indigo-600">
+        <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-bold text-primary-600">
           {count}
         </span>
         {open
-          ? <ChevronDown  size={15} className="text-indigo-400" />
-          : <ChevronRight size={15} className="text-indigo-400" />
+          ? <ChevronDown  size={15} className="text-primary-400" />
+          : <ChevronRight size={15} className="text-primary-400" />
         }
       </button>
 
@@ -293,7 +293,6 @@ const ClassSection = ({
 
 interface EmptyStateAction {
   label:   string;
-  color:   string;
   onClick: () => void;
 }
 
@@ -315,10 +314,9 @@ const EmptyState = ({ icon: Icon, title, subtitle, action }: EmptyStateProps) =>
       <button
         onClick={action.onClick}
         className={cn(
-          "mt-6 inline-flex items-center gap-2 rounded-xl border-2 px-5 py-3",
-          "text-sm font-semibold transition-colors hover:opacity-80"
+          "mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-primary-600 px-5 py-3",
+          "text-sm font-semibold text-primary-600 transition-colors hover:bg-primary-50"
         )}
-        style={{ borderColor: action.color, color: action.color }}
       >
         <Plus size={17} />
         {action.label}
@@ -515,7 +513,6 @@ export default function AdminSubjectsPage() {
           subtitle={t("subjects.needClass")}
           action={{
             label:   t("subjects.addClass"),
-            color:   "#4F46E5",
             onClick: () => navigate("/classes"),
           }}
         />
@@ -541,7 +538,6 @@ export default function AdminSubjectsPage() {
             canManage
               ? {
                   label:   t("subjects.add"),
-                  color:   "#059669",
                   onClick: () => navigate("/subjects/add"),
                 }
               : undefined

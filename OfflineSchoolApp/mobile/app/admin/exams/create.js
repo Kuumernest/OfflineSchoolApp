@@ -12,7 +12,11 @@ import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
-import api              from "../../../src/services/api";
+import {
+  getPickerClasses,
+  getPickerTeachers,
+  getPickerSubjects,
+} from "../../../src/services/pickerData.service";
 import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
@@ -406,19 +410,14 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const load = async () => {
       try {
         setLoading(true);
-        const [clsRes, tchRes] = await Promise.all([
-          api.get("/admin/classes",  { params: { schoolId } }),
-          api.get("/admin/teachers", { params: { schoolId } }),
+        // Server when it answers, the phone's copy when it does not — so an
+        // exam can be drafted offline and ExamService.createExam queues it.
+        const [cls, tch] = await Promise.all([
+          getPickerClasses(),
+          getPickerTeachers(),
         ]);
-        setClasses(
-          clsRes.data?.classes ||
-          (Array.isArray(clsRes.data) ? clsRes.data : [])
-        );
-        setTeachers(
-          Array.isArray(tchRes.data)
-            ? tchRes.data
-            : tchRes.data?.teachers || tchRes.data?.data || []
-        );
+        setClasses(cls);
+        setTeachers(tch);
       } catch (err) {
         console.error("StepSubjects load error:", err.message);
         Alert.alert(
@@ -437,20 +436,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const loadSubjects = async () => {
       try {
         setSubjectsLoading(true);
-        const res = await api.get("/admin/subjects", {
-          params: { schoolId, classId: selectedClass.id },
-        });
-        let subs =
-          res.data?.subjects ||
-          (Array.isArray(res.data) ? res.data : []);
-        if (subs.length > 0 && selectedClass.id) {
-          const classFiltered = subs.filter(
-            (s) =>
-              String(s.class_id || s.classId || s.class || "") === selectedClass.id
-          );
-          if (classFiltered.length > 0) subs = classFiltered;
-        }
-        setFilteredSubjects(subs);
+        setFilteredSubjects(await getPickerSubjects(selectedClass.id));
       } catch (err) {
         console.warn("loadSubjects error:", err.message);
         setFilteredSubjects([]);

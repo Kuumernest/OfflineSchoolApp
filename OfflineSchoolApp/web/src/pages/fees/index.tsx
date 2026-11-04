@@ -15,7 +15,7 @@ import { Wallet, ArrowUpRight, Search } from "lucide-react";
 import { useUser }             from "@/store/auth.store";
 import { PageHeader }          from "@/components/ui/PageHeader";
 import { Card }                from "@/components/ui/Card";
-import { TILE_TONE }           from "@/config/sections";
+import { CARD_SHELL, iconBox } from "@/config/sections";
 import { cn }                  from "@/utils/cn";
 import { Button }              from "@/components/ui/Button";
 import { Select }              from "@/components/ui/Select";
@@ -146,25 +146,27 @@ export default function FeesPage() {
 
       {/* The headline figure, before the detail. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className={cn("min-w-0 rounded-tile p-5 shadow-tile sm:col-span-1", TILE_TONE.finance.fill)}>
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" aria-hidden="true" />
-            <p className="text-sm font-medium">
+        <div className={cn("min-w-0 p-5 sm:col-span-1", CARD_SHELL)}>
+          <div className="flex items-center gap-2.5">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", iconBox("finance"))}>
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-ink-muted">
               {t("fees.totalOutstanding")}
             </p>
           </div>
-          <p className="mt-3 text-[30px] font-bold leading-none tracking-tight tabular">
+          <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-ink tabular">
             {fmt.money(report?.totalOutstanding ?? 0)}
           </p>
-          <p className="mt-2 text-xs">
+          <p className="mt-2 text-xs text-ink-faint">
             {t("fees.studentsOwing", { count: report?.count ?? 0 })}
           </p>
           {/* Owed is everything unpaid; overdue the part past its due date —
               the figure the bell shows, from the same helper. */}
-          <p className="mt-1 text-xs">
+          <p className="mt-1 text-xs text-ink-faint">
             {(report?.overdueCount ?? 0) > 0 ? (
               <>
-                <span className="rounded-control bg-danger-soft px-1.5 font-semibold text-danger tabular">
+                <span className="rounded-control bg-danger-soft px-1.5 font-semibold text-danger-text tabular">
                   {t("fees.overdueOfIt", { amount: fmt.money(report?.overdueTotal ?? 0) })}
                 </span>
                 {" · "}
@@ -265,23 +267,23 @@ export default function FeesPage() {
               {arrearsGroups.map((group) => (
                 <Fragment key={group.classId ?? "no-class"}>
                   {showClassRows && (
-                    <Tr className="bg-indigo-50/60">
+                    <Tr className="bg-primary-50/60">
                       <Td colSpan={4} className="py-2">
                         {/* "Form 5 – 5 owing" (C7): the class as it is
                             written, then the count, never run together. */}
-                        <span className="text-xs font-semibold text-indigo-700">
+                        <span className="text-xs font-semibold text-primary-700">
                           {group.className}
                         </span>
                         <span className="text-[11px] text-ink-faint tabular-nums">
                           {" – "}{t("fees.owingCount", { count: group.items.length })}
                           {group.overdue > 0 && (
-                            <span className="text-danger">
+                            <span className="text-danger-text">
                               {" · "}{t("fees.overdueCount", { count: group.overdue })}
                             </span>
                           )}
                         </span>
                       </Td>
-                      <Td numeric className="py-2 font-semibold text-danger">
+                      <Td numeric className="py-2 font-semibold text-danger-text">
                         {fmt.money(group.total)}
                       </Td>
                       <Td />
@@ -298,10 +300,10 @@ export default function FeesPage() {
                   <Td className="text-ink-muted">{r.enrollmentNo ?? "—"}</Td>
                   <Td numeric>{fmt.money(r.charged)}</Td>
                   <Td numeric>{fmt.money(r.paid)}</Td>
-                  <Td numeric className="font-semibold text-danger">
+                  <Td numeric className="font-semibold text-danger-text">
                     {fmt.money(r.balance)}
                   </Td>
-                  <Td numeric className={r.overdue > 0 ? "font-semibold text-danger" : "text-ink-faint"}>
+                  <Td numeric className={r.overdue > 0 ? "font-semibold text-danger-text" : "text-ink-faint"}>
                     {r.overdue > 0 ? fmt.money(r.overdue) : "—"}
                   </Td>
                   <Td numeric>

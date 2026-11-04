@@ -665,7 +665,7 @@ export default function TeacherSubjectsScreen() {
           <Text style={s.headerTitle}>{t("teacherSubjects.title")}</Text>
           <Text style={s.headerSub}>
             {user?.name || t("teacherSubjects.teacher")}
-            {user?.staffId ? ` · ${user.staffId}` : ""}
+            {user?.staffNo ? ` · ${user.staffNo}` : ""}
             {source === "api" ? "  ·  synced from server" : ""}
           </Text>
         </View>

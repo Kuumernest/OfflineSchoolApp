@@ -76,10 +76,10 @@ const ICON: Record<ToastKind, typeof CheckCircle2> = {
 };
 
 const ICON_COLOR: Record<ToastKind, string> = {
-  success: "text-success",
-  error:   "text-danger",
-  warning: "text-warning",
-  info:    "text-info",
+  success: "text-success-text",
+  error:   "text-danger-text",
+  warning: "text-warning-text",
+  info:    "text-info-text",
 };
 
 // A toast sits on top of the page, so it keeps a solid surface and a hairline
@@ -260,9 +260,9 @@ function ConfirmDialog({
           )}
         >
           {isDanger ? (
-            <AlertCircle className="h-4.5 w-4.5 text-danger" />
+            <AlertCircle className="h-4.5 w-4.5 text-danger-text" />
           ) : (
-            <AlertTriangle className="h-4.5 w-4.5 text-warning" />
+            <AlertTriangle className="h-4.5 w-4.5 text-warning-text" />
           )}
         </div>
 

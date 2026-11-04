@@ -261,9 +261,10 @@ const safeResultField = (result, key) => {
 // SUB-COMPONENTS  (unchanged — kept exactly as original)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Applications are pupils-to-be: students' teal. Stale ones carry the alert dot.
-const SummaryCard = React.memo(({ icon, value, label, alert = false }) => (
-  <StatTile kind="students" icon={icon} value={value} label={label} alert={alert} />
+// Applications are pupils-to-be: the students accent. Pending and stale ones
+// are warnings when there are any.
+const SummaryCard = React.memo(({ icon, value, label, tone }) => (
+  <StatTile kind="students" tone={tone} icon={icon} value={value} label={label} />
 ));
 
 const ApplicationCard = React.memo(({ application, onReview }) => {
@@ -837,12 +838,13 @@ export default function StudentApplicationsScreen() {
       <View style={styles.summaryRow}>
         <SummaryCard
           icon="person-add-outline"
+          tone={applications.length > 0 ? "warning" : undefined}
           value={applications.length}
           label={t("appsReview.pending")}
         />
         <SummaryCard
           icon="alert-circle-outline"
-          alert={staleCount > 0}
+          tone={staleCount > 0 ? "warning" : undefined}
           value={staleCount}
           label={t("appsReview.overDays", { days: STALE_DAYS })}
         />

@@ -110,7 +110,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
                 hint={t(`reportLayout.section.${s.id}.desc`)}
               />
               {notHidden.has(s.id) && !(form[s.id] ?? true) && (
-                <p className="mt-2 flex items-start gap-1.5 text-xs text-warning">
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-warning-text">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {t("reportLayout.templatePrintsIt")}
                 </p>

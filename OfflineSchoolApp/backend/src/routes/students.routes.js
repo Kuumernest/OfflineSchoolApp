@@ -414,13 +414,21 @@ const resolveStudentRecord = async (userId, schoolId) => {
   student = await Student.findOne({ _id: userId, schoolId }).lean();
   if (student) return student;
 
+  // Last resort, for a legacy account never linked by userId: the record that
+  // carries this account's email. Only when that is unambiguous. Siblings
+  // share the parent's address, so "the first pupil with this email" could be
+  // a brother or sister — and this resolver feeds the pupil's own profile
+  // EDIT as well as every read. A record already linked to another account is
+  // that account's, never this one's.
   const user = await User.findById(userId).select("email").lean();
   if (user?.email) {
-    student = await Student.findOne({
+    const matches = await Student.find({
       email: user.email.toLowerCase(),
       schoolId,
-    }).lean();
-    if (student) return student;
+      deletedAt: null,
+    }).limit(2).lean();
+    const only = matches.length === 1 ? matches[0] : null;
+    if (only && (!only.userId || String(only.userId) === String(userId))) return only;
   }
 
   return null;
@@ -545,30 +553,42 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
   let emailAttached = false;
   let notice        = null;
 
-  if (emailRaw) {
-    const existing = await User.findOne({ email: emailRaw.toLowerCase().trim() });
+  const emailClean = emailRaw ? emailRaw.toLowerCase().trim() : "";
+
+  // The pupil's OWN login first, found by their record (student.userId) and
+  // never by the address. Siblings share the parent's email, so "the account
+  // with this email" may be a brother's or sister's: looking it up first both
+  // missed this pupil's own account when a sibling's came back instead (a
+  // second login was minted and theirs orphaned) and is the shape of lookup
+  // that let /sync/push take over a sibling's account.
+  if (student?.userId) {
+    const own = await User.findOne({ _id: String(student.userId), role: "student" });
+    if (own) {
+      own.name              = displayName;
+      own.isActive          = true;
+      own.schoolId          = schoolId;
+      own.password          = tempPassword;
+      own.mustResetPassword = true;
+      userAccount   = own;
+      emailAttached = Boolean(emailClean) && String(own.email ?? "").toLowerCase() === emailClean;
+    }
+  }
+
+  // Otherwise, only to word the notice: whose account already carries this
+  // address. It is never reused, renamed or re-passworded from here.
+  if (!userAccount && emailClean) {
+    const existing = await User.findOne({ email: emailClean });
 
     if (existing) {
-      const isOwnAccount =
-        student?.userId && String(existing._id) === String(student.userId);
-
-      if (isOwnAccount) {
-        existing.name              = displayName;
-        existing.isActive          = true;
-        existing.schoolId          = schoolId;
-        existing.password          = tempPassword;
-        existing.mustResetPassword = true;
-        userAccount   = existing;
-        emailAttached = true;
-      } else if (existing.role === "student") {
+      if (existing.role === "student") {
         const sibling = await Student.findOne({ userId: existing._id })
           .select("name firstName lastName studentName").lean().catch(() => null);
         const siblingName = sibling
           ? resolveDisplayName(sibling)
           : existing.name || "another student";
         notice =
-          `The application email (${emailRaw}) is already used by ` +
-          `${siblingName}. A separate account has been created for ${displayName} — ` +
+          `The application email (${emailRaw}) is also the contact for ` +
+          `${siblingName}. ${displayName} has their own account — ` +
           `they will log in using their enrollment number.`;
       } else {
         notice =
@@ -2646,21 +2666,13 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     });
   }
 
-  // ── Guard the one uniqueness this route can breach ────────────────────────
+  // No "another pupil already uses that email" check, on purpose.
   //
-  // email is unique per school for a student. Caught here with a readable
-  // message rather than as an E11000 the client would show raw.
-  if (changed.email) {
-    const clash = await Student.findOne({
-      schoolId,
-      email:     changed.email,
-      _id:       { $ne: student._id },
-      deletedAt: null,
-    }).select("_id").lean();
-    if (clash) {
-      return sendError(res, 409, "Another student in this school already uses that email address");
-    }
-  }
+  // A pupil's email is very often the parent's, and one parent has several
+  // children here (CLAUDE.md: one guardian, many children). Nothing needs it
+  // unique: a pupil signs in with their own admission number, Student.email
+  // carries no unique index, and the User model lets student accounts share an
+  // address. Refusing it here blocked the second child's correction with a 409.
 
   const nameBefore = resolveDisplayName(student);
 

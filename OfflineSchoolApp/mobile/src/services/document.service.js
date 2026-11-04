@@ -134,6 +134,18 @@ export const getIdCardsHtml = ({ schoolId, classId, lang = "en" }) =>
     id: classId, schoolId, lang,
   });
 
+/**
+ * The official receipt for a payment the server has confirmed — the server's
+ * own sheet (backend/src/print/receipt.js), cached like the others so it can
+ * be printed again with no signal. A payment still queued on this phone has no
+ * official receipt yet; receipt.service.js prints a provisional one instead.
+ */
+export const getReceiptHtml = ({ schoolId, paymentId, lang = "en" }) =>
+  fetchDocument({
+    kind: "receipt", path: `/fees/receipt/${paymentId}`,
+    id: paymentId, schoolId, lang,
+  });
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PUTTING IT ON PAPER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,6 +181,7 @@ export default {
   getClassListHtml,
   getTranscriptHtml,
   getIdCardsHtml,
+  getReceiptHtml,
   printDocument,
   shareDocument,
 };

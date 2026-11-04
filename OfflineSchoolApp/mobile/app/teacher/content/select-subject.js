@@ -18,7 +18,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { getTeacherSubjectsForUpload } from "../../../src/services/content.service";
+import { loadTeacherSubjectsForContent } from "../../../src/services/content.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
@@ -160,6 +160,7 @@ function SelectSubjectPage() {
   const [subjects,  setSubjects]  = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [neverLoaded, setNeverLoaded] = useState(false);
 
   const [subjectSearch, setSubjectSearch] = useState("");
 
@@ -169,8 +170,11 @@ function SelectSubjectPage() {
     try {
       setLoading(true);
       setLoadError(null);
-      const data = await getTeacherSubjectsForUpload(teacherId);
-      setSubjects(Array.isArray(data) ? data : []);
+      // Offline this reads the phone (the same subjects the quiz and
+      // homework pickers use); neverLoaded means nothing was ever downloaded.
+      const res = await loadTeacherSubjectsForContent(teacherId);
+      setSubjects(Array.isArray(res?.subjects) ? res.subjects : []);
+      setNeverLoaded(Boolean(res?.neverLoaded));
     } catch (err) {
       console.error("SelectSubjectPage load error:", err);
       setLoadError(t("teacherContent.loadSubjectsFailed"));
@@ -443,15 +447,34 @@ function SelectSubjectPage() {
             </View>
           ) : filteredSubjects.length === 0 ? (
             <View style={styles.centered}>
-              <Ionicons name="book-outline" size={40} color="#9CA3AF" />
+              <Ionicons
+                name={!subjectSearch && neverLoaded ? "cloud-offline-outline" : "book-outline"}
+                size={40}
+                color="#9CA3AF"
+              />
               <Text style={styles.emptyTitle}>
-                {subjectSearch ? t("teacherContent.noSubjectMatch") : t("teacherContent.noSubjects")}
+                {subjectSearch
+                  ? t("teacherContent.noSubjectMatch")
+                  : neverLoaded
+                    ? t("teacherContent.subjectsNeverLoaded")
+                    : t("teacherContent.noSubjects")}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {subjectSearch
                   ? t("teacherContent.noResultsFor", { query: subjectSearch })
-                  : t("teacherContent.noSubjectsSub")}
+                  : neverLoaded
+                    ? t("teacherContent.subjectsNeverLoadedSub")
+                    : t("teacherContent.noSubjectsSub")}
               </Text>
+              {!subjectSearch && neverLoaded && (
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={loadSubjects}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.retryBtnText}>{t("common.retry")}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <ScrollView

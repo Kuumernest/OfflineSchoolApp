@@ -77,6 +77,9 @@ export interface FeePayment {
   method:         PaymentMethod;
   reference?:     string | null;
   receiptNo?:     string | null;
+  /** A device-issued number the server refused and replaced; the official
+   *  receipt says it replaces this provisional one. Never changes once set. */
+  claimedReceiptNo?: string | null;
   note?:          string | null;
   receivedAt?:    string;
   /** Set on a correcting row: the payment it cancels. */
@@ -84,7 +87,7 @@ export interface FeePayment {
   /** Set on the original once a reversal exists. */
   reversedById?:  string | null;
   reversalReason?: string | null;
-  source?:        "web" | "mobile" | "import";
+  source?:        "web" | "mobile" | "desktop" | "import";
 }
 
 /** Never stored — always computed from the ledger. */

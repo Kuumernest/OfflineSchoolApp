@@ -16,6 +16,7 @@ import api                              from "../../../../../../src/services/api
 import ReportCard                       from "../../../../components/ReportCard";
 import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../../../src/utils/appError";
+import { needsInternetFailureText, requireOnline } from "../../../../../../src/hooks/useNeedsInternet";
 import { formatDecimal } from "../../../../../../src/i18n/format";
 import { recalculateClass, CONFIRM } from "../../../../../../src/services/reportCardCalc.service";
 
@@ -302,7 +303,9 @@ export default function StudentReportCardScreen() {
       }
     } catch (err) {
       console.error("loadReportCard:", err.message);
-      setError(errorText(t, err));
+      // The report card is computed by the server (online-only): offline,
+      // say that rather than "Network Error".
+      setError(needsInternetFailureText(t, err));
     } finally {
       setLoading(false);
     }
@@ -363,7 +366,8 @@ export default function StudentReportCardScreen() {
     }
   }, [examId, studentId, loadReportCard, t]);
 
-  const handleCalculate = useCallback(() => {
+  const handleCalculate = useCallback(async () => {
+    if (!(await requireOnline(t))) return;
     Alert.alert(
       t(CONFIRM.title),
       t(CONFIRM.body),
@@ -384,7 +388,8 @@ export default function StudentReportCardScreen() {
    * act that supersedes it — confirmed first, because it replaces a document
    * a parent may already be holding.
    */
-  const handleReissue = useCallback(() => {
+  const handleReissue = useCallback(async () => {
+    if (!(await requireOnline(t))) return;
     Alert.alert(
       t("studentResult.reissueTitle"),
       t("studentResult.reissueBody"),
@@ -411,7 +416,7 @@ export default function StudentReportCardScreen() {
               const res = err?.response?.data;
               Alert.alert(
                 t("studentResult.reissueFailed"),
-                res?.detail || res?.error || errorText(t, err)
+                res?.detail || res?.error || needsInternetFailureText(t, err)
               );
             } finally {
               setReissuing(false);

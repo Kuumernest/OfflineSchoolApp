@@ -212,6 +212,7 @@ const parseCoefficient = (raw) => {
 // shape. See OfflineSchoolApp/shared/students.js for why it is not copied.
 const { normaliseStudentDoc } = require("../../../shared/students");
 const { nextAdmissionNo } = require("../services/admissionNumber.service");
+const staffNumbers = require("../services/staffNumber.service");
 
 // ─── Multi-collection student helpers ────────────────────────────────────────
 
@@ -1156,7 +1157,46 @@ router.get("/teachers", requirePermission("teachers.view"), asyncHandler(async (
 }));
 
 router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
-  const { id, name, email, schoolId } = req.body;
+  const { name, email, schoolId } = req.body;
+  const id = req.body.id ?? req.body._id;
+
+  // A create carrying an id that already names an account is a REPLAY, never a
+  // create. Phones keep the id they made offline and send it here; an old build
+  // could still POST a teacher it had already synced (pulled without
+  // _synced_at, then edited). Before this guard that POST fell through to the
+  // email claim below and, for a removed teacher, reactivated them with a new
+  // password and a welcome email — a removal undone by a retry nobody saw.
+  //
+  // Answered before validation on purpose: a replay must settle whatever the
+  // body says, and it changes NOTHING — not isActive, not the password, not
+  // the name or email, and no mail. Only an id that is new (or absent) may go
+  // on to the email claim, so the console's deliberate re-add by email of a
+  // removed teacher — which sends no id, or a fresh one — works as before.
+  const clientId = id == null ? "" : String(id).trim();
+  if (clientId) {
+    const already = await User.findById(clientId)
+      .select("-password -tempPassword").lean();
+    if (already) {
+      const ownSchool = resolveSchoolId(req, schoolId);
+      const sameTenant = String(already.schoolId ?? "") === String(ownSchool ?? "");
+      if (already.role !== "teacher" || !sameTenant) {
+        // Another school's account, or a pupil/bursar/admin: refused with
+        // nothing changed and nothing about the row disclosed.
+        return sendError(res, 409, "An account with this id already exists");
+      }
+      console.log(`↩️  Teacher create replayed: ${already._id} (unchanged)`);
+      return sendSuccess(res, {
+        data:         already,
+        teacher:      already,
+        serverId:     String(already._id),
+        clientId,
+        replay:       true,
+        deduplicated: true,
+        message:      "This teacher already exists",
+      });
+    }
+  }
+
   if (!name?.trim() || !email) {
     return sendError(res, 400, "name and email are required");
   }
@@ -1182,6 +1222,9 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
     const { user, tempPassword: restoredPassword } = await restoreStaffAccount({
       doc: claim.restore, name,
     });
+    // A teacher coming back keeps the number on their old paperwork; one who
+    // somehow never had one is given one now, as a new teacher would be.
+    if (!user.staffNo) user.staffNo = await staffNumbers.ensureStaffNo(user._id);
 
     const restoreEmail = await sendEmailSafe({
       to:       emailClean,
@@ -1226,7 +1269,14 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
   };
   if (id) userData._id = String(id).trim();
 
-  const teacher = await User.create(userData);
+  // Numbered in the same request, by the server: a phone's offline create
+  // gets its number here, when it syncs, never on the device. The number is
+  // taken first; if the create then fails it is a gap, never a duplicate, and
+  // a clash with the unique index takes the next one (staffNumber.service).
+  const teacher = await staffNumbers.withStaffNo(
+    resolvedSchoolId,
+    (staffNo) => User.create({ ...userData, staffNo })
+  );
 
   const emailResult = await sendEmailSafe({
     to:       emailClean,
@@ -1291,12 +1341,59 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
     updateFields.schoolId = String(schoolId).trim();
   }
 
-  const teacher = await User.findOneAndUpdate(
-    { ...getTenantQuery(req, req.params.id), role: "teacher" },
-    updateFields,
-    { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
-  );
+  // The staff number, overridden by an administrator (this route is
+  // teachers.manage, which only administrators hold and cannot be delegated).
+  // Only when the body names it: a phone's queued edit sends name and email
+  // alone and must never touch it. It cannot be cleared — every teacher has
+  // one — and must be free within the school. One in the generated shape
+  // moves the sequence past it, so the next generated number does not clash.
+  let staffNoChange = null;
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "staffNo")) {
+    const parsed = staffNumbers.normaliseStaffNo(req.body.staffNo);
+    if (parsed.error) return sendError(res, 400, parsed.error, { code: "STAFF_NO_INVALID" });
+    const current = await User.findOne({ ...getTenantQuery(req, req.params.id), role: "teacher" })
+      .select("schoolId staffNo").lean();
+    if (!current) return sendError(res, 404, "Teacher not found");
+    const school = updateFields.schoolId ?? current.schoolId;
+    if (parsed.value !== current.staffNo || updateFields.schoolId) {
+      const holder = await User.findOne({
+        schoolId: school, staffNo: parsed.value, _id: { $ne: String(current._id) },
+      }).select("name").lean();
+      if (holder) {
+        return sendError(res, 409,
+          `Staff number ${parsed.value} is already used by ${holder.name || "another member of staff"}`,
+          { code: "STAFF_NO_TAKEN" });
+      }
+      updateFields.staffNo = parsed.value;
+      staffNoChange = { school, before: current.staffNo ?? null, after: parsed.value };
+    }
+  }
+
+  let teacher;
+  try {
+    teacher = await User.findOneAndUpdate(
+      { ...getTenantQuery(req, req.params.id), role: "teacher" },
+      updateFields,
+      { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
+    );
+  } catch (err) {
+    // Taken between the check above and this write.
+    if (staffNumbers.isStaffNoClash(err)) {
+      return sendError(res, 409, `Staff number ${updateFields.staffNo} is already used`,
+        { code: "STAFF_NO_TAKEN" });
+    }
+    throw err;
+  }
   if (!teacher) return sendError(res, 404, "Teacher not found");
+
+  if (staffNoChange && staffNoChange.before !== staffNoChange.after) {
+    await staffNumbers.noteStaffNo(staffNoChange.school, staffNoChange.after);
+    await recordAudit(req, {
+      action: "teacher.staffNoChanged", schoolId: staffNoChange.school,
+      resource: { type: "user", id: teacher._id, label: teacher.email },
+      before: { staffNo: staffNoChange.before }, after: { staffNo: staffNoChange.after },
+    });
+  }
 
   console.log(`✅ Teacher updated: ${teacher.name}`);
   return sendSuccess(res, { data: teacher.toObject() });
@@ -3634,8 +3731,10 @@ router.put("/settings/profile", requirePermission("settings.manage"), asyncHandl
     if (!isValidEmail(emailClean)) {
       return sendError(res, 400, "A valid email is required");
     }
+    // Staff addresses only, as claimStaffEmail: a pupil account may carry it
+    // because this member of staff is also a parent at the school.
     const taken = await User.findOne({
-      email: emailClean, _id: { $ne: userId },
+      email: emailClean, _id: { $ne: userId }, role: { $ne: ROLES.STUDENT },
     }).lean();
     if (taken) return sendError(res, 409, "Email already in use");
     updates.email = emailClean;

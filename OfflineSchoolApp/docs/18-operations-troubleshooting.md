@@ -279,7 +279,7 @@ receipts.
 
 ```js
 db.feepayments.find({ schoolId, studentId, amount, receivedAt: { $gte: from, $lt: to } })
-db.idempotencykeys.find({ userId })   // TTL 14 days — older keys are gone
+db.idempotencykeys.find({ userId })   // TTL 45 days — older keys are gone
 ```
 
 Compare `createdAt`. Two rows seconds apart with different `_id`s and no shared

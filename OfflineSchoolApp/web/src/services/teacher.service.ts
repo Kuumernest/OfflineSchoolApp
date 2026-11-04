@@ -42,6 +42,7 @@ interface RawTeacher {
   fullName?:         string;
   full_name?:        string;
   email?:            string;
+  staffNo?:          string | null;
   phone?:            string;
   mobile?:           string;
   phoneNumber?:      string;
@@ -139,6 +140,7 @@ function normaliseTeacher(
     _id:       id,
     name:      raw.name     ?? raw.fullName ?? raw.full_name ?? "",
     email:     raw.email    ?? "",
+    staffNo:   raw.staffNo  ?? null,
     phone:     raw.phone    ?? raw.mobile   ?? raw.phoneNumber ?? "",
     schoolId,
     isActive:  raw.isActive !== false && !raw.deletedAt && !raw.deleted_at,

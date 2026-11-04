@@ -65,8 +65,8 @@ export default function RecentAnnouncements({
     if (error) {
       return (
         <div role="alert" className="text-center py-8">
-          <Megaphone className="mx-auto mb-2 h-6 w-6 text-danger/50" aria-hidden="true" />
-          <p className="text-sm text-danger">{error}</p>
+          <Megaphone className="mx-auto mb-2 h-6 w-6 text-danger-text/50" aria-hidden="true" />
+          <p className="text-sm text-danger-text">{error}</p>
         </div>
       );
     }

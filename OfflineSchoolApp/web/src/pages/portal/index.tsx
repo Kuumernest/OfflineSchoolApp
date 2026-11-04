@@ -131,7 +131,7 @@ export default function ParentPortalPage() {
                 </FormField>
 
                 {error && (
-                  <p role="alert" className="flex items-start gap-2 rounded-control border border-danger-line bg-danger-soft px-3 py-2.5 text-sm text-danger">
+                  <p role="alert" className="flex items-start gap-2 rounded-control border border-danger-line bg-danger-soft px-3 py-2.5 text-sm text-danger-text">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}
                   </p>
                 )}
@@ -165,7 +165,7 @@ export default function ParentPortalPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
         <Card className="w-full max-w-sm space-y-4 text-center">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning-soft text-warning" aria-hidden="true">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning-soft text-warning-text" aria-hidden="true">
             <LogIn className="h-6 w-6" />
           </span>
           <p className="text-sm text-ink-body">{t("portal.sessionExpired")}</p>

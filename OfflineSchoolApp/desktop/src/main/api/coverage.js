@@ -115,22 +115,10 @@ const ONLINE_ONLY = [
   // Each of these sits on a collection syncFeed.js excludes, and the exclusion
   // is where the reasoning lives. Repeated here only as far as needed to explain
   // the consequence.
-  {
-    endpoint: "GET /messages/conversations",
-    because:
-      "Conversation and Message are excluded from the feed: who may read a " +
-      "thread is decided per THREAD by services/communication/policy.service, " +
-      "and the feed can express one capability per collection. Mirroring every " +
-      "message in the school to answer one screen is not the trade.",
-  },
-  {
-    endpoint: "GET /messages/conversations/:id",
-    because: "As the conversation list — the collection is not mirrored.",
-  },
-  {
-    endpoint: "GET /messages/conversations/:id/messages",
-    because: "As the conversation list — the collection is not mirrored.",
-  },
+  // GET /messages/conversations, /conversations/:id, /conversations/:id/messages
+  // and POST /conversations/:id/messages are answered by handlers/messages.js
+  // (a read-through cache of what the server showed this account, and sends
+  // queued) — see PARTIAL for what still goes to the network.
   {
     endpoint: "GET /messages/audit/conversations",
     because:
@@ -146,26 +134,31 @@ const ONLINE_ONLY = [
   },
   {
     endpoint: "POST /messages/conversations/direct",
-    because: "Starting a conversation in a collection this machine does not hold.",
-  },
-  {
-    endpoint: "POST /messages/conversations/:id/messages",
     because:
-      "Sending a message. It could be queued, and it should not be: somebody who " +
-      "types a message to a parent and sees it appear has been told it was sent. " +
-      "A message that leaves in four hours is worse than one that visibly did not.",
+      "Starting a conversation. Who may be written to is the server's policy, " +
+      "and the conversation does not exist until the server makes it — a local " +
+      "one would be a thread nobody else can see. The page says it needs a " +
+      "connection (NeedsInternet) rather than letting it be tried.",
   },
   {
     endpoint: "POST /messages/conversations/:id/read",
-    because: "A read marker on a thread this machine does not mirror.",
+    because:
+      "A read receipt. Queued, it would sit in the one strict-order outbox, and " +
+      "a 404 for a thread somebody has since left would block every fee and " +
+      "mark behind it. Offline it fails silently (the page ignores it) and the " +
+      "next one sent online carries the newest seq — the server takes the max.",
   },
   {
     endpoint: "POST /messages/:id/reactions",
-    because: "As above — the thread is not here.",
+    because:
+      "A toggle on a message: replayed after somebody else's toggle it would " +
+      "undo theirs. Not worth queueing.",
   },
   {
     endpoint: "DELETE /messages/:id",
-    because: "As above — the thread is not here.",
+    because:
+      "Deleting a sent message is the server's to confirm: the screen saying " +
+      "\"deleted\" while the parent can still read it is the wrong way round.",
   },
   {
     endpoint: "POST /messages/conversations/:id/attachments",
@@ -675,7 +668,47 @@ const PARTIAL = [
       "the request out and lets the server resolve the name, rather than writing " +
       "a blank one that a later pull corrects.",
   },
+  {
+    endpoint: "GET /messages/conversations",
+    except:   "offline, before this account has loaded the list once on this machine; a later page (before=)",
+    because:
+      "Not mirrored by the feed (syncFeed.js excludes Conversation), so the only " +
+      "copy is what the server last showed THIS person here (handlers/messages.js). " +
+      "With none there is nothing honest to show. Online it is the server's answer.",
+  },
+  {
+    endpoint: "GET /messages/conversations/:id",
+    except:   "offline, a conversation not in this account's cached list",
+    because:  "As the list: answered from the copy of it.",
+  },
+  {
+    endpoint: "GET /messages/conversations/:id/messages",
+    except:   "offline, a thread never opened here by this account; an audit read is never kept",
+    because:
+      "As the list. An administrator auditing sees unredacted rows, which are not " +
+      "kept on a shared machine.",
+  },
+  {
+    endpoint: "POST /messages/conversations/:id/messages",
+    except:   "offline, a conversation missing from this account's cached list, read-only or archived; any refusal online",
+    because:
+      "Queued only into a thread the server already gave this person. Online it " +
+      "is sent directly, so a refusal (\"this school has not enabled …\") is " +
+      "shown at once instead of blocking the queue. Uploading an attachment " +
+      "stays online-only; sending one already uploaded queues like text.",
+  },
   // REMOVED: PATCH /exams/:id/status — now fully handled offline including "published"
+  {
+    endpoint: "GET /fees/receipt/:id",
+    except:   "a payment the server has confirmed — its official receipt is the server's",
+    because:
+      "Answered here only while the payment's create is still in the outbox, as a " +
+      "receipt marked PROVISIONAL (handlers/receipts.js; the owner's decision that " +
+      "provisional receipts may be printed before sync). Once the server has accepted " +
+      "the payment, the official receipt is rendered by the server from its own record, " +
+      "unmarked — a confirmed receipt printed from the mirror would be indistinguishable " +
+      "from the official one while possibly disagreeing with it.",
+  },
 ];
 
 /**

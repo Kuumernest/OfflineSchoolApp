@@ -24,20 +24,17 @@ const EMAIL_REGEX     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NEXT_STEPS = [
   {
     icon:     Key,
-    color:    "#4F46E5",
-    bg:       "bg-indigo-50",
+    box:      "bg-accent-blue-soft text-accent-blue",
     labelKey: "teachersAdd.step1",
   },
   {
     icon:     Mail,
-    color:    "#0891B2",
-    bg:       "bg-cyan-50",
+    box:      "bg-accent-teal-soft text-accent-teal",
     labelKey: "teachersAdd.step2",
   },
   {
     icon:     Lock,
-    color:    "#059669",
-    bg:       "bg-emerald-50",
+    box:      "bg-accent-indigo-soft text-accent-indigo",
     labelKey: "teachersAdd.step3",
   },
 ];
@@ -249,7 +246,7 @@ export default function AddTeacherPage() {
                     <button
                       onClick={() => handleCopy(success.tempPassword!)}
                       className="flex items-center gap-1 text-xs font-semibold
-                                 text-indigo-600 hover:text-indigo-800 transition-colors"
+                                 text-primary-600 hover:text-primary-800 transition-colors"
                     >
                       {copied
                         ? <><Check size={13} /> {t("common.copied")}</>
@@ -321,7 +318,7 @@ export default function AddTeacherPage() {
               transition-colors
               ${errors.name
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <User
                 size={18}
@@ -377,7 +374,7 @@ export default function AddTeacherPage() {
               transition-colors
               ${errors.email
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <Mail
                 size={18}
@@ -449,12 +446,12 @@ export default function AddTeacherPage() {
             {t("teachersAdd.whatNext")}
           </h3>
           <div className="space-y-3">
-            {NEXT_STEPS.map(({ icon: Icon, color, bg, labelKey }) => (
+            {NEXT_STEPS.map(({ icon: Icon, box, labelKey }) => (
               <div key={labelKey} className="flex items-center gap-3">
                 <div className={`
-                  w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}
+                  w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${box}
                 `}>
-                  <Icon size={16} style={{ color }} />
+                  <Icon size={16} />
                 </div>
                 <p className="text-sm text-gray-600">{t(labelKey)}</p>
               </div>

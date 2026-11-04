@@ -196,7 +196,7 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {!anyOn && (
-        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning-text">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{t("approvalSettings.allOff")}</span>
         </div>

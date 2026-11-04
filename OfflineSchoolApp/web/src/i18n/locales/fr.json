@@ -603,7 +603,7 @@
     "notAssigned": "Pas encore affecté",
     "resetPassword": "Réinitialiser le mot de passe",
     "subjectsCovered": "Matières enseignées",
-    "searchPh": "Rechercher dans cette page…",
+    "searchPh": "Rechercher nom, e-mail ou matricule…",
     "activeOnly": "Actifs uniquement",
     "inactiveOnly": "Inactifs uniquement",
     "resetTitle": "Réinitialiser le mot de passe de cet enseignant ?",
@@ -637,7 +637,9 @@
     "unassignedTitle_other": "{{count}} matières-classes sur {{total}} sans enseignant",
     "unassignedHint": "Aucun enseignant ne peut y saisir de notes, et le bulletin n'affiche aucun enseignant pour ces lignes.",
     "unassignedShow": "Afficher",
-    "unassignedHide": "Masquer"
+    "unassignedHide": "Masquer",
+    "staffNo": "N° matricule",
+    "staffNoNone": "Pas encore attribué"
   },
   "subjects": {
     "title": "Matières",
@@ -1284,7 +1286,14 @@
     "subtitle": "Profil de l’enseignant et matières attribuées",
     "subjectsAssignedCount": "{{count}} matière affectée",
     "subjectsAssignedCount_other": "{{count}} matières affectées",
-    "assign": "Affecter"
+    "assign": "Affecter",
+    "staffNo": "Matricule",
+    "staffNoHint": "Attribué par l'établissement à l'ajout de l'enseignant. Ne le modifiez que pour correspondre à un numéro déjà sur les documents.",
+    "staffNoNone": "Pas encore attribué — le serveur en donnera un sous peu.",
+    "errStaffNoRequired": "Un matricule ne peut pas être supprimé.",
+    "errStaffNoTooLong": "Un matricule comporte au plus 32 caractères.",
+    "errStaffNoChars": "Utilisez uniquement lettres, chiffres et - / . _",
+    "errStaffNoTaken": "{{number}} est déjà le matricule d'un autre membre du personnel."
   },
   "subjectsAdd": {
     "title": "Ajouter une matière",
@@ -1929,7 +1938,6 @@
       "homework": "Devoirs",
       "quiz": "Quiz",
       "permissions": "Droits",
-      "sync": "Synchronisation",
       "approvals": "Validations",
       "subjects": "Matières",
       "dashboard": "Tableau de bord",
@@ -1995,7 +2003,6 @@
       "homework.manage": "Donner et noter les devoirs",
       "quiz.author": "Rédiger quiz et questions",
       "permissions.manage": "Modifier ces droits",
-      "sync.push": "Envoyer des modifications depuis un appareil",
       "fees.refund": "Rembourser",
       "fees.waive": "Réduire ou annuler des frais",
       "approvals.view": "Voir les demandes en attente",
@@ -2033,7 +2040,6 @@
       "documents.manage": "Comprend la remise des codes du portail parents, qui sont des identifiants.",
       "messages.audit": "Lire une conversation dont on ne fait pas partie. Enregistré, et jamais accordé comme effet secondaire du droit d'écrire.",
       "permissions.manage": "Un rôle qui peut s'attribuer des droits n'a plus de limite, ni les personnes qu'il nomme.",
-      "sync.push": "Écrit les créneaux et les décisions de passage directement depuis un appareil.",
       "students.view": "Noms, matricules, classes et coordonnées des parents. Aucune note.",
       "gate.scan": "Dans un petit établissement, la personne au portail à huit heures est celle qui est là.",
       "approvals.decide": "Jamais la personne qui a soumis la demande — vérifié demande par demande, par utilisateur, y compris pour un super administrateur.",
@@ -2154,6 +2160,10 @@
     "receiptNo": "N° de reçu",
     "receivedOn": "Reçu le",
     "recorded": "Paiement enregistré",
+    "recordedProvisional": "Le reçu {{receiptNo}} est provisoire jusqu'à la synchronisation de cet ordinateur avec le serveur de l'école. Un reçu imprimé maintenant porte la mention provisoire.",
+    "provisional": "Provisoire",
+    "provisionalHint": "Pas encore confirmé par le serveur de l'école. Son reçu s'imprime avec la mention provisoire ; le reçu officiel sera disponible après la synchronisation de cet ordinateur.",
+    "printProvisional": "Imprimer (provisoire)",
     "recordFailed": "Impossible d'enregistrer le paiement",
     "reverse": "Annuler",
     "reverseTitle": "Annuler ce paiement ?",
@@ -3282,6 +3292,8 @@
     "deleteMessage": "Supprimer le message",
     "attach": "Joindre un fichier",
     "writePh": "Écrire un message…",
+    "pendingSend": "En attente d'envoi — il partira au retour de la connexion",
+    "offlineQueued": "Hors ligne — les messages envoyés maintenant attendent sur cet ordinateur et partiront au retour de la connexion. Joindre un fichier nécessite une connexion.",
     "searchPh": "Rechercher un personnel, un élève ou un parent…",
     "noMatch": "Personne ne correspond à ce nom.",
     "nobodyAvailable": "Il n'y a personne avec qui démarrer une conversation.",
@@ -3419,6 +3431,13 @@
     "settingsDesc": "Configuration du système"
   },
   "sync": {
+    "heldOtherAccount": "1 de ces modifications a été mise en file par un autre compte sur cet ordinateur. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOtherAccount_other": "{{count}} de ces modifications ont été mises en file par un autre compte sur cet ordinateur. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOwnerless": "1 modification a été mise en file par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée ici et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+    "heldOwnerless_other": "{{count}} modifications ont été mises en file par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées ici et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent.",
+    "readOnlyOtherAccount": "Enregistrée par un autre compte sur cet ordinateur. Seule cette personne peut l’abandonner, la réessayer ou en enregistrer une copie — elle est envoyée quand elle se reconnecte ici.",
+    "readOnlyOwnerless": "Enregistrée par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée pour examen et ne peut être ni abandonnée, ni réessayée, ni copiée ici.",
+    "refusedSignedOut": "Connectez-vous pour agir sur une modification en attente sur cet ordinateur.",
     "saveCopy": "Enregistrer une copie",
     "copySaved": "Enregistré dans {{path}}",
     "copyFailed": "La copie n'a pas pu être enregistrée.",
@@ -3439,7 +3458,16 @@
     "discard": "Abandonner",
     "discardConfirm": "Abandonner cette modification ? Ce qui a été enregistré sur cet ordinateur sera supprimé et jamais envoyé.",
     "syncNow": "Vérifier maintenant",
-    "lastChecked": "Dernière vérification à {{time}}"
+    "lastChecked": "Dernière vérification à {{time}}",
+    "signInAgainTitle": "Reconnectez-vous pour envoyer {{count}} modification(s) non envoyée(s)",
+    "signInAgainTitleNone": "Reconnectez-vous pour que cet ordinateur reste synchronisé",
+    "signInAgainBody": "Le serveur a mis fin à la session de cet ordinateur : plus rien n'est envoyé. Tout ce qui a été enregistré ici reste sur cet ordinateur et sera envoyé dès que vous vous reconnecterez.",
+    "signInAgainAction": "Se reconnecter",
+    "signInAgainShort": "Reconnexion requise"
+  },
+  "offlinePeriod": {
+    "notice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité.",
+    "warning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité."
   },
   "initialSync": {
     "loadingTitle": "Téléchargement des données de votre établissement sur cet ordinateur…",
@@ -3570,7 +3598,8 @@
       "RULE_FIXED": "Cette règle est la même pour toutes les écoles et ne peut pas être modifiée.",
       "PROMOTION_RUN_EXISTS": "Une proposition de passage de l'année a été faite à partir de ces résultats. Supprimez d'abord le brouillon, ou annulez la proposition.",
       "CLASS_REQUIRED": "Choisissez une classe : la publication s'annule classe par classe."
-    }
+    },
+    "needsInternet": "Cette action nécessite une connexion Internet. Le reste de l'application continue de fonctionner hors ligne."
   },
   "studentEdit": {
     "title": "Corriger la fiche de l'élève",
@@ -5754,5 +5783,17 @@
   "verifyPage": {
     "opening": "Ouverture de la page de vérification…",
     "continue": "Continuer"
+  },
+  "connection": {
+    "offlineTitle": "Vous êtes hors ligne.",
+    "unreachableTitle": "Le serveur est injoignable.",
+    "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie.",
+    "needsInternetTitle": "Cette fonction nécessite une connexion Internet",
+    "needsInternetBody": "Cet ordinateur est hors ligne. Ce qui se fait sur cet écran passe obligatoirement par le serveur : c'est désactivé jusqu'au retour de la connexion. Tout le reste de l'application continue de fonctionner hors ligne.",
+    "needsInternetShort": "Nécessite une connexion Internet"
+  },
+  "signOutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "message": "Vous avez {{count}} modification(s) pas encore envoyée(s). Elles seront envoyées la prochaine fois que vous vous connecterez sur cet ordinateur."
   }
 }

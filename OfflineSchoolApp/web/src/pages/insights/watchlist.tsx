@@ -120,7 +120,7 @@ export default function WatchlistPage() {
             <Card
               className={cn(
                 "h-full transition-shadow",
-                tier === c.key && "ring-2 ring-indigo-400"
+                tier === c.key && "ring-2 ring-primary-400"
               )}
             >
               <div className="flex items-center gap-2">

@@ -304,7 +304,7 @@ const payroll = {
 
     const staffRows = await User.find({
       schoolId, _id: { $in: slips.map((s) => s.userId) },
-    }).select("name email role").lean();
+    }).select("name email role staffNo").lean();
     const staff = new Map(staffRows.map((u) => [String(u._id), u]));
 
     const runStatus = new Map(runs.map((r) => [String(r._id), r.status]));
@@ -318,6 +318,9 @@ const payroll = {
           { label: L.payslipNo,  width: 20, cell: (r) => text(r.payslipNo) },
           { label: L.month,      width: 12, cell: (r) => text(r.periodMonth) },
           { label: L.staff,      width: 26, cell: (r) => text(staff.get(String(r.userId))?.name) },
+          // The school's number for the person paid (teachers; blank for staff
+          // not numbered), so a payroll sheet reconciles against staff files.
+          { label: L.staffNo,    width: 16, cell: (r) => text(staff.get(String(r.userId))?.staffNo) },
           { label: L.role,       width: 14, cell: (r) => text(staff.get(String(r.userId))?.role) },
           { label: L.basePay,    width: 14, cell: (r) => money(r.baseAmount) },
           { label: L.allowances, width: 14,

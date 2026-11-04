@@ -26,7 +26,9 @@ import DateField                from "../../../src/components/DateField";
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 import { useTranslation }       from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+import { loadOwnStaffNo }       from "../../../src/services/staffNumber.service";
+import { staffNoText }          from "../../../src/utils/staffNumber";
+import { needsInternetFailureText } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -240,7 +242,6 @@ const validateStep = (step, form, t) => {
     if (!form.nationalId?.trim())  errors.nationalId  = t("profileTeacher.errNationalId");
   }
   if (step === 1) {
-    if (!form.staffId?.trim())   errors.staffId        = t("profileTeacher.errStaffId");
     if (!form.qualification)     errors.qualification  = t("profileTeacher.errQualification");
     if (!form.employmentType)    errors.employmentType = t("profileTeacher.errEmploymentType");
     if (!form.joinDate?.trim())  errors.joinDate       = t("profileTeacher.errJoinDate");
@@ -296,12 +297,16 @@ const saveProfile = async (form, userId) => {
   };
 
   // ── API save with retry ───────────────────────────────
+  // Online-only on the server side: nothing queues it. Reported back so the
+  // screen can say "saved on this phone only" instead of pretending.
+  let serverSaved = false;
   try {
     await withRetry(
       () => api.put("/teacher/profile", payload, { timeout: 10_000 }),
       3,
       1_000
     );
+    serverSaved = true;
   } catch (err) {
     console.warn("[profile/setup] API save failed:", err.message);
     // Non-fatal — SQLite save below is the source of truth on device
@@ -347,6 +352,7 @@ const saveProfile = async (form, userId) => {
     console.warn("[profile/setup] SQLite save error:", err.message);
     throw err;
   }
+  return { serverSaved };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -411,6 +417,17 @@ export default function TeacherProfileSetup() {
   const [step,   setStep]   = useState(0);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // The school's staff number: issued by the server, shown read-only. It
+  // replaced the "Staff ID" a teacher used to type here, which the server
+  // never stored. Whatever an older build typed stays in form.staffId (and
+  // the local teacher_profiles.staff_id column) untouched, but is not shown.
+  const [staffNo, setStaffNo] = useState({ kind: "none", value: null });
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   const [form, setForm] = useState({
     firstName:         user?.name?.split(" ")[0]                 || "",
@@ -540,7 +557,7 @@ export default function TeacherProfileSetup() {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     try {
       setSaving(true);
-      await saveProfile(form, userId);
+      const { serverSaved } = await saveProfile(form, userId);
 
       const fullName = `${form.firstName} ${form.lastName}`.trim();
 
@@ -549,14 +566,14 @@ export default function TeacherProfileSetup() {
 
       Alert.alert(
         t("profileTeacher.savedTitle"),
-        t("profileTeacher.savedBody"),
+        serverSaved ? t("profileTeacher.savedBody") : t("common.savedOnPhoneOnly"),
         [{
           text: t("profileTeacher.continueBtn"),
           onPress: () => router.replace("/teacher/dashboard"),
         }]
       );
     } catch (err) {
-      Alert.alert(t("profileTeacher.errorTitle"), errorText(t, err, "profileTeacher.saveFailedBody"));
+      Alert.alert(t("profileTeacher.errorTitle"), needsInternetFailureText(t, err, "profileTeacher.saveFailedBody"));
     } finally {
       setSaving(false);
     }
@@ -654,12 +671,11 @@ export default function TeacherProfileSetup() {
             </View>
 
             <Field
-              label={t("profileTeacher.labelStaffId")} required
-              value={form.staffId}
-              onChangeText={(v) => set("staffId", v)}
-              placeholder={t("profileTeacher.phStaffId")}
+              label={t("staffNo.labelLong")}
+              value={staffNoText(t, staffNo)}
+              editable={false}
               icon="id-card-outline"
-              error={errors.staffId}
+              hint={t("staffNo.fromSchool")}
             />
 
             <SelectField

@@ -23,6 +23,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
+import { staffNoStatus, staffNoText } from "../../../src/utils/staffNumber";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -477,6 +478,17 @@ export default function EditTeacher() {
       >
         {/* ── PROFILE FIELDS ── */}
         <View style={styles.card}>
+          {/* The school's staff number: read-only here. It is issued by the
+              server, and an administrator changes it on the web console. */}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>{t("staffNo.labelLong")}</Text>
+            <Text
+              testID="teacher-staff-no"
+              style={[styles.staffNoValue, staffNoStatus(teacher).kind !== "assigned" && styles.staffNoMuted]}
+            >
+              {staffNoText(t, staffNoStatus(teacher))}
+            </Text>
+          </View>
           <FieldInput
             label={t("teachersEdit.nameLabel")}
             value={name}
@@ -617,6 +629,8 @@ const styles = StyleSheet.create({
 
   fieldWrap:  { gap: 6 },
   fieldLabel: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  staffNoValue: { fontSize: 15, fontWeight: "700", color: "#111827", paddingVertical: 4 },
+  staffNoMuted: { fontSize: 13, fontWeight: "400", fontStyle: "italic", color: "#6B7280" },
   fieldInput: {
     borderWidth:       1,
     borderColor:       "#D1D5DB",

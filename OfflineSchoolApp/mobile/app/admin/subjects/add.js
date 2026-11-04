@@ -11,7 +11,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { getDatabase }    from "@/db/database";
 import api              from "@/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+import { useNeedsInternet } from "../../../src/hooks/useNeedsInternet";
+import { NeedsInternetNote } from "../../../src/components/NeedsInternetNote";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -130,6 +131,9 @@ function ResultsSummary({ results, subjectName, onDone, onAddAnother }) {
 
 export default function AddSubjectScreen() {
   const { t } = useTranslation();
+  // Creating and editing a subject write straight to the server (online-only
+  // until made offline-capable): said up front, not as a network error.
+  const { isOnline, requireOnline, failureText } = useNeedsInternet();
   const router   = useRouter();
   const { user } = useAuthStore();
   const schoolId = user?.schoolId ?? "";
@@ -237,6 +241,7 @@ export default function AddSubjectScreen() {
       return;
     }
     setErrors({});
+    if (!(await requireOnline())) return;
     setSubmitting(true);
 
     if (isEdit) {
@@ -260,7 +265,7 @@ export default function AddSubjectScreen() {
         } catch { /* the next pull sets it right */ }
         router.push("/admin/subjects");
       } catch (err) {
-        Alert.alert(t("common.error"), err?.response?.data?.message || errorText(t, err, "subjectsAdd.unknownError"));
+        Alert.alert(t("common.error"), failureText(err, "subjectsAdd.unknownError"));
       } finally {
         setSubmitting(false);
       }
@@ -284,9 +289,7 @@ export default function AddSubjectScreen() {
         });
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: true });
       } catch (err) {
-        const msg =
-          err?.response?.data?.message ||
-          errorText(t, err, "subjectsAdd.unknownError");
+        const msg = failureText(err, "subjectsAdd.unknownError");
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: false, error: msg });
       }
     }
@@ -300,7 +303,7 @@ export default function AddSubjectScreen() {
     }
 
     setResults(outcomes);
-  }, [form, t, classes, schoolId, router, isEdit, editId]);
+  }, [form, t, classes, schoolId, router, isEdit, editId, requireOnline, failureText]);
 
   // ── Discard ─────────────────────────────────────────────
 
@@ -655,11 +658,13 @@ export default function AddSubjectScreen() {
             </View>
           )}
 
+          <NeedsInternetNote online={isOnline} />
+
           {/* Submit */}
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={submitting}
-            style={[styles.submitBtn, submitting && styles.submitDisabled]}
+            disabled={submitting || !isOnline}
+            style={[styles.submitBtn, (submitting || !isOnline) && styles.submitDisabled]}
             activeOpacity={0.8}
           >
             {submitting ? (

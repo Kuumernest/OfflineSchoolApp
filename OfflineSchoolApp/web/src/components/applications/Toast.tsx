@@ -6,7 +6,7 @@ import type { ToastMessage }          from "../../types/applications";
 const BG: Record<string, string> = {
   success: "bg-emerald-600",
   warning: "bg-amber-500",
-  info:    "bg-indigo-600",
+  info:    "bg-primary-600",
   error:   "bg-red-600",
 };
 

@@ -40,6 +40,8 @@ export const SCHEMAS = {
       school_id:           "TEXT",
       name:                "TEXT",
       email:               "TEXT",
+      // The school's staff number, from the server (never made on a device).
+      staff_no:            "TEXT",
       role:                "TEXT",
       is_active:           "INTEGER DEFAULT 1",
       must_reset_password: "INTEGER DEFAULT 0",

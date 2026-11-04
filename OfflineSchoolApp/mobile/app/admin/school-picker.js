@@ -23,6 +23,7 @@ import { useTranslation } from "../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../src/store/auth.store";
 import { errorText }      from "../../src/utils/appError";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
+import { useSafeLogout }   from "../../src/hooks/useSafeLogout";
 
 const C = {
   primary:   "#3B4996",
@@ -44,7 +45,7 @@ export default function SchoolPickerScreen() {
   const current     = useAuthStore((s) => s.activeSchool);
   const enterSchool = useAuthStore((s) => s.enterSchool);
   const leaveSchool = useAuthStore((s) => s.leaveSchool);
-  const logout      = useAuthStore((s) => s.logout);
+  const safeLogout  = useSafeLogout();
 
   const [query, setQuery]     = useState("");
   const [schools, setSchools] = useState([]);
@@ -116,7 +117,7 @@ export default function SchoolPickerScreen() {
           <Text style={styles.subtitle} numberOfLines={2}>{t("schoolPick.blurb")}</Text>
         </View>
         {!current ? (
-          <TouchableOpacity onPress={logout} hitSlop={10}>
+          <TouchableOpacity onPress={() => safeLogout()} hitSlop={10}>
             <Ionicons name="log-out-outline" size={22} color={C.inkBody} />
           </TouchableOpacity>
         ) : null}

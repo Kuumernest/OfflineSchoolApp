@@ -23,13 +23,13 @@ const variants: Record<BadgeVariant, string> = {
   // primary/secondary are the selected / unselected pair used by tab counters.
   primary:   "bg-primary-600     text-white        ring-primary-600",
   secondary: "bg-canvas          text-ink-faint    ring-line",
-  success:   "bg-success-soft    text-success      ring-success-line",
-  warning:   "bg-warning-soft    text-warning      ring-warning-line",
-  danger:    "bg-danger-soft     text-danger       ring-danger-line",
-  info:      "bg-info-soft       text-info         ring-info-line",
+  success:   "bg-success-soft    text-success-text ring-success-line",
+  warning:   "bg-warning-soft    text-warning-text ring-warning-line",
+  danger:    "bg-danger-soft     text-danger-text  ring-danger-line",
+  info:      "bg-info-soft       text-info-text    ring-info-line",
   // Retained for callers that pass it; drawn from the info scale so it no
   // longer introduces a hue the rest of the system does not use.
-  purple:    "bg-info-soft       text-info         ring-info-line",
+  purple:    "bg-info-soft       text-info-text    ring-info-line",
 };
 
 interface BadgeProps {

@@ -6,9 +6,13 @@ import api                         from "@/services/api";
 import { getErrorMessage }         from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
+import axios               from "axios";
+import NeedsInternet       from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
+import { STAFF_NO_MAX, normaliseStaffNoInput, staffNoErrorKey } from "@/utils/staffNo";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,
-  BookOpen, Plus, X, RefreshCw, User, Mail,
+  BookOpen, Plus, X, RefreshCw, User, Mail, Hash,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────
@@ -33,14 +37,16 @@ interface AvailableSubject {
 }
 
 interface Teacher {
-  _id:   string;
-  name:  string;
-  email: string;
+  _id:      string;
+  name:     string;
+  email:    string;
+  staffNo?: string | null;
 }
 
 interface FormErrors {
-  name?:  string;
-  email?: string;
+  name?:    string;
+  email?:   string;
+  staffNo?: string;
 }
 
 /**
@@ -108,6 +114,9 @@ export default function EditTeacherPage() {
   const { id: teacherId }     = useParams<{ id: string }>();
   const user                  = useAuthStore((s) => s.user);
   const schoolId              = user?.schoolId;
+  // Editing a teacher is online-only on the desktop (desktop coverage.js:
+  // PUT /admin/teachers/:id), the staff number included.
+  const net                   = useNeedsInternet();
 
   const isMounted = useRef(true);
   useEffect(() => {
@@ -123,6 +132,7 @@ export default function EditTeacherPage() {
   // ── UI state ────────────────────────────────────────────
   const [name,         setName]         = useState("");
   const [email,        setEmail]        = useState("");
+  const [staffNo,      setStaffNo]      = useState("");
   const [errors,       setErrors]       = useState<FormErrors>({});
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
@@ -159,6 +169,7 @@ export default function EditTeacherPage() {
         setTeacher(t);
         setName(t.name  ?? "");
         setEmail(t.email ?? "");
+        setStaffNo(t.staffNo ?? "");
 
         // ── Assigned subjects ─────────────────────────────
         const rawAssigned: RawSubjectRow[] =
@@ -242,32 +253,52 @@ export default function EditTeacherPage() {
     if (!email.trim()) next.email = t("teachersAdd.errEmailRequired");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       next.email = t("teachersAdd.errEmailInvalid");
+    // Only when it has one to change: a teacher not numbered yet has nothing
+    // here, and an untouched empty field is not an attempt to clear it.
+    const cleanStaffNo = normaliseStaffNoInput(staffNo);
+    if (teacher?.staffNo || cleanStaffNo) {
+      const key = staffNoErrorKey(cleanStaffNo);
+      if (key) next.staffNo = t(key);
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
-  }, [name, email, t]);
+  }, [name, email, staffNo, teacher, t]);
 
   // ── Save profile ────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!validate() || saving) return;
+    if (!validate() || saving || net.blocked) return;
     setSaving(true);
+    // Sent only when changed, so a plain rename never touches (or audits)
+    // the number.
+    const cleanStaffNo = normaliseStaffNoInput(staffNo);
+    const staffNoChanged = Boolean(cleanStaffNo) && cleanStaffNo !== (teacher?.staffNo ?? "");
     try {
       await api.put(`/admin/teachers/${teacherId}`, {
         name:  name.trim(),
         email: email.trim().toLowerCase(),
+        ...(staffNoChanged ? { staffNo: cleanStaffNo } : {}),
         schoolId,
       });
       if (isMounted.current) navigate("/teachers");
     } catch (err) {
       if (isMounted.current) {
-        setErrors({
-          name: getErrorMessage(err) || "Failed to save.",
-        });
+        // The server's refusal of the number goes under the number.
+        const code = axios.isAxiosError(err) ? err.response?.data?.code : undefined;
+        if (code === "STAFF_NO_TAKEN") {
+          setErrors({ staffNo: t("teachersEdit.errStaffNoTaken", { number: cleanStaffNo }) });
+        } else if (code === "STAFF_NO_INVALID") {
+          setErrors({ staffNo: getErrorMessage(err) });
+        } else {
+          setErrors({
+            name: getErrorMessage(err) || "Failed to save.",
+          });
+        }
       }
     } finally {
       if (isMounted.current) setSaving(false);
     }
-  }, [name, email, saving, teacherId, schoolId, navigate, validate]);
+  }, [name, email, staffNo, teacher, saving, net.blocked, teacherId, schoolId, navigate, validate, t]);
 
   // ── Unassign ────────────────────────────────────────────
 
@@ -447,7 +478,7 @@ export default function EditTeacherPage() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <PageHeader title={t("teachersEdit.title")} onBack={() => navigate("/teachers")} />
         <div className="flex-1 flex items-center justify-center gap-3">
-          <Loader2 size={32} className="animate-spin text-indigo-600" />
+          <Loader2 size={32} className="animate-spin text-primary-600" />
           <span className="text-gray-500 text-sm">{t("teachersEdit.loading")}</span>
         </div>
       </div>
@@ -517,7 +548,8 @@ export default function EditTeacherPage() {
         </button>
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || net.blocked}
+          title={net.hint}
           className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700
                      disabled:opacity-60 text-white text-sm font-bold
                      px-4 py-2 rounded-lg transition-colors"
@@ -533,6 +565,7 @@ export default function EditTeacherPage() {
       <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5">
 
         {/* ── Profile fields ── */}
+        <NeedsInternet>
         <section className="bg-white rounded-2xl border border-gray-200
                             shadow-sm p-6 space-y-4">
           <h2 className="text-sm font-bold text-gray-700">{t("common.profile")}</h2>
@@ -547,7 +580,7 @@ export default function EditTeacherPage() {
               transition-colors
               ${errors.name
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <User size={16} className="text-gray-400 shrink-0" />
               <input
@@ -579,7 +612,7 @@ export default function EditTeacherPage() {
               transition-colors
               ${errors.email
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <Mail size={16} className="text-gray-400 shrink-0" />
               <input
@@ -600,7 +633,45 @@ export default function EditTeacherPage() {
               </p>
             )}
           </div>
+
+          {/* Staff number — issued by the server; an administrator may change it */}
+          <div className="space-y-1.5">
+            <label htmlFor="teacher-staff-no" className="block text-sm font-semibold text-gray-700">
+              {t("teachersEdit.staffNo")}
+            </label>
+            <div className={`
+              flex items-center gap-3 border rounded-xl px-4 py-3 bg-gray-50
+              transition-colors
+              ${errors.staffNo
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
+            `}>
+              <Hash size={16} className="text-gray-400 shrink-0" />
+              <input
+                id="teacher-staff-no"
+                type="text"
+                value={staffNo}
+                maxLength={STAFF_NO_MAX}
+                autoCapitalize="characters"
+                onChange={(e) => {
+                  setStaffNo(e.target.value);
+                  if (errors.staffNo) setErrors((p) => ({ ...p, staffNo: undefined }));
+                }}
+                placeholder={teacher?.staffNo ? undefined : t("teachersEdit.staffNoNone")}
+                className="flex-1 bg-transparent text-sm font-mono uppercase text-gray-900
+                           placeholder-gray-400 placeholder:font-sans placeholder:normal-case focus:outline-none"
+              />
+            </div>
+            {errors.staffNo ? (
+              <p className="flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle size={12} /> {errors.staffNo}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500">{t("teachersEdit.staffNoHint")}</p>
+            )}
+          </div>
         </section>
+        </NeedsInternet>
 
         {/* ── Assigned subjects ── */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
@@ -608,7 +679,7 @@ export default function EditTeacherPage() {
             <h2 className="text-sm font-bold text-gray-700 flex-1">
               {t("teachersEdit.assigned")}
             </h2>
-            <span className="bg-indigo-50 text-indigo-600 text-xs font-bold
+            <span className="bg-primary-50 text-primary-600 text-xs font-bold
                              px-2.5 py-1 rounded-full">
               {assigned.length}
             </span>
@@ -628,9 +699,9 @@ export default function EditTeacherPage() {
                     key={subject.id || subject.assignmentId}
                     className="flex items-center gap-3 py-3"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center
+                    <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center
                                     justify-center shrink-0">
-                      <BookOpen size={14} className="text-indigo-600" />
+                      <BookOpen size={14} className="text-primary-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">

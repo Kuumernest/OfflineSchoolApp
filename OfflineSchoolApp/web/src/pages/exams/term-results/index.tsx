@@ -16,6 +16,8 @@ import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { TermResult, TermNumber } from "@/types/exam.types";
 
@@ -51,6 +53,8 @@ export default function TermResultsPage() {
   const user      = useUser();
   const isAdmin   = user?.role === "super_admin" || user?.role === "school_admin";
   const needsClass = !isAdmin && !classId;
+  // Computing and publishing run on the server: online-only on the desktop.
+  const net = useNeedsInternet();
   const classesQ  = useQuery({
     queryKey: ["staff-classes", user?.role ?? "", user?.schoolId ?? ""],
     queryFn:  () => fetchStaffClasses(user),
@@ -124,7 +128,7 @@ export default function TermResultsPage() {
           <select
             value={academicYear}
             onChange={(e) => { setAcademicYear(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {ACADEMIC_YEARS.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -138,7 +142,7 @@ export default function TermResultsPage() {
           <select
             value={term}
             onChange={(e) => { setTerm(Number(e.target.value) as TermNumber); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {periods.terms.map((te) => (
               <option key={te.number} value={te.number}>
@@ -154,7 +158,7 @@ export default function TermResultsPage() {
           <select
             value={classId}
             onChange={(e) => { setClassId(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             <option value="">{t("termResults.allClasses")}</option>
             {classes.map((c) => (
@@ -164,11 +168,11 @@ export default function TermResultsPage() {
         </div>
         <button
           onClick={handleCompute}
-          disabled={computeMutation.isPending || needsClass}
-          title={needsClass ? t("termResults.pickClassToCompute") : undefined}
+          disabled={computeMutation.isPending || needsClass || net.blocked}
+          title={needsClass ? t("termResults.pickClassToCompute") : net.hint}
           className={cn(
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-            computeMutation.isPending || needsClass
+            computeMutation.isPending || needsClass || net.blocked
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
               : "bg-primary-600 text-white hover:bg-primary-700"
           )}
@@ -182,10 +186,11 @@ export default function TermResultsPage() {
         </button>
         {isAdmin && <button
           onClick={handlePublish}
-          disabled={publishMutation.isPending || !results.length}
+          title={net.hint}
+          disabled={publishMutation.isPending || !results.length || net.blocked}
           className={cn(
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-            publishMutation.isPending || !results.length
+            publishMutation.isPending || !results.length || net.blocked
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
               : "bg-emerald-600 text-white hover:bg-emerald-700"
           )}
@@ -203,7 +208,7 @@ export default function TermResultsPage() {
           classOptions={classes.map((c) => ({ id: String(c._id), name: c.name }))}
           classId={classId || undefined}
           academicYear={academicYear} term={term}
-          disabled={!results.some((r) => r.isPublished)}
+          disabled={!results.some((r) => r.isPublished) || net.blocked}
         />}
       </div>
 
@@ -214,6 +219,8 @@ export default function TermResultsPage() {
           subject rows on the very same report card. Saying so is the point:
           recomputing silently would take the decision away, and saying nothing
           is what let a parent receive a card that did not add up. */}
+      <NeedsInternet />
+
       {staleCount > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200
                         bg-amber-50 px-4 py-3">
@@ -228,7 +235,7 @@ export default function TermResultsPage() {
           </div>
           <button
             onClick={handleCompute}
-            disabled={computeMutation.isPending || needsClass}
+            disabled={computeMutation.isPending || needsClass || net.blocked}
             className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs
                        font-semibold text-white hover:bg-amber-700
                        disabled:opacity-50"
@@ -268,7 +275,7 @@ export default function TermResultsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-12 text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary-500" />
                 </td>
               </tr>
             ) : results.length === 0 ? (
@@ -315,7 +322,7 @@ export default function TermResultsPage() {
                       {r.termAverage?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                      <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
                         {r.overallRemark ?? "—"}
                       </span>
                     </td>
@@ -384,8 +391,8 @@ function SummaryCard({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-        <Icon className="h-5 w-5 text-indigo-600" />
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
+        <Icon className="h-5 w-5 text-primary-600" />
       </div>
       <div>
         <p className="text-xs text-gray-500">{label}</p>

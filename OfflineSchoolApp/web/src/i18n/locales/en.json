@@ -603,7 +603,7 @@
     "notAssigned": "Not assigned yet",
     "resetPassword": "Reset password",
     "subjectsCovered": "Subjects covered",
-    "searchPh": "Search this page…",
+    "searchPh": "Search name, email or staff no.…",
     "activeOnly": "Active only",
     "inactiveOnly": "Inactive only",
     "resetTitle": "Reset this teacher's password?",
@@ -637,7 +637,9 @@
     "unassignedTitle_other": "{{count}} of {{total}} class-subjects have no teacher",
     "unassignedHint": "Their marks cannot be entered by a teacher and their report-card rows print no teacher.",
     "unassignedShow": "Show them",
-    "unassignedHide": "Hide"
+    "unassignedHide": "Hide",
+    "staffNo": "Staff no.",
+    "staffNoNone": "Not assigned yet"
   },
   "subjects": {
     "title": "Subjects",
@@ -1284,7 +1286,14 @@
     "subtitle": "Teacher profile & subject assignments",
     "subjectsAssignedCount": "{{count}} subject assigned",
     "subjectsAssignedCount_other": "{{count}} subjects assigned",
-    "assign": "Assign"
+    "assign": "Assign",
+    "staffNo": "Staff number",
+    "staffNoHint": "Issued by the school when the teacher was added. Change it only to match numbers already on paperwork.",
+    "staffNoNone": "Not assigned yet — the server gives one shortly.",
+    "errStaffNoRequired": "A staff number cannot be removed.",
+    "errStaffNoTooLong": "A staff number is at most 32 characters.",
+    "errStaffNoChars": "Use only letters, digits and - / . _",
+    "errStaffNoTaken": "{{number}} is already another member of staff's number."
   },
   "subjectsAdd": {
     "title": "Add subject",
@@ -1929,7 +1938,6 @@
       "homework": "Homework",
       "quiz": "Quizzes",
       "permissions": "Permissions",
-      "sync": "Synchronisation",
       "approvals": "Approvals",
       "subjects": "Subjects",
       "dashboard": "Dashboard",
@@ -1995,7 +2003,6 @@
       "homework.manage": "Set and grade homework",
       "quiz.author": "Write quizzes and questions",
       "permissions.manage": "Change these permissions",
-      "sync.push": "Send changes from a device",
       "fees.refund": "Give money back",
       "fees.waive": "Reduce or write off a charge",
       "approvals.view": "See what is waiting for a decision",
@@ -2033,7 +2040,6 @@
       "documents.manage": "Includes handing out guardian portal codes, which are credentials.",
       "messages.audit": "Reading a conversation you are not part of. Recorded, and never granted as a side effect of being able to send one.",
       "permissions.manage": "A role that can grant itself capabilities has no ceiling, and neither does anybody it appoints.",
-      "sync.push": "Writes period definitions and promotion decisions straight from a device.",
       "students.view": "Names, admission numbers, classes and guardian contacts. No marks.",
       "gate.scan": "In a small school the person on the gate at eight in the morning is whoever is standing there.",
       "approvals.decide": "Never the person who raised the request — that is enforced per request, by user, and holds for a super admin too.",
@@ -2154,6 +2160,10 @@
     "receiptNo": "Receipt no.",
     "receivedOn": "Received",
     "recorded": "Payment recorded",
+    "recordedProvisional": "Receipt {{receiptNo}} is provisional until this computer syncs with the school's server. A receipt printed now is marked provisional.",
+    "provisional": "Provisional",
+    "provisionalHint": "Not yet confirmed by the school's server. Its receipt prints marked provisional; the official receipt is available once this computer syncs.",
+    "printProvisional": "Print provisional",
     "recordFailed": "Could not record the payment",
     "reverse": "Reverse",
     "reverseTitle": "Reverse this payment?",
@@ -3282,6 +3292,8 @@
     "deleteMessage": "Delete message",
     "attach": "Attach a file",
     "writePh": "Write a message…",
+    "pendingSend": "Waiting to send — it goes when the connection returns",
+    "offlineQueued": "Offline — messages you send now wait on this computer and go when the connection returns. Attaching a file needs a connection.",
     "searchPh": "Search staff, students or parents…",
     "noMatch": "Nobody matches that name.",
     "nobodyAvailable": "There is nobody you can start a conversation with.",
@@ -3419,6 +3431,13 @@
     "settingsDesc": "System configuration"
   },
   "sync": {
+    "heldOtherAccount": "1 of these was queued by another account on this computer. It is sent when that person signs in here again — not under your name.",
+    "heldOtherAccount_other": "{{count}} of these were queued by another account on this computer. They are sent when that person signs in here again — not under your name.",
+    "heldOwnerless": "1 was queued by an older version of the app that did not record who made it. It is kept here and is not sent under any account until someone decides whose it is.",
+    "heldOwnerless_other": "{{count}} were queued by an older version of the app that did not record who made them. They are kept here and are not sent under any account until someone decides whose they are.",
+    "readOnlyOtherAccount": "Recorded by another account on this computer. Only that person can discard it, try it again or save a copy — it is sent when they sign in here.",
+    "readOnlyOwnerless": "Recorded by an older version of the app that did not note who made it. It is kept for review and cannot be discarded, retried or copied here.",
+    "refusedSignedOut": "Sign in to act on a change waiting on this computer.",
     "saveCopy": "Save a copy",
     "copySaved": "Saved to {{path}}",
     "copyFailed": "The copy could not be saved.",
@@ -3439,7 +3458,16 @@
     "discard": "Discard",
     "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
     "syncNow": "Check now",
-    "lastChecked": "Last checked at {{time}}"
+    "lastChecked": "Last checked at {{time}}",
+    "signInAgainTitle": "Sign in again to send {{count}} unsent change(s)",
+    "signInAgainTitleNone": "Sign in again to keep this computer in sync",
+    "signInAgainBody": "The server ended this computer's session, so nothing is being sent. Everything recorded here stays on this computer and is sent once you sign in again.",
+    "signInAgainAction": "Sign in again",
+    "signInAgainShort": "Sign in again"
+  },
+  "offlinePeriod": {
+    "notice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely.",
+    "warning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely."
   },
   "initialSync": {
     "loadingTitle": "Downloading your school's data to this computer…",
@@ -3570,7 +3598,8 @@
       "RULE_FIXED": "This rule is the same for every school and cannot be changed.",
       "PROMOTION_RUN_EXISTS": "A promotion run for this year was made from these results. Discard the draft, or reverse the run, first.",
       "CLASS_REQUIRED": "Choose a class: results are unpublished one class at a time."
-    }
+    },
+    "needsInternet": "This action needs an internet connection. The rest of the app keeps working offline."
   },
   "studentEdit": {
     "title": "Correct student record",
@@ -5754,5 +5783,17 @@
   "verifyPage": {
     "opening": "Opening the verification page…",
     "continue": "Continue"
+  },
+  "connection": {
+    "offlineTitle": "You're offline.",
+    "unreachableTitle": "The server can't be reached.",
+    "browserBody": "The web console needs an internet connection — changes can't be saved until you reconnect.",
+    "needsInternetTitle": "This needs an internet connection",
+    "needsInternetBody": "This computer is offline. What is on this screen can only be done with the server, so it is switched off until the connection returns. Everything else in the app keeps working offline.",
+    "needsInternetShort": "Needs an internet connection"
+  },
+  "signOutGuard": {
+    "title": "Changes not yet sent",
+    "message": "You have {{count}} change(s) not yet sent. They'll be sent next time you sign in on this computer."
   }
 }

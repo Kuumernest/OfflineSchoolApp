@@ -102,7 +102,10 @@
     "error": "Error",
     "ok": "OK",
     "male": "Male",
-    "female": "Female"
+    "female": "Female",
+    "needsInternetTitle": "No internet connection",
+    "needsInternet": "This needs an internet connection. Connect and try again.",
+    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected."
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1116,6 +1119,10 @@
       "other": "{{count}} payments waiting to sync"
     },
     "pendingReceipt": "Receipt pending",
+    "provisionalReceipt": "Provisional receipt",
+    "provisionalReceiptHint": "This payment has not reached the school's server yet. The receipt will be marked PROVISIONAL; the official receipt is available once the phone syncs.",
+    "printProvisional": "Provisional receipt",
+    "provisionalRef": "Provisional ref. {{ref}}",
     "recordedOffline": "Saved on this device. It will reach the server on the next sync, and the receipt number arrives with it.",
     "classesLoading": "Loading classes…",
     "classesFailed": "Couldn't load classes",
@@ -5349,6 +5356,14 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 change on this phone was saved by another account. It is sent when that person signs in here again — not under your name.",
+      "other": "{{count}} changes on this phone were saved by another account. They are sent when that person signs in here again — not under your name."
+    },
+    "heldOwnerless": {
+      "one": "1 change was saved by an older version of the app that did not record who made it. It is kept on this phone and is not sent under any account until someone decides whose it is.",
+      "other": "{{count}} changes were saved by an older version of the app that did not record who made them. They are kept on this phone and are not sent under any account until someone decides whose they are."
+    },
     "listTitle": "Sync Overwrites",
     "listBlurb": "Edits replaced by other admins",
     "loading": "Loading overwrites…",
@@ -5733,6 +5748,8 @@
     "noSubjectMatch": "No subjects found",
     "noSubjects": "No subjects assigned",
     "noSubjectsSub": "Contact admin to get subjects assigned",
+    "subjectsNeverLoaded": "Your subjects are not on this phone yet",
+    "subjectsNeverLoadedSub": "Connect to the internet once to load your subjects. After that, you can pick them offline.",
     "pickClasses": "Which classes get access?",
     "pickClassesSub": "Select one or more classes for this content",
     "noClasses": "No classes found",
@@ -5923,6 +5940,10 @@
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 change on this phone is not yours to send",
+      "other": "{{count}} changes on this phone are not yours to send"
+    },
     "offlineSession": "Signed in offline — sign in again while connected to upload",
     "needAttention": {
       "one": "1 change needs attention",
@@ -5937,7 +5958,15 @@
       "one": "Uploading 1 change…",
       "other": "Uploading {{count}} changes…"
     },
-    "syncing": "Syncing…"
+    "syncing": "Syncing…",
+    "needsSignIn": {
+      "zero": "Your session has ended — sign in again to keep syncing",
+      "one": "Sign in again to send 1 unsent change",
+      "other": "Sign in again to send {{count}} unsent changes"
+    },
+    "signInCta": "Sign in",
+    "staleNotice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely",
+    "staleWarning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely"
   },
   "svcErr": {
     "titleRequired": "Title is required",
@@ -6040,7 +6069,8 @@
     "noOfflineAccountEnrollment": "No offline account found for that enrollment number",
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone."
   },
   "syncStep": {
     "prepare": "Preparing",
@@ -7465,5 +7495,60 @@
     "pendingUploads": "Some changes on this phone have not been uploaded yet. Sync them before changing school, or they would be sent to the wrong school.",
     "openPending": "See pending changes",
     "failed": "Could not change school."
+  },
+  "logoutGuard": {
+    "title": "Changes not yet sent",
+    "body": {
+      "one": "You have 1 change not yet sent. If you sign out, it will be sent next time you sign in on this phone.",
+      "other": "You have {{count}} changes not yet sent. If you sign out, they'll be sent next time you sign in on this phone."
+    },
+    "signOut": "Sign out"
+  },
+  "localData": {
+    "preparingTitle": "Setting up your own data on this phone",
+    "preparingBody": "This phone is shared, so your school now keeps each person's data separately. Your data is downloading once; nothing you saved on this phone is lost.",
+    "preparingSkip": "Use the app now",
+    "preparingStopping": "Stopping…",
+    "reviewTitle": "Held changes",
+    "reviewIntro": "These changes were saved on this phone without a record of who made them. They are kept here, in full, and are not sent under anybody's name until someone decides whose they are.",
+    "reviewAdminOnly": "Only an administrator signed in on this phone can decide what happens to them.",
+    "reviewEmpty": "No changes are held on this phone.",
+    "reviewLink": {
+      "one": "1 change on this phone is held for review",
+      "other": "{{count}} changes on this phone are held for review"
+    },
+    "statusHeld": "Held",
+    "statusAssigned": "Given to an account",
+    "statusPlaced": "With its account",
+    "heldSince": "Held since {{date}}",
+    "assign": "Give to an account",
+    "assignTitle": "Whose change is this?",
+    "assignBody": "Choose the account that made it. It will be sent the next time that person is signed in on this phone.",
+    "assignConfirmTitle": "Give this change away?",
+    "assignConfirmBody": "This change will be recorded as made by {{name}} and sent from their account.",
+    "sendAsMe": "Send as me",
+    "sendAsMeTitle": "Send this change as yours?",
+    "sendAsMeBody": "It will be recorded on the server as made by you, even if somebody else made it. Do this only if you know it is right.",
+    "saveCopy": "Save a copy",
+    "actionFailed": "That could not be done. Nothing was changed.",
+    "legacyTitle": "Old shared data on this phone",
+    "gateOk": "Everything on it is accounted for. It can be deleted.",
+    "gateNotMigrated": "This phone has not been moved to per-person data.",
+    "gateTooSoon": "It is kept for 30 days after the move ({{days}} so far).",
+    "gateAlreadyDeleted": "It has already been deleted.",
+    "gateUnplaced": "Some changes in it are not yet with their account.",
+    "gateWaitingOwner": "Some changes in it wait for their account to sign in on this phone.",
+    "gateUploadsPending": "Some files in it have not been uploaded yet.",
+    "gateInUse": "Somebody on this phone is still using it.",
+    "deleteLegacy": "Delete old shared data",
+    "deleteLegacyTitle": "Delete the old shared data?",
+    "deleteLegacyBody": "Every change in it is with its account or in the held list. This cannot be undone."
+  },
+  "staffNo": {
+    "label": "Staff no.",
+    "labelLong": "Staff number",
+    "pending": "Pending — the school issues it when this syncs",
+    "none": "Not assigned yet",
+    "fromSchool": "Issued by the school. It cannot be changed on the phone."
   }
 }

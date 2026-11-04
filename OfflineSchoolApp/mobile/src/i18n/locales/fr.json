@@ -102,7 +102,10 @@
     "error": "Erreur",
     "ok": "OK",
     "male": "Masculin",
-    "female": "Féminin"
+    "female": "Féminin",
+    "needsInternetTitle": "Pas de connexion internet",
+    "needsInternet": "Cette action nécessite une connexion internet. Connectez-vous et réessayez.",
+    "savedOnPhoneOnly": "Enregistré sur ce téléphone uniquement. La copie de l'école n'a pas été mise à jour car cela nécessite une connexion internet — enregistrez à nouveau une fois connecté."
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -1116,6 +1119,10 @@
       "other": "{{count}} paiements en attente de synchronisation"
     },
     "pendingReceipt": "Reçu en attente",
+    "provisionalReceipt": "Reçu provisoire",
+    "provisionalReceiptHint": "Ce paiement n'a pas encore atteint le serveur de l'école. Le reçu portera la mention PROVISOIRE ; le reçu officiel sera disponible après la synchronisation du téléphone.",
+    "printProvisional": "Reçu provisoire",
+    "provisionalRef": "Réf. provisoire {{ref}}",
     "recordedOffline": "Enregistré sur cet appareil. Il sera transmis au serveur lors de la prochaine synchronisation, avec le numéro de reçu.",
     "classesLoading": "Chargement des classes…",
     "classesFailed": "Impossible de charger les classes",
@@ -5349,6 +5356,14 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 modification sur ce téléphone a été enregistrée par un autre compte. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+      "other": "{{count}} modifications sur ce téléphone ont été enregistrées par un autre compte. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom."
+    },
+    "heldOwnerless": {
+      "one": "1 modification a été enregistrée par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée sur ce téléphone et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+      "other": "{{count}} modifications ont été enregistrées par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées sur ce téléphone et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent."
+    },
     "listTitle": "Modifications écrasées",
     "listBlurb": "Vos modifications remplacées par d’autres administrateurs",
     "loading": "Chargement…",
@@ -5733,6 +5748,8 @@
     "noSubjectMatch": "Aucune matière trouvée",
     "noSubjects": "Aucune matière attribuée",
     "noSubjectsSub": "Contactez l’administration pour obtenir des matières",
+    "subjectsNeverLoaded": "Vos matières ne sont pas encore sur ce téléphone",
+    "subjectsNeverLoadedSub": "Connectez-vous à internet une fois pour charger vos matières. Ensuite, vous pourrez les choisir hors ligne.",
     "pickClasses": "Quelles classes y ont accès ?",
     "pickClassesSub": "Sélectionnez une ou plusieurs classes pour ce contenu",
     "noClasses": "Aucune classe trouvée",
@@ -5923,6 +5940,10 @@
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 modification sur ce téléphone n’est pas à vous d’envoyer",
+      "other": "{{count}} modifications sur ce téléphone ne sont pas à vous d’envoyer"
+    },
     "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer",
     "needAttention": {
       "one": "1 modification requiert votre attention",
@@ -5937,7 +5958,15 @@
       "one": "Envoi d'1 modification…",
       "other": "Envoi de {{count}} modifications…"
     },
-    "syncing": "Synchronisation…"
+    "syncing": "Synchronisation…",
+    "needsSignIn": {
+      "zero": "Votre session a pris fin — reconnectez-vous pour continuer la synchronisation",
+      "one": "Reconnectez-vous pour envoyer 1 modification en attente",
+      "other": "Reconnectez-vous pour envoyer {{count}} modifications en attente"
+    },
+    "signInCta": "Se connecter",
+    "staleNotice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité",
+    "staleWarning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité"
   },
   "svcErr": {
     "titleRequired": "Le titre est obligatoire",
@@ -6040,7 +6069,8 @@
     "noOfflineAccountEnrollment": "Aucun compte hors ligne trouvé pour ce numéro de matricule",
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
-    "invalidCredentials": "Identifiants invalides"
+    "invalidCredentials": "Identifiants invalides",
+    "deviceFullOfAccounts": "Ce téléphone contient déjà des modifications non envoyées de cinq autres comptes. L’un d’eux doit se connecter et les envoyer avant qu’un autre compte puisse utiliser ce téléphone."
   },
   "syncStep": {
     "prepare": "Préparation",
@@ -7465,5 +7495,60 @@
     "pendingUploads": "Des modifications de ce téléphone n’ont pas encore été envoyées. Synchronisez-les avant de changer d’établissement, sinon elles seraient envoyées au mauvais établissement.",
     "openPending": "Voir les modifications en attente",
     "failed": "Impossible de changer d’établissement."
+  },
+  "logoutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "body": {
+      "one": "Vous avez 1 modification pas encore envoyée. Si vous vous déconnectez, elle sera envoyée à votre prochaine connexion sur ce téléphone.",
+      "other": "Vous avez {{count}} modifications pas encore envoyées. Si vous vous déconnectez, elles seront envoyées à votre prochaine connexion sur ce téléphone."
+    },
+    "signOut": "Se déconnecter"
+  },
+  "localData": {
+    "preparingTitle": "Préparation de vos données sur ce téléphone",
+    "preparingBody": "Ce téléphone est partagé : votre école garde désormais les données de chaque personne séparément. Vos données se téléchargent une seule fois ; rien de ce que vous avez enregistré sur ce téléphone n’est perdu.",
+    "preparingSkip": "Utiliser l’application maintenant",
+    "preparingStopping": "Arrêt en cours…",
+    "reviewTitle": "Modifications en attente",
+    "reviewIntro": "Ces modifications ont été enregistrées sur ce téléphone sans indiquer leur auteur. Elles sont conservées ici en entier et ne sont envoyées au nom de personne tant que quelqu’un n’a pas décidé à qui elles appartiennent.",
+    "reviewAdminOnly": "Seul un administrateur connecté sur ce téléphone peut décider de leur sort.",
+    "reviewEmpty": "Aucune modification n’est en attente sur ce téléphone.",
+    "reviewLink": {
+      "one": "1 modification sur ce téléphone attend une décision",
+      "other": "{{count}} modifications sur ce téléphone attendent une décision"
+    },
+    "statusHeld": "En attente",
+    "statusAssigned": "Attribuée à un compte",
+    "statusPlaced": "Avec son compte",
+    "heldSince": "En attente depuis le {{date}}",
+    "assign": "Attribuer à un compte",
+    "assignTitle": "À qui appartient cette modification ?",
+    "assignBody": "Choisissez le compte qui l’a faite. Elle sera envoyée la prochaine fois que cette personne sera connectée sur ce téléphone.",
+    "assignConfirmTitle": "Attribuer cette modification ?",
+    "assignConfirmBody": "Cette modification sera enregistrée comme faite par {{name}} et envoyée depuis son compte.",
+    "sendAsMe": "Envoyer en mon nom",
+    "sendAsMeTitle": "Envoyer cette modification en votre nom ?",
+    "sendAsMeBody": "Elle sera enregistrée sur le serveur comme faite par vous, même si quelqu’un d’autre l’a faite. Ne le faites que si vous êtes sûr que c’est juste.",
+    "saveCopy": "Enregistrer une copie",
+    "actionFailed": "Impossible de le faire. Rien n’a été modifié.",
+    "legacyTitle": "Anciennes données partagées sur ce téléphone",
+    "gateOk": "Tout leur contenu est pris en compte. Elles peuvent être supprimées.",
+    "gateNotMigrated": "Ce téléphone n’est pas encore passé aux données par personne.",
+    "gateTooSoon": "Elles sont conservées 30 jours après le passage ({{days}} pour l’instant).",
+    "gateAlreadyDeleted": "Elles ont déjà été supprimées.",
+    "gateUnplaced": "Certaines modifications ne sont pas encore avec leur compte.",
+    "gateWaitingOwner": "Certaines modifications attendent que leur compte se connecte sur ce téléphone.",
+    "gateUploadsPending": "Certains fichiers n’ont pas encore été envoyés.",
+    "gateInUse": "Quelqu’un sur ce téléphone les utilise encore.",
+    "deleteLegacy": "Supprimer les anciennes données",
+    "deleteLegacyTitle": "Supprimer les anciennes données partagées ?",
+    "deleteLegacyBody": "Chaque modification est avec son compte ou dans la liste en attente. Cette action est irréversible."
+  },
+  "staffNo": {
+    "label": "Matricule",
+    "labelLong": "Matricule",
+    "pending": "En attente — attribué par l'établissement à la synchronisation",
+    "none": "Pas encore attribué",
+    "fromSchool": "Attribué par l'établissement. Il ne peut pas être modifié sur le téléphone."
   }
 }

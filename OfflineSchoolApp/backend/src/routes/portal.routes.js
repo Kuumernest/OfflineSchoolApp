@@ -9,23 +9,26 @@ const router  = express.Router();
 // numbers — and what an unauthenticated caller has no other limit on. The
 // admission numbers are sequential (SCH-2026-0004), so the route is the
 // guessable half of the credential and it is the half that had no ceiling.
-const rateLimit = require("express-rate-limit");
+//
+// FAILURES per address, successful sign-ins free (utils/loginRateLimit.js).
+// It was 15 requests per IP with successes counted, so parents behind one
+// address — a school's Wi-Fi at a meeting, a cyber café, a mobile operator's
+// carrier-grade NAT — were refused after the fifteenth of them got in.
+//
+// No per-account limiter here: portal.service already locks each access
+// record after MAX_TRIES wrong codes, across every address. What this route
+// adds is the cross-account ceiling, and 30 failures in 15 minutes from one
+// address is far more than honest typos and far too few to walk a school's
+// admission numbers. Same opt-out as the staff limiter; only scripts/ sets it.
+const { failedAttemptsLimiter } = require("../utils/loginRateLimit");
 
-// Same shape and the same opt-out as the staff login limiter in auth.routes.js:
-// the verification harness signs in dozens of times from 127.0.0.1 in a few
-// seconds, which is indistinguishable from the attack this stops. Only
-// scripts/ sets the flag; production never does.
-const portalLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15,                  // per IP per window
-  standardHeaders: true,
-  legacyHeaders: false,
+const portalLoginLimiter = failedAttemptsLimiter({
+  max: 30,
   message: {
     success: false,
     code:    "RATE_LIMITED",
     message: "Too many sign-in attempts. Please try again later.",
   },
-  skip: () => process.env.DISABLE_LOGIN_RATE_LIMIT === "1",
 });
 
 const School        = require("../db/models/School");

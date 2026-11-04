@@ -86,7 +86,7 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger"
+      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text"
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
@@ -252,7 +252,7 @@ export default function BursarDashboardPage() {
           subtitle={t("bursarDashboard.owingStudents", { count: owingCount })}
           subtitleColor={
             (arrears?.outstanding ?? 0) > 0
-              ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning"
+              ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning-text"
               : undefined
           }
           icon={TrendingDown}
@@ -284,7 +284,7 @@ export default function BursarDashboardPage() {
                 <span
                   className={cn(
                     "font-display text-[22px] leading-tight",
-                    pendingApprovals > 0 ? "text-warning" : "text-ink"
+                    pendingApprovals > 0 ? "text-warning-text" : "text-ink"
                   )}
                 >
                   {pendingApprovals}
@@ -367,7 +367,7 @@ export default function BursarDashboardPage() {
             <div
               className={cn(
                 "mt-1 font-display text-[22px] leading-tight",
-                (flow?.net ?? 0) < 0 ? "text-danger" : "text-ink"
+                (flow?.net ?? 0) < 0 ? "text-danger-text" : "text-ink"
               )}
             >
               {fmt.money(flow?.net ?? 0)}
@@ -424,7 +424,7 @@ export default function BursarDashboardPage() {
                           </span>
                         )}
                       </Td>
-                      <Td numeric className="font-medium text-warning">
+                      <Td numeric className="font-medium text-warning-text">
                         {fmt.money(row.balance)}
                       </Td>
                     </Tr>
@@ -511,10 +511,10 @@ export default function BursarDashboardPage() {
               className={cn(
                 "rounded-full px-2 py-0.5 text-xs font-medium",
                 lastRun.status === "confirmed"
-                  ? "bg-success-soft text-success"
+                  ? "bg-success-soft text-success-text"
                   : lastRun.status === "reversed"
-                    ? "bg-danger-soft text-danger"
-                    : "bg-warning-soft text-warning"
+                    ? "bg-danger-soft text-danger-text"
+                    : "bg-warning-soft text-warning-text"
               )}
             >
               {t(`bursarDashboard.runStatus.${lastRun.status}`)}

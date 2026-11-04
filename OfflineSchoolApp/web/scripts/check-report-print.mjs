@@ -83,7 +83,9 @@ check("selection changes invalidate the active generation",
       page.indexOf("const closePreview"))));
 check("a stale reply is checked before progress, cards and result state",
   /if \(stale\(\)\) return;[\s\S]{0,160}setProgress/.test(generate)
-    && /await cardRequest\(sid\);[\s\S]{0,80}if \(stale\(\)\) return;/.test(generate)
+    // A single card in its own tab is fetched as issued (cardRequest's
+    // second argument), so the call may carry it.
+    && /await cardRequest\(sid(?:,\s*singleInTab)?\);[\s\S]{0,80}if \(stale\(\)\) return;/.test(generate)
     && /if \(stale\(\)\) return;[\s\S]{0,80}setGenerating\(false\)/.test(generate)
     && /if \(stale\(\)\) return;[\s\S]{0,1200}setPreviewCards\(collected\)/.test(generate));
 
@@ -91,11 +93,14 @@ console.log("--- the class preview ---");
 check("no window is opened inside the per-student loop",
   loopAt >= 0 && !/openPreviewWindow\s*\(/.test(loop));
 check("batch HTML is collected for the in-app preview",
-  /collected\.push\(\{\s*id:\s*sid,\s*name,\s*html\s*\}\)/.test(generate));
+  // Each card also carries `issued`, the fetch for its coded, printable copy.
+  /collected\.push\(\{\s*id:\s*sid,\s*name,\s*html(?:,\s*issued:\s*issuedHtml\(sid\))?\s*\}\)/.test(generate));
 check("the in-app preview renders the selected card in an iframe",
   /<iframe[\s\S]{0,220}srcDoc=\{previewCard\.html\}/.test(page));
 check("Print is an explicit action in the preview, through the shared helper",
-  /const handlePrintPreview[\s\S]{0,420}await printHtml\(previewCard\.html\)/.test(page));
+  // It prints the issued card (it carries the verification code), not the
+  // preview's HTML — but still only from this handler, via printHtml.
+  /const handlePrintPreview[\s\S]{0,600}const html = await previewCard\.issued\(\)[\s\S]{0,300}await printHtml\(html\)/.test(page));
 
 console.log("--- what is counted and said ---");
 check("no card is counted before its HTML was written",

@@ -6,7 +6,7 @@
  *
  *   1. A record left "processing" — the process died mid-request, or the
  *      handler answered without res.json — answered every retry of its key
- *      with 409 IDEMPOTENCY_IN_PROGRESS for the key's 14-day life, holding a
+ *      with 409 IDEMPOTENCY_IN_PROGRESS for the key's whole life (14 days then, 45 now), holding a
  *      phone's or a desktop's queued change for as long. Once older than the
  *      longest a request may run, the next retry now takes it over, and of two
  *      racing retries exactly one runs.

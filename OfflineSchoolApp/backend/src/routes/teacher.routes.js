@@ -2070,7 +2070,11 @@ router.put("/profile", asyncHandler(async (req, res) => {
 
   if (email) {
     const emailClean = email.toLowerCase().trim();
-    const taken = await User.findOne({ email: emailClean, _id: { $ne: teacherId } }).lean();
+    // Staff addresses only: a pupil account may carry this one because the
+    // teacher is also a parent here (siblings share it; see User.js).
+    const taken = await User.findOne({
+      email: emailClean, _id: { $ne: teacherId }, role: { $ne: "student" },
+    }).lean();
     if (taken) return res.status(409).json({ message: "Email already in use" });
     updates.email = emailClean;
   }

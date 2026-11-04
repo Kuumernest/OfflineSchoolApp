@@ -19,6 +19,7 @@ import {
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import { getDatabase }  from "../../../src/db/database";
 import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
@@ -26,6 +27,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 import * as ImagePicker from "expo-image-picker";
 import { errorText } from "../../../src/utils/appError";
+import { needsInternetFailureText, requireOnline } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -306,9 +308,8 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
         [{ text: t("studentSettings.ok"), onPress: onClose }]
       );
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        errorText(t, err, "studentSettings.errChangeFailed");
+      // Changing a password is online-only: offline, said as such.
+      const msg = needsInternetFailureText(t, err, "studentSettings.errChangeFailed");
       setError(msg);
     } finally {
       setSaving(false);
@@ -611,7 +612,7 @@ const cp = StyleSheet.create({
 export default function StudentSettingsScreen() {
   const { t }      = useTranslation();
   const user       = useAuthStore((s) => s.user);
-  const logout     = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const updateUser = useAuthStore((s) => s.updateUser);
   const token      = useAuthStore((s) => s.token);
 
@@ -638,6 +639,8 @@ export default function StudentSettingsScreen() {
   };
 
   const pickPhoto = async () => {
+    // The photo is stored on the server (online-only): asked before picking.
+    if (!(await requireOnline(t))) return;
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
@@ -671,7 +674,7 @@ export default function StudentSettingsScreen() {
       // so it is shown rather than replaced with something generic.
       Alert.alert(
         t("studentSettings.photoSaveFailedTitle"),
-        err?.response?.data?.message || errorText(t, err, "studentSettings.tryAgain")
+        needsInternetFailureText(t, err, "studentSettings.tryAgain")
       );
     } finally {
       setPhotoBusy(false);
@@ -692,7 +695,7 @@ export default function StudentSettingsScreen() {
             await api.delete("/students/photo");
             setPhotoUrl(null);
           } catch (err) {
-            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), errorText(t, err));
+            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), needsInternetFailureText(t, err));
           } finally {
             setPhotoBusy(false);
           }
@@ -813,17 +816,14 @@ export default function StudentSettingsScreen() {
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
+  // Warns first when this account has changes not yet sent.
   const handleLogout = () => {
-    Alert.alert(t("studentSettings.logout"), t("studentSettings.logoutConfirm"), [
-      { text: t("studentSettings.cancel"), style: "cancel" },
-      {
-        text: t("studentSettings.logout"), style: "destructive",
-        onPress: async () => {
-          try { await logout(); } catch { /* ignore */ }
-          router.replace("/auth/login");
-        },
-      },
-    ]);
+    safeLogout({
+      title:        t("studentSettings.logout"),
+      body:         t("studentSettings.logoutConfirm"),
+      confirmLabel: t("studentSettings.logout"),
+      cancelLabel:  t("studentSettings.cancel"),
+    });
   };
 
   // ── Derived display values ────────────────────────────────────────────────

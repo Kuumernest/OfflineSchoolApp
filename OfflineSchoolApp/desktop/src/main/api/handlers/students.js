@@ -562,3 +562,17 @@ module.exports = [
     },
   },
 ];
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// admin.routes.js (authorize(STAFF_ROLES) + requirePermission per route) and
+// students.routes.js (officeRead, canManage). See readPermissions.js (F6).
+const { guardReads, STAFF_ROLES } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/admin/students/pending":  { roles: STAFF_ROLES, permissions: ["students.admit"] },
+  "GET /api/admin/students":          { roles: STAFF_ROLES, permissions: ["students.view"] },
+  "GET /api/admin/students/approved": { roles: STAFF_ROLES, permissions: ["students.view"] },
+  "GET /api/admin/students/stats":    { roles: STAFF_ROLES, permissions: ["dashboard.view"] },
+  "GET /api/admin/students/:id":      { roles: STAFF_ROLES, permissions: ["students.viewFull"] },
+  "GET /api/students/:id/editable":   { permissions: ["students.manage"] },
+  "GET /api/students/stats/summary":  { permissions: ["students.view"] },
+}, { ownWrites: ["/api/admin/students", "/api/students/"] });

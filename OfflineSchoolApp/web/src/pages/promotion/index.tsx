@@ -29,7 +29,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { cn }              from "@/utils/cn";
-import { TILE_TONE }        from "@/config/sections";
+import { CARD_SHELL, SEMANTIC } from "@/config/sections";
 import { getErrorMessage } from "@/lib/axios";
 import {
   fetchRuns, fetchRun, generateRun, setDecision,
@@ -237,13 +237,13 @@ export default function PromotionPage() {
           <>
             {run.status === "draft" && blocked === 0 && (
               <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
                 <p>{t("promo.draftNotice")}</p>
               </div>
             )}
 
             {blocked > 0 && (
-              <div className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
+              <div className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                 <p>{t("promo.blockedNotice", { count: blocked })}</p>
               </div>
@@ -256,16 +256,15 @@ export default function PromotionPage() {
                 ["promo.graduated",  run.counts.graduated],
                 ["promo.unassigned", run.counts.unassigned],
               ] as const).map(([key, value]) => (
-                // Promotion is decided from exam results, so its counts wear
-                // the exams colour; a pupil left unassigned is a problem, and
-                // a problem leaves the palette for the danger tile.
+                // White counts; a pupil left unassigned is a problem, so that
+                // card alone takes the error tint when it is above zero.
                 <div
                   key={key}
                   className={cn(
-                    "min-w-0 rounded-tile p-5",
+                    "min-w-0 p-5",
                     key === "promo.unassigned" && value > 0
-                      ? "border border-danger-line bg-danger-soft text-danger"
-                      : cn("shadow-tile", TILE_TONE.exams.fill)
+                      ? cn(SEMANTIC.error.card, SEMANTIC.error.text)
+                      : cn(CARD_SHELL, "text-ink")
                   )}
                 >
                   <p className="text-[28px] font-bold leading-none tracking-tight tabular">
@@ -453,7 +452,7 @@ export default function PromotionPage() {
 
       {incomplete > 0 && (
         <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <div>
             <p className="font-medium">{t("prog.incomplete", { count: incomplete })}</p>
             <p className="text-ink-muted">{t("prog.incompleteHint")}</p>
@@ -489,7 +488,7 @@ export default function PromotionPage() {
                   <Td numeric className="text-ink-muted">{r.counts.graduated}</Td>
                   <Td
                     numeric
-                    className={r.counts.unassigned > 0 ? "font-semibold text-danger" : "text-ink-muted"}
+                    className={r.counts.unassigned > 0 ? "font-semibold text-danger-text" : "text-ink-muted"}
                   >
                     {r.counts.unassigned}
                   </Td>
@@ -527,7 +526,7 @@ export default function PromotionPage() {
             </FormField>
           </div>
           {classesWithoutResults.length > 0 && (
-            <p className="text-sm text-warning">
+            <p className="text-sm text-warning-text">
               {t("prog.noResults", { count: classesWithoutResults.length })}{" "}
               {classesWithoutResults.map((c) => c.name).join(", ")} — {t("prog.noResultsHint")}
             </p>

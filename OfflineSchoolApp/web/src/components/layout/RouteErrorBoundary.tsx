@@ -46,7 +46,7 @@ function ErrorFallback({
     <Card className="mx-auto mt-10 max-w-2xl">
       <div className="flex items-start gap-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-soft">
-          <AlertTriangle className="h-5 w-5 text-danger" aria-hidden="true" />
+          <AlertTriangle className="h-5 w-5 text-danger-text" aria-hidden="true" />
         </div>
 
         <div className="min-w-0 flex-1">
