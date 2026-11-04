@@ -54,4 +54,8 @@ router.get( "/pull", authenticate, syncCtrl.pullChanges);
 // RETIRED_KEYS), so any authenticated caller gets the 410; nothing is written.
 router.post("/push", authenticate, syncCtrl.pushRetired);
 
+// Overwritten edits, for the person whose edit was replaced (and the school's
+// list for students.manage). See syncOverwrites.routes.js.
+router.use("/overwrites", require("./syncOverwrites.routes"));
+
 module.exports = router;
