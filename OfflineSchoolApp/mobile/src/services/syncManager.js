@@ -2670,7 +2670,9 @@ class SyncManagerClass {
         [me, me]
       );
       for (const r of taught ?? []) for (const c of [r.class_id, r.classId]) if (c) scope.add(String(c));
-      const formClasses = await db.getAllAsync("SELECT id FROM classes WHERE classTeacherId = ?", [me]);
+      // Not a soft-deleted class: the server's teacher scope skips those too
+      // (backend/src/config/syncFeed.js), and the two must agree exactly.
+      const formClasses = await db.getAllAsync("SELECT id FROM classes WHERE classTeacherId = ? AND deleted_at IS NULL", [me]);
       for (const r of formClasses ?? []) if (r.id) scope.add(String(r.id));
       if (!scope.size) return 0;
 
