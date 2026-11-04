@@ -1,6 +1,6 @@
 # 08 — Desktop Application
 
-*Documented commit `be2d2ac`. Source: `OfflineSchoolApp/desktop/`.*
+*Documented commit `fc8cf6d`. Source: `OfflineSchoolApp/desktop/`.*
 
 Electron. It does **not** contain its own UI: it builds the web app
 (`npm --prefix ../web run build`) and serves that bundle, then intercepts the
@@ -19,12 +19,13 @@ graph TB
     subgraph main["Main process"]
         PRE["preload.js — context bridge"]
         DISP["api/index.js — route matcher and dispatcher"]
-        H["api/handlers/* — 17 read handlers"]
-        W["api/writes/* — 16 write handlers"]
+        H["api/handlers/* — 19 handlers + readPermissions guard"]
+        W["api/writes/* — 17 write handlers"]
         ST["db/store.js — documents, state, meta, transactor"]
         OB["db/outbox.js"]
         EN["sync/engine.js"]
         CL["sync/client.js"]
+        CN["sync/connectivity.js"]
     end
     SQL[("node:sqlite — docs, meta, outbox, sync_state")]
     SRV["Backend /api/sync/changes"]
@@ -38,9 +39,10 @@ graph TB
     EN --> OB
     EN --> CL --> SRV
     EN --> ST
+    CN --> EN
 ```
 
-Entry point is `src/main/main.js` (`package.json` `main`). There are **46 source
+Entry point is `src/main/main.js` (`package.json` `main`). There are **57 source
 files** in `src/main/`.
 
 ---
@@ -54,7 +56,7 @@ built-in SQLite, not `better-sqlite3`.
 
 | Table | Purpose |
 |---|---|
-| `docs` | The document mirror. `(collection, id)` plus columns lifted out of the JSON because sync and every query filter on them. |
+| `docs` | The document mirror. `(collection, id)` plus columns lifted out of the JSON because sync and every query filter on them; `base_json`/`base_state` keep the server's version under a pending row (migration 5). |
 | `sync_state` | Per-collection cursor. |
 | `outbox` | Queued writes. |
 | `meta` | Schema version and bookkeeping. |
@@ -81,13 +83,15 @@ const { open, migrate, documents, state, meta, transactor, SCHEMA_VERSION }
 ## Migrations and version safety — IMPLEMENTATION VERIFIED
 
 `src/main/db/schema.js` holds an ordered `MIGRATIONS` array;
-`SCHEMA_VERSION` is the last entry's version. **Currently 3.**
+`SCHEMA_VERSION` is the last entry's version (`schema.js:267`). **Currently 5.**
 
 | Version | Name |
 |---|---|
 | 1 | documents, sync cursors and the outbox |
 | 2 | separate replay identity from double-submit identity |
 | 3 | one request may have changed more than one row |
+| 4 | the outbox remembers who queued each request (`outbox.user_id`) |
+| 5 | a pending row remembers the server's version under it (`docs.base_json`, `base_state`) |
 
 Each migration runs **inside a transaction together with its version bump**, so a
 half-applied migration cannot exist. A school's data is not somewhere to discover
@@ -129,6 +133,19 @@ The split:
 `dedupe_key` is checked only against entries *still queued*, so repeating the same
 intent later is legitimate — a person doing the same thing twice on purpose.
 
+### Migration 5 — discard restores the server's version
+
+Discarding a refused **edit** used to delete the row: the record vanished and the
+pull never brought it back (the cursor was already past it). Now, when a row goes
+pending, the version it replaced is kept (`base_state` 0 = local create, 1 =
+`base_json` is the last server-confirmed version, NULL = pending before the
+migration). A discard puts `base_json` back, or removes a create. A write the
+server accepts while a later one for the same row is still queued updates
+`base_json` to the server's answer (`store.js:417`).
+
+A row stays **pending until its last queued write settles** — any pending or
+blocked entry that wrote it keeps it protected from the pull (`outbox.js:269`).
+
 ---
 
 ## The outbox
@@ -138,6 +155,7 @@ outbox(
   seq          INTEGER PRIMARY KEY,   -- ordering
   idem_key     TEXT NOT NULL UNIQUE,
   dedupe_key   TEXT,                  -- migration 2
+  user_id      TEXT,                  -- migration 4: who queued it
   attempts     INTEGER NOT NULL DEFAULT 0,
   next_try_at  TEXT,
   last_status  INTEGER,
@@ -178,11 +196,30 @@ against a state that never happened.
 `Idempotency-Key` is sent with each request so a replay is answered with the
 original response rather than creating a second record.
 
+### Ownership
+
+Each entry records the account that queued it. Discard / Try again / Save a copy
+are offered only to that signed-in account (`ownOutboxActions`, `outbox.js:432`);
+another account on the same machine sees the entry but cannot act on it. Entries
+queued by an account whose session has expired are shown as "sign in again to
+send N" (`main.js:333`).
+
+### Reconnecting — `sync/connectivity.js`
+
+While online nothing runs. After a cycle fails to reach the server (or the OS /
+window reports offline), a cheap local `net.isOnline()` check runs every few
+seconds; when it flips, the server's `/api/health` is probed, and only its answer
+counts. On reconnect a cycle runs **immediately** with **network-failure
+backoffs brought forward**; backoffs the server asked for (`5xx`, `429`, `408`)
+are kept, and blocked entries stay blocked (`outbox.js:249`). Offline, the engine
+retries a cycle every 15 s (`engine.js:40`).
+
 ---
 
 ## Sync — `/api/sync/changes`
 
-Desktop uses the **feed**, not the mobile pull. 36 collections, capability-gated,
+Desktop uses the **feed**, not the mobile pull. 42 collections (incl.
+`syncTombstone`; `FEED` in `backend/src/config/syncFeed.js`), capability-gated,
 keyset cursor per collection. Protocol detail is in
 [10-synchronization.md](10-synchronization.md); what is desktop-specific:
 
@@ -208,12 +245,46 @@ being asked for again on every page. **TEST VERIFIED** by
 `scripts/check-sync-engine.js` — *"a refused collection is reported and then left
 alone"*.
 
+### Tombstones are applied generically
+
+`syncTombstone` rows remove the named row (`store.applyTombstones`, called from
+`engine.js:334`) for every tombstoned entity — subjects, assignments, pupils,
+users, result summaries / term / annual results, enrolments, promotion runs and
+decisions (`SyncTombstone.ENTITIES`). A non-admin also receives **"unpublished"**
+tombstones, since its mirror holds only published results. A row with a local
+write still queued is **held**, and the cursor stops there.
+
+### Stale-sync warning
+
+The engine records the last cycle that reached the server; the window warns
+from day **21** and the offline period ends at **30** days
+(`engine.js:125`, `web/src/config/offlinePeriod.ts`).
+
 ### One cycle at a time
 
 An in-flight cycle is not a refusal; a second trigger is ignored rather than
 starting a concurrent pass over the same cursors.
 
 ---
+
+## What is answered offline
+
+`node scripts/coverage.js` (a floor, not a census) at this commit: **285**
+endpoints called by the console — **142 answered offline (50%)**, 58
+deliberately online-only (20%), 85 still to do (30%). Notable offline paths:
+
+- **Local read permission guards** — `api/handlers/readPermissions.js` wraps a
+  handler with the server route's permission/role check; without it the read is
+  not answered locally (online the server says 403). Nothing is removed from disk.
+- **Messages** — `handlers/messages.js`: conversations and threads from this
+  account's cache; sending queues, except to a read-only/archived conversation.
+- **Provisional receipts** — `handlers/receipts.js`: a payment whose create is
+  still queued prints the shared receipt template marked PROVISIONAL; once
+  confirmed, the receipt is the server's.
+- **Class, subject and assignment creates** offline under client ids
+  (`writes/structure.js`, `classes.js`, `subjects.js`, `assignments.js`). A body
+  with no id stays online. **Bulk** assignment create stays online-only — the
+  backend ignores client ids there (`writes/assignments.js:24`).
 
 ## Packaging
 
@@ -241,22 +312,12 @@ cd OfflineSchoolApp/desktop
 npm run check
 ```
 
-Nine suites, **216 assertions**, all green at this commit:
-
-| Suite | Script | Assertions |
-|---|---|---|
-| `check:routes` | route shadowing | 6 |
-| `check:store` | document store | 51 |
-| `check:outbox` | outbox | 57 |
-| `check:crash` | crash seams | 9 |
-| `check:sync` | sync engine | 48 |
-| `check:path` | request-path resolution | 45 |
-| `check:student-writes` | student writes against the real store | reports `REAL STORE: ALL PASS` |
-| `check:results` | results | reports `ALL PASS` |
-| `check:settings` | settings | reports `ALL PASS` |
-
-The last three print a pass/fail verdict rather than a count, which is why the
-assertion total (216) covers six suites and not nine.
+**24 suites** chained in `package.json` `"check"` — protocol, tombstones,
+mirror-tombstones, unsent, routes, store, outbox, crash, sync, path,
+student-writes, score-writes, process-rules, results, settings, roster,
+reliability, initial-sync, messages, receipt, read-perms, outbox-owner, recovery,
+structure-creates. (`check:launch` and `check:seam` exist but are not in the
+chain.) Not re-run for this revision.
 
 CI runs this job with `ELECTRON_SKIP_BINARY_DOWNLOAD=1` — nothing in
 `npm run check` touches Electron itself, so skipping the ~100 MB binary removes
@@ -269,9 +330,9 @@ the flakiest step in the install.
 | | Mobile | Desktop |
 |---|---|---|
 | Storage | `expo-sqlite`, ~40 relational tables | `node:sqlite`, 4 tables, documents as JSON |
-| Sync endpoint | `GET /api/sync/pull` | `GET /api/sync/changes` |
-| Collections | 6 | 36 |
-| Cursor | one high-water timestamp for everything | `(updatedAt, _id)` keyset, per collection |
+| Sync endpoint | `GET /api/sync/changes?profile=phone` (older builds: `/sync/pull`) | `GET /api/sync/changes` |
+| Collections | 6 + tombstones (`PHONE_FEED`) | 42 |
+| Cursor | `(updatedAt, _id)` per collection (older builds: one timestamp) | `(updatedAt, _id)` keyset, per collection |
 | Outbox ordering | `created_at`, coalesced by `entity_key` | strict `seq` |
 | Replay identity | `Idempotency-Key` + derived `_id` | `idem_key` (operation) + `dedupe_key` (intent) |
 | Blocked write | `failed` after 8 retries; queue continues | `blocked`; queue **stops** |
