@@ -697,6 +697,30 @@ const PARTIAL = [
       "shown at once instead of blocking the queue. Uploading an attachment " +
       "stays online-only; sending one already uploaded queues like text.",
   },
+  // The three structure creates. Answered here only under the id the client
+  // chose (web/src/lib/clientId.ts) — without one the server mints it and a
+  // local row would be an orphan. A repeat of the same id answers the row
+  // already made, as the server does. Everything the server would refuse —
+  // a name taken, a row this machine cannot see — goes to it to refuse.
+  {
+    endpoint: "POST /admin/classes",
+    except:   "a body with no id; a name already taken; a form master this machine does not hold",
+    because:
+      "The server's 409 and 403 are its own to give, with its own message. A " +
+      "teacher missing from this mirror is indistinguishable from no such teacher.",
+  },
+  {
+    endpoint: "POST /admin/subjects",
+    except:   "a body with no id; a class this machine does not hold; a name taken in that class; a coefficient out of range",
+    because:  "As for classes: the server's refusals stay the server's.",
+  },
+  {
+    endpoint: "POST /admin/assignments",
+    except:   "a body with no id; a teacher, class or subject this machine does not hold; one that already exists",
+    because:
+      "As for classes. The bulk create (POST /admin/teacher-assignments/bulk) stays " +
+      "online-only: the server mints an id for every row it makes.",
+  },
   // REMOVED: PATCH /exams/:id/status — now fully handled offline including "published"
   {
     endpoint: "GET /fees/receipt/:id",
