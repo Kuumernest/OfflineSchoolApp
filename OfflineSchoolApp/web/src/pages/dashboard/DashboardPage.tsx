@@ -297,6 +297,7 @@ export default function DashboardPage() {
           subtitleColor={pendingCount > 0 ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning-text" : undefined}
           icon={GraduationCap}
           tone="students"
+          tinted
           href="/students"
         />
         <StatCard
@@ -305,6 +306,7 @@ export default function DashboardPage() {
           subtitle={t("dashboard.activeCount", { count: td?.active ?? 0 })}
           icon={Users}
           tone="teachers"
+          tinted
           href="/teachers"
         />
         <StatCard
@@ -313,6 +315,7 @@ export default function DashboardPage() {
           subtitle={t("dashboard.withSubjects", { count: cd?.withSubjects ?? 0 })}
           icon={School}
           tone="classes"
+          tinted
           href="/classes"
         />
         <StatCard
@@ -321,6 +324,7 @@ export default function DashboardPage() {
           subtitle={t("dashboard.acrossAllClasses")}
           icon={BookOpen}
           tone="subjects"
+          tinted
           href="/classes?tab=subjects"
         />
         <StatCard
@@ -329,6 +333,7 @@ export default function DashboardPage() {
           subtitle={t("dashboard.ongoingCount", { count: ed?.ongoing ?? 0 })}
           icon={FileText}
           tone="exams"
+          tinted
           href="/exams"
         />
         <StatCard
@@ -337,6 +342,7 @@ export default function DashboardPage() {
           subtitle={t("dashboard.presentToday", { count: ad?.todayPresent ?? 0 })}
           icon={CheckSquare}
           tone="attendance"
+          tinted
           href="/attendance"
         />
       </div>

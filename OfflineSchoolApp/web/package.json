@@ -30,7 +30,8 @@
     "check:offlineperiod": "node scripts/check-offline-period.mjs",
     "check:outboxowner": "node scripts/check-outbox-ownership.mjs",
     "check:staffno": "node scripts/check-staff-number.mjs",
-    "check:createids": "node scripts/check-create-ids.mjs"
+    "check:createids": "node scripts/check-create-ids.mjs",
+    "check:dashcolours": "node scripts/check-dashboard-colours.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

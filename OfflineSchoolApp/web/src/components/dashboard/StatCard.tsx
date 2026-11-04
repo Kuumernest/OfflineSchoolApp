@@ -3,6 +3,7 @@ import { useNavigate }             from "react-router-dom";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn }                      from "@/utils/cn";
 import { CARD_SHELL, SEMANTIC, iconBox, type Semantic, type TileTone } from "@/config/sections";
+import { dashTint }                from "@/config/dashboardTint";
 
 interface StatCardProps {
   title:          string;
@@ -30,6 +31,12 @@ interface StatCardProps {
   iconBg?:        string;
   href?:          string;
   loading?:       boolean;
+  /**
+   * The school dashboard's look (config/dashboardTint.ts): a soft wash of the
+   * kind's colour, a 3px top edge, a solid icon square and the figure in a
+   * deeper shade. Off everywhere else. A `semantic` tint still wins.
+   */
+  tinted?:        boolean;
 }
 
 /**
@@ -48,11 +55,13 @@ export default function StatCard({
   semantic,
   href,
   loading = false,
+  tinted = false,
 }: StatCardProps) {
   const navigate    = useNavigate();
   const interactive = Boolean(href);
   const sem         = semantic ? SEMANTIC[semantic] : null;
-  const box         = sem ? sem.box : iconBox(tone);
+  const tint        = !sem && tinted ? dashTint(tone) : null;
+  const box         = sem ? sem.box : tint ? tint.box : iconBox(tone);
 
   const go = () => { if (href) navigate(href); };
 
@@ -70,9 +79,10 @@ export default function StatCard({
       }
       className={cn(
         "group relative overflow-hidden p-5",
-        sem ? sem.card : CARD_SHELL,
+        sem ? sem.card : tint ? tint.card : CARD_SHELL,
         "transition duration-150 ease-[var(--ease-out-quiet)]",
-        interactive && "cursor-pointer hover:border-line-strong hover:shadow-lift"
+        // A tinted card keeps its coloured top edge on hover.
+        interactive && (tint ? "cursor-pointer hover:shadow-lift" : "cursor-pointer hover:border-line-strong hover:shadow-lift")
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -91,7 +101,7 @@ export default function StatCard({
       {loading ? (
         <div className="mt-4 h-9 w-16 animate-pulse rounded-control bg-canvas" />
       ) : (
-        <p className={cn("mt-4 text-[34px] font-bold leading-none tracking-tight tabular", sem ? sem.text : "text-ink")}>
+        <p className={cn("mt-4 text-[34px] font-bold leading-none tracking-tight tabular", sem ? sem.text : tint ? tint.number : "text-ink")}>
           {value}
         </p>
       )}
@@ -100,8 +110,9 @@ export default function StatCard({
         {title}
       </p>
 
+      {/* ink-faint is under AA on a wash, so a tinted card's subtitle is ink-muted. */}
       {subtitle && (
-        <p className={cn("mt-1 truncate text-xs", subtitleColor ?? (sem ? sem.text : "text-ink-faint"))}>
+        <p className={cn("mt-1 truncate text-xs", subtitleColor ?? (sem ? sem.text : tint ? "text-ink-muted" : "text-ink-faint"))}>
           {subtitle}
         </p>
       )}
