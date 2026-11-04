@@ -53,13 +53,18 @@ const check = (label, actual, expected) => {
 // And for term compute: the term average is read from the term's marks
 // (term/4, periodMarks.service) — the exams, the CA settings, the scores, the
 // exam subjects and the deleted pupils among them (+5).
+//
+// And for promotion generateRun: a promotion run and its decisions are
+// tombstoned when deleted (db/plugins/syncTombstones.js), so creating them asks
+// whether their ids were deleted before — once for the run, once for the whole
+// insertMany of decisions, whatever the class size (+1 over the old ceiling).
 const CEILING = {
   "process one exam, one class": 16,
   "term compute, one class": 20,
   "sequence card payload": 12,
   "term card": 12,
   "annual card": 12,
-  "promotion generateRun": 10,
+  "promotion generateRun": 11,
   "progression?year (HTTP)": 8,
   "calculate & save (HTTP)": 26,
 };
