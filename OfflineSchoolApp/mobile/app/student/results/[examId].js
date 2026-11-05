@@ -20,6 +20,8 @@ import ExamService                      from "../../../src/services/exam.service
 // Results, report cards and PDFs are online-only: a failure for want of a
 // connection says so rather than "Network Error".
 import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS as THEME, SEMANTIC, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -130,7 +132,7 @@ export default function StudentReportCardScreen() {
   if (error || !myExamResult) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="document-outline" size={56} color={COLORS.gray200} />
+        <IconSquare icon="document-outline" accent="slate" size={56} radius={16} />
         <Text style={styles.errorTitle}>
           {error || t("results.my.notAvailable")}
         </Text>
@@ -169,8 +171,10 @@ export default function StudentReportCardScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={{ marginRight: 0 }} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -197,11 +201,11 @@ export default function StudentReportCardScreen() {
         styles.resultBanner,
         {
           backgroundColor: myExamResult.isPassing
-            ? COLORS.success + "15"
-            : COLORS.error   + "15",
+            ? SEMANTIC.success.bg
+            : SEMANTIC.error.bg,
           borderColor: myExamResult.isPassing
-            ? COLORS.success + "40"
-            : COLORS.error   + "40",
+            ? statusBadge("success").border
+            : statusBadge("error").border,
         },
       ]}>
         <Ionicons
@@ -209,12 +213,12 @@ export default function StudentReportCardScreen() {
             ? "checkmark-circle"
             : "close-circle"}
           size={20}
-          color={myExamResult.isPassing ? COLORS.success : COLORS.error}
+          color={myExamResult.isPassing ? SEMANTIC.success.icon : SEMANTIC.error.icon}
         />
         <Text style={[
           styles.resultBannerText,
           {
-            color: myExamResult.isPassing ? COLORS.success : COLORS.error,
+            color: myExamResult.isPassing ? SEMANTIC.success.text : SEMANTIC.error.text,
           },
         ]}>
           {myExamResult.isPassing
@@ -262,12 +266,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize:   15,
     fontWeight: "700",
-    color:      COLORS.gray700,
+    color:      THEME.text,
     textAlign:  "center",
   },
   errorSub: {
     fontSize:   13,
-    color:      COLORS.gray500,
+    color:      THEME.textSecondary,
     textAlign:  "center",
     lineHeight: 20,
   },
@@ -307,9 +311,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   COLORS.white,
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
     gap:               10,
   },
   headerBack: {
@@ -324,11 +328,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize:   16,
     fontWeight: "700",
-    color:      COLORS.gray900,
+    color:      THEME.text,
   },
   headerSub: {
     fontSize:  11,
-    color:     COLORS.gray500,
+    color:     THEME.textSecondary,
     marginTop: 2,
   },
   shareBtn: {

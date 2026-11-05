@@ -24,6 +24,7 @@ import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import PortalService from "../../src/services/portal.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../src/theme/colors";
 
 // The scrim across the screen — the same shape as before at about half the
 // weight, so the building and the sign read as a photograph rather than as a
@@ -201,7 +202,7 @@ export default function LoginScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.logoTile}>
-            <Ionicons name="school" size={32} color="#FFFFFF" />
+            <Ionicons name="school" size={32} color={COLORS.onPrimary} />
           </View>
           <Text style={styles.title}>{t("login.appName")}</Text>
           <Text style={styles.subtitle}>{t("login.signInToAccount")}</Text>
@@ -222,7 +223,7 @@ export default function LoginScreen() {
             value={identifier}
             onChangeText={setIdentifier}
             placeholder={t("login.identifierPh")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -243,7 +244,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
               secureTextEntry={!showPass}
               autoCapitalize="none"
             />
@@ -267,7 +268,7 @@ export default function LoginScreen() {
             disabled={isLoading}
           >
             {isLoading
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={COLORS.onPrimary} />
               : <Text style={styles.loginBtnText}>{t("login.submit")}</Text>
             }
           </TouchableOpacity>
@@ -335,7 +336,7 @@ const styles = StyleSheet.create({
   logoTile: {
     width: 64, height: 64, borderRadius: 16,
     alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: ACCENT.blue.solid,
     marginBottom: 16,
   },
   footer: {
@@ -364,8 +365,10 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.blue.base,
     padding:         24,
     shadowColor:     "#000",
     shadowOpacity:   0.06,
@@ -375,34 +378,36 @@ const styles = StyleSheet.create({
   },
 
   errorBox: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.error.box,
     borderRadius:    8,
     padding:         12,
     marginBottom:    16,
   },
-  errorText: { color: "#DC2626", fontSize: 13 },
+  errorText: { color: SEMANTIC.error.text, fontSize: 13 },
 
   label: {
     fontSize:     13,
     fontWeight:   "600",
-    color:        "#374151",
+    color:        COLORS.text,
     marginBottom: 6,
   },
 
   input: {
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     borderRadius:    10,
     padding:         12,
     fontSize:        15,
-    color:           "#111827",
-    backgroundColor: "#F9FAFB",
+    color:           COLORS.text,
+    backgroundColor: COLORS.surface,
     marginBottom:    8,
   },
 
   hint: {
     fontSize:     12,
-    color:        "#6B7280",
+    color:        ACCENT.blue.deep,
     marginBottom: 18,
     lineHeight:   18,
   },
@@ -413,14 +418,14 @@ const styles = StyleSheet.create({
 
   forgotNote: {
     fontSize:     12,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     marginBottom: 20,
     lineHeight:   18,
   },
 
-  loginBtn:         { backgroundColor: "#4F46E5", borderRadius: 12, padding: 14, alignItems: "center" },
+  loginBtn:         { backgroundColor: COLORS.primary, borderRadius: 12, padding: 14, alignItems: "center" },
   loginBtnDisabled: { opacity: 0.6 },
-  loginBtnText:     { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  loginBtnText:     { color: COLORS.onPrimary, fontSize: 16, fontWeight: "700" },
 
   dividerRow:  { flexDirection: "row", alignItems: "center", marginBottom: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },

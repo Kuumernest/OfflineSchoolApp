@@ -25,6 +25,8 @@ import {
 } from "../../../src/services/homework.service";
 import { fetchTeacherScope } from "../../../src/services/teacherScope.service";
 import { errorText }       from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const EMPTY = {
   class_id: null, subject_id: null, title: "", description: "", instructions: "",
@@ -55,9 +57,12 @@ const dueToInput = (iso) => {
 // Lives outside the screen on purpose. Defined inside, each keystroke made a
 // new Field type, React remounted the TextInput under it, and the keyboard
 // closed after one character.
-const Field = ({ label, error, children, hint }) => (
+const Field = ({ label, error, children, hint, icon, accent = "indigo" }) => (
   <View style={styles.field}>
-    <Text style={styles.label}>{label}</Text>
+    <View style={styles.labelRow}>
+      {icon ? <IconSquare icon={icon} accent={accent} size={28} /> : null}
+      <Text style={styles.label}>{label}</Text>
+    </View>
     {children}
     {hint && !error ? <Text style={styles.hint}>{hint}</Text> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -182,24 +187,25 @@ export default function TeacherHomeworkCreateScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#D97706" />
+        <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       <View style={[styles.header, { paddingTop: screenPad.paddingTop }]}>
         <TouchableOpacity onPress={leave} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <Text style={styles.headerTitle}>{t(editing ? "teacherHw.editTitle" : "teacherHw.createTitle")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* Class */}
-        <Field label={t("academic.class")} error={errors.class_id}
+        <Field label={t("academic.class")} error={errors.class_id} icon="school"
           hint={editing ? t("teacherHw.classLocked") : undefined}>
           {classes.length === 0 ? (
             <Text style={styles.muted}>{t("teacherHw.noScopeSub")}</Text>
@@ -207,11 +213,12 @@ export default function TeacherHomeworkCreateScreen() {
             <View style={styles.chipWrap}>
               {classes.map((c) => {
                 const active = form.class_id === c.id;
+                const lvl = ACCENT[levelAccent(c.level ?? c.name)];
                 return (
                   <TouchableOpacity key={c.id} disabled={editing}
-                    style={[styles.chip, active && styles.chipActive, editing && !active && styles.chipDisabled]}
+                    style={[styles.chip, active && styles.chipActive, active && { backgroundColor: lvl.wash, borderColor: lvl.base }, editing && !active && styles.chipDisabled]}
                     onPress={() => { set("class_id", c.id); set("subject_id", null); }}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.name || c.id}</Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive, active && { color: lvl.deep }]}>{c.name || c.id}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -220,7 +227,7 @@ export default function TeacherHomeworkCreateScreen() {
         </Field>
 
         {/* Subject */}
-        <Field label={t("academic.subject")} error={errors.subject_id}>
+        <Field label={t("academic.subject")} error={errors.subject_id} icon="book" accent="slate">
           {!form.class_id ? (
             <Text style={styles.muted}>{t("teacherHw.selectClassFirst")}</Text>
           ) : subjects.length === 0 ? (
@@ -231,9 +238,9 @@ export default function TeacherHomeworkCreateScreen() {
                 const active = form.subject_id === s.id;
                 return (
                   <TouchableOpacity key={s.id} disabled={editing}
-                    style={[styles.chip, active && styles.chipActive, editing && !active && styles.chipDisabled]}
+                    style={[styles.chip, active && styles.chipActive, active && { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base }, editing && !active && styles.chipDisabled]}
                     onPress={() => set("subject_id", s.id)}>
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.name || s.id}</Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive, active && { color: ACCENT.slate.deep }]}>{s.name || s.id}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -241,47 +248,47 @@ export default function TeacherHomeworkCreateScreen() {
           )}
         </Field>
 
-        <Field label={t("teacherHw.titleLabel")} error={errors.title}>
+        <Field label={t("teacherHw.titleLabel")} error={errors.title} icon="text">
           <TextInput style={[styles.input, errors.title && styles.inputError]} value={form.title}
             onChangeText={(v) => set("title", v)} placeholder={t("teacherHw.titlePh")} placeholderTextColor="#9CA3AF" maxLength={250} />
         </Field>
 
-        <Field label={t("teacherHw.descriptionLabel")}>
+        <Field label={t("teacherHw.descriptionLabel")} icon="document-text">
           <TextInput style={[styles.input, styles.multiline]} value={form.description} multiline
             onChangeText={(v) => set("description", v)} placeholder={t("teacherHw.descriptionPh")} placeholderTextColor="#9CA3AF" />
         </Field>
 
-        <Field label={t("teacherHw.instructionsLabel")}>
+        <Field label={t("teacherHw.instructionsLabel")} icon="list">
           <TextInput style={[styles.input, styles.multiline]} value={form.instructions} multiline
             onChangeText={(v) => set("instructions", v)} placeholder={t("teacherHw.instructionsPh")} placeholderTextColor="#9CA3AF" />
         </Field>
 
-        <Field label={t("teacherHw.dueDateLabel")} error={errors.due_date} hint={t("teacherHw.dueDateHint")}>
+        <Field label={t("teacherHw.dueDateLabel")} error={errors.due_date} hint={t("teacherHw.dueDateHint")} icon="calendar" accent="amber">
           <TextInput style={[styles.input, errors.due_date && styles.inputError]} value={form.due_date}
             onChangeText={(v) => set("due_date", v)} placeholder={t("teacherHw.dueDatePh")} placeholderTextColor="#9CA3AF"
             autoCapitalize="none" autoCorrect={false} />
         </Field>
 
-        <Field label={t("teacherHw.maxScoreLabel")} error={errors.max_score}>
+        <Field label={t("teacherHw.maxScoreLabel")} error={errors.max_score} icon="trophy">
           <TextInput style={[styles.input, errors.max_score && styles.inputError]} value={form.max_score}
             onChangeText={(v) => set("max_score", v.replace(/[^\d.]/g, ""))} keyboardType="numeric" />
         </Field>
 
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>{t("teacherHw.allowLate")}</Text>
-          <Switch value={form.allow_late} onValueChange={(v) => set("allow_late", v)} trackColor={{ true: "#FCD34D" }} thumbColor={form.allow_late ? "#D97706" : "#F3F4F6"} />
+          <Switch value={form.allow_late} onValueChange={(v) => set("allow_late", v)} trackColor={{ true: ACCENT.indigo.base + "66" }} thumbColor={form.allow_late ? ACCENT.indigo.solid : COLORS.border} />
         </View>
         <Text style={styles.hint}>{t("teacherHw.publishHint")}</Text>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: screenPad.paddingBottom }]}>
         <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={() => save(false)} disabled={saving} activeOpacity={0.8}>
-          {saving ? <ActivityIndicator color="#374151" /> : <Text style={styles.btnSecondaryText}>{t("teacherHw.saveDraft")}</Text>}
+          {saving ? <ActivityIndicator color={COLORS.text} /> : <Text style={styles.btnSecondaryText}>{t("teacherHw.saveDraft")}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => save(true)} disabled={saving} activeOpacity={0.8}>
           {saving ? <ActivityIndicator color="#FFF" /> : (
             <>
-              <Ionicons name="send-outline" size={16} color="#FFF" />
+              <Ionicons name="send-outline" size={16} color={COLORS.onPrimary} />
               <Text style={styles.btnPrimaryText}>{t("teacherHw.savePublish")}</Text>
             </>
           )}
@@ -292,44 +299,46 @@ export default function TeacherHomeworkCreateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.page },
   header: {
     flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 0, paddingBottom: 14,
-    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827", flex: 1 },
+  headerIcon: { marginRight: 0 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text, flex: 1 },
   body: { padding: 16, paddingBottom: 32, gap: 16 },
   field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: "700", color: "#374151" },
-  hint: { fontSize: 12, color: "#9CA3AF", lineHeight: 17 },
-  error: { fontSize: 12, color: "#DC2626", fontWeight: "600" },
-  muted: { fontSize: 13, color: "#9CA3AF", fontStyle: "italic" },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  label: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+  hint: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 17 },
+  error: { fontSize: 12, color: SEMANTIC.error.text, fontWeight: "600" },
+  muted: { fontSize: 13, color: COLORS.textSecondary, fontStyle: "italic" },
   input: {
-    backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#111827",
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: COLORS.text,
   },
-  inputError: { borderColor: "#DC2626" },
+  inputError: { borderColor: SEMANTIC.error.icon },
   multiline: { minHeight: 90, textAlignVertical: "top" },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E7EB" },
-  chipActive: { backgroundColor: "#FEF3C7", borderColor: "#D97706" },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  chipActive: { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
   chipDisabled: { opacity: 0.45 },
-  chipText: { fontSize: 13, color: "#4B5563", fontWeight: "500" },
-  chipTextActive: { color: "#B45309", fontWeight: "700" },
+  chipText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  chipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
   switchRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFF",
-    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
   },
-  switchLabel: { fontSize: 14, color: "#111827", fontWeight: "500", flex: 1 },
+  switchLabel: { fontSize: 14, color: COLORS.text, fontWeight: "500", flex: 1 },
   footer: {
-    flexDirection: "row", gap: 10, padding: 16, backgroundColor: "#FFF",
-    borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    flexDirection: "row", gap: 10, padding: 16, backgroundColor: COLORS.surface,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   btn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 13 },
-  btnSecondary: { backgroundColor: "#F3F4F6" },
-  btnSecondaryText: { color: "#374151", fontWeight: "700", fontSize: 14 },
-  btnPrimary: { backgroundColor: "#D97706" },
-  btnPrimaryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  btnSecondary: { backgroundColor: ACCENT.indigo.wash, borderWidth: 1, borderColor: ACCENT.indigo.base + "4D" },
+  btnSecondaryText: { color: ACCENT.indigo.deep, fontWeight: "700", fontSize: 14 },
+  btnPrimary: { backgroundColor: ACCENT.indigo.solid },
+  btnPrimaryText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 });

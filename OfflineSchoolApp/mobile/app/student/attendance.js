@@ -13,8 +13,9 @@ import { getDatabase } from "../../src/db/database";
 import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { errorText } from "../../src/utils/appError";
-import { COLORS, ACCENT } from "../../src/theme/colors";
+import { COLORS, ACCENT, SEMANTIC, statusBadge } from "../../src/theme/colors";
 import { tileShell } from "../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -28,10 +29,11 @@ const TABS = [
 ];
 
 const STATUS_META = {
-  present: { labelKey: "studentAttendance.statusPresent", color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle",   accent: ACCENT.green },
-  absent:  { labelKey: "studentAttendance.statusAbsent",  color: "#DC2626", bg: "#FEE2E2", icon: "close-circle",       accent: ACCENT.red },
-  late:    { labelKey: "studentAttendance.statusLate",    color: "#D97706", bg: "#FEF3C7", icon: "time",                accent: ACCENT.amber },
-  excused: { labelKey: "studentAttendance.statusExcused", color: "#7C3AED", bg: "#EDE9FE", icon: "information-circle",  accent: ACCENT.violet },
+  // color = text on a tint, fill = a dot / bar / edge, bg = the tone's wash, box = a stronger wash (calendar cells).
+  present: { labelKey: "studentAttendance.statusPresent", color: SEMANTIC.success.text, fill: SEMANTIC.success.icon, bg: SEMANTIC.success.bg, box: SEMANTIC.success.box, border: statusBadge("success").border, icon: "checkmark-circle",   accent: ACCENT.green },
+  absent:  { labelKey: "studentAttendance.statusAbsent",  color: SEMANTIC.error.text,   fill: SEMANTIC.error.icon,   bg: SEMANTIC.error.bg,   box: SEMANTIC.error.box,   border: statusBadge("error").border,   icon: "close-circle",       accent: ACCENT.red },
+  late:    { labelKey: "studentAttendance.statusLate",    color: SEMANTIC.warning.text, fill: SEMANTIC.warning.icon, bg: SEMANTIC.warning.bg, box: SEMANTIC.warning.box, border: statusBadge("warning").border, icon: "time",                accent: ACCENT.amber },
+  excused: { labelKey: "studentAttendance.statusExcused", color: SEMANTIC.info.text,    fill: SEMANTIC.info.icon,    bg: SEMANTIC.info.bg,    box: SEMANTIC.info.box,    border: statusBadge("info").border,    icon: "information-circle",  accent: ACCENT.violet },
 };
 
 const MONTH_KEYS = [
@@ -115,7 +117,7 @@ const buildSummary = (records) => {
 };
 
 const getRateColor = (rate) =>
-  rate >= 90 ? "#059669" : rate >= 75 ? "#D97706" : "#DC2626";
+  rate >= 90 ? SEMANTIC.success.text : rate >= 75 ? SEMANTIC.warning.text : SEMANTIC.error.text;
 
 const normalizeRecord = (r) => ({
   ...r,
@@ -390,9 +392,9 @@ const RateRing = ({ rate, label }) => {
 const rr = StyleSheet.create({
   container: { alignItems: "center", gap: 6 },
   ring:  { width: 90, height: 90, borderRadius: 45, borderWidth: 5, alignItems: "center", justifyContent: "center" },
-  rate:  { fontSize: 20, fontWeight: "800", color: "#111827" },
-  sub:   { fontSize: 10, color: "#9CA3AF" },
-  label: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  rate:  { fontSize: 20, fontWeight: "800", color: COLORS.text },
+  sub:   { fontSize: 10, color: COLORS.textSecondary },
+  label: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
 });
 
 const RecordRow = ({ record }) => {
@@ -400,14 +402,14 @@ const RecordRow = ({ record }) => {
   const status = (record.status || "").toLowerCase();
   const meta   = STATUS_META[status] || STATUS_META.absent;
   return (
-    <View style={row.container}>
-      <View style={[row.dot, { backgroundColor: meta.color }]} />
+    <View style={[row.container, { backgroundColor: meta.bg, borderLeftColor: meta.fill }]}>
+      <View style={[row.dot, { backgroundColor: meta.fill }]} />
       <View style={{ flex: 1 }}>
         <Text style={row.date}>{formatDate(record.date) || record.date}</Text>
         {!!record.note    && <Text style={row.note} numberOfLines={1}>{record.note}</Text>}
         {!!record.subject && <Text style={row.note} numberOfLines={1}>{record.subject}</Text>}
       </View>
-      <View style={[row.badge, { backgroundColor: meta.bg }]}>
+      <View style={[row.badge, { backgroundColor: COLORS.surface, borderColor: meta.border }]}>
         <Ionicons name={meta.icon} size={12} color={meta.color} />
         <Text style={[row.badgeText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
       </View>
@@ -416,14 +418,15 @@ const RecordRow = ({ record }) => {
 };
 const row = StyleSheet.create({
   container: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#FFF",
+    flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface,
     borderRadius: 10, padding: 12, marginBottom: 6, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   dot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  date:      { fontSize: 13, fontWeight: "600", color: "#111827" },
-  note:      { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
-  badge:     { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  date:      { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  note:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  badge:     { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
   badgeText: { fontSize: 11, fontWeight: "700" },
 });
 
@@ -446,16 +449,16 @@ const WeekBar = ({ records, weekStart }) => {
       {days.map((d) => (
         <View key={d.date} style={wb.col}>
           <View style={[wb.bar, {
-            backgroundColor: d.meta ? d.meta.bg : "#F3F4F6",
-            borderColor:  d.isToday ? "#4F46E5" : "transparent",
+            backgroundColor: d.meta ? d.meta.box : ACCENT.slate.wash,
+            borderColor:  d.isToday ? ACCENT.green.base : "transparent",
             borderWidth:  d.isToday ? 2 : 0,
           }]}>
             {d.meta
-              ? <Ionicons name={d.meta.icon} size={16} color={d.meta.color} />
+              ? <Ionicons name={d.meta.icon} size={16} color={d.meta.fill} />
               : <View style={wb.empty} />
             }
           </View>
-          <Text style={[wb.dayLabel, d.isToday && { color: "#4F46E5", fontWeight: "700" }]}>
+          <Text style={[wb.dayLabel, d.isToday && { color: ACCENT.green.deep, fontWeight: "700" }]}>
             {t(d.dayKey)}
           </Text>
           <Text style={wb.dateLabel}>{formatDateShort(d.date)}</Text>
@@ -468,9 +471,9 @@ const wb = StyleSheet.create({
   container: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 },
   col:       { alignItems: "center", gap: 4, flex: 1 },
   bar:       { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  empty:     { width: 8, height: 8, borderRadius: 4, backgroundColor: "#D1D5DB" },
-  dayLabel:  { fontSize: 10, fontWeight: "600", color: "#6B7280" },
-  dateLabel: { fontSize: 9, color: "#9CA3AF" },
+  empty:     { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.textMuted },
+  dayLabel:  { fontSize: 10, fontWeight: "600", color: COLORS.textSecondary },
+  dateLabel: { fontSize: 9, color: COLORS.textSubtle },
 });
 
 const MonthCalendar = ({ records, month, year }) => {
@@ -510,19 +513,19 @@ const MonthCalendar = ({ records, month, year }) => {
           : (
             <View key={cell.key} style={[
               cal.cell,
-              cell.meta    && { backgroundColor: cell.meta.bg },
+              cell.meta    && { backgroundColor: cell.meta.box },
               cell.isToday && cal.cellToday,
             ]}>
               <Text style={[
                 cal.cellText,
                 cell.meta     && { color: cell.meta.color, fontWeight: "700" },
-                cell.isToday  && { color: "#4F46E5", fontWeight: "800" },
-                cell.isFuture && { color: "#D1D5DB" },
+                cell.isToday  && { color: ACCENT.green.deep, fontWeight: "800" },
+                cell.isFuture && { color: COLORS.textMuted },
               ]}>
                 {cell.d}
               </Text>
               {cell.meta && (
-                <View style={[cal.dot, { backgroundColor: cell.meta.color }]} />
+                <View style={[cal.dot, { backgroundColor: cell.meta.fill }]} />
               )}
             </View>
           )
@@ -533,20 +536,20 @@ const MonthCalendar = ({ records, month, year }) => {
 };
 const cal = StyleSheet.create({
   headerRow:  { flexDirection: "row", justifyContent: "space-around", marginBottom: 6 },
-  headerCell: { width: 36, textAlign: "center", fontSize: 11, fontWeight: "700", color: "#9CA3AF" },
+  headerCell: { width: 36, textAlign: "center", fontSize: 11, fontWeight: "700", color: COLORS.textSecondary },
   grid:       { flexDirection: "row", flexWrap: "wrap" },
   cell:       { width: `${100/7}%`, aspectRatio: 1, alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 2, gap: 2 },
-  cellToday:  { borderWidth: 2, borderColor: "#4F46E5" },
-  cellText:   { fontSize: 12, fontWeight: "500", color: "#374151" },
+  cellToday:  { borderWidth: 2, borderColor: ACCENT.green.base },
+  cellText:   { fontSize: 12, fontWeight: "500", color: COLORS.text },
   dot:        { width: 4, height: 4, borderRadius: 2 },
 });
 
 const SourceBadge = ({ source }) => {
   const { t } = useTranslation();
   const map = {
-    sqlite:     { labelKey: "studentAttendance.sourceCached",  color: "#D97706", bg: "#FEF3C7" },
-    "api-empty":{ labelKey: "studentAttendance.sourceNoData",  color: "#6B7280", bg: "#F3F4F6" },
-    none:       { labelKey: "studentAttendance.sourceOffline", color: "#DC2626", bg: "#FEE2E2" },
+    sqlite:     { labelKey: "studentAttendance.sourceCached",  color: statusBadge("warning").text, bg: statusBadge("warning").bg, border: statusBadge("warning").border },
+    "api-empty":{ labelKey: "studentAttendance.sourceNoData",  color: statusBadge("info").text,    bg: statusBadge("info").bg,    border: statusBadge("info").border },
+    none:       { labelKey: "studentAttendance.sourceOffline", color: statusBadge("error").text,   bg: statusBadge("error").bg,   border: statusBadge("error").border },
   };
   const v = map[source];
   if (!v) return null;
@@ -554,7 +557,7 @@ const SourceBadge = ({ source }) => {
     <View style={{
       flexDirection: "row", alignItems: "center", gap: 3,
       paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
-      backgroundColor: v.bg,
+      backgroundColor: v.bg, borderWidth: 1, borderColor: v.border,
     }}>
       <Ionicons name="cloud-offline-outline" size={11} color={v.color} />
       <Text style={{ fontSize: 10, fontWeight: "700", color: v.color }}>{t(v.labelKey)}</Text>
@@ -566,7 +569,7 @@ const SourceBadge = ({ source }) => {
 
 const EmptyCard = ({ title, sub }) => (
   <View style={s.noRecord}>
-    <Ionicons name="calendar-outline" size={36} color="#D1D5DB" />
+    <IconSquare icon="calendar-outline" accent="green" size={48} />
     <Text style={s.noRecordTitle}>{title}</Text>
     <Text style={s.noRecordSub}>{sub}</Text>
   </View>
@@ -594,7 +597,7 @@ const ProgressBars = ({ summary }) => {
         <View key={st} style={s.progressRow}>
           <Text style={s.progressLabel}>{t(meta.labelKey)}</Text>
           <View style={s.progressTrack}>
-            <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: meta.color }]} />
+            <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: meta.fill }]} />
           </View>
           <Text style={[s.progressCount, { color: meta.color }]}>{summary[st]}</Text>
         </View>
@@ -607,7 +610,7 @@ const ProgressBars = ({ summary }) => {
 const Navigator = ({ label, onPrev, onNext, nextDisabled }) => (
   <View style={s.navigator}>
     <TouchableOpacity style={s.navBtn} onPress={onPrev} activeOpacity={0.7}>
-      <Ionicons name="chevron-back" size={20} color="#374151" />
+      <Ionicons name="chevron-back" size={20} color={COLORS.text} />
     </TouchableOpacity>
     <Text style={s.navLabel}>{label}</Text>
     <TouchableOpacity
@@ -619,7 +622,7 @@ const Navigator = ({ label, onPrev, onNext, nextDisabled }) => (
       <Ionicons
         name="chevron-forward"
         size={20}
-        color={nextDisabled ? "#D1D5DB" : "#374151"}
+        color={nextDisabled ? COLORS.textMuted : COLORS.text}
       />
     </TouchableOpacity>
   </View>
@@ -715,7 +718,7 @@ export default function StudentAttendanceScreen() {
   if (loading) {
     return (
       <View style={s.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={s.loadingText}>{t("studentAttendance.loading")}</Text>
       </View>
     );
@@ -731,8 +734,9 @@ export default function StudentAttendanceScreen() {
       {/* HEADER */}
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>{t("studentAttendance.title")}</Text>
           <Text style={s.headerSub}>
@@ -766,15 +770,15 @@ export default function StudentAttendanceScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => load(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
       >
         {/* Error */}
         {!!error && (
           <View style={s.errorBox}>
-            <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+            <Ionicons name="alert-circle-outline" size={20} color={SEMANTIC.error.icon} />
             <Text style={s.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => load(true)}>
               <Text style={s.retryText}>{t("studentAttendance.retry")}</Text>
@@ -787,7 +791,7 @@ export default function StudentAttendanceScreen() {
           <>
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="calendar" size={18} color="#4F46E5" />
+                <IconSquare icon="calendar" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.today")}</Text>
                 <Text style={s.cardSub}>{formatDate(todayStr())}</Text>
               </View>
@@ -814,7 +818,7 @@ export default function StudentAttendanceScreen() {
 
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="time-outline" size={18} color="#059669" />
+                <IconSquare icon="time-outline" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.cardRecentRecords")}</Text>
                 <Text style={s.cardSub}>{t("studentAttendance.totalCount", { count: allRecords.length })}</Text>
               </View>
@@ -842,14 +846,14 @@ export default function StudentAttendanceScreen() {
             />
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="bar-chart-outline" size={18} color="#4F46E5" />
+                <IconSquare icon="bar-chart-outline" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.cardWeekOverview")}</Text>
               </View>
               <WeekBar records={weekRecords} weekStart={weekRange.start} />
             </View>
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="stats-chart" size={18} color="#7C3AED" />
+                <IconSquare icon="stats-chart" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.cardWeekSummary")}</Text>
                 <RatePill rate={weekSummary.rate} />
               </View>
@@ -886,7 +890,7 @@ export default function StudentAttendanceScreen() {
             />
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="calendar-outline" size={18} color="#4F46E5" />
+                <IconSquare icon="calendar-outline" accent="green" size={28} />
                 <Text style={s.cardTitle}>{monthRange.label}</Text>
               </View>
               <MonthCalendar
@@ -897,7 +901,7 @@ export default function StudentAttendanceScreen() {
             </View>
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="stats-chart" size={18} color="#059669" />
+                <IconSquare icon="stats-chart" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.cardMonthSummary")}</Text>
                 <RatePill rate={monthSummary.rate} />
               </View>
@@ -943,7 +947,7 @@ export default function StudentAttendanceScreen() {
               <>
                 <View style={s.card}>
                   <View style={s.cardHeader}>
-                    <Ionicons name="stats-chart" size={18} color="#4F46E5" />
+                    <IconSquare icon="stats-chart" accent="green" size={28} />
                     <Text style={s.cardTitle}>{t("studentAttendance.cardBreakdown")}</Text>
                   </View>
                   <View style={s.statRow}>
@@ -956,7 +960,7 @@ export default function StudentAttendanceScreen() {
 
                 <View style={s.card}>
                   <View style={s.cardHeader}>
-                    <Ionicons name="trending-up-outline" size={18} color="#059669" />
+                    <IconSquare icon="trending-up-outline" accent="green" size={28} />
                     <Text style={s.cardTitle}>{t("studentAttendance.cardMonthlyTrend")}</Text>
                   </View>
                   {[-5,-4,-3,-2,-1,0].map((offset) => {
@@ -979,7 +983,7 @@ export default function StudentAttendanceScreen() {
                                 key={st}
                                 style={{
                                   width: `${pct}%`, height: "100%",
-                                  backgroundColor: STATUS_META[st].color,
+                                  backgroundColor: STATUS_META[st].fill,
                                 }}
                               />
                             );
@@ -997,7 +1001,7 @@ export default function StudentAttendanceScreen() {
 
             <View style={s.card}>
               <View style={s.cardHeader}>
-                <Ionicons name="list-outline" size={18} color="#6B7280" />
+                <IconSquare icon="list-outline" accent="green" size={28} />
                 <Text style={s.cardTitle}>{t("studentAttendance.cardAllRecords")}</Text>
                 <Text style={s.cardSub}>{t("studentAttendance.totalCount", { count: allRecords.length })}</Text>
               </View>
@@ -1034,41 +1038,42 @@ export default function StudentAttendanceScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     gap: 10,
   },
-  backBtn:     { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  backBtn:     { width: 36, height: 36, borderRadius: 10, backgroundColor: ACCENT.slate.wash, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   tabBar: {
-    flexDirection: "row", backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    flexDirection: "row", backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     paddingHorizontal: 4,
   },
   tab:            { flex: 1, paddingVertical: 12, alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabActive:      { borderBottomColor: "#4F46E5" },
-  tabLabel:       { fontSize: 13, fontWeight: "600", color: "#9CA3AF" },
-  tabLabelActive: { color: "#4F46E5" },
+  tabActive:      { borderBottomColor: ACCENT.green.base },
+  tabLabel:       { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  tabLabelActive: { color: ACCENT.green.deep },
 
   scroll: { paddingHorizontal: 16, paddingTop: 12 },
 
   card: {
-    backgroundColor: "#FFF", borderRadius: 16, padding: 16, marginBottom: 12,
-    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+    backgroundColor: COLORS.surface, borderRadius: 16, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.green.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
     gap: 12,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  cardTitle:  { fontSize: 15, fontWeight: "700", color: "#111827" },
-  cardSub:    { fontSize: 12, color: "#9CA3AF", marginLeft: "auto" },
+  cardTitle:  { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  cardSub:    { fontSize: 12, color: COLORS.textSecondary, marginLeft: "auto" },
 
   statRow:       { flexDirection: "row", gap: 8 },
   statCardsWrap: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -1079,37 +1084,38 @@ const s = StyleSheet.create({
 
   navigator: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  navBtn:         { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  navBtnDisabled: { backgroundColor: "#F9FAFB" },
-  navLabel:       { fontSize: 14, fontWeight: "700", color: "#111827" },
+  navBtn:         { width: 36, height: 36, borderRadius: 10, backgroundColor: ACCENT.green.wash, alignItems: "center", justifyContent: "center" },
+  navBtnDisabled: { backgroundColor: COLORS.page },
+  navLabel:       { fontSize: 14, fontWeight: "700", color: COLORS.text },
 
   progressSection: { gap: 10 },
   progressRow:     { flexDirection: "row", alignItems: "center", gap: 10 },
-  progressLabel:   { fontSize: 12, fontWeight: "600", color: "#374151", width: 56 },
-  progressTrack:   { flex: 1, height: 8, backgroundColor: "#F3F4F6", borderRadius: 4, overflow: "hidden" },
+  progressLabel:   { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 56 },
+  progressTrack:   { flex: 1, height: 8, backgroundColor: ACCENT.slate.wash, borderRadius: 4, overflow: "hidden" },
   progressFill:    { height: "100%", borderRadius: 4 },
   progressCount:   { fontSize: 12, fontWeight: "700", width: 24, textAlign: "right" },
 
   overallCard:  { alignItems: "center", gap: 8 },
-  overallTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  overallTotal: { fontSize: 13, color: "#6B7280" },
-  overallRange: { fontSize: 11, color: "#9CA3AF", textAlign: "center" },
+  overallTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  overallTotal: { fontSize: 13, color: COLORS.textSecondary },
+  overallRange: { fontSize: 11, color: COLORS.textSecondary, textAlign: "center" },
 
   trendRow:   { flexDirection: "row", alignItems: "center", gap: 10 },
-  trendMonth: { fontSize: 11, fontWeight: "600", color: "#374151", width: 70 },
-  trendBar:   { flex: 1, height: 12, borderRadius: 6, overflow: "hidden", flexDirection: "row", backgroundColor: "#F3F4F6" },
+  trendMonth: { fontSize: 11, fontWeight: "600", color: COLORS.text, width: 70 },
+  trendBar:   { flex: 1, height: 12, borderRadius: 6, overflow: "hidden", flexDirection: "row", backgroundColor: ACCENT.slate.wash },
   trendRate:  { fontSize: 11, fontWeight: "700", width: 32, textAlign: "right" },
 
   noRecord:      { alignItems: "center", paddingVertical: 24, gap: 8 },
-  noRecordTitle: { fontSize: 15, fontWeight: "700", color: "#374151" },
-  noRecordSub:   { fontSize: 12, color: "#9CA3AF", textAlign: "center" },
+  noRecordTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  noRecordSub:   { fontSize: 12, color: COLORS.textSecondary, textAlign: "center" },
 
-  moreText: { fontSize: 12, color: "#9CA3AF", textAlign: "center", paddingVertical: 8 },
+  moreText: { fontSize: 12, color: COLORS.textSecondary, textAlign: "center", paddingVertical: 8 },
 
-  errorBox:  { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 10 },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
-  retryText: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
+  errorBox:  { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: SEMANTIC.error.bg, borderWidth: 1, borderColor: SEMANTIC.error.box, borderRadius: 10, padding: 12, marginBottom: 10 },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
+  retryText: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
 });

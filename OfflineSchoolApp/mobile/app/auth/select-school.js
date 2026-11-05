@@ -19,6 +19,10 @@ import { API_URL } from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { errorText } from "../../src/utils/appError";
+import { COLORS, ACCENT, statusBadge } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
+
+const VERIFIED = statusBadge("success");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -149,7 +153,7 @@ const SchoolCard = ({ school, onSelect }) => {
           </Text>
           {school.verified && (
             <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#059669" />
+              <Ionicons name="checkmark-circle" size={14} color={VERIFIED.text} />
               <Text style={styles.verifiedText}>{t("selectSchool.verified")}</Text>
             </View>
           )}
@@ -157,13 +161,13 @@ const SchoolCard = ({ school, onSelect }) => {
 
         {location ? (
           <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={12} color="#9CA3AF" />
+            <Ionicons name="location-outline" size={12} color={ACCENT.blue.solid} />
             <Text style={styles.metaText}>{location}</Text>
           </View>
         ) : null}
 
         <View style={styles.metaRow}>
-          <Ionicons name="library-outline" size={12} color="#9CA3AF" />
+          <Ionicons name="library-outline" size={12} color={ACCENT.blue.solid} />
           <Text style={styles.metaText}>
             {classCount === 1
               ? t("selectSchool.oneClass")
@@ -176,13 +180,13 @@ const SchoolCard = ({ school, onSelect }) => {
           <View style={styles.contactRow}>
             {school.phone ? (
               <View style={styles.contactItem}>
-                <Ionicons name="call-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="call-outline" size={11} color={ACCENT.blue.solid} />
                 <Text style={styles.contactText}>{school.phone}</Text>
               </View>
             ) : null}
             {school.email ? (
               <View style={styles.contactItem}>
-                <Ionicons name="mail-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="mail-outline" size={11} color={ACCENT.blue.solid} />
                 <Text style={styles.contactText} numberOfLines={1}>
                   {school.email}
                 </Text>
@@ -193,7 +197,7 @@ const SchoolCard = ({ school, onSelect }) => {
       </View>
 
       {/* Arrow */}
-      <Ionicons name="chevron-forward" size={20} color="#C7D2FE" />
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
     </TouchableOpacity>
   );
 };
@@ -345,7 +349,7 @@ export default function SelectSchoolScreen() {
     if (error) {
       return (
         <View style={styles.centreBox}>
-          <Text style={styles.centreEmoji}>😕</Text>
+          <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} style={styles.centreIcon} />
           <Text style={styles.centreTitle}>{t("selectSchool.errorTitle")}</Text>
           <Text style={styles.centreBody}>{error}</Text>
           <TouchableOpacity
@@ -362,7 +366,7 @@ export default function SelectSchoolScreen() {
 
     return (
       <View style={styles.centreBox}>
-        <Text style={styles.centreEmoji}>🏫</Text>
+        <IconSquare icon="business-outline" accent="indigo" size={56} radius={16} style={styles.centreIcon} />
         <Text style={styles.centreTitle}>{t("selectSchool.emptyTitle")}</Text>
         <Text style={styles.centreBody}>
           {debouncedQuery
@@ -392,7 +396,7 @@ export default function SelectSchoolScreen() {
     if (!loadingMore) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#4F46E5" />
+        <ActivityIndicator size="small" color={COLORS.primary} />
         <Text style={styles.footerLoaderText}>{t("selectSchool.loadingMore")}</Text>
       </View>
     );
@@ -425,24 +429,27 @@ export default function SelectSchoolScreen() {
           accessibilityRole="button"
           accessibilityLabel={t("common.goBack")}
         >
-          <Ionicons name="arrow-back" size={20} color="#4F46E5" />
+          <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
           <Text style={styles.backArrowText}>{t("selectSchool.back")}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>{t("selectSchool.title")}</Text>
+        <View style={styles.titleRow}>
+          <HeaderIcon />
+          <Text style={[styles.headerTitle, styles.headerTitleInRow]}>{t("selectSchool.title")}</Text>
+        </View>
         <Text style={styles.headerSubtitle}>
           {t("selectSchool.subtitle")}
         </Text>
 
         {/* Search bar */}
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+          <Ionicons name="search-outline" size={18} color={COLORS.textSubtle} />
           <TextInput
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
             placeholder={t("selectSchool.searchPh")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
@@ -456,7 +463,7 @@ export default function SelectSchoolScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("selectSchool.a11yClear")}
             >
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={18} color={COLORS.textSubtle} />
             </TouchableOpacity>
           )}
         </View>
@@ -487,8 +494,8 @@ export default function SelectSchoolScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              colors={["#4F46E5"]}
-              tintColor="#4F46E5"
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
             />
           }
           keyboardShouldPersistTaps="handled"
@@ -509,18 +516,18 @@ export default function SelectSchoolScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
 
   // ── Header ──
   header: {
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     // paddingTop comes from the insets at render; 56-on-iOS/36-on-Android
     // was a guess from before Android drew behind the status bar.
     paddingBottom:     16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-    shadowColor:       "#000",
+    borderBottomColor: COLORS.border,
+    shadowColor:       COLORS.shadow,
     shadowOpacity:     0.04,
     shadowRadius:      4,
     elevation:         2,
@@ -532,17 +539,19 @@ const styles = StyleSheet.create({
     marginBottom:  12,
     alignSelf:     "flex-start",
   },
-  backArrowText:  { color: "#4F46E5", fontSize: 15, fontWeight: "600" },
-  headerTitle:    { fontSize: 22, fontWeight: "800", color: "#111827", marginBottom: 4 },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginBottom: 14, lineHeight: 18 },
+  backArrowText:  { color: COLORS.primary, fontSize: 15, fontWeight: "600" },
+  titleRow:       { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  headerTitle:    { fontSize: 22, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
+  headerTitleInRow: { flex: 1, marginBottom: 0 },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 14, lineHeight: 18 },
 
   // Search
   searchBar: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     borderRadius:      12,
     paddingHorizontal: 12,
     paddingVertical:   Platform.OS === "ios" ? 10 : 6,
@@ -551,7 +560,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex:     1,
     fontSize: 15,
-    color:    "#111827",
+    color:    COLORS.text,
     padding:  0,
   },
 
@@ -563,14 +572,16 @@ const styles = StyleSheet.create({
   card: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    16,
     marginBottom:    12,
     padding:         16,
     gap:             12,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.indigo.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -581,7 +592,7 @@ const styles = StyleSheet.create({
     width:           48,
     height:          48,
     borderRadius:    14,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.solid,
     alignItems:      "center",
     justifyContent:  "center",
     flexShrink:      0,
@@ -592,7 +603,7 @@ const styles = StyleSheet.create({
     height:       48,
     borderRadius: 14,
   },
-  avatarText: { fontSize: 22, fontWeight: "800", color: "#4F46E5" },
+  avatarText: { fontSize: 22, fontWeight: "800", color: COLORS.onPrimary },
 
   cardInfo:     { flex: 1 },
   cardTitleRow: {
@@ -601,18 +612,20 @@ const styles = StyleSheet.create({
     flexWrap:      "wrap",
     gap:           6,
   },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827", flexShrink: 1 },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
 
   verifiedBadge: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   "#ECFDF5",
+    backgroundColor:   VERIFIED.bg,
+    borderWidth:       1,
+    borderColor:       VERIFIED.border,
     borderRadius:      20,
     paddingVertical:   2,
     paddingHorizontal: 7,
   },
-  verifiedText: { fontSize: 10, color: "#059669", fontWeight: "600" },
+  verifiedText: { fontSize: 10, color: VERIFIED.text, fontWeight: "600" },
 
   metaRow: {
     flexDirection: "row",
@@ -620,7 +633,7 @@ const styles = StyleSheet.create({
     gap:           4,
     marginTop:     3,
   },
-  metaText: { fontSize: 12, color: "#6B7280" },
+  metaText: { fontSize: 12, color: COLORS.textSecondary },
 
   // Contact row (inside card)
   contactRow: {
@@ -630,10 +643,10 @@ const styles = StyleSheet.create({
     marginTop:      6,
     paddingTop:     6,
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
   },
   contactItem: { flexDirection: "row", alignItems: "center", gap: 3 },
-  contactText: { fontSize: 10, color: "#9CA3AF" },
+  contactText: { fontSize: 10, color: COLORS.textSecondary },
 
   // ── Empty / error ──
   centreBox: {
@@ -643,28 +656,28 @@ const styles = StyleSheet.create({
     padding:        32,
     marginTop:      40,
   },
-  centreEmoji: { fontSize: 52, marginBottom: 12 },
+  centreIcon: { marginBottom: 12 },
   centreTitle: {
     fontSize:     18,
     fontWeight:   "700",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 8,
     textAlign:    "center",
   },
   centreBody: {
     fontSize:     14,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     textAlign:    "center",
     lineHeight:   21,
     marginBottom: 20,
   },
   retryBtn: {
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   COLORS.primary,
     borderRadius:      10,
     paddingVertical:   12,
     paddingHorizontal: 28,
   },
-  retryBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  retryBtnText: { color: COLORS.onPrimary, fontSize: 14, fontWeight: "700" },
 
   // ── Footer loader ──
   footerLoader: {
@@ -674,7 +687,7 @@ const styles = StyleSheet.create({
     gap:             8,
     paddingVertical: 16,
   },
-  footerLoaderText: { fontSize: 13, color: "#6B7280" },
+  footerLoaderText: { fontSize: 13, color: COLORS.textSecondary },
 
   // ── Skeleton ──
   skeletonContainer: { padding: 16 },

@@ -41,6 +41,8 @@ import {
   getTeacherSubjectsForClass,
 } from "../../../src/services/quiz.service";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -60,6 +62,7 @@ const QUESTION_TYPES = [
 ];
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
+const DIFFICULTY_TONE = { easy: "success", medium: "warning", hard: "error" };
 
 const FEEDBACK_OPTIONS = [
   { value: "immediately"    },
@@ -174,7 +177,7 @@ const TabBar = ({ active, onChange, tabs }) => {
           <Ionicons
             name={tab.icon}
             size={16}
-            color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
+            color={active === tab.id ? ACCENT.indigo.solid : COLORS.textSecondary}
           />
           <Text style={[styles.tabLabel, active === tab.id && styles.tabLabelActive]}>
             {tabLabels[tab.id]}
@@ -198,7 +201,7 @@ const Field = ({
   <View style={styles.field}>
     <Text style={styles.fieldLabel}>
       {label}
-      {required && <Text style={{ color: "#DC2626" }}> *</Text>}
+      {required && <Text style={{ color: SEMANTIC.error.text }}> *</Text>}
     </Text>
     <TextInput
       style={[
@@ -227,14 +230,17 @@ const ToggleRow = ({ label, subtitle, value, onChange }) => (
     <Switch
       value={value}
       onValueChange={onChange}
-      trackColor={{ false: "#E5E7EB", true: "#C7D2FE" }}
-      thumbColor={value ? "#4F46E5" : "#9CA3AF"}
+      trackColor={{ false: COLORS.border, true: ACCENT.indigo.base + "66" }}
+      thumbColor={value ? ACCENT.indigo.solid : COLORS.textMuted}
     />
   </View>
 );
 
-const SectionHeader = ({ title }) => (
-  <Text style={styles.sectionHeader}>{title}</Text>
+const SectionHeader = ({ title, icon = "list" }) => (
+  <View style={styles.sectionHeaderRow}>
+    <IconSquare icon={icon} accent="indigo" size={28} />
+    <Text style={styles.sectionHeader}>{title}</Text>
+  </View>
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -352,19 +358,23 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
             key={qt.value}
             style={[
               styles.typeChip,
-              form.question_type === qt.value && styles.typeChipActive,
+              form.question_type === qt.value && {
+                backgroundColor: ACCENT[categoryAccent(qt.value)].wash,
+                borderColor:     ACCENT[categoryAccent(qt.value)].base,
+              },
             ]}
             onPress={() => set("question_type", qt.value)}
           >
             <Ionicons
               name={qt.icon}
               size={14}
-              color={form.question_type === qt.value ? "#4F46E5" : "#9CA3AF"}
+              color={form.question_type === qt.value ? ACCENT[categoryAccent(qt.value)].deep : COLORS.textSecondary}
             />
             <Text
               style={[
                 styles.typeChipText,
                 form.question_type === qt.value && styles.typeChipTextActive,
+                form.question_type === qt.value && { color: ACCENT[categoryAccent(qt.value)].deep },
               ]}
             >
               {typeLabels[qt.value]}
@@ -421,7 +431,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                 <Ionicons
                   name={opt.is_correct ? "checkmark-circle" : "ellipse-outline"}
                   size={22}
-                  color={opt.is_correct ? "#059669" : "#D1D5DB"}
+                  color={opt.is_correct ? SEMANTIC.success.icon : COLORS.textSecondary}
                 />
               </TouchableOpacity>
 
@@ -443,7 +453,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                   style={styles.optionRemove}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                  <Ionicons name="close-circle-outline" size={18} color={SEMANTIC.error.icon} />
                 </TouchableOpacity>
               )}
             </View>
@@ -451,7 +461,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
 
           {!isTrueFalse && form.options.length < 6 && (
             <TouchableOpacity style={styles.addOptionBtn} onPress={addOption}>
-              <Ionicons name="add-circle-outline" size={18} color="#4F46E5" />
+              <Ionicons name="add-circle-outline" size={18} color={ACCENT.indigo.solid} />
               <Text style={styles.addOptionText}>{t("quizCreate.addOption")}</Text>
             </TouchableOpacity>
           )}
@@ -468,6 +478,10 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                 style={[
                   styles.diffChip,
                   form.difficulty === d && styles.diffChipActive,
+                  form.difficulty === d && {
+                    backgroundColor: SEMANTIC[DIFFICULTY_TONE[d]].bg,
+                    borderColor:     SEMANTIC[DIFFICULTY_TONE[d]].icon,
+                  },
                 ]}
                 onPress={() => set("difficulty", d)}
               >
@@ -475,6 +489,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                   style={[
                     styles.diffChipText,
                     form.difficulty === d && styles.diffChipTextActive,
+                    form.difficulty === d && { color: SEMANTIC[DIFFICULTY_TONE[d]].text },
                   ]}
                 >
                   {diffLabels[d]}
@@ -529,7 +544,10 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                 key={cat.id}
                 style={[
                   styles.typeChip,
-                  form.category_id === cat.id && styles.typeChipActive,
+                  form.category_id === cat.id && {
+                    backgroundColor: ACCENT[categoryAccent(cat.name)].wash,
+                    borderColor:     ACCENT[categoryAccent(cat.name)].base,
+                  },
                 ]}
                 onPress={() => set("category_id", cat.id)}
               >
@@ -537,6 +555,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                   style={[
                     styles.typeChipText,
                     form.category_id === cat.id && styles.typeChipTextActive,
+                    form.category_id === cat.id && { color: ACCENT[categoryAccent(cat.name)].deep },
                   ]}
                 >
                   {cat.name}
@@ -621,14 +640,14 @@ const QuestionListItem = React.memo(({
         style={styles.quizQuestionIconBtn}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="create-outline" size={17} color="#4F46E5" />
+        <Ionicons name="create-outline" size={17} color={ACCENT.indigo.deep} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => onRemove(item)}
         style={styles.quizQuestionIconBtn}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="remove-circle-outline" size={17} color="#DC2626" />
+        <Ionicons name="remove-circle-outline" size={17} color={SEMANTIC.error.icon} />
       </TouchableOpacity>
     </View>
   </View>
@@ -662,7 +681,7 @@ const BankQuestionItem = React.memo(({ item, onAdd }) => {
         </Text>
       </View>
       <View style={styles.addFromBankBtn}>
-        <Ionicons name="add" size={18} color="#4F46E5" />
+        <Ionicons name="add" size={18} color={COLORS.onPrimary} />
       </View>
     </TouchableOpacity>
   );
@@ -1098,15 +1117,15 @@ export default function CreateQuizScreen() {
       contentContainerStyle={styles.tabContent}
       keyboardShouldPersistTaps="handled"
     >
-      <SectionHeader title={t("quizCreate.sectionBasic")} />
+      <SectionHeader title={t("quizCreate.sectionBasic")} icon="information-circle" />
 
       {/* CLASS PICKER */}
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>
-          {t("quizCreate.classLabel")} <Text style={{ color: "#DC2626" }}>*</Text>
+          {t("quizCreate.classLabel")} <Text style={{ color: SEMANTIC.error.text }}>*</Text>
         </Text>
         {__DEV__ && quizForm.class_id && (
-          <Text style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>
+          <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginBottom: 4 }}>
             class_id: {quizForm.class_id}
           </Text>
         )}
@@ -1124,6 +1143,10 @@ export default function CreateQuizScreen() {
                 style={[
                   styles.pickerChip,
                   quizForm.class_id === cls.id && styles.pickerChipActive,
+                  quizForm.class_id === cls.id && {
+                    backgroundColor: ACCENT[levelAccent(cls.level ?? cls.name)].wash,
+                    borderColor:     ACCENT[levelAccent(cls.level ?? cls.name)].base,
+                  },
                 ]}
                 onPress={() => handleSelectClass(cls.id)}
               >
@@ -1131,6 +1154,7 @@ export default function CreateQuizScreen() {
                   style={[
                     styles.pickerChipText,
                     quizForm.class_id === cls.id && styles.pickerChipTextActive,
+                    quizForm.class_id === cls.id && { color: ACCENT[levelAccent(cls.level ?? cls.name)].deep },
                   ]}
                 >
                   {cls.name}
@@ -1145,10 +1169,10 @@ export default function CreateQuizScreen() {
       {quizForm.class_id && (
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
-            {t("quizCreate.subjectLabel")} <Text style={{ color: "#DC2626" }}>*</Text>
+            {t("quizCreate.subjectLabel")} <Text style={{ color: SEMANTIC.error.text }}>*</Text>
           </Text>
           {__DEV__ && quizForm.subject_id && (
-            <Text style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>
+            <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginBottom: 4 }}>
               subject_id: {quizForm.subject_id}
             </Text>
           )}
@@ -1168,6 +1192,7 @@ export default function CreateQuizScreen() {
                   style={[
                     styles.pickerChip,
                     quizForm.subject_id === subj.id && styles.pickerChipActive,
+                    quizForm.subject_id === subj.id && { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base },
                   ]}
                   onPress={() => handleSelectSubject(subj.id)}
                 >
@@ -1175,6 +1200,7 @@ export default function CreateQuizScreen() {
                     style={[
                       styles.pickerChipText,
                       quizForm.subject_id === subj.id && styles.pickerChipTextActive,
+                      quizForm.subject_id === subj.id && { color: ACCENT.slate.deep },
                     ]}
                   >
                     {subj.name}
@@ -1210,7 +1236,7 @@ export default function CreateQuizScreen() {
         multiline
       />
 
-      <SectionHeader title={t("quizCreate.sectionTiming")} />
+      <SectionHeader title={t("quizCreate.sectionTiming")} icon="time" />
 
       <Field
         label={t("quizCreate.timeLimitLabel")}
@@ -1239,7 +1265,7 @@ export default function CreateQuizScreen() {
       <TouchableOpacity
         style={[
           styles.primaryBtn,
-          { backgroundColor: "#059669" },
+          { backgroundColor: ACCENT.green.solid },
           saving && styles.primaryBtnDisabled,
         ]}
         onPress={() => handleSaveQuiz(true)}
@@ -1278,7 +1304,7 @@ export default function CreateQuizScreen() {
             </Text>
             {editingQuestion && (
               <View style={styles.editingBadge}>
-                <Ionicons name="create-outline" size={12} color="#4F46E5" />
+                <Ionicons name="create-outline" size={12} color={ACCENT.indigo.deep} />
                 <Text style={styles.editingBadgeText}>{t("quizCreate.editingBadge")}</Text>
               </View>
             )}
@@ -1344,7 +1370,7 @@ export default function CreateQuizScreen() {
 
           {emptyTitle !== null ? (
             <View style={styles.emptyState}>
-              <Ionicons name={emptyIcon} size={40} color="#D1D5DB" />
+              <IconSquare icon={emptyIcon} accent="indigo" size={56} radius={16} />
               <Text style={styles.emptyTitle}>{emptyTitle}</Text>
               {emptySub ? <Text style={styles.emptySubtitle}>{emptySub}</Text> : null}
             </View>
@@ -1376,20 +1402,20 @@ export default function CreateQuizScreen() {
             onPress={openNewQuestion}
             activeOpacity={0.8}
           >
-            <Ionicons name="add-circle-outline" size={18} color="#4F46E5" />
+            <Ionicons name="add-circle-outline" size={18} color={ACCENT.indigo.deep} />
             <Text style={styles.questionTabBtnText}>{t("quizCreate.newQuestion")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.questionTabBtn,
-              { backgroundColor: "#F0FDF4", borderColor: "#059669" },
+              { backgroundColor: ACCENT.green.wash, borderColor: ACCENT.green.base },
             ]}
             onPress={() => setShowBankPicker(true)}
             activeOpacity={0.8}
           >
-            <Ionicons name="library-outline" size={18} color="#059669" />
-            <Text style={[styles.questionTabBtnText, { color: "#059669" }]}>
+            <Ionicons name="library-outline" size={18} color={ACCENT.green.deep} />
+            <Text style={[styles.questionTabBtnText, { color: ACCENT.green.deep }]}>
               {t("quizCreate.fromBank")}
             </Text>
           </TouchableOpacity>
@@ -1414,7 +1440,7 @@ export default function CreateQuizScreen() {
         {/* ── Scrollable: question list ── */}
         {quizQuestions.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="help-circle-outline" size={48} color="#D1D5DB" />
+            <IconSquare icon="help-circle-outline" accent="indigo" size={56} radius={16} />
             <Text style={styles.emptyTitle}>{t("quizCreate.noQuestionsTitle")}</Text>
             <Text style={styles.emptySubtitle}>
               {t("quizCreate.noQuestionsSub")}
@@ -1449,7 +1475,7 @@ export default function CreateQuizScreen() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.tabContent}
     >
-      <SectionHeader title={t("quizCreate.sectionAttempts")} />
+      <SectionHeader title={t("quizCreate.sectionAttempts")} icon="repeat" />
 
       <Field
         label={t("quizCreate.maxAttemptsLabel")}
@@ -1467,7 +1493,7 @@ export default function CreateQuizScreen() {
         keyboardType="decimal-pad"
       />
 
-      <SectionHeader title={t("quizCreate.sectionDelivery")} />
+      <SectionHeader title={t("quizCreate.sectionDelivery")} icon="layers" />
 
       <ToggleRow
         label={t("quizCreate.shuffleQuestions")}
@@ -1490,7 +1516,7 @@ export default function CreateQuizScreen() {
         onChange={(v) => setQuizField("allow_backtrack", v)}
       />
 
-      <SectionHeader title={t("quizCreate.sectionFeedback")} />
+      <SectionHeader title={t("quizCreate.sectionFeedback")} icon="chatbubble-ellipses" />
 
       {FEEDBACK_OPTIONS.map((opt) => (
         <TouchableOpacity
@@ -1563,7 +1589,7 @@ export default function CreateQuizScreen() {
       style={styles.container}
       behavior="padding"
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -1574,9 +1600,10 @@ export default function CreateQuizScreen() {
           }}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <Text style={styles.headerTitle}>
           {showQuestionForm
             ? editingQuestion
@@ -1619,25 +1646,26 @@ export default function CreateQuizScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   centered:  {
     flex: 1, justifyContent: "center",
-    alignItems: "center", backgroundColor: "#F3F4F6",
+    alignItems: "center", backgroundColor: COLORS.page,
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backButton: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: "#F3F4F6",
     alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { flex: 1, fontSize: 20, fontWeight: "700", color: "#111827" },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { flex: 1, fontSize: 20, fontWeight: "700", color: COLORS.text },
   publishBtn: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#059669", borderRadius: 10,
@@ -1646,17 +1674,17 @@ const styles = StyleSheet.create({
   publishBtnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
 
   tabBar: {
-    flexDirection: "row", backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    flexDirection: "row", backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   tab: {
     flex: 1, flexDirection: "row", alignItems: "center",
     justifyContent: "center", paddingVertical: 12, gap: 5,
     borderBottomWidth: 2, borderBottomColor: "transparent",
   },
-  tabActive:      { borderBottomColor: "#4F46E5" },
-  tabLabel:       { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  tabLabelActive: { color: "#4F46E5", fontWeight: "700" },
+  tabActive:      { borderBottomColor: ACCENT.indigo.base },
+  tabLabel:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  tabLabelActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   // ✅ Wrapper that gives all tab content the remaining flex space
   tabContentWrapper: { flex: 1 },
@@ -1668,7 +1696,7 @@ const styles = StyleSheet.create({
   questionTabContainer: {
     flex:           1,
     flexDirection:  "column",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
   },
 
   // ✅ FlatList padding — replaces ScrollView contentContainerStyle
@@ -1678,58 +1706,63 @@ const styles = StyleSheet.create({
   },
 
   field:      { marginBottom: 14 },
-  fieldLabel: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
-  fieldHint:  { fontSize: 11, color: "#9CA3AF", fontWeight: "400" },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 6 },
+  fieldHint:  { fontSize: 11, color: COLORS.textSecondary, fontWeight: "400" },
   fieldInput: {
-    backgroundColor: "#FFF", borderRadius: 10,
+    backgroundColor: COLORS.surface, borderRadius: 10,
     paddingVertical: 10, paddingHorizontal: 12,
-    fontSize: 14, color: "#111827",
-    borderWidth: 1, borderColor: "#E5E7EB",
+    fontSize: 14, color: COLORS.text,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   fieldInputMulti:    { height: 80, textAlignVertical: "top" },
-  fieldInputDisabled: { backgroundColor: "#F9FAFB", color: "#9CA3AF" },
+  fieldInputDisabled: { backgroundColor: COLORS.page, color: COLORS.textSecondary },
 
-  sectionHeader: {
-    fontSize: 13, fontWeight: "700", color: "#9CA3AF",
-    textTransform: "uppercase", letterSpacing: 0.5,
+  sectionHeaderRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
     marginTop: 8, marginBottom: 12,
+  },
+  sectionHeader: {
+    fontSize: 13, fontWeight: "700", color: COLORS.textSecondary,
+    textTransform: "uppercase", letterSpacing: 0.5,
   },
 
   pickerRow:            { gap: 8, paddingBottom: 4 },
   pickerChip: {
     paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent",
+    borderRadius: 20, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  pickerChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  pickerChipText:       { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  pickerChipTextActive: { color: "#4F46E5", fontWeight: "700" },
-  pickerEmpty:          { fontSize: 13, color: "#9CA3AF", fontStyle: "italic", marginTop: 4 },
+  pickerChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  pickerChipText:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  pickerChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
+  pickerEmpty:          { fontSize: 13, color: COLORS.textSecondary, fontStyle: "italic", marginTop: 4 },
 
   toggleRow: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12,
+    backgroundColor: COLORS.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
     padding: 14, marginBottom: 8,
   },
-  toggleLabel:    { fontSize: 14, fontWeight: "600", color: "#111827" },
-  toggleSubtitle: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  toggleLabel:    { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  toggleSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   radioRow: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 10,
+    backgroundColor: COLORS.surface, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
     padding: 12, marginBottom: 6, gap: 10,
   },
   radioOuter: {
     width: 20, height: 20, borderRadius: 10,
-    borderWidth: 2, borderColor: "#D1D5DB",
+    borderWidth: 2, borderColor: COLORS.textMuted,
     alignItems: "center", justifyContent: "center",
   },
-  radioOuterActive: { borderColor: "#4F46E5" },
+  radioOuterActive: { borderColor: ACCENT.indigo.base },
   radioInner: {
     width: 10, height: 10, borderRadius: 5,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.indigo.solid,
   },
-  radioLabel: { fontSize: 14, color: "#374151" },
+  radioLabel: { fontSize: 14, color: COLORS.text },
 
   primaryBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -1742,24 +1775,25 @@ const styles = StyleSheet.create({
   questionForm: {},
 
   formHeaderRow:   { flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 10 },
-  formHeaderTitle: { fontSize: 18, fontWeight: "700", color: "#111827", flex: 1 },
+  formHeaderTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text, flex: 1 },
   editingBadge: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF", borderRadius: 20,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 20,
+    borderWidth: 1, borderColor: ACCENT.indigo.base + "4D",
     paddingHorizontal: 10, paddingVertical: 4, gap: 4,
   },
-  editingBadgeText: { fontSize: 11, fontWeight: "700", color: "#4F46E5" },
+  editingBadgeText: { fontSize: 11, fontWeight: "700", color: ACCENT.indigo.deep },
 
   typeRow: { gap: 8, paddingBottom: 10 },
   typeChip: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent", gap: 5,
+    borderRadius: 20, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border, gap: 5,
   },
-  typeChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  typeChipText:       { fontSize: 12, color: "#6B7280", fontWeight: "500" },
-  typeChipTextActive: { color: "#4F46E5", fontWeight: "700" },
+  typeChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  typeChipText:       { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  typeChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   optionsSection: { marginBottom: 14 },
   optionRow:      { flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 8 },
@@ -1769,34 +1803,34 @@ const styles = StyleSheet.create({
   },
   optionCorrectToggleOn: {},
   optionInput: {
-    flex: 1, backgroundColor: "#FFF", borderRadius: 10,
+    flex: 1, backgroundColor: COLORS.surface, borderRadius: 10,
     paddingVertical: 9, paddingHorizontal: 12,
-    fontSize: 14, color: "#111827",
-    borderWidth: 1, borderColor: "#E5E7EB",
+    fontSize: 14, color: COLORS.text,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  optionInputCorrect: { borderColor: "#059669", backgroundColor: "#F0FDF4" },
+  optionInputCorrect: { borderColor: SEMANTIC.success.icon, backgroundColor: SEMANTIC.success.bg },
   optionRemove:       { padding: 4 },
   addOptionBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8 },
-  addOptionText: { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+  addOptionText: { fontSize: 13, color: ACCENT.indigo.deep, fontWeight: "600" },
 
   metaRow: { flexDirection: "row", gap: 12 },
 
   diffRow: { flexDirection: "row", gap: 6 },
   diffChip: {
     paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 8, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent",
+    borderRadius: 8, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  diffChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  diffChipText:       { fontSize: 12, color: "#6B7280" },
-  diffChipTextActive: { color: "#4F46E5", fontWeight: "700" },
+  diffChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  diffChipText:       { fontSize: 12, color: COLORS.textSecondary },
+  diffChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   formActions:    { flexDirection: "row", gap: 10, marginTop: 16 },
   cancelBtn: {
     flex: 1, paddingVertical: 13, borderRadius: 12,
-    borderWidth: 1, borderColor: "#E5E7EB", alignItems: "center",
+    borderWidth: 1, borderColor: COLORS.border, alignItems: "center",
   },
-  cancelBtnText: { fontSize: 14, fontWeight: "600", color: "#6B7280" },
+  cancelBtnText: { fontSize: 14, fontWeight: "600", color: COLORS.textSecondary },
   saveBtn: {
     flex: 2, flexDirection: "row", alignItems: "center",
     justifyContent: "center", backgroundColor: "#4F46E5",
@@ -1809,71 +1843,75 @@ const styles = StyleSheet.create({
   questionTabActions: {
     flexDirection: "row", gap: 10,
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     // No flex here — intrinsic height only
   },
   questionTabBtn: {
     flex: 1, flexDirection: "row", alignItems: "center",
     justifyContent: "center", paddingVertical: 10,
-    borderRadius: 10, backgroundColor: "#EEF2FF",
-    borderWidth: 1, borderColor: "#4F46E5", gap: 6,
+    borderRadius: 10, backgroundColor: ACCENT.indigo.wash,
+    borderWidth: 1, borderColor: ACCENT.indigo.base, gap: 6,
   },
-  questionTabBtnText: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
+  questionTabBtnText: { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep },
 
   // ✅ Fixed count row — never shrinks
   questionCountRow: {
     paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     // No flex here — intrinsic height only
   },
-  questionCount:     { fontSize: 13, fontWeight: "600", color: "#374151" },
-  questionCountHint: { fontSize: 11, color: "#DC2626", marginTop: 2 },
+  questionCount:     { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  questionCountHint: { fontSize: 11, color: SEMANTIC.error.text, marginTop: 2 },
 
   quizQuestionCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
     padding: 12, marginBottom: 8, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   quizQuestionNum: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.solid,
     alignItems: "center", justifyContent: "center",
   },
-  quizQuestionNumText: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
-  quizQuestionText:    { fontSize: 14, fontWeight: "600", color: "#111827", lineHeight: 20 },
+  quizQuestionNumText: { fontSize: 13, fontWeight: "700", color: COLORS.onPrimary },
+  quizQuestionText:    { fontSize: 14, fontWeight: "600", color: COLORS.text, lineHeight: 20 },
   quizQuestionMeta:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  quizQuestionMetaText:{ fontSize: 11, color: "#9CA3AF" },
-  quizQuestionMetaDot: { fontSize: 11, color: "#D1D5DB" },
+  quizQuestionMetaText:{ fontSize: 11, color: COLORS.textSecondary },
+  quizQuestionMetaDot: { fontSize: 11, color: COLORS.textSecondary },
   quizQuestionBtns:    { flexDirection: "row", gap: 4 },
   quizQuestionIconBtn: {
     width: 32, height: 32, borderRadius: 8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
     alignItems: "center", justifyContent: "center",
   },
 
   bankPickerHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     // No flex — intrinsic height only
   },
-  bankPickerTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  bankPickerScope: { fontSize: 12, fontWeight: "600", color: "#059669", marginTop: 2 },
-  bankPickerClose: { fontSize: 14, fontWeight: "700", color: "#4F46E5" },
+  bankPickerTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  bankPickerScope: { fontSize: 12, fontWeight: "600", color: ACCENT.slate.deep, marginTop: 2 },
+  bankPickerClose: { fontSize: 14, fontWeight: "700", color: ACCENT.indigo.deep },
   bankQuestionCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
     padding: 12, marginBottom: 8, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  bankQuestionText: { fontSize: 14, fontWeight: "600", color: "#111827", lineHeight: 20 },
-  bankQuestionMeta: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  bankQuestionText: { fontSize: 14, fontWeight: "600", color: COLORS.text, lineHeight: 20 },
+  bankQuestionMeta: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   addFromBankBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.solid,
     alignItems: "center", justifyContent: "center",
   },
 
@@ -1882,6 +1920,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     paddingVertical: 48, paddingHorizontal: 24, gap: 8,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 });

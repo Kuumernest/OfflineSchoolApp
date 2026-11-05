@@ -22,6 +22,8 @@ import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { getDatabase }       from "../../../src/db/database";
 import { getTeacherClasses } from "../../../src/services/teacherScope.service";
+import { COLORS, ACCENT, SEMANTIC, levelAccent, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -124,17 +126,31 @@ const getTeacherAssignedClassesFromMirror = async (teacherId, schoolId, t) => {
 // STAT PILL
 // ─────────────────────────────────────────────────────────────
 
-const StatPill = ({ label, value, color }) => (
-  <View style={[pillS.pill, { backgroundColor: color + "15" }]}>
-    <Text style={[pillS.val, { color }]}>{value}</Text>
+// Status pills: present success, absent error, late warning; a count with
+// no status (total, unmarked) in slate. Never grey.
+const PILL = {
+  present:  statusPill("success"),
+  absent:   statusPill("error"),
+  late:     statusPill("warning"),
+  neutral:  { bg: accentBadge("slate").bg, text: accentBadge("slate").text, border: accentBadge("slate").border },
+};
+function statusPill(tone) {
+  return { bg: SEMANTIC[tone].bg, text: SEMANTIC[tone].text, border: SEMANTIC[tone].icon + "4D" };
+}
+/** A rate's tone: 75%+ success, 50%+ warning, below that error. */
+const rateTone = (rate) => (rate >= 75 ? "success" : rate >= 50 ? "warning" : "error");
+
+const StatPill = ({ label, value, pal }) => (
+  <View style={[pillS.pill, { backgroundColor: pal.bg, borderColor: pal.border }]}>
+    <Text style={[pillS.val, { color: pal.text }]}>{value}</Text>
     <Text style={pillS.lbl}>{label}</Text>
   </View>
 );
 
 const pillS = StyleSheet.create({
-  pill: { flex: 1, borderRadius: 10, padding: 10, alignItems: "center", gap: 2 },
+  pill: { flex: 1, borderRadius: 10, padding: 10, alignItems: "center", gap: 2, borderWidth: 1 },
   val:  { fontSize: 18, fontWeight: "800" },
-  lbl:  { fontSize: 9, color: "#6B7280", fontWeight: "600", textTransform: "uppercase" },
+  lbl:  { fontSize: 9, color: COLORS.textSecondary, fontWeight: "600", textTransform: "uppercase" },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -144,11 +160,15 @@ const pillS = StyleSheet.create({
 const ClassCard = ({ cls, summary, onMark, onReport }) => {
   const { t } = useTranslation();
   const rate  = summary?.rate  ?? 0;
-  const color = rate >= 75 ? "#059669" : rate >= 50 ? "#D97706" : "#DC2626";
+  const tone  = SEMANTIC[rateTone(rate)];
+  const color = tone.text;
+  const accent = levelAccent(cls.sub || cls.name);
+  const tint   = ACCENT[accent];
 
   return (
-    <View style={[cardS.card, { borderLeftColor: color, borderLeftWidth: 4 }]}>
+    <View style={[cardS.card, { backgroundColor: tint.wash, borderTopColor: tint.base }]}>
       <View style={cardS.header}>
+        <IconSquare icon="school" accent={accent} size={36} />
         <View style={{ flex: 1 }}>
           <Text style={cardS.name}>{cls.name}</Text>
           {!!cls.sub && <Text style={cardS.sub}>{cls.sub}</Text>}
@@ -157,7 +177,7 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           </Text>
         </View>
 
-        <View style={[cardS.rateBadge, { backgroundColor: color + "15" }]}>
+        <View style={[cardS.rateBadge, { backgroundColor: tone.bg, borderColor: tone.icon + "4D" }]}>
           <Text style={[cardS.rateNum, { color }]}>{rate}%</Text>
           <Text style={[cardS.rateLbl, { color }]}>rate</Text>
         </View>
@@ -167,25 +187,25 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
         <View
           style={[
             cardS.barFill,
-            { width: `${Math.min(rate, 100)}%`, backgroundColor: color },
+            { width: `${Math.min(rate, 100)}%`, backgroundColor: tone.icon },
           ]}
         />
       </View>
 
       <View style={cardS.pills}>
-        <StatPill label={t("attStatus.present")}  value={summary?.present  ?? 0} color="#059669" />
-        <StatPill label={t("attStatus.absent")}   value={summary?.absent   ?? 0} color="#DC2626" />
-        <StatPill label={t("attStatus.late")}     value={summary?.late     ?? 0} color="#D97706" />
-        <StatPill label={t("attStatus.unmarked")} value={summary?.unmarked ?? 0} color="#9CA3AF" />
+        <StatPill label={t("attStatus.present")}  value={summary?.present  ?? 0} pal={PILL.present} />
+        <StatPill label={t("attStatus.absent")}   value={summary?.absent   ?? 0} pal={PILL.absent} />
+        <StatPill label={t("attStatus.late")}     value={summary?.late     ?? 0} pal={PILL.late} />
+        <StatPill label={t("attStatus.unmarked")} value={summary?.unmarked ?? 0} pal={PILL.neutral} />
       </View>
 
       <View style={cardS.actions}>
         <TouchableOpacity
-          style={[cardS.btn, { backgroundColor: "#4F46E5" }]}
+          style={[cardS.btn, { backgroundColor: ACCENT.green.solid }]}
           onPress={() => onMark(cls)}
           activeOpacity={0.8}
         >
-          <Ionicons name="create-outline" size={15} color="#FFF" />
+          <Ionicons name="create-outline" size={15} color={COLORS.onPrimary} />
           <Text style={cardS.btnText}>{t("attTeacher.markAttendance")}</Text>
         </TouchableOpacity>
 
@@ -194,8 +214,8 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           onPress={() => onReport(cls)}
           activeOpacity={0.8}
         >
-          <Ionicons name="bar-chart-outline" size={15} color="#4F46E5" />
-          <Text style={[cardS.btnText, { color: "#4F46E5" }]}>{t("attTeacher.report")}</Text>
+          <Ionicons name="bar-chart-outline" size={15} color={ACCENT.green.deep} />
+          <Text style={[cardS.btnText, { color: ACCENT.green.deep }]}>{t("attTeacher.report")}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -204,11 +224,14 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
 
 const cardS = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     marginBottom:    12,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
@@ -219,15 +242,15 @@ const cardS = StyleSheet.create({
     marginBottom:  10,
     gap:           10,
   },
-  name:      { fontSize: 16, fontWeight: "700", color: "#111827" },
-  sub:       { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  meta:      { fontSize: 12, color: "#6B7280", marginTop: 4 },
-  rateBadge: { alignItems: "center", borderRadius: 10, padding: 10, minWidth: 56 },
+  name:      { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  sub:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  meta:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
+  rateBadge: { alignItems: "center", borderRadius: 10, padding: 10, minWidth: 56, borderWidth: 1 },
   rateNum:   { fontSize: 20, fontWeight: "800" },
   rateLbl:   { fontSize: 9, fontWeight: "600", textTransform: "uppercase" },
   barBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     borderRadius:    3,
     overflow:        "hidden",
     marginBottom:    12,
@@ -245,11 +268,11 @@ const cardS = StyleSheet.create({
     paddingVertical: 9,
   },
   btnOutline: {
-    backgroundColor: "transparent",
+    backgroundColor: COLORS.surface,
     borderWidth:     1.5,
-    borderColor:     "#4F46E5",
+    borderColor:     ACCENT.green.base,
   },
-  btnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  btnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 13 },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -378,7 +401,7 @@ export default function TeacherAttendanceScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={styles.loadingText}>{t("attTeacher.loading")}</Text>
       </View>
     );
@@ -388,7 +411,7 @@ export default function TeacherAttendanceScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -396,9 +419,10 @@ export default function TeacherAttendanceScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("attTeacher.title")}</Text>
           <Text style={styles.headerSub}>{formatDate(today)}</Text>
@@ -409,7 +433,7 @@ export default function TeacherAttendanceScreen() {
           onPress={() => loadData(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh" size={20} color="#4F46E5" />
+          <Ionicons name="refresh" size={20} color={ACCENT.green.solid} />
         </TouchableOpacity>
       </View>
 
@@ -420,14 +444,14 @@ export default function TeacherAttendanceScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
       >
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={16} color="#DC2626" />
+            <Ionicons name="alert-circle" size={16} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -440,10 +464,10 @@ export default function TeacherAttendanceScreen() {
             </Text>
 
             <View style={styles.overallPills}>
-              <StatPill label={t("common.total")}   value={totals.total}   color="#6B7280" />
-              <StatPill label={t("attStatus.present")} value={totals.present} color="#059669" />
-              <StatPill label={t("attStatus.absent")}  value={totals.absent}  color="#DC2626" />
-              <StatPill label={t("attStatus.late")}    value={totals.late}    color="#D97706" />
+              <StatPill label={t("common.total")}   value={totals.total}   pal={PILL.neutral} />
+              <StatPill label={t("attStatus.present")} value={totals.present} pal={PILL.present} />
+              <StatPill label={t("attStatus.absent")}  value={totals.absent}  pal={PILL.absent} />
+              <StatPill label={t("attStatus.late")}    value={totals.late}    pal={PILL.late} />
             </View>
 
             <View style={styles.overallBarBg}>
@@ -452,12 +476,7 @@ export default function TeacherAttendanceScreen() {
                   styles.overallBarFill,
                   {
                     width: `${Math.min(totals.rate, 100)}%`,
-                    backgroundColor:
-                      totals.rate >= 75
-                        ? "#059669"
-                        : totals.rate >= 50
-                        ? "#D97706"
-                        : "#DC2626",
+                    backgroundColor: SEMANTIC[rateTone(totals.rate)].icon,
                   },
                 ]}
               />
@@ -472,7 +491,7 @@ export default function TeacherAttendanceScreen() {
         {/* Per-class cards */}
         {classes.length === 0 ? (
           <View style={styles.empty}>
-            <Ionicons name="school-outline" size={56} color="#D1D5DB" />
+            <IconSquare icon="school-outline" accent="green" size={56} radius={16} />
             <Text style={styles.emptyTitle}>{t("attTeacher.noClasses")}</Text>
             <Text style={styles.emptySub}>
               {t("attTeacher.noClassesHint")}
@@ -500,14 +519,14 @@ export default function TeacherAttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
-  loadingText: { color: "#6B7280", marginTop: 12, fontSize: 14 },
+  loadingText: { color: COLORS.textSecondary, marginTop: 12, fontSize: 14 },
 
   header: {
     flexDirection:     "row",
@@ -515,26 +534,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   refreshBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.green.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -544,37 +564,41 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    16,
     gap:             8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
 
   overallCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.green.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    20,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.green.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
   },
-  overallTitle:  { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  overallTitle:  { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 12 },
   overallPills:  { flexDirection: "row", gap: 6, marginBottom: 12 },
   overallBarBg: {
     height:          8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     borderRadius:    4,
     overflow:        "hidden",
     marginBottom:    8,
   },
   overallBarFill: { height: 8, borderRadius: 4 },
-  overallRate:   { fontSize: 12, color: "#6B7280", textAlign: "center", fontWeight: "600" },
+  overallRate:   { fontSize: 12, color: ACCENT.green.deep, textAlign: "center", fontWeight: "600" },
 
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 12 },
 
   empty: {
     alignItems:        "center",
@@ -583,7 +607,7 @@ const styles = StyleSheet.create({
     gap:               12,
     paddingHorizontal: 32,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "600", color: "#374151", textAlign: "center" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle: { fontSize: 16, fontWeight: "600", color: COLORS.text, textAlign: "center" },
+  emptySub:   { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
