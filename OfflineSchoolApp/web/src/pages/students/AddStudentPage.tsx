@@ -28,7 +28,10 @@ import {
   MailWarning,
   KeyRound,
   IdCard,
+  Users,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -183,10 +186,10 @@ export default function AddStudentPage() {
             <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
               <Check className="w-6 h-6 text-emerald-600" />
             </div>
-            <h2 className="mt-4 text-base font-semibold text-gray-900">
+            <h2 className="mt-4 text-base font-semibold text-ink">
               {t("students.isEnrolled", { name: result.name })}
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {result.emailSent
                 ? t("students.emailedThem")
                 : t("students.noEmailSent")}
@@ -265,15 +268,18 @@ export default function AddStudentPage() {
         {t("academic.student_other")}
       </Link>
 
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">{t("students.enroll")}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+      <div className="flex items-start gap-3">
+        <PageIcon />
+        <div>
+        <h1 className="text-lg font-semibold text-ink">{t("students.enroll")}</h1>
+        <p className="text-sm text-ink-muted mt-0.5">
           {t("students.directJoinHint")}{" "}
           <Link to="/students/admissions" className="text-primary-600 hover:underline">
             {t("admissions.title")}
           </Link>
           .
         </p>
+        </div>
       </div>
 
       {classOptions.length === 0 && (
@@ -292,7 +298,7 @@ export default function AddStudentPage() {
         className="space-y-4"
       >
         <Card>
-          <CardHeader title={t("students.theStudent")} />
+          <CardHeader title={t("students.theStudent")} icon={UserPlus} accent="blue" />
           <div className="grid sm:grid-cols-2 gap-3">
             <FormField label={t("common.firstName")} required>
               <Input value={form.firstName} onChange={set("firstName")} autoFocus />
@@ -352,6 +358,8 @@ export default function AddStudentPage() {
 
         <Card>
           <CardHeader
+            icon={Users}
+            accent="blue"
             title={t("students.guardianLabel")}
             subtitle={t("common.optionalContact")}
           />
@@ -416,14 +424,14 @@ function Credential({
   };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
-      <Icon className="w-4 h-4 text-gray-400 shrink-0" />
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-accent-blue-soft border border-line">
+      <Icon className={cn("w-4 h-4 shrink-0", DASH_TINT.blue.glyph)} />
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-semibold text-gray-900 font-mono break-all">
+        <p className="text-xs text-ink-muted">{label}</p>
+        <p className="text-sm font-semibold text-ink font-mono break-all">
           {value}
         </p>
-        <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>
+        <p className="text-[11px] text-ink-muted mt-0.5">{hint}</p>
       </div>
       <button
         type="button"

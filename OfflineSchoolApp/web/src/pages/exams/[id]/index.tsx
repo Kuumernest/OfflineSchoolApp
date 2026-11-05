@@ -34,9 +34,11 @@ import {
 }                                            from "@/constants/exam.constants";
 import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
 import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
-import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
+import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX, Flag, Info, ListChecks, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { DASH_TINT } from "@/config/dashboardTint";
+import { ACCENT_LEFT_CARD, DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -191,13 +193,15 @@ const NEXT_STATUSES: Record<string, ExamStatus[]> = {
   archived:  ["draft"                 ],
 };
 
+// `accent` colours the subject's card (left edge, wash, icon square); `ring`
+// marks the open card on that wash. Class strings in full for Tailwind.
 const SUBMISSION_META: Record<string, {
-  color: string; bg: string; labelKey: string; icon: LucideIcon;
+  color: string; bg: string; labelKey: string; icon: LucideIcon; accent: DashAccent; ring: string;
 }> = {
-  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: Hourglass },
-  submitted: { color: "text-primary-600", bg: "bg-primary-50", labelKey: "examSubmission.awaitingApproval", icon: Inbox },
-  approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: CheckCircle },
-  rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: XCircle },
+  pending:   { color: "text-accent-amber-deep", bg: "bg-accent-amber-soft", labelKey: "examSubmission.notSubmitted",     icon: Hourglass,   accent: "amber", ring: "ring-accent-amber" },
+  submitted: { color: "text-accent-sky-deep",   bg: "bg-accent-sky-soft",   labelKey: "examSubmission.awaitingApproval", icon: Inbox,       accent: "sky",   ring: "ring-accent-sky" },
+  approved:  { color: "text-accent-green-deep", bg: "bg-accent-green-soft", labelKey: "results.approved",                icon: CheckCircle, accent: "green", ring: "ring-accent-green" },
+  rejected:  { color: "text-accent-red-deep",   bg: "bg-accent-red-soft",   labelKey: "results.rejected",                icon: XCircle,     accent: "red",   ring: "ring-accent-red" },
 };
 
 const EMPTY_SCORE: ScoreEntry = {
@@ -236,9 +240,11 @@ const EmptyState = ({
   const Icon = icon;
   return (
   <div className="flex flex-col items-center justify-center
-                  py-16 text-center text-gray-400">
-    <Icon className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} aria-hidden />
-    <p className="font-semibold text-gray-600">{title}</p>
+                  py-16 text-center text-ink-muted">
+    <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.amber.box)} aria-hidden="true">
+      <Icon className="w-6 h-6" aria-hidden />
+    </div>
+    <p className="font-semibold text-ink">{title}</p>
     {subtitle && <p className="text-sm mt-1">{subtitle}</p>}
   </div>
   );
@@ -349,9 +355,14 @@ const DetailsTab = ({
     <div className="space-y-5">
 
       {/* Status card */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">{t("exams.statusTitle")}</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Flag className="h-4 w-4" />
+          </span>
+            {t("exams.statusTitle")}
+          </h3>
           <StatusBadge status={exam.status} />
         </div>
 
@@ -387,9 +398,14 @@ const DetailsTab = ({
       </div>
 
       {/* Exam info */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">{t("exams.information")}</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Info className="h-4 w-4" />
+          </span>
+            {t("exams.information")}
+          </h3>
           <button
             onClick={() => setEditOpen(true)}
             className="px-3 py-1.5 text-sm font-semibold rounded-xl
@@ -647,14 +663,19 @@ const DetailsTab = ({
       )}
 
       {/* Per-subject progress */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-1">{t("exams.marksProgress")}</h3>
-        <p className="text-xs text-gray-400 mb-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
+        <h3 className="flex items-center gap-2 font-semibold text-ink mb-1">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <BarChart3 className="h-4 w-4" />
+          </span>
+          {t("exams.marksProgress")}
+        </h3>
+        <p className="text-xs text-ink-muted mb-4">
           {t("exams.marksProgressHint")}
         </p>
 
         {subjectCount === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
+          <p className="text-sm text-ink-muted text-center py-6">
             {t("exams.noSubjectsYet")}
           </p>
         ) : (
@@ -666,10 +687,10 @@ const DetailsTab = ({
                     <h4 className="text-xs font-semibold text-primary-700 shrink-0">
                       {group.className}
                     </h4>
-                    <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                    <span className="text-[11px] font-medium text-ink-muted tabular-nums">
                       {group.items.length}
                     </span>
-                    <span className="flex-1 border-t border-gray-100" />
+                    <span className="flex-1 border-t border-line" />
                   </div>
                 )}
 
@@ -677,18 +698,18 @@ const DetailsTab = ({
               <div key={sub._id}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <meta.icon className={`w-4 h-4 ${meta.color}`} aria-hidden />
-                    <span className="text-sm font-semibold text-gray-800">
+                    <meta.icon className={cn("w-4 h-4", DASH_TINT[meta.accent].glyph)} aria-hidden />
+                    <span className="text-sm font-semibold text-ink">
                       {sub.subjectName}
                     </span>
                     {sub.teacherName && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">
                         — {sub.teacherName}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-ink-muted">
                       {t("exams.enteredOf", { entered, total })}
                     </span>
                     <span className={`text-xs font-bold px-2 py-0.5
@@ -697,14 +718,14 @@ const DetailsTab = ({
                     </span>
                   </div>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-accent-amber-soft rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all
                       ${pct === 100
-                        ? "bg-green-500"
+                        ? "bg-accent-green-solid"
                         : pct > 0
                           ? "bg-primary-500"
-                          : "bg-gray-200"
+                          : "bg-transparent"
                       }`}
                     style={{ width: `${pct}%` }}
                   />
@@ -1402,7 +1423,7 @@ const MarksTab = ({
 
       {/* Subject rows */}
       <div className="space-y-2">
-        <p className="text-xs text-gray-400 font-medium mb-3">
+        <p className="text-xs text-ink-muted font-medium mb-3">
           {t("exams.marksHint")}
         </p>
 
@@ -1413,10 +1434,10 @@ const MarksTab = ({
                 <h3 className="text-xs font-semibold text-primary-700 shrink-0">
                   {group.className}
                 </h3>
-                <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                <span className="text-[11px] font-medium text-ink-muted tabular-nums">
                   {group.items.length}
                 </span>
-                <span className="flex-1 border-t border-gray-100" />
+                <span className="flex-1 border-t border-line" />
               </div>
             )}
 
@@ -1430,45 +1451,46 @@ const MarksTab = ({
           return (
             <div key={sub._id}>
               <div
-                className={`bg-white rounded-xl border transition-colors
-                  cursor-pointer select-none
-                  ${isOpen
-                    ? "border-primary-300 shadow-sm"
-                    : "border-gray-100 hover:border-gray-200"
-                  }`}
+                className={cn(
+                  ACCENT_LEFT_CARD[meta.accent],
+                  "transition-shadow cursor-pointer select-none",
+                  isOpen ? cn("ring-2", meta.ring) : "hover:shadow-lift",
+                )}
               >
                 <div
                   className="flex items-center gap-4 p-4"
                   onClick={() => toggleSubject(sub._id)}
                 >
-                  <meta.icon className={`w-5 h-5 shrink-0 ${meta.color}`} aria-hidden />
+                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", DASH_TINT[meta.accent].box)} aria-hidden="true">
+                    <meta.icon className="w-5 h-5" aria-hidden />
+                  </span>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">
+                      <span className="font-semibold text-ink text-sm">
                         {sub.subjectName}
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5
-                        rounded-full ${meta.color} ${meta.bg}`}>
+                        rounded-full bg-surface ${meta.color}`}>
                         {t(meta.labelKey)}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">
                         {sub.teacherName || t("exams.noTeacherAssigned")}
                       </span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">·</span>
+                      <span className="text-xs text-ink-muted">
                         {t("exams.scoresEntered", { entered, total })}
                       </span>
-                      <span className="text-xs text-gray-300">·</span>
+                      <span className="text-xs text-ink-muted">·</span>
                       {editingCoeff === sub._id ? (
                         <span
                           className="flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-ink-muted">
                             {t("exams.coeff")}
                           </span>
                           <input
@@ -1506,7 +1528,7 @@ const MarksTab = ({
                         </span>
                       ) : (
                         <span
-                          className="text-xs text-gray-400 flex items-center gap-1"
+                          className="text-xs text-ink-muted flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {t("exams.coeff")} {coeffOf(sub)}
@@ -1526,10 +1548,10 @@ const MarksTab = ({
                       )}
                     </div>
 
-                    <div className="mt-2 h-1 bg-gray-100 rounded-full w-48">
+                    <div className="mt-2 h-1 bg-surface rounded-full w-48">
                       <div
                         className={`h-full rounded-full transition-all
-                          ${pct === 100 ? "bg-green-500" : "bg-primary-400"}`}
+                          ${pct === 100 ? "bg-accent-green-solid" : "bg-primary-400"}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -1676,8 +1698,13 @@ const ResultsTab = ({
     <div className="space-y-5">
 
       {/* Guided steps */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">{t("exams.checklist")}</h3>
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
+        <h3 className="flex items-center gap-2 font-semibold text-ink mb-4">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <ListChecks className="h-4 w-4" />
+          </span>
+          {t("exams.checklist")}
+        </h3>
 
         <div className="space-y-3">
 
@@ -1851,7 +1878,7 @@ const ResultsTab = ({
           <Spinner size="lg" />
         </div>
       ) : results.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100">
+        <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.amber.edge)}>
           <EmptyState
             icon={BarChart3}
             title={t("exams.noResultsYet")}
@@ -1863,11 +1890,13 @@ const ResultsTab = ({
           />
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100
-                        overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex
+        <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.amber.edge)}>
+          <div className="px-4 py-3 border-b border-line flex
                           items-center justify-between">
-            <h3 className="font-semibold text-gray-900">
+            <h3 className="flex items-center gap-2 font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Trophy className="h-4 w-4" />
+          </span>
               {t("exams.rankingsCount", { count: results.length })}
             </h3>
             <Link
@@ -2046,12 +2075,17 @@ export default function ExamDetailPage() {
           >
             ← {t("exams.backToExams")}
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">{exam.name}</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {examTypeLabel(t, exam.type)}
-            {exam.academicYear ? ` · ${exam.academicYear}` : ""}
-            {exam.term         ? ` · ${exam.term}`         : ""}
-          </p>
+          <div className="flex items-start gap-3">
+            <PageIcon />
+            <div>
+              <h1 className="text-2xl font-bold text-ink">{exam.name}</h1>
+              <p className="text-ink-muted text-sm mt-1">
+                {examTypeLabel(t, exam.type)}
+                {exam.academicYear ? ` · ${exam.academicYear}` : ""}
+                {exam.term         ? ` · ${exam.term}`         : ""}
+              </p>
+            </div>
+          </div>
         </div>
         <StatusBadge status={exam.status} />
       </div>

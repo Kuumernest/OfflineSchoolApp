@@ -19,6 +19,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { useSignOut } from "@/hooks/useSignOut";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT } from "@/config/dashboardTint";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,13 +111,11 @@ export default function ChangePasswordPage() {
 
         {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center mx-auto">
-            <KeyRound className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="mt-4 text-xl font-semibold text-gray-900">
+          <PageIcon icon={KeyRound} accent="slate" className="mx-auto h-12 w-12 rounded-xl" />
+          <h1 className="mt-4 text-xl font-semibold text-ink">
             {t("changePassword.choose")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {user?.name
               ? `${t("changePassword.welcomeName", { name: user.name })} `
               : ""}
@@ -129,7 +129,7 @@ export default function ChangePasswordPage() {
             e.preventDefault();
             if (canSubmit) mutation.mutate();
           }}
-          className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4"
+          className={cn("bg-surface rounded-xl border border-line shadow-card p-6 space-y-4", DASH_TINT.slate.edge)}
         >
           <Field
             label={

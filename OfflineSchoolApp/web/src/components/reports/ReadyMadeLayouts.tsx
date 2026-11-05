@@ -17,6 +17,20 @@ import { Badge }           from "@/components/ui/Badge";
 import { useToast }        from "@/components/ui/Toast";
 import { getErrorMessage } from "@/lib/axios";
 import { cn }              from "@/utils/cn";
+import { DASH_TINT, categoryAccent, type DashAccent } from "@/config/dashboardTint";
+
+/** The layout in use, ringed in its own colour (literal for Tailwind). */
+const IN_USE_RING: Record<DashAccent, string> = {
+  blue:   "ring-2 ring-accent-blue",
+  violet: "ring-2 ring-accent-violet",
+  indigo: "ring-2 ring-accent-indigo",
+  slate:  "ring-2 ring-accent-slate",
+  amber:  "ring-2 ring-accent-amber",
+  green:  "ring-2 ring-accent-green",
+  teal:   "ring-2 ring-accent-teal",
+  sky:    "ring-2 ring-accent-sky",
+  red:    "ring-2 ring-accent-red",
+};
 
 interface Preset { id: "classic" | "compact" | "clear"; name: string; description: string; inUse: boolean }
 
@@ -55,11 +69,13 @@ export function ReadyMadeLayouts({ schoolId, onChanged }: { schoolId: string; on
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
-            <LayoutTemplate className="h-4 w-4 text-gray-400" aria-hidden />
+          <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+              <LayoutTemplate className="h-4 w-4" />
+            </span>
             {t("templates.readyMade")}
           </h2>
-          <p className="mt-0.5 text-sm text-gray-500">{t("templates.readyMadeHint")}</p>
+          <p className="mt-0.5 text-sm text-ink-muted">{t("templates.readyMadeHint")}</p>
         </div>
         <Link to="/settings?section=reportLayout"
           className="flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:underline">
@@ -69,21 +85,26 @@ export function ReadyMadeLayouts({ schoolId, onChanged }: { schoolId: string; on
       </div>
 
       {q.data?.custom && (
-        <p className="text-sm text-gray-600">{t("templates.customInUse", { name: q.data.custom })}</p>
+        <p className="text-sm text-ink-muted">{t("templates.customInUse", { name: q.data.custom })}</p>
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
         {presets.map((p) => (
           <div key={p.id}
-            className={cn("flex flex-col rounded-xl border bg-white p-4",
-              p.inUse ? "border-primary-500 ring-1 ring-primary-500" : "border-gray-200")}>
+            className={cn("flex flex-col p-4", DASH_TINT[categoryAccent(p.id)].card,
+              p.inUse && IN_USE_RING[categoryAccent(p.id)])}>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <h3 className="font-semibold text-gray-900">{t(`templates.preset.${p.id}.name`)}</h3>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(p.id)].box)} aria-hidden="true">
+                  <LayoutTemplate className="h-4 w-4" />
+                </span>
+                <h3 className="font-semibold text-ink">{t(`templates.preset.${p.id}.name`)}</h3>
+              </div>
               {p.inUse && <Badge variant="success">{t("templates.inUse")}</Badge>}
             </div>
-            <p className="mb-4 flex-1 text-sm text-gray-500">{t(`templates.preset.${p.id}.description`)}</p>
+            <p className="mb-4 flex-1 text-sm text-ink-muted">{t(`templates.preset.${p.id}.description`)}</p>
             {p.inUse ? (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-green-700">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-success-text">
                 <Check className="h-4 w-4" aria-hidden />{t("templates.printingWithThis")}
               </span>
             ) : (

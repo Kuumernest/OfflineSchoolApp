@@ -49,7 +49,9 @@ export default function CalculationRulesSection({ schoolId }: { schoolId: string
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <Calculator className="mt-0.5 h-5 w-5 text-ink-muted" aria-hidden="true" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-slate-solid text-white">
+            <Calculator className="h-4 w-4" aria-hidden="true" />
+          </div>
           <div>
             <h2 className="text-sm font-semibold text-ink">{t("academicRules.title")}</h2>
             <p className="mt-1 text-sm text-ink-muted">{t("academicRules.intro")}</p>
@@ -67,7 +69,7 @@ export default function CalculationRulesSection({ schoolId }: { schoolId: string
 
       <ul className="mt-4 space-y-2">
         {STATEMENTS.map((key) => (
-          <li key={key} className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-ink-body">
+          <li key={key} className="rounded-xl border border-line bg-accent-slate-soft p-3 text-sm text-ink-body">
             {t(`academicRules.statement.${key}`)}
           </li>
         ))}
@@ -90,7 +92,7 @@ export default function CalculationRulesSection({ schoolId }: { schoolId: string
               {t("academicRules.editBars")}
             </Link>
           </p>
-          <div className="flex items-start gap-2 rounded-xl border border-gray-100 p-3 text-ink-muted">
+          <div className="flex items-start gap-2 rounded-xl border border-line p-3 text-ink-muted">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p>
               {t("academicRules.counts", {

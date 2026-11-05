@@ -46,6 +46,8 @@ import {
   type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine, type DevGuidanceItem, type DevelopmentIntervention, type InterventionTrigger, type DevelopmentPlan,
 } from "@/services/insights.service";
 import { formatDay } from "../../../../shared/dateFormat.js";
+import { DASH_TINT, categoryAccent } from "@/config/dashboardTint";
+import { cn } from "@/utils/cn";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
 const OBS_CODES  = ["PROBLEM_SOLVING", "PERSISTENCE", "COMMUNICATION", "TECHNICAL_EXECUTION", "CREATIVE_APPROACH", "COLLABORATION", "EXPLANATION", "ITERATION"];
@@ -56,8 +58,24 @@ const DIMENSIONS = ["quantitative_reasoning", "scientific_reasoning", "language_
 const AREAS = ["quantitative_scientific", "mathematical", "life_sciences", "computational_technical", "language_media", "humanities_social",
   "creative_arts", "design_spatial", "organisation_enterprise", "collaborative_service"];
 
-const LEVEL_VARIANT = { strong: "success", emerging: "info", limited: "default" } as const;
-const CONF_VARIANT  = { strong: "success", emerging: "info", insufficient: "default" } as const;
+const LEVEL_VARIANT = { strong: "success", emerging: "info", limited: "info" } as const;
+const CONF_VARIANT  = { strong: "success", emerging: "info", insufficient: "info" } as const;
+
+// Badge colours for readings that go up or down: green for a gain, red for a
+// loss, the info blue for everything in between. Styling only.
+type ReadingVariant = "success" | "danger" | "warning" | "info";
+const stateVariant = (state?: string | null): ReadingVariant =>
+  state === "ESTABLISHED" ? "success" : state === "DECLINING" ? "danger" : "info";
+const trajectoryVariant = (tr?: string | null): ReadingVariant =>
+  ["STRENGTHENING", "RECOVERING", "STABLE_ESTABLISHED"].includes(tr ?? "") ? "success"
+  : ["WEAKENING", "DECLINING", "STABLE_DECLINING"].includes(tr ?? "") ? "danger" : "info";
+const directionVariant = (dir?: string | null): ReadingVariant =>
+  dir === "rising" ? "success" : dir === "declining" ? "danger" : "info";
+const evidenceQualityVariant = (q?: string | null): ReadingVariant =>
+  q === "WELL_SUPPORTED" || q === "SUPPORTED" ? "success" : q === "INSUFFICIENT" ? "warning" : "info";
+const coverageVariant = (level?: string | null): ReadingVariant =>
+  level === "STRONG_COVERAGE" || level === "GOOD_COVERAGE" ? "success"
+  : level === "SPARSE_DATA" || level === "INSUFFICIENT_DATA" ? "warning" : "info";
 
 export default function StudentStrengthsPage() {
   const { studentId = "" } = useParams();
@@ -93,9 +111,9 @@ export default function StudentStrengthsPage() {
         <Card>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant={CONF_VARIANT[p.confidence]} label={t(`strengths.confidence.${p.confidence}`)} />
-            <Badge variant="default" label={t("strengths.coverage", { seq: p.evidenceCoverage.sequences, subj: p.evidenceCoverage.subjects })} />
-            <Badge variant="default" label={t("strengths.versions", { a: p.academicEngineVersion ?? "—", s: p.strengthEngineVersion })} />
-            <Badge variant="default" label={t("strengths.strongMark", { m: p.grading.strongMark })} />
+            <Badge variant="info" label={t("strengths.coverage", { seq: p.evidenceCoverage.sequences, subj: p.evidenceCoverage.subjects })} />
+            <Badge variant="info" label={t("strengths.versions", { a: p.academicEngineVersion ?? "—", s: p.strengthEngineVersion })} />
+            <Badge variant="info" label={t("strengths.strongMark", { m: p.grading.strongMark })} />
           </div>
           <p className="mt-2 text-xs text-ink-muted">{t("strengths.confidenceMeans")}</p>
         </Card>
@@ -152,7 +170,7 @@ export default function StudentStrengthsPage() {
         {p?.strengths.length ? p.strengths.map((d) => <DimensionCard key={d.dimension} d={d} areas={p?.explorationAreas} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
           : <p className="text-sm text-ink-muted">{t("strengths.none")}</p>}
         {p?.singleSubjectStrengths.map((s) => (
-          <Card key={s.subjectId} className="text-sm">
+          <Card key={s.subjectId} className={cn("text-sm", DASH_TINT.slate.card)}>
             <p className="font-medium text-ink">{s.subjectName ?? s.subjectId} <span className="font-normal text-ink-muted">· {t("strengths.singleSubject")}</span></p>
             <p className="text-xs text-ink-muted">{t(`strengths.state.${s.state}`)} · {t(`strengths.persistence.${s.persistence}`)} · {s.consistency ? t(`strengths.consistency.${s.consistency}`) : "—"}</p>
           </Card>
@@ -177,7 +195,7 @@ export default function StudentStrengthsPage() {
         {p?.explorationAreas.length ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {p.explorationAreas.map((a) => (
-              <Card key={a.area} className="space-y-2 text-sm">
+              <Card key={a.area} className={cn("space-y-2 text-sm", DASH_TINT[categoryAccent(a.area)].card)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-ink">{t(`strengths.area.${a.area}`, { defaultValue: a.area })}</span>
                   <Badge variant={LEVEL_VARIANT[a.evidenceLevel]} label={t(`strengths.level.${a.evidenceLevel}`)} />
@@ -187,7 +205,7 @@ export default function StudentStrengthsPage() {
                   {a.supportingSubjects.length > 0 && ` · ${a.supportingSubjects.map((s) => s.subjectName ?? s.subjectId).join(", ")}`}
                 </p>
                 <div>
-                  <p className="text-xs font-medium text-ink-faint">{t("strengths.waysToExplore")}</p>
+                  <p className="text-xs font-medium text-ink-muted">{t("strengths.waysToExplore")}</p>
                   <ul className="list-disc pl-5 text-ink">{a.waysToExplore.map((w) => <li key={w}>{t(`strengths.activity.${w}`, { defaultValue: w })}</li>)}</ul>
                 </div>
               </Card>
@@ -202,7 +220,7 @@ export default function StudentStrengthsPage() {
           <ul className="space-y-1 text-sm">
             {p.interestSignals.map((s, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2">
-                <Badge variant="default" label={t(`strengths.kind.${s.kind}`)} />
+                <Badge accent={categoryAccent(s.kind)} label={t(`strengths.kind.${s.kind}`)} />
                 <span className="text-ink">{s.activity}</span>
                 <span className="text-xs text-ink-muted">
                   {s.dimension ? t(`strengths.dimension.${s.dimension}`, { defaultValue: s.dimension }) : s.area ? t(`strengths.area.${s.area}`, { defaultValue: s.area }) : ""}
@@ -240,7 +258,7 @@ export default function StudentStrengthsPage() {
           <ul className="space-y-1 text-sm">
             {profileQ.data!.history.map((h) => (
               <li key={h.snapshotId} className="flex flex-wrap items-center gap-2">
-                <Badge variant="default" label={`v${h.profileVersion}`} />
+                <Badge variant="info" label={`v${h.profileVersion}`} />
                 <span className="text-ink">{h.periodLabel ?? formatDay(h.generatedAt)}</span>
                 <span className="text-xs text-ink-muted">
                   {t("strengths.historyLine", { s: h.profile.strengths.map((d) => t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })).join(", ") || "—",
@@ -281,9 +299,9 @@ function DimensionCard({ d, areas, reviews, studentId, schoolId, isStaff, onChan
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })}</span>
         <Badge variant={d.state === "ESTABLISHED" ? "success" : d.state === "EMERGING" ? "info" : d.state === "DECLINING" ? "warning" : "default"} label={t(`strengths.state.${d.state}`)} />
-        <Badge variant="default" label={t(`strengths.persistence.${d.persistence}`)} />
+        <Badge variant="info" label={t(`strengths.persistence.${d.persistence}`)} />
         <Badge variant={CONF_VARIANT[d.confidence]} label={t(`strengths.confidence.${d.confidence}`)} />
-        {d.crossSubject && <Badge variant="default" label={t("strengths.crossSubject")} />}
+        {d.crossSubject && <Badge variant="info" label={t("strengths.crossSubject")} />}
       </div>
       <ul className="space-y-0.5 text-xs text-ink-muted">
         {d.evidence.map((e, i) => (
@@ -505,7 +523,7 @@ function ExplorationCard({ e, criteria, schoolId, toast, onChanged }: { e: Explo
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{e.title}</span>
         <Badge variant={e.status === "COMPLETED" ? "success" : e.status === "REVIEW_REQUIRED" ? "warning" : closedish ? "default" : "info"} label={t(`explore.status.${e.status}`)} />
-        <Badge variant="default" label={t(`strengths.area.${e.area}`, { defaultValue: e.area })} />
+        <Badge accent={categoryAccent(e.area)} label={t(`strengths.area.${e.area}`, { defaultValue: e.area })} />
         <span className="text-xs text-ink-muted">{t(`explore.level.${e.level}`)}{e.relevance ? ` · ${t(`explore.relevance.${e.relevance}`)}` : ""}</span>
       </div>
       {e.suggestedBecause.length > 0 && <p className="text-xs text-ink-muted">{t("explore.because")}: {e.suggestedBecause.map((r) => t(`explore.reason.${r}`, { defaultValue: r })).join(", ")}</p>}
@@ -626,9 +644,9 @@ function TrajectoryCard({ x, isStaff, fam, day, explainLine }: { x: Trajectory; 
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{name}</span>
         <Badge variant={x.currentState === "ESTABLISHED" ? "success" : x.currentState === "EMERGING" ? "info" : x.currentState === "DECLINING" ? "warning" : "default"} label={`${t("development.current")}: ${t(`strengths.state.${x.currentState}`)}`} />
-        {prev && <Badge variant="default" label={`${t("development.previous")}: ${t(`strengths.state.${prev.state}`)}`} />}
-        <Badge variant="default" label={t(`development.trajectory.${x.trajectory}`, { defaultValue: x.trajectory })} />
-        <Badge variant="default" label={`${t("development.direction")}: ${t(`development.dir.${x.direction}`, { defaultValue: x.direction })}`} />
+        {prev && <Badge variant={stateVariant(prev.state)} label={`${t("development.previous")}: ${t(`strengths.state.${prev.state}`)}`} />}
+        <Badge variant={trajectoryVariant(x.trajectory)} label={t(`development.trajectory.${x.trajectory}`, { defaultValue: x.trajectory })} />
+        <Badge variant={directionVariant(x.direction)} label={`${t("development.direction")}: ${t(`development.dir.${x.direction}`, { defaultValue: x.direction })}`} />
       </div>
       {x.currentRelationship && <p className="text-xs text-ink-muted">{t("development.relationship")}: {t(`strengths.integration.relationship.${x.currentRelationship}`, { defaultValue: x.currentRelationship })}</p>}
       <div className="text-xs">
@@ -721,7 +739,7 @@ function GuidanceCard({ i, isStaff, triggers, onPropose, onPlan, fam, day }: { i
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{name}</span>
         <Badge variant={["SEEK_SUPPORT", "CHANGE_APPROACH"].includes(i.category) ? "warning" : ["MAINTAIN", "DEEPEN"].includes(i.category) ? "success" : "info"} label={t(`devGuidance.category.${i.category}`, { defaultValue: i.category })} />
-        <Badge variant="default" label={`${t("devGuidance.quality")}: ${t(`devGuidance.evidenceQuality.${i.evidenceQuality}`, { defaultValue: i.evidenceQuality })}`} />
+        <Badge variant={evidenceQualityVariant(i.evidenceQuality)} label={`${t("devGuidance.quality")}: ${t(`devGuidance.evidenceQuality.${i.evidenceQuality}`, { defaultValue: i.evidenceQuality })}`} />
       </div>
       <div className="grid gap-2 text-xs md:grid-cols-2">
         <div>
@@ -1033,7 +1051,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
     <Section icon={<BookOpen className="h-3.5 w-3.5" />} heading={t("learning.heading")} hint={t("learning.hint", { v: d.learningEvidenceVersion })}>
       <Card className="text-xs text-ink-muted">
         {t("learning.counts", { e: d.counts.events, h: d.counts.bySource.HOMEWORK ?? 0, q: d.counts.bySource.QUIZ ?? 0, s: d.counts.bySource.EXAM_SCORE ?? 0, a: d.counts.bySource.ATTENDANCE ?? 0 })}
-        {" · "}{t("learning.coverageOverall")}: <Badge variant="default" label={t(`learning.quality.${d.quality.overall.level}`)} />
+        {" · "}{t("learning.coverageOverall")}: <Badge variant={coverageVariant(d.quality.overall.level)} label={t(`learning.quality.${d.quality.overall.level}`)} />
         {d.quality.overall.flags.map((f) => <span key={f}> <Badge variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} /></span>)}
       </Card>
 
@@ -1043,7 +1061,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
           <Card key={s.subjectId ?? "none"} className="space-y-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-ink">{s.subjectId}</span>
-              <Badge variant="default" label={t(`learning.quality.${qs?.level ?? "NO_DATA"}`)} />
+              <Badge variant={coverageVariant(qs?.level)} label={t(`learning.quality.${qs?.level ?? "NO_DATA"}`)} />
               {(qs?.flags ?? []).map((f) => <Badge key={f} variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} />)}
             </div>
             <p className="text-xs font-medium text-ink-faint">{t("learning.observed")}</p>
@@ -1260,7 +1278,10 @@ function ExplanationResult({ r, onPick }: { r: ExplainResponse; onPick: (q: stri
 function Section({ icon, heading, hint, children }: { icon: React.ReactNode; heading: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{icon} {heading}</h3>
+      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        <span aria-hidden="true" className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)}>{icon}</span>
+        {heading}
+      </h3>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       {children}
     </section>

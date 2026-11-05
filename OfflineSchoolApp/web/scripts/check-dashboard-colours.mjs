@@ -189,5 +189,48 @@ const opted = walk(path.join(ROOT, "src"))
   .map((f) => path.relative(ROOT, f));
 check("no screen opts out of the tinted cards", opted, []);
 
+// ── 7. Every screen: headers, badges, entity colours ───────────────────────
+const { levelAccent, termAccent, roleAccent, categoryAccent, ACCENT_BADGE, ACCENT_LEFT_CARD } =
+  await import(path.join(ROOT, "src/config/dashboardTint.ts"));
+check("a class takes its level's colour, the same for the same level",
+  [levelAccent("1"), levelAccent("JHS 2"), levelAccent("Form 3"), levelAccent(null), levelAccent("Nursery") === levelAccent("nursery")],
+  ["blue", "violet", "indigo", "indigo", true]);
+check("a fee structure takes its term's colour",
+  [termAccent("Term 1"), termAccent("2"), termAccent("Third term 3"), termAccent(null)], ["blue", "green", "amber", "teal"]);
+check("a person takes their role's colour",
+  [roleAccent("teacher"), roleAccent("student"), roleAccent("bursar"), roleAccent("parent"), roleAccent("school_admin")],
+  ["violet", "blue", "teal", "sky", "indigo"]);
+check("an entity colour is never red (red is bad news)",
+  [...Array(40)].map((_, i) => categoryAccent(`category ${i}`)).includes("red"), false);
+const lowBadge = [];
+for (const [accent, cls] of Object.entries(ACCENT_BADGE)) {
+  const [, fgTok] = cls.match(/text-(accent-[\w-]+)/) ?? [];
+  const [, bgTok] = cls.match(/bg-(accent-[\w-]+)/) ?? [];
+  const r = ratio(tokens[fgTok], tokens[bgTok]);
+  if (!(r >= 4.5)) lowBadge.push(`${accent} ${r.toFixed(2)}`);
+}
+check("every accent badge's text is WCAG AA on its wash", lowBadge, []);
+check("left-edge cards exist for every accent", Object.keys(ACCENT_LEFT_CARD).sort(), Object.keys(DASH_TINT).sort());
+
+const badge = read("src/components/ui/Badge.tsx");
+check("no grey badge variant (default and secondary are coloured)",
+  [/default:\s*"bg-canvas/.test(badge), /secondary:\s*"bg-canvas/.test(badge), /accent \? ACCENT_BADGE\[accent\]/.test(badge)],
+  [false, false, true]);
+const header = read("src/components/ui/PageHeader.tsx");
+check("every PageHeader opens with the route's solid icon square",
+  [/pageIdentity\(pathname\)/.test(header), /tint\.box/.test(header), /export function PageIcon/.test(header)], [true, true, true]);
+const app = read("src/App.tsx");
+const identity = read("src/config/pageIdentity.ts");
+const prefixes = [...identity.matchAll(/^\s*"(\/[^"]*)":/gm)].map((m) => m[1]);
+const routes = [...app.matchAll(/path="(\/[^"]*)"/g)].map((m) => m[1])
+  .filter((r) => !["/login", "/portal", "/verify", "/verify/:code"].includes(r));
+const unmapped = routes.filter((r) => !prefixes.some((p) => r === p || r.startsWith(`${p}/`)));
+check("every console route has a header colour and icon", [...new Set(unmapped)], []);
+const table = read("src/components/ui/DataTable.tsx");
+check("tables: white header, blue row hover, no grey",
+  [/<thead className="bg-surface">/.test(table), /hover:bg-surface-muted|bg-gray-50/.test(table)], [true, false]);
+const card = read("src/components/ui/Card.tsx");
+check("CardHeader can carry a solid icon square", /DASH_TINT\[accent\]\.box/.test(card), true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

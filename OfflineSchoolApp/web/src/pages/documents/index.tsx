@@ -21,6 +21,7 @@ import { FormField, SelectField } from "@/components/ui/FormField";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { useToast }    from "@/components/ui/Toast";
 import { cn }          from "@/utils/cn";
+import { DASH_TINT, categoryAccent, type DashAccent } from "@/config/dashboardTint";
 import { getErrorMessage } from "@/lib/axios";
 
 import { fetchClasses }  from "@/services/class.service";
@@ -35,6 +36,19 @@ import { useSingleFlight } from "@/hooks/useSingleFlight";
 type ClassListVariant = "plain" | "register" | "contacts";
 
 type Tab = "classList" | "transcript" | "idCards";
+
+/** The selected option card's ring, in its own colour (literal for Tailwind). */
+const SELECTED_RING: Record<DashAccent, string> = {
+  blue:   "ring-2 ring-accent-blue",
+  violet: "ring-2 ring-accent-violet",
+  indigo: "ring-2 ring-accent-indigo",
+  slate:  "ring-2 ring-accent-slate",
+  amber:  "ring-2 ring-accent-amber",
+  green:  "ring-2 ring-accent-green",
+  teal:   "ring-2 ring-accent-teal",
+  sky:    "ring-2 ring-accent-sky",
+  red:    "ring-2 ring-accent-red",
+};
 
 export default function DocumentsPage() {
   const { t, i18n } = useTranslation();
@@ -157,7 +171,7 @@ export default function DocumentsPage() {
       </div>
 
       {tab === "classList" || tab === "idCards" ? (
-        <Card className="space-y-5">
+        <Card className={cn("space-y-5", DASH_TINT.slate.edge)}>
           <FormField label={t("cl.pick")} required>
             <SelectField
               value={classId}
@@ -168,13 +182,13 @@ export default function DocumentsPage() {
           </FormField>
 
           {tab === "idCards" && (
-            <p className="rounded-control border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">
+            <p className="rounded-control border border-info-line bg-info-soft px-3 py-2 text-xs text-info-text">
               {t("idc.hint")} {t("idc.blank")}
             </p>
           )}
 
           {tab === "classList" && <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {t("cl.variant")}
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -184,21 +198,25 @@ export default function DocumentsPage() {
                   type="button"
                   onClick={() => setVariant(v.key)}
                   className={cn(
-                    "rounded-card border p-3 text-left transition-colors",
-                    variant === v.key
-                      ? "border-primary-600 bg-primary-50/60"
-                      : "border-line bg-surface hover:bg-surface-muted"
+                    "flex items-start gap-3 p-3 text-left transition-shadow hover:shadow-lift",
+                    DASH_TINT[categoryAccent(v.key)].card,
+                    variant === v.key && SELECTED_RING[categoryAccent(v.key)]
                   )}
                 >
-                  <p className="text-sm font-medium text-ink">{t(`cl.${v.key}`)}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{v.hint}</p>
+                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(v.key)].box)} aria-hidden="true">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{t(`cl.${v.key}`)}</span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">{v.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
           </div>}
         </Card>
       ) : (
-        <Card className="space-y-4">
+        <Card className={cn("space-y-4", DASH_TINT.slate.edge)}>
           <SearchInput
             value={query}
             onChange={setQuery}

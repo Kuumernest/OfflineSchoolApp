@@ -168,3 +168,90 @@ export const healthLook = (
   }
   return { kind: "kind" };
 };
+
+// ── One colour per entity ───────────────────────────────────────────────────
+//
+// Cards and badges that stand for an entity take a colour from what they are,
+// the same everywhere: a class by its level, a fee structure by its term, a
+// person by their role. Levels and terms are free text, so the colour comes
+// from the number in them (Level 1, Form 2, Term 3…) and otherwise from a
+// stable hash of the text — the same text is always the same colour.
+
+/** The accents an entity colour is drawn from — no red (that is bad news). */
+export const ENTITY_ACCENTS: readonly DashAccent[] = ["blue", "violet", "indigo", "teal", "amber", "green", "sky"];
+
+const hashAccent = (text: string): DashAccent => {
+  let h = 0;
+  for (const ch of text.trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ENTITY_ACCENTS[h % ENTITY_ACCENTS.length];
+};
+const firstNumber = (text: string): number | null => {
+  const m = text.match(/\d+/);
+  return m ? Number(m[0]) : null;
+};
+
+/** A class's colour, by its level ("1", "JHS 2", "Form 3" …). No level: indigo, the classes' colour. */
+export const levelAccent = (level?: string | null): DashAccent => {
+  if (!level || !level.trim()) return "indigo";
+  const n = firstNumber(level);
+  return n != null && n > 0 ? ENTITY_ACCENTS[(n - 1) % ENTITY_ACCENTS.length] : hashAccent(level);
+};
+
+/** A term's colour: Term 1 blue, 2 green, 3 amber; a whole-year item teal. */
+export const termAccent = (term?: string | null): DashAccent => {
+  if (!term || !term.trim()) return "teal";
+  const n = firstNumber(term);
+  if (n === 1) return "blue";
+  if (n === 2) return "green";
+  if (n === 3) return "amber";
+  return hashAccent(term);
+};
+
+/** A person's colour by role — the same as their kind on the dashboard. */
+export const ROLE_ACCENT: Record<string, DashAccent> = {
+  super_admin:  "slate",
+  school_admin: "indigo",
+  admin:        "indigo",
+  teacher:      "violet",
+  student:      "blue",
+  pupil:        "blue",
+  bursar:       "teal",
+  accountant:   "teal",
+  parent:       "sky",
+  guardian:     "sky",
+};
+export const roleAccent = (role?: string | null): DashAccent =>
+  (role && ROLE_ACCENT[role.toLowerCase()]) || "slate";
+
+/** Any other category (a subject type, a document kind…): a stable colour from its name. */
+export const categoryAccent = (name?: string | null): DashAccent =>
+  name && name.trim() ? hashAccent(name) : "slate";
+
+/** A badge in an accent: the wash, a faint ring and the deep text (≥ 6.8:1). */
+export const ACCENT_BADGE: Record<DashAccent, string> = {
+  blue:   "bg-accent-blue-soft text-accent-blue-deep ring-accent-blue/30",
+  violet: "bg-accent-violet-soft text-accent-violet-deep ring-accent-violet/30",
+  indigo: "bg-accent-indigo-soft text-accent-indigo-deep ring-accent-indigo/30",
+  slate:  "bg-accent-slate-soft text-accent-slate-deep ring-accent-slate/30",
+  amber:  "bg-accent-amber-soft text-accent-amber-deep ring-accent-amber/30",
+  green:  "bg-accent-green-soft text-accent-green-deep ring-accent-green/30",
+  teal:   "bg-accent-teal-soft text-accent-teal-deep ring-accent-teal/30",
+  sky:    "bg-accent-sky-soft text-accent-sky-deep ring-accent-sky/30",
+  red:    "bg-accent-red-soft text-accent-red-deep ring-accent-red/30",
+};
+
+/** A list card with a coloured LEFT edge instead of the top one (rows, narrow cards). */
+export const ACCENT_LEFT_CARD: Record<DashAccent, string> = {
+  blue:   "rounded-card border border-line border-l-[3px] border-l-accent-blue bg-accent-blue-soft shadow-card",
+  violet: "rounded-card border border-line border-l-[3px] border-l-accent-violet bg-accent-violet-soft shadow-card",
+  indigo: "rounded-card border border-line border-l-[3px] border-l-accent-indigo bg-accent-indigo-soft shadow-card",
+  slate:  "rounded-card border border-line border-l-[3px] border-l-accent-slate bg-accent-slate-soft shadow-card",
+  amber:  "rounded-card border border-line border-l-[3px] border-l-accent-amber bg-accent-amber-soft shadow-card",
+  green:  "rounded-card border border-line border-l-[3px] border-l-accent-green bg-accent-green-soft shadow-card",
+  teal:   "rounded-card border border-line border-l-[3px] border-l-accent-teal bg-accent-teal-soft shadow-card",
+  sky:    "rounded-card border border-line border-l-[3px] border-l-accent-sky bg-accent-sky-soft shadow-card",
+  red:    "rounded-card border border-line border-l-[3px] border-l-accent-red bg-accent-red-soft shadow-card",
+};
+
+/** A table row's hover: a faint wash of the brand blue, never grey. */
+export const ROW_HOVER = "hover:bg-accent-blue-soft/70";

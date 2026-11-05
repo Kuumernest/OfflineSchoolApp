@@ -18,6 +18,9 @@ import { Badge }           from "@/components/ui/Badge";
 import { SearchInput }     from "@/components/ui/SearchInput";
 import { Select }          from "@/components/ui/Select";
 import { Pagination }      from "@/components/ui/Pagination";
+import { PageIcon }        from "@/components/ui/PageHeader";
+import { DASH_TINT }       from "@/config/dashboardTint";
+import { cn }              from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import i18n from "@/i18n";
@@ -340,11 +343,12 @@ export default function StudentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center
                       sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">
+          <h2 className="flex items-center gap-2.5 text-xl font-bold text-ink">
+            <PageIcon className="h-8 w-8" />
             {t("students.title")}
           </h2>
           {/* ✅ Count label now reflects the active filter honestly */}
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-ink-muted mt-0.5">
             {countLabel(t, {
               shown:       total,
               schoolTotal: schoolTotalQuery.data?.total ?? null,
@@ -380,8 +384,8 @@ export default function StudentsPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border
-                      border-gray-200 shadow-sm p-4">
+      <div className="bg-surface rounded-xl border
+                      border-line shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <SearchInput
             value={search}
@@ -405,9 +409,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Table card */}
-      <div className="bg-white rounded-xl border
-                      border-gray-200 shadow-sm
-                      overflow-hidden">
+      <div className={cn("bg-surface rounded-xl border border-line shadow-sm overflow-hidden", DASH_TINT.blue.edge)}>
 
         {studentsQuery.isLoading ? (
           <PageSpinner />
@@ -415,7 +417,7 @@ export default function StudentsPage() {
           <EmptyTable
             icon={
               <GraduationCap
-                className="w-12 h-12 text-gray-300"
+                className={cn("w-12 h-12", DASH_TINT.blue.glyph)}
                 aria-hidden="true"
               />
             }
@@ -461,7 +463,7 @@ export default function StudentsPage() {
               </TBody>
             </Table>
 
-            <div className="border-t border-gray-100">
+            <div className="border-t border-line">
               <Pagination
                 page={page}
                 pages={pages}

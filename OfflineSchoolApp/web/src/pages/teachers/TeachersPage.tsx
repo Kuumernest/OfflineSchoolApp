@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { PageSpinner } from "@/components/ui/Spinner";
@@ -226,8 +227,8 @@ export default function TeachersPage() {
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">{t("teachers.loadFailed")}</h3>
-            <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(error)}</p>
+            <h3 className="text-sm font-semibold text-ink">{t("teachers.loadFailed")}</h3>
+            <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(error)}</p>
           </div>
         </div>
       </Card>
@@ -239,11 +240,14 @@ export default function TeachersPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("teachers.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("teachers.blurb")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("teachers.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("teachers.blurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -274,8 +278,10 @@ export default function TeachersPage() {
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-line">
           <CardHeader
+            icon={Users}
+            accent="violet"
             title={t("teachers.all")}
             subtitle={
               deferredSearch
@@ -302,11 +308,13 @@ export default function TeachersPage() {
 
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <Users className="w-8 h-8 text-gray-300 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700">
+            <span className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.violet.box)} aria-hidden="true">
+              <Users className="w-6 h-6" />
+            </span>
+            <p className="mt-3 text-sm font-medium text-ink">
               {teachers.length === 0 ? t("teachers.none") : t("teachers.noneMatch")}
             </p>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {teachers.length === 0
                 ? t("teachers.firstOne")
                 : t("teachers.searchPageOnly")}
@@ -381,7 +389,7 @@ export default function TeachersPage() {
                           {teacher.subjects.length > 3 && (
                             <Badge
                               label={`+${teacher.subjects.length - 3}`}
-                              variant="default"
+                              accent="slate"
                             />
                           )}
                         </div>
@@ -395,7 +403,7 @@ export default function TeachersPage() {
                     <td className="px-4 py-3">
                       <Badge
                         label={teacher.isActive ? t("common.active") : t("common.inactive")}
-                        variant={teacher.isActive ? "success" : "default"}
+                        variant={teacher.isActive ? "success" : "danger"}
                       />
                     </td>
 

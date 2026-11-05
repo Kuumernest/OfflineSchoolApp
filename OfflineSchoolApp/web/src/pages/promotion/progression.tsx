@@ -28,6 +28,7 @@ import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
 import { Badge }       from "@/components/ui/Badge";
+import { DASH_TINT }   from "@/config/dashboardTint";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { SelectField, Checkbox, Input, FormField } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
@@ -170,7 +171,7 @@ export default function ProgressionPage() {
         </div>
       )}
 
-      <Card>
+      <Card className={DASH_TINT.blue.edge}>
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-44">
             <FormField label={t("prog.year")}>
@@ -304,7 +305,7 @@ export default function ProgressionPage() {
       </Card>
 
       {pendingBars && (
-        <Card>
+        <Card className={DASH_TINT.blue.edge}>
           <FormField label={t("prog.reason")} hint={t("prog.reasonHint")}>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} />
           </FormField>

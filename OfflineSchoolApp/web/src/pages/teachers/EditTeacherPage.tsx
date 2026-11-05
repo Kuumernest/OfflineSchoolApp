@@ -13,8 +13,11 @@ import { createIds }       from "@/lib/clientId";
 import { STAFF_NO_MAX, normaliseStaffNoInput, staffNoErrorKey } from "@/utils/staffNo";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,
-  BookOpen, Plus, X, RefreshCw, User, Mail, Hash,
+  BookOpen, Plus, X, RefreshCw, User, Mail, Hash, BookMarked, UserCog,
 } from "lucide-react";
+import { cn }               from "@/utils/cn";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon }         from "@/components/ui/PageHeader";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -537,11 +540,12 @@ export default function EditTeacherPage() {
         >
           <ArrowLeft size={20} className="text-gray-700" />
         </button>
+        <PageIcon />
         <div className="flex-1">
-          <h1 className="text-lg font-bold text-gray-900 truncate">
+          <h1 className="text-lg font-bold text-ink truncate">
             {teacher?.name ?? "Edit Teacher"}
           </h1>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-ink-muted">
             {t("teachersEdit.subjectsAssignedCount", { count: assigned.length })}
           </p>
         </div>
@@ -578,9 +582,13 @@ export default function EditTeacherPage() {
 
         {/* ── Profile fields ── */}
         <NeedsInternet>
-        <section className="bg-white rounded-2xl border border-gray-200
-                            shadow-sm p-6 space-y-4">
-          <h2 className="text-sm font-bold text-gray-700">{t("common.profile")}</h2>
+        <section className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6 space-y-4", DASH_TINT.violet.edge)}>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)} aria-hidden="true">
+              <UserCog className="h-4 w-4" />
+            </span>
+            {t("common.profile")}
+          </h2>
 
           {/* Name */}
           <div className="space-y-1.5">
@@ -686,13 +694,15 @@ export default function EditTeacherPage() {
         </NeedsInternet>
 
         {/* ── Assigned subjects ── */}
-        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <section className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6", DASH_TINT.violet.edge)}>
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-sm font-bold text-gray-700 flex-1">
+            <h2 className="flex flex-1 items-center gap-2 text-sm font-bold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)} aria-hidden="true">
+                <BookOpen className="h-4 w-4" />
+              </span>
               {t("teachersEdit.assigned")}
             </h2>
-            <span className="bg-primary-50 text-primary-600 text-xs font-bold
-                             px-2.5 py-1 rounded-full">
+            <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full ring-1 ring-inset", ACCENT_BADGE.violet)}>
               {assigned.length}
             </span>
           </div>
@@ -744,13 +754,15 @@ export default function EditTeacherPage() {
         </section>
 
         {/* ── Available subjects ── */}
-        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <section className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6", DASH_TINT.violet.edge)}>
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-sm font-bold text-gray-700 flex-1">
+            <h2 className="flex flex-1 items-center gap-2 text-sm font-bold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+                <BookMarked className="h-4 w-4" />
+              </span>
               {t("teachersEdit.available")}
             </h2>
-            <span className="bg-gray-100 text-gray-600 text-xs font-bold
-                             px-2.5 py-1 rounded-full">
+            <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full ring-1 ring-inset", ACCENT_BADGE.slate)}>
               {available.length}
             </span>
           </div>
@@ -831,9 +843,10 @@ function PageHeader({
       >
         <ArrowLeft size={20} className="text-gray-700" />
       </button>
+      <PageIcon />
       <div>
-        <h1 className="text-lg font-bold text-gray-900">{title}</h1>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <h1 className="text-lg font-bold text-ink">{title}</h1>
+        <p className="text-xs text-ink-muted mt-0.5">
           {t("teachersEdit.subtitle")}
         </p>
       </div>

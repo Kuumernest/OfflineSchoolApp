@@ -1,5 +1,7 @@
 // web/src/components/ui/Card.tsx
 import { cn }             from "@/utils/cn";
+import type { LucideIcon } from "lucide-react";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
 interface CardProps {
   className?: string;
@@ -49,11 +51,17 @@ export function CardHeader({
   title,
   subtitle,
   action,
+  icon: Icon,
+  accent = "blue",
   className,
 }: {
   title:      string;
   subtitle?:  string;
   action?:    React.ReactNode;
+  /** A small solid icon square in front of the title, in `accent`'s colour. */
+  icon?:      LucideIcon;
+  /** The square's colour (config/dashboardTint.ts); blue by default. */
+  accent?:    DashAccent;
   className?: string;
 }) {
   return (
@@ -64,12 +72,22 @@ export function CardHeader({
         {/* A 2px accent stub against the title. One small deliberate mark per
             panel is what separates a designed header from a bold paragraph —
             and it costs nothing in space. */}
-        <span
-          className={cn(
-            "mt-[3px] h-4 w-[3px] shrink-0 rounded-full bg-primary-600"
-          )}
-          aria-hidden="true"
-        />
+        {Icon ? (
+          <span
+            className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)}
+            aria-hidden="true"
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "mt-[3px] h-4 w-[3px] shrink-0 rounded-full",
+              accent === "blue" ? "bg-primary-600" : DASH_TINT[accent].box,
+            )}
+            aria-hidden="true"
+          />
+        )}
         <div className="min-w-0">
           <h3 className="truncate text-base font-semibold text-ink" title={title}>{title}</h3>
           {subtitle && (

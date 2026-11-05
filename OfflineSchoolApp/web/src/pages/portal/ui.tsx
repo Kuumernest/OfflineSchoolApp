@@ -7,6 +7,8 @@
 import { useTranslation } from "react-i18next";
 import { SUPPORTED_LANGUAGES } from "@/i18n";
 import { cn } from "@/utils/cn";
+import type { LucideIcon } from "lucide-react";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
 /** A grey block standing in for content while it loads: never a blank page. */
 export function Skeleton({ className }: { className?: string }) {
@@ -23,6 +25,15 @@ export function PortalCard({ className, children, as: Tag = "section", ...rest }
   );
 }
 
+/** A small solid icon square before a section heading, in the section's colour. */
+export function SectionIcon({ icon: Icon, accent, className }: { icon: LucideIcon; accent: DashAccent; className?: string }) {
+  return (
+    <span aria-hidden="true" className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box, className)}>
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
+
 /** Nothing to show yet, said kindly, with an icon rather than an empty box. */
 export function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
@@ -36,10 +47,11 @@ export function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title
   );
 }
 
+// Solid fills with white initials, from the entity accents (blue, violet, teal).
 const AVATAR_TONES = [
-  "bg-primary-100 text-primary-800",
-  "bg-success-soft text-success-text",
-  "bg-warning-soft text-warning-text",
+  DASH_TINT.blue.box,
+  DASH_TINT.violet.box,
+  DASH_TINT.teal.box,
 ];
 
 /** Initials in a circle; the same child keeps the same colour everywhere. */

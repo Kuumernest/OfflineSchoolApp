@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link }                from "react-router-dom";
 import { ArrowRight, BarChart3, AlertTriangle, CheckCircle, Printer, RefreshCw } from "lucide-react";
+import { PageIcon }            from "@/components/ui/PageHeader";
+import { ACCENT_LEFT_CARD, DASH_TINT } from "@/config/dashboardTint";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
@@ -71,22 +73,19 @@ const ExamCard = ({
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left p-4 rounded-xl border transition-all
-        ${isSelected
-          ? "border-primary-500 bg-primary-50 shadow-md"
-          : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
-        }`}
+      className={`w-full text-left p-4 transition-all hover:shadow-lift ${ACCENT_LEFT_CARD.amber}
+        ${isSelected ? "ring-2 ring-accent-amber" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm truncate">
+          <p className="font-semibold text-ink text-sm truncate">
             {exam.name}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-ink-muted mt-0.5">
             {examTypeLabel(t, exam.type)} · {t(`exams.term${exam.term}`, String(exam.term))} · {exam.academicYear}
           </p>
           {(exam.classNames || exam.className) && (
-            <p className="text-xs text-primary-600 font-medium mt-1">
+            <p className="text-xs text-accent-amber-deep font-medium mt-1">
               {exam.classNames || exam.className}
             </p>
           )}
@@ -699,11 +698,14 @@ export default function ReportCardsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("reportCards.title")}</h1>
-          <p className="text-gray-500 text-sm mt-1">
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+          <h1 className="text-2xl font-bold text-ink">{t("reportCards.title")}</h1>
+          <p className="text-ink-muted text-sm mt-1">
             {t("reportCards.blurb")}
           </p>
+          </div>
         </div>
         <Link
           to="/exams/results"
@@ -723,15 +725,15 @@ export default function ReportCardsPage() {
           {/* Which of the three cards. Chosen first, because it decides what the
               next step even asks for: a sequence card is one exam's, a term or
               annual card covers a period and has no exam behind it. */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+            <h3 className="font-semibold text-ink mb-1 flex items-center gap-2">
               <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                flex items-center justify-center text-xs font-bold">
                 1
               </span>
               {t("reportCards.selectType")}
             </h3>
-            <p className="text-xs text-gray-400 mb-3 ml-9">
+            <p className="text-xs text-ink-muted mb-3 ml-9">
               {t(`reportCards.typeHint_${cardType}`)}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -754,7 +756,7 @@ export default function ReportCardsPage() {
                   className={`px-4 py-2 rounded-xl text-sm font-semibold border
                     transition-colors ${cardType === ct
                       ? "bg-primary-600 border-primary-600 text-white"
-                      : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                      : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"}`}
                 >
                   {t(`reportCards.type_${ct}`)}
                 </button>
@@ -763,8 +765,8 @@ export default function ReportCardsPage() {
           </div>
 
           {/* Step 2: the period this card covers */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+            <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
               <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                flex items-center justify-center text-xs font-bold">
                 2
@@ -777,7 +779,7 @@ export default function ReportCardsPage() {
             {cardType !== "sequence" && (
               <div className="flex flex-wrap gap-4 mb-2">
                 <label className="block">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                  <span className="block text-xs font-semibold text-ink-muted mb-1.5">
                     {t("academic.schoolYear")}
                   </span>
                   <select
@@ -787,7 +789,7 @@ export default function ReportCardsPage() {
                       setAcademicYear(e.target.value);
                       setSelectedClass(null);
                     }}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm
+                    className="rounded-xl border border-line px-3 py-2 text-sm
                                outline-none focus:border-primary-400"
                   >
                     {academicYears.length === 0 && <option value="">—</option>}
@@ -797,7 +799,7 @@ export default function ReportCardsPage() {
 
                 {cardType === "term" && (
                   <label className="block">
-                    <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                    <span className="block text-xs font-semibold text-ink-muted mb-1.5">
                       {t("academic.term")}
                     </span>
                     <div className="flex gap-2">
@@ -813,7 +815,7 @@ export default function ReportCardsPage() {
                           className={`px-3 py-2 rounded-xl text-sm font-semibold border
                             transition-colors ${termNumber === n
                               ? "bg-primary-600 border-primary-600 text-white"
-                              : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                              : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"}`}
                         >
                           {t(`exams.term${n}`)}
                         </button>
@@ -830,7 +832,7 @@ export default function ReportCardsPage() {
                                border-t-transparent rounded-full animate-spin" />
               </div>
             ) : exams.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-8 text-ink-muted">
                 <p className="font-semibold">{t("reportCards.noneCompleted")}</p>
                 <p className="text-sm mt-1">
                   {t("reportCards.completeFirst")}
@@ -858,8 +860,8 @@ export default function ReportCardsPage() {
 
           {/* Step 3: Class */}
           {periodChosen && (
-            <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+              <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
                   3
@@ -885,14 +887,14 @@ export default function ReportCardsPage() {
                         border transition-colors
                         ${selectedClass?._id === cls._id
                           ? "bg-primary-600 border-primary-600 text-white"
-                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                          : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                         }`}
                     >
                       {cls.name}
                     </button>
                   ))}
                   {classes.length === 0 && (
-                    <p className="text-sm text-gray-400">{t("classes.none")}</p>
+                    <p className="text-sm text-ink-muted">{t("classes.none")}</p>
                   )}
                 </div>
               )}
@@ -901,14 +903,14 @@ export default function ReportCardsPage() {
 
           {/* Step 4: Student (optional) */}
           {selectedClass && (
-            <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+              <h3 className="font-semibold text-ink mb-1 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
                   4
                 </span>
                 {t("reportCards.selectStudent")}
-                <span className="text-xs text-gray-400 font-normal">
+                <span className="text-xs text-ink-muted font-normal">
                   {t("reportCards.optionalWholeClass")}
                 </span>
               </h3>
@@ -959,7 +961,7 @@ export default function ReportCardsPage() {
                       border transition-colors
                       ${!selectedStudent
                         ? "bg-primary-600 border-primary-600 text-white"
-                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                       }`}
                   >
                     {t("reportCards.allStudents", { count: students.length })}
@@ -977,7 +979,7 @@ export default function ReportCardsPage() {
                           border transition-colors
                           ${selectedStudent?._id === s._id
                             ? "bg-primary-600 border-primary-600 text-white"
-                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                            : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                           }`}
                       >
                         {name}
@@ -990,7 +992,7 @@ export default function ReportCardsPage() {
               {/* Who is left out, by name: a pupil with no marks for this
                   exam has no card to print. */}
               {!studentLoading && cardType === "sequence" && noMarks.length > 0 && (
-                <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <p className="mt-3 rounded-lg border border-info-line bg-info-soft px-3 py-2 text-xs text-info-text">
                   <span className="font-semibold">
                     {t("reportCards.noMarksNote", { count: noMarks.length })}
                   </span>{" "}
@@ -1003,8 +1005,13 @@ export default function ReportCardsPage() {
 
         {/* Sidebar — Generate panel */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-5 sticky top-6">
-            <h3 className="font-semibold text-gray-900 mb-4">{t("common.generate")}</h3>
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5 sticky top-6">
+            <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
+              <span className={`w-7 h-7 rounded-control flex items-center justify-center shrink-0 ${DASH_TINT.slate.box}`} aria-hidden="true">
+                <Printer className="w-4 h-4" />
+              </span>
+              {t("common.generate")}
+            </h3>
 
             {/* Summary */}
             <div className="space-y-2 mb-4">
@@ -1017,12 +1024,12 @@ export default function ReportCardsPage() {
                 * said nothing had been chosen.
                 */}
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">
+                <span className="text-ink-muted">
                   {cardType === "sequence"
                     ? t("academic.exam")
                     : t("reportCards.selectPeriod")}
                 </span>
-                <span className="font-semibold text-gray-900 truncate
+                <span className="font-semibold text-ink truncate
                                  ml-2 max-w-[160px] text-right">
                   {cardType === "sequence"
                     ? (selectedExam?.name || "—")
@@ -1032,14 +1039,14 @@ export default function ReportCardsPage() {
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{t("academic.class")}</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-ink-muted">{t("academic.class")}</span>
+                <span className="font-semibold text-ink">
                   {selectedClass?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{t("academic.student")}</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-ink-muted">{t("academic.student")}</span>
+                <span className="font-semibold text-ink">
                   {selectedStudent
                     ? selectedStudent.studentName || selectedStudent.name
                     : `All (${students.length})`}
@@ -1124,7 +1131,7 @@ export default function ReportCardsPage() {
               </button>
             )}
 
-            <p className="text-xs text-gray-400 text-center mt-3">
+            <p className="text-xs text-ink-muted text-center mt-3">
               {t("reportCards.previewNote")}
             </p>
           </div>

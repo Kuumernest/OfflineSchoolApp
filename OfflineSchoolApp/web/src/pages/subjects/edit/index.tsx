@@ -19,6 +19,7 @@ import { useToast }     from "@/components/ui/Toast";
 import { coefficientCascadeNotice } from "../coefficientCascade";
 import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
+import { PageIcon }     from "@/components/ui/PageHeader";
 import type { Class, Teacher, Subject } from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -322,9 +323,9 @@ export default function EditSubjectPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
 
-      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
         <button
           type="button"
           onClick={handleDiscard}
@@ -334,9 +335,11 @@ export default function EditSubjectPage() {
           <ChevronLeft size={20} />
         </button>
 
+        <PageIcon />
+
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-gray-900">{t("subjectsEdit.title")}</h1>
-          <p className="truncate text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-ink">{t("subjectsEdit.title")}</h1>
+          <p className="truncate text-sm text-ink-muted">
             {subject?.name ?? t("subjectsEdit.subtitle")}
           </p>
         </div>

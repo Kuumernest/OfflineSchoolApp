@@ -29,6 +29,9 @@ import type {
 import { PageSpinner }                                   from "@/components/ui/Spinner";
 import { Button }                                        from "@/components/ui/Button";
 import { Badge }                                         from "@/components/ui/Badge";
+import { PageIcon }                                      from "@/components/ui/PageHeader";
+import { DASH_TINT, levelAccent, type DashAccent }       from "@/config/dashboardTint";
+import { cn }                                            from "@/utils/cn";
 import { Modal }                                         from "@/components/ui/Modal";
 import { SearchInput }                                   from "@/components/ui/SearchInput";
 import { FormField, Input, SelectField }                 from "@/components/ui/FormField";
@@ -410,15 +413,16 @@ export default function ClassesPage() {
 
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900
-                         flex items-center gap-2">
-            <School className="h-7 w-7 text-primary-600" />
-            {t("classes.pageTitle")}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {t("classes.pageBlurb")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t("classes.pageTitle")}
+            </h1>
+            <p className="text-sm text-ink-muted mt-1">
+              {t("classes.pageBlurb")}
+            </p>
+          </div>
         </div>
 
         <Button
@@ -433,7 +437,7 @@ export default function ClassesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-line">
         <nav className="flex gap-6" aria-label={t("classes.pageTabs")}>
           {(["classes", "subjects"] as const).map((key) => (
             <button
@@ -444,7 +448,7 @@ export default function ClassesPage() {
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 tab === key
                   ? "border-primary-600 text-primary-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                  : "border-transparent text-ink-muted hover:text-ink"
               }`}
             >
               {key === "classes" ? t("classes.title") : t("subjects.title")}
@@ -496,7 +500,8 @@ export default function ClassesPage() {
       {tab === "classes" && (
         filteredClasses.length === 0 ? (
           <EmptyState
-            icon={<School className="h-10 w-10 text-gray-400" />}
+            icon={<School className="h-6 w-6" />}
+            accent="indigo"
             title={t("classes.none")}
             description={
               search
@@ -542,7 +547,8 @@ export default function ClassesPage() {
           <PageSpinner />
         ) : filteredSubjects.length === 0 ? (
           <EmptyState
-            icon={<BookOpen className="h-10 w-10 text-gray-400" />}
+            icon={<BookOpen className="h-6 w-6" />}
+            accent="slate"
             title={t("subjects.none")}
             description={
               search
@@ -809,26 +815,35 @@ function ClassCard({
   onViewSubjects,
 }: ClassCardProps) {
   const { t } = useTranslation();
+  const accent = levelAccent(cls.level);
+  const tint   = DASH_TINT[accent];
   return (
     <div
-      className="
-        bg-white rounded-xl
-        border border-gray-200
-        p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow
-      "
+      className={cn(
+        tint.card,
+        "p-5 flex flex-col gap-3 hover:shadow-lift transition-shadow",
+      )}
     >
       <div className="flex items-start justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 text-lg truncate">
-            {cls.name}
-          </h3>
-          <div className="flex gap-2 mt-1 flex-wrap">
-            {cls.level && (
-              <Badge variant="secondary">{t("common.level")} {cls.level}</Badge>
-            )}
-            {cls.section && (
-              <Badge variant="secondary">{t("common.section")} {cls.section}</Badge>
-            )}
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span
+            className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", tint.box)}
+            aria-hidden="true"
+          >
+            <School className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-ink text-lg truncate">
+              {cls.name}
+            </h3>
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {cls.level && (
+                <Badge accent={accent}>{t("common.level")} {cls.level}</Badge>
+              )}
+              {cls.section && (
+                <Badge accent={accent}>{t("common.section")} {cls.section}</Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -836,7 +851,7 @@ function ClassCard({
           <button
             onClick={() => onEdit(cls)}
             className="
-              p-1.5 rounded-lg text-gray-400
+              p-1.5 rounded-lg text-ink-muted
               hover:text-primary-600 hover:bg-primary-50
  transition
             "
@@ -848,7 +863,7 @@ function ClassCard({
           <button
             onClick={() => onDelete(cls)}
             className="
-              p-1.5 rounded-lg text-gray-400
+              p-1.5 rounded-lg text-ink-muted
               hover:text-red-600 hover:bg-red-50
  transition
             "
@@ -863,13 +878,13 @@ function ClassCard({
       <button
         type="button"
         className="
-          flex items-center gap-2 text-sm text-gray-500
+          flex items-center gap-2 text-sm text-ink-muted
           hover:text-primary-600 transition-colors text-left
         "
         onClick={() => onViewSubjects(cls)}
         aria-label={t("classes.viewSubjectsFor", { name: cls.name })}
       >
-        <BookOpen className="h-4 w-4 flex-shrink-0" />
+        <BookOpen className={cn("h-4 w-4 flex-shrink-0", tint.glyph)} />
         <span>
           {t("academic.subjectCount", { count: subjectCount })}
         </span>
@@ -901,14 +916,14 @@ function SubjectsTable({
   return (
     <div
       className="
-        bg-white rounded-xl
-        border border-gray-200
-        overflow-hidden shadow-sm
+        bg-surface rounded-xl
+        border border-line
+        overflow-hidden shadow-card
       "
     >
       <table className="w-full text-sm" role="grid">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-50">
+          <tr className="border-b border-line bg-surface">
             {([
             t("academic.subject"),
             t("common.code"),
@@ -919,7 +934,7 @@ function SubjectsTable({
           ]).map((h) => (
               <th
                 key={h}
-                className="text-left px-4 py-3 font-medium text-gray-600"
+                className="text-left px-4 py-3 font-medium text-ink-muted"
               >
                 {h}
               </th>
@@ -927,31 +942,31 @@ function SubjectsTable({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {subjects.map((sub) => (
             <tr
               key={sub._id}
-              className="hover:bg-gray-50 transition-colors"
+              className="hover:bg-accent-blue-soft/70 transition-colors"
             >
-              <td className="px-4 py-3 font-medium text-gray-900">
+              <td className="px-4 py-3 font-medium text-ink">
                 {sub.name}
               </td>
 
-              <td className="px-4 py-3 text-gray-500">
+              <td className="px-4 py-3 text-ink-muted">
                 {sub.code
-                  ? <Badge variant="secondary">{sub.code}</Badge>
+                  ? <Badge accent="slate">{sub.code}</Badge>
                   : "—"}
               </td>
 
-              <td className="px-4 py-3 text-gray-600 tabular-nums">
+              <td className="px-4 py-3 text-ink-body tabular-nums">
                 {sub.coefficient}
               </td>
 
-              <td className="px-4 py-3 text-gray-600">
+              <td className="px-4 py-3 text-ink-body">
                 {sub.class?.name ?? getClassName(sub.classId)}
               </td>
 
-              <td className="px-4 py-3 text-gray-600">
+              <td className="px-4 py-3 text-ink-body">
                 {getTeacherName(sub)}
               </td>
 
@@ -997,21 +1012,22 @@ function SubjectsTable({
 
 interface EmptyStateProps {
   icon:        React.ReactNode;
+  accent?:     DashAccent;
   title:       string;
   description: string;
   action?:     React.ReactNode;
 }
 
-function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+function EmptyState({ icon, accent = "indigo", title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-      <div className="p-4 bg-gray-100 rounded-full">
+      <div className={cn("flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT[accent].box)} aria-hidden="true">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-gray-900">
+      <h3 className="text-lg font-semibold text-ink">
         {title}
       </h3>
-      <p className="text-sm text-gray-500 max-w-xs">
+      <p className="text-sm text-ink-muted max-w-xs">
         {description}
       </p>
       {action && <div className="mt-2">{action}</div>}

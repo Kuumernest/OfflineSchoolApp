@@ -10,7 +10,7 @@ import { useState }        from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate }     from "react-router-dom";
 import { useTranslation }  from "react-i18next";
-import { Plus, Trash2, Play, ArrowLeft, Check } from "lucide-react";
+import { Plus, Trash2, Play, ArrowLeft, Check, ClipboardList } from "lucide-react";
 
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
@@ -24,6 +24,7 @@ import { useToast }         from "@/components/ui/Toast";
 import { EmptyTable }       from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
 import { cn }               from "@/utils/cn";
+import { DASH_TINT, termAccent } from "@/config/dashboardTint";
 import { getErrorMessage }  from "@/lib/axios";
 import {
   fetchStructures,
@@ -210,8 +211,10 @@ export default function FeeStructuresPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {structures.map((s) => (
-            <Card key={s._id}>
+            <Card key={s._id} className={DASH_TINT[termAccent(s.term)].card}>
               <CardHeader
+                icon={ClipboardList}
+                accent={termAccent(s.term)}
                 title={`${s.academicYear} · ${s.term ?? t("fees.wholeYear")}`}
                 subtitle={
                   s.classIds?.length
@@ -221,7 +224,7 @@ export default function FeeStructuresPage() {
                 action={
                   s.isActive
                     ? <Badge variant="success">{t("common.active")}</Badge>
-                    : <Badge variant="default">{t("fees.inactive")}</Badge>
+                    : <Badge variant="danger">{t("fees.inactive")}</Badge>
                 }
               />
 
@@ -234,7 +237,7 @@ export default function FeeStructuresPage() {
                     <span className="min-w-0 truncate text-[13px] text-ink-body">
                       {item.label}
                       {item.isOptional && (
-                        <Badge variant="default" className="ml-2">
+                        <Badge variant="info" className="ml-2">
                           {t("fees.optional")}
                         </Badge>
                       )}
@@ -247,10 +250,10 @@ export default function FeeStructuresPage() {
               </ul>
 
               <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                   {t("common.total")}
                 </span>
-                <span className="font-display text-lg text-ink tabular">
+                <span className={cn("font-display text-lg tabular", DASH_TINT[termAccent(s.term)].number)}>
                   {fmt.money(s.items.reduce((sum, i) => sum + i.amount, 0))}
                 </span>
               </div>
@@ -305,7 +308,7 @@ export default function FeeStructuresPage() {
               <select
                 value={form.academicYear}
                 onChange={(e) => setForm((f) => ({ ...f, academicYear: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 rounded-lg border border-line bg-surface text-sm outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {(ACADEMIC_YEAR_OPTIONS.includes(form.academicYear)
                   ? ACADEMIC_YEAR_OPTIONS
@@ -388,7 +391,7 @@ export default function FeeStructuresPage() {
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, classIds: [] }))}
-                      className="rounded-control px-2 py-1 text-xs font-medium text-ink-muted hover:bg-canvas"
+                      className="rounded-control px-2 py-1 text-xs font-medium text-ink-muted hover:bg-accent-teal-soft"
                     >
                       {t("fees.clearSelection")}
                     </button>
@@ -503,7 +506,7 @@ export default function FeeStructuresPage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[13px] font-medium text-ink-body">{t("fees.items")}</p>
-              <span className="text-sm font-medium text-ink tabular">
+              <span className="text-sm font-medium text-accent-teal-deep tabular">
                 {fmt.money(formTotal)}
               </span>
             </div>

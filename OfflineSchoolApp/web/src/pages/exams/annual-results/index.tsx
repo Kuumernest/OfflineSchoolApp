@@ -16,6 +16,7 @@ import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
 import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
 import NeedsInternet from "@/components/offline/NeedsInternet";
 import { useNeedsInternet } from "@/hooks/useNeedsInternet";
@@ -34,11 +35,11 @@ const ACADEMIC_YEARS = [
 ];
 
 const PROMO_COLORS: Record<string, string> = {
-  promoted:   "bg-emerald-50 text-emerald-700",
-  repeated:   "bg-red-50 text-red-700",
-  conditional:"bg-amber-50 text-amber-700",
-  graduated:  "bg-purple-50 text-purple-700",
-  pending:    "bg-gray-50 text-gray-500",
+  promoted:   "bg-success-soft text-success-text ring-1 ring-inset ring-success-line",
+  repeated:   "bg-danger-soft text-danger-text ring-1 ring-inset ring-danger-line",
+  conditional:"bg-warning-soft text-warning-text ring-1 ring-inset ring-warning-line",
+  graduated:  "bg-accent-violet-soft text-accent-violet-deep ring-1 ring-inset ring-accent-violet/30",
+  pending:    "bg-info-soft text-info-text ring-1 ring-inset ring-info-line",
 };
 
 // ─────────────────────────────────────────────────────────
@@ -110,12 +111,13 @@ export default function AnnualResultsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/exams" className="rounded-lg p-2 hover:bg-gray-100 transition">
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
+          <Link to="/exams" className="rounded-lg p-2 hover:bg-accent-blue-soft transition">
+            <ArrowLeft className="h-5 w-5 text-ink-body" />
           </Link>
+          <PageIcon />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t("annualResults.title")}</h1>
-            <p className="text-sm text-gray-500">{t("annualResults.description")}</p>
+            <h1 className="text-2xl font-bold text-ink">{t("annualResults.title")}</h1>
+            <p className="text-sm text-ink-muted">{t("annualResults.description")}</p>
           </div>
         </div>
       </div>
@@ -123,13 +125,13 @@ export default function AnnualResultsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {t("academicStructure.academicYear")}
           </label>
           <select
             value={academicYear}
             onChange={(e) => { setAcademicYear(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {ACADEMIC_YEARS.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -137,13 +139,13 @@ export default function AnnualResultsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {t("annualResults.className")}
           </label>
           <select
             value={classId}
             onChange={(e) => { setClassId(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             <option value="">{t("annualResults.allClasses")}</option>
             {classes.map((c) => (
@@ -238,10 +240,10 @@ export default function AnnualResultsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className={cn("overflow-x-auto rounded-2xl border border-line bg-surface shadow-card", DASH_TINT.slate.edge)}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <tr className="border-b border-line bg-surface text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
               <th className="px-4 py-3">#</th>
               <th className="px-4 py-3">{t("annualResults.studentName")}</th>
               <th className="px-4 py-3">{t("annualResults.admissionNo")}</th>
@@ -255,7 +257,7 @@ export default function AnnualResultsPage() {
               <th className="px-4 py-3 text-center">{t("annualResults.promotion")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-line">
             {isLoading ? (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-12 text-center">
@@ -264,7 +266,7 @@ export default function AnnualResultsPage() {
               </tr>
             ) : results.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={columnCount} className="px-4 py-12 text-center text-ink-muted">
                   {t("annualResults.noResults")}
                 </td>
               </tr>
@@ -274,10 +276,10 @@ export default function AnnualResultsPage() {
                   <tr
                     key={r._id}
                     className={cn("transition",
-                      r.isStale ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-gray-50")}
+                      r.isStale ? "bg-accent-amber-soft hover:bg-accent-amber-soft/70" : "hover:bg-accent-blue-soft/70")}
                   >
-                    <td className="px-4 py-3 text-gray-500">{(page - 1) * 50 + idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-4 py-3 text-ink-muted">{(page - 1) * 50 + idx + 1}</td>
+                    <td className="px-4 py-3 font-medium text-ink">
                       {r.studentName}
                       {r.isStale && (
                         <span
@@ -290,14 +292,14 @@ export default function AnnualResultsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
-                    <td className="px-4 py-3 text-gray-500">{r.className}</td>
+                    <td className="px-4 py-3 text-ink-muted">{r.admissionNo}</td>
+                    <td className="px-4 py-3 text-ink-muted">{r.className}</td>
                     {periods.terms.map((tm) => (
-                      <td key={tm.number} className="px-4 py-3 text-center text-gray-700">
+                      <td key={tm.number} className="px-4 py-3 text-center text-ink-body">
                         {r.termAverages?.find((ta) => ta.term === tm.number)?.average?.toFixed(1) ?? "—"}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                    <td className="px-4 py-3 text-center font-semibold text-ink">
                       {r.annualAverage?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -305,14 +307,14 @@ export default function AnnualResultsPage() {
                         {r.overallRemark ?? "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
+                    <td className="px-4 py-3 text-center text-ink-body">
                       {r.classPosition ? `${r.classPosition}/${r.totalInClass}` : "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                          PROMO_COLORS[r.promotionStatus] ?? "bg-gray-50 text-gray-500"
+                          PROMO_COLORS[r.promotionStatus] ?? PROMO_COLORS.pending
                         )}
                       >
                         {t(`annualResults.status_${r.promotionStatus}`)}

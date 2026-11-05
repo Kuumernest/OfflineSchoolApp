@@ -203,7 +203,7 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
       )}
 
       <Card>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {t("approvalSettings.amounts")}
         </h3>
 
@@ -219,7 +219,7 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       <Card>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {t("approvalSettings.payroll")}
         </h3>
 

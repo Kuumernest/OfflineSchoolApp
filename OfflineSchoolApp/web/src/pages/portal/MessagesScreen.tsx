@@ -25,6 +25,7 @@ import {
   type PortalNotification, type PortalMessage, type PortalRecipient, type PortalStudent,
 } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 export type MsgView = "messages" | "notices" | "news";
 
@@ -59,7 +60,10 @@ export function MessagesScreen({ view, onView, children, unreadMessages, unreadN
   ];
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-ink">{t("portal.messages")}</h1>
+      <div className="flex items-center gap-3">
+        <PageIcon icon={MessageSquare} accent="sky" />
+        <h1 className="text-xl font-semibold text-ink">{t("portal.messages")}</h1>
+      </div>
       <div role="tablist" aria-label={t("portal.messages")} className="grid grid-cols-3 gap-1 rounded-card border border-line bg-surface p-1">
         {tabs.map(([key, label, n]) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => onView(key)}
@@ -180,10 +184,10 @@ function News({ family }: { family: PortalStudent[] }) {
         return (
           <PortalCard key={a._id} as="article" className="p-4">
             <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-sky-solid text-white" aria-hidden="true"><Megaphone className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent-sky-solid text-white" aria-hidden="true"><Megaphone className="h-4 w-4" /></span>
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold text-ink">{a.title ?? "—"}</h2>
-                <p className="text-xs text-ink-faint">{fmt.date(a.createdAt)}{about.length ? ` · ${t("portal.messagesScreen.about", { names: about.join(", ") })}` : ""}</p>
+                <p className="text-xs text-ink-muted">{fmt.date(a.createdAt)}{about.length ? ` · ${t("portal.messagesScreen.about", { names: about.join(", ") })}` : ""}</p>
                 {a.body && <p className="mt-2 whitespace-pre-line text-sm text-ink-body">{a.body}</p>}
               </div>
             </div>
