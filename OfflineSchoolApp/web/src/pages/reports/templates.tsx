@@ -335,12 +335,9 @@ function TemplateCard({
       <div className="flex items-start gap-3">
         <div className={`
           w-12 h-12 rounded-xl flex items-center justify-center shrink-0
-          ${template.isDefault ? "bg-blue-50" : "bg-gray-100"}
+          ${template.isDefault ? "bg-accent-teal-solid" : "bg-accent-slate-solid"} text-white
         `}>
-          <FileText
-            size={24}
-            className={template.isDefault ? "text-blue-600" : "text-gray-400"}
-          />
+          <FileText size={24} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

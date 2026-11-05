@@ -34,6 +34,7 @@ import type { AttendanceSummary } from "@/types/attendance.types";
 import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
 import { useTranslation } from "react-i18next";
 
 const QK = {
@@ -234,31 +235,33 @@ function SummaryPanel({
   const rate    = summary?.rate ?? null;
   const unmarked = summary?.unmarked ?? Math.max(0, total - marked);
 
+  // Attendance is green (config/dashboardTint.ts): tinted card, solid icon
+  // square, the rate in the deep shade, ink-muted labels on the wash.
   return (
-    <Card>
+    <Card className={DASH_TINT.green.card}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-accent-teal-soft flex items-center justify-center">
-            <Icon className="w-4 h-4 text-accent-teal" />
+          <div className={cn("w-9 h-9 rounded-control flex items-center justify-center", DASH_TINT.green.box)}>
+            <Icon className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
-            <p className="text-xs text-gray-500">{t("attendance.onRoster", { count: total })}</p>
+            <h3 className="text-sm font-semibold text-ink">{title}</h3>
+            <p className="text-xs text-ink-muted">{t("attendance.onRoster", { count: total })}</p>
           </div>
         </div>
 
         <div className="text-right">
-          <p className="text-2xl font-semibold text-gray-900 leading-none tabular-nums">
+          <p className={cn("text-2xl font-semibold leading-none tabular-nums", DASH_TINT.green.number)}>
             {rate == null ? "–" : `${rate}%`}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">present</p>
+          <p className="text-xs text-ink-muted mt-0.5">present</p>
         </div>
       </div>
 
       {/* Stacked bar. Unmarked is shown as its own segment rather than folded
           into "absent" — not knowing where someone is, is different from
           knowing they are away. */}
-      <div className="mt-4 h-2 rounded-full overflow-hidden bg-gray-100 flex">
+      <div className="mt-4 h-2 rounded-full overflow-hidden bg-surface flex">
         {statuses.map((s) => {
           const n = Number(summary?.[s.key] ?? 0);
           if (!n || !total) return null;
@@ -277,16 +280,17 @@ function SummaryPanel({
         {statuses.map((s) => (
           <div key={String(s.key)} className="flex items-center gap-1.5">
             <span className={cn("w-2 h-2 rounded-full", s.tone)} />
-            <span className="text-xs text-gray-500">{s.label}</span>
-            <span className="text-xs font-semibold text-gray-800 tabular-nums">
+            <span className="text-xs text-ink-muted">{s.label}</span>
+            <span className="text-xs font-semibold text-ink tabular-nums">
               {Number(summary?.[s.key] ?? 0)}
             </span>
           </div>
         ))}
         {unmarked > 0 && (
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-gray-200" />
-            <span className="text-xs text-gray-500">{t("attendance.unmarked")}</span>
+            {/* Unmarked is the bar's empty track, so its dot is the track's colour. */}
+            <span className="w-2 h-2 rounded-full bg-surface ring-1 ring-line-strong" />
+            <span className="text-xs text-ink-muted">{t("attendance.unmarked")}</span>
             <Badge label={String(unmarked)} variant="warning" />
           </div>
         )}

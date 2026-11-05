@@ -271,23 +271,22 @@ const StudentApplicationsPage: React.FC = () => {
       {/* ── Summary ── */}
       <div className="flex gap-2 px-5 pt-5 pb-2">
         <SummaryCard
-          bg="#FEF3C7"
-          icon={<SvgIcon d={PATHS.personAdd} color="#D97706" />}
-          iconColor="#D97706"
+          accent="amber"
+          status={applications.length > 0 ? "warning" : null}
+          icon={<SvgIcon d={PATHS.personAdd} color="currentColor" />}
           value={applications.length}
           label={t("common.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
-          icon={<SvgIcon d={PATHS.alert} color="#DC2626" />}
-          iconColor="#DC2626"
+          accent="red"
+          status={staleCount > 0 ? "error" : null}
+          icon={<SvgIcon d={PATHS.alert} color="currentColor" />}
           value={staleCount}
           label={`Over ${STALE_DAYS}d`}
         />
         <SummaryCard
-          bg="#EEF2FF"
-          icon={<SvgIcon d={PATHS.school} color="#4F46E5" />}
-          iconColor="#4F46E5"
+          accent="indigo"
+          icon={<SvgIcon d={PATHS.school} color="currentColor" />}
           value={classes.length}
           label={t("academic.class_other")}
         />

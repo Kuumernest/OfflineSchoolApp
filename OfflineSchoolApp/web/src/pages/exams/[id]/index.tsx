@@ -36,7 +36,7 @@ import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
 import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
 import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { CARD_SHELL, SEMANTIC } from "@/config/sections";
+import { DASH_TINT } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -1826,18 +1826,18 @@ const ResultsTab = ({
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Counts are plain white cards. Passed and failed are verdicts, so
-              they keep their status tints. */}
+          {/* Tinted cards (config/dashboardTint.ts): students blue, passed
+              green, failed red, pass rate slate; the figure in the deep shade. */}
           {[
-            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  cls: `${CARD_SHELL} text-ink` },
-            { id: "passed",   label: t("results.passed"),         value: stats.passed,         cls: `${SEMANTIC.success.card} ${SEMANTIC.success.text}` },
-            { id: "failed",   label: t("results.failed"),         value: stats.failed,         cls: `${SEMANTIC.error.card} ${SEMANTIC.error.text}` },
-            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, cls: `${CARD_SHELL} text-ink` },
+            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  tint: DASH_TINT.blue },
+            { id: "passed",   label: t("results.passed"),         value: stats.passed,         tint: DASH_TINT.green },
+            { id: "failed",   label: t("results.failed"),         value: stats.failed,         tint: DASH_TINT.red },
+            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, tint: DASH_TINT.slate },
           ].map((s) => (
             <div key={s.id}
-                 className={`p-5 text-center ${s.cls}`}>
-              <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums">{s.value}</p>
-              <p className="text-sm font-medium mt-2">
+                 className={`p-5 text-center ${s.tint.card}`}>
+              <p className={`text-[28px] font-bold leading-none tracking-tight tabular-nums ${s.tint.number}`}>{s.value}</p>
+              <p className="text-sm font-medium mt-2 text-ink-muted">
                 {s.label}
               </p>
             </div>

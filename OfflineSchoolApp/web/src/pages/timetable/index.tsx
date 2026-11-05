@@ -277,8 +277,8 @@ export default function TimetablePage() {
   if (periods.length === 0) {
     return (
       <Card className="max-w-xl mx-auto mt-6 text-center">
-        <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center mx-auto">
-          <Clock className="w-6 h-6 text-amber-600" />
+        <div className="w-12 h-12 rounded-xl bg-accent-teal-solid text-white flex items-center justify-center mx-auto">
+          <Clock className="w-6 h-6" />
         </div>
         <h2 className="mt-4 text-base font-semibold text-gray-800">
           {t("timetable.setUpDay")}

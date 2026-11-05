@@ -17,6 +17,7 @@ import { Printer, Wallet, CheckCircle2, AlertCircle, CalendarClock, Receipt } fr
 
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
 import { printHtml } from "@/print/document";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { fetchFees, fetchFeeReminders, fetchHome, fetchReceiptHtml } from "@/services/portal.service";
@@ -64,7 +65,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
       <h1 className="text-xl font-semibold text-ink">{t("portal.feesScreen.title")}</h1>
 
       {/* The balance, said first and once. */}
-      <PortalCard className={cn("p-5", overdue && "border-danger-line")}>
+      <PortalCard className={cn("p-5", overdue ? DASH_TINT.teal.errorCard : DASH_TINT.teal.card)}>
         {owes ? (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -75,7 +76,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
                 </span>
               )}
             </div>
-            <p className={cn("mt-1 text-3xl font-semibold tabular-nums", overdue ? "text-danger-text" : "text-ink")}>{fmt.money(fees.totals.balance)}</p>
+            <p className={cn("mt-1 text-3xl font-semibold tabular-nums", overdue ? "text-danger-text" : "text-accent-teal-deep")}>{fmt.money(fees.totals.balance)}</p>
             {status?.dueDate && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-body">
                 <CalendarClock className="h-4 w-4 text-ink-muted" aria-hidden="true" />
@@ -85,7 +86,9 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
           </>
         ) : (
           <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-9 w-9 shrink-0 text-success-text" aria-hidden="true" />
+            <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-control", DASH_TINT.green.box)} aria-hidden="true">
+              <CheckCircle2 className="h-6 w-6" />
+            </span>
             <div>
               <p className="text-lg font-semibold text-ink">{t("portal.feesScreen.paidUp")}</p>
               <p className="text-sm text-ink-muted">{t("portal.feesScreen.paidUpHint", { name: childName ?? "" })}</p>

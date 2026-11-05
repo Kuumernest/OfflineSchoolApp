@@ -711,9 +711,9 @@ export default function EditTeacherPage() {
                     key={subject.id || subject.assignmentId}
                     className="flex items-center gap-3 py-3"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center
+                    <div className="w-8 h-8 rounded-lg bg-accent-slate-solid text-white flex items-center
                                     justify-center shrink-0">
-                      <BookOpen size={14} className="text-primary-600" />
+                      <BookOpen size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">
@@ -769,9 +769,9 @@ export default function EditTeacherPage() {
                     key={subject.id || subject.subjectId}
                     className="flex items-center gap-3 py-3"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center
+                    <div className="w-8 h-8 rounded-lg bg-accent-slate-solid text-white flex items-center
                                     justify-center shrink-0">
-                      <BookOpen size={14} className="text-gray-400" />
+                      <BookOpen size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">

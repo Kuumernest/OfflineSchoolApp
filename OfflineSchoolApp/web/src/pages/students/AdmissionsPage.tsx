@@ -28,7 +28,8 @@ import {
   type ApplicationDocument,
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
-import { CARD_SHELL, SEMANTIC, iconBox, type Semantic, type TileTone } from "@/config/sections";
+import { type Semantic, type TileTone } from "@/config/sections";
+import { DASH_TINT, dashTint } from "@/config/dashboardTint";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useToast }       from "@/components/ui/Toast";
@@ -170,8 +171,9 @@ function FlashBanner({
 }
 
 /**
- * A count over the list. White with an accented icon box, unless the count
- * means something: `semantic` tints it (pending → warning, overdue → error).
+ * A count over the list: the kind's tinted card with a solid icon square.
+ * When the count means something, `semantic` swaps in an amber (warning) or
+ * red (error) border and gives the figure that status colour.
  */
 function SummaryCard({
   icon: Icon,
@@ -186,14 +188,22 @@ function SummaryCard({
   value: number;
   label: string;
 }) {
-  const sem = semantic ? SEMANTIC[semantic] : null;
+  const tint = dashTint(tone);
+  const card =
+    semantic === "warning" ? tint.warnCard :
+    semantic === "error"   ? tint.errorCard :
+    tint.card;
+  const figure =
+    semantic === "warning" ? "text-warning-text" :
+    semantic === "error"   ? "text-danger-text" :
+    tint.number;
   return (
-    <div className={cn("flex flex-1 flex-col items-center gap-1 px-4 py-4", sem ? sem.card : CARD_SHELL)}>
-      <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", sem ? sem.box : iconBox(tone))}>
+    <div className={cn("flex flex-1 flex-col items-center gap-1 px-4 py-4", card)}>
+      <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", tint.box)}>
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <span className={cn("text-xl font-bold", sem ? sem.text : "text-ink")}>{value}</span>
-      <span className={cn("text-xs font-semibold", sem ? sem.text : "text-ink-muted")}>{label}</span>
+      <span className={cn("text-xl font-bold", figure)}>{value}</span>
+      <span className="text-xs font-semibold text-ink-muted">{label}</span>
     </div>
   );
 }
@@ -220,10 +230,10 @@ function ApplicationCard({
         <div
           className={cn(
             "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
-            stale ? "bg-red-50" : "bg-amber-50"
+            stale ? DASH_TINT.red.box : DASH_TINT.amber.box
           )}
         >
-          <UserPlus className={cn("h-5 w-5", stale ? "text-red-500" : "text-amber-600")} />
+          <UserPlus className="h-5 w-5" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -325,8 +335,8 @@ function DocumentCard({
       onClick={() => onOpen(doc)}
       className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left hover:bg-gray-100"
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50">
-        <FileText className="h-4 w-4 text-emerald-600" />
+      <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", DASH_TINT.slate.box)}>
+        <FileText className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-gray-900">

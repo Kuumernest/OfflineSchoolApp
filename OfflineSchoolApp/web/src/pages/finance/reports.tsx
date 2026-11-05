@@ -15,7 +15,7 @@ import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
-import { CARD_SHELL }   from "@/config/sections";
+import { DASH_TINT }    from "@/config/dashboardTint";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input } from "@/components/ui/FormField";
 import {
@@ -158,42 +158,50 @@ export default function FinanceReportsPage() {
 
       {/* Headline */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className={cn("min-w-0 p-5", CARD_SHELL)}>
+        {/* Tinted cards (config/dashboardTint.ts): income green, expenditure
+            red, net teal, each with a solid icon square. */}
+        <div className={cn("min-w-0 p-5", DASH_TINT.green.card)}>
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-success" aria-hidden="true" />
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.green.box)}>
+              <TrendingUp className="h-4 w-4" aria-hidden="true" />
+            </span>
             <p className="text-sm font-medium text-ink-muted">
               {t("finrep.income")}
             </p>
           </div>
-          <p className="mt-3 text-[28px] font-bold leading-none tracking-tight text-ink tabular">
+          <p className={cn("mt-3 text-[28px] font-bold leading-none tracking-tight tabular", DASH_TINT.green.number)}>
             {fmt.money(income)}
           </p>
-          <p className="mt-2 text-xs text-ink-faint">
+          <p className="mt-2 text-xs text-ink-muted">
             {t("finrep.paymentCount", { count: summary?.income.count ?? 0 })}
           </p>
         </div>
 
-        <div className={cn("min-w-0 p-5", CARD_SHELL)}>
+        <div className={cn("min-w-0 p-5", DASH_TINT.red.card)}>
           <div className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4 text-danger" aria-hidden="true" />
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.red.box)}>
+              <TrendingDown className="h-4 w-4" aria-hidden="true" />
+            </span>
             <p className="text-sm font-medium text-ink-muted">
               {t("finrep.expenditure")}
             </p>
           </div>
-          <p className="mt-3 text-[28px] font-bold leading-none tracking-tight text-ink tabular">
+          <p className={cn("mt-3 text-[28px] font-bold leading-none tracking-tight tabular", DASH_TINT.red.number)}>
             {fmt.money(expenditure)}
           </p>
-          <p className="mt-2 text-xs text-ink-faint">
+          <p className="mt-2 text-xs text-ink-muted">
             {t("expenses.title")} {fmt.money(summary?.expenditure.expenses ?? 0)}
             {" · "}
             {t("finrep.payrollLine")} {fmt.money(summary?.expenditure.payroll ?? 0)}
           </p>
         </div>
 
-        <Card>
+        <div className={cn("min-w-0 p-5", DASH_TINT.teal.card)}>
           <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-ink-faint" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)}>
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {net < 0 ? t("finrep.deficit") : t("finrep.surplus")}
             </p>
           </div>
@@ -206,7 +214,7 @@ export default function FinanceReportsPage() {
             {fmt.money(net)}
           </p>
           <p className="mt-2 text-xs text-ink-muted">{t("finrep.net")}</p>
-        </Card>
+        </div>
       </div>
 
       {/* Month by month */}

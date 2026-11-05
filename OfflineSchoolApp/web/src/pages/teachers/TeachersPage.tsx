@@ -41,6 +41,7 @@ import { API } from "@/services/apiEndpoints";
 import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import type { Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
 
@@ -264,9 +265,9 @@ export default function TeachersPage() {
 
       {/* ── Totals ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
-        <Stat icon={Users}      label={t("teachers.title")}          value={totals.all} />
-        <Stat icon={School}     label={t("common.active")}            value={totals.active} />
-        <Stat icon={BookMarked} label={t("teachers.subjectsCovered")}  value={totals.subjects} />
+        <Stat icon={Users}      accent="violet" label={t("teachers.title")}          value={totals.all} />
+        <Stat icon={School}     accent="violet" label={t("common.active")}            value={totals.active} />
+        <Stat icon={BookMarked} accent="slate"  label={t("teachers.subjectsCovered")}  value={totals.subjects} />
       </div>
 
       <UnassignedClassSubjects schoolId={schoolId} />
@@ -534,21 +535,24 @@ function UnassignedClassSubjects({ schoolId }: { schoolId: string }) {
 
 function Stat({
   icon: Icon,
+  accent,
   label,
   value,
 }: {
-  icon:  React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
+  icon:   React.ComponentType<{ className?: string }>;
+  accent: DashAccent;
+  label:  string;
+  value:  number;
 }) {
+  const tint = DASH_TINT[accent];
   return (
-    <Card className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-primary-600" />
+    <Card className={cn("flex items-center gap-3", tint.card)}>
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", tint.box)}>
+        <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0">
-        <p className="text-xl font-semibold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs text-gray-500 truncate">{label}</p>
+        <p className={cn("text-xl font-semibold leading-tight", tint.number)}>{value}</p>
+        <p className="text-xs text-ink-muted truncate">{label}</p>
       </div>
     </Card>
   );

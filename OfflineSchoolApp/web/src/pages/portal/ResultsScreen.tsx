@@ -116,7 +116,7 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
           </p>
         </div>
         <div className="w-full sm:w-auto sm:text-right">
-          <p className="text-2xl font-semibold tabular-nums text-ink">{on20(r.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span></p>
+          <p className="text-2xl font-semibold tabular-nums text-accent-slate-deep">{on20(r.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span></p>
           {r.classPosition != null && r.totalInClass != null && (
             <p className="text-sm text-ink-body">{t("portal.resultsScreen.rank", { position: ordinal(r.classPosition, i18n.resolvedLanguage), outOf: r.totalInClass })}</p>
           )}

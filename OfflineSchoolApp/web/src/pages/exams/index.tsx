@@ -22,7 +22,8 @@ import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
-import { CARD_SHELL, iconBox, type TileTone } from "@/config/sections";
+import { type TileTone } from "@/config/sections";
+import { DASH_TINT, dashTint } from "@/config/dashboardTint";
 import { cn }                 from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
@@ -157,7 +158,7 @@ const StatCard = ({
   value:      number | string;
   sub?:       string;
   icon:       React.ElementType;
-  /** What the figure is about: exams blue, results violet (icon box only). */
+  /** What the figure is about: exams amber, results slate. */
   tone:       TileTone;
   onClick?:   () => void;
   highlight?: boolean;
@@ -182,25 +183,27 @@ const StatCard = ({
     onClick={onClick}
     aria-pressed={highlight}
     className={cn(
-      CARD_SHELL,
+      dashTint(tone).card,
       "p-4 flex flex-col gap-2 text-left w-full",
-      "transition duration-150 ease-[var(--ease-out-quiet)] hover:border-line-strong hover:shadow-lift",
+      // A tinted card keeps its coloured top edge on hover.
+      "transition duration-150 ease-[var(--ease-out-quiet)] hover:shadow-lift",
       // The filter in force: a ring in the interaction accent.
       highlight && "ring-2 ring-primary-600 ring-offset-2 ring-offset-canvas",
     )}
   >
     <div className="flex items-center gap-3">
-      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", iconBox(tone))}>
+      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", dashTint(tone).box)}>
         <Icon className="w-5 h-5" />
       </div>
       {/* tabular-nums so the counts line up across the seven cards. */}
-      <p className="text-[28px] font-bold leading-none tracking-tight tabular-nums text-ink">{value}</p>
+      <p className={cn("text-[28px] font-bold leading-none tracking-tight tabular-nums", dashTint(tone).number)}>{value}</p>
     </div>
     <div className="min-w-0">
       <p className="text-xs font-semibold leading-tight text-ink-muted">
         {label}
       </p>
-      {sub && <p className="text-[11px] mt-0.5 leading-tight text-ink-faint">{sub}</p>}
+      {/* ink-faint is under AA on a wash. */}
+      {sub && <p className="text-[11px] mt-0.5 leading-tight text-ink-muted">{sub}</p>}
     </div>
   </button>
 );
@@ -1093,7 +1096,7 @@ export default function ExamsPage() {
     return [
       {
         id: "published", label: t("results.published"),
-        value: r.published ?? 0, color: "text-purple-600",
+        value: r.published ?? 0, color: "text-accent-slate-deep",
         // Published results belong to published exams; the list is where you
         // see them, and it is already on this page.
         go: (r.published ?? 0) > 0 ? () => setStatusFilter("published") : null,
@@ -1101,7 +1104,7 @@ export default function ExamsPage() {
       },
       {
         id: "pending", label: t("results.pending"),
-        value: r.pending ?? 0, color: "text-amber-600",
+        value: r.pending ?? 0, color: "text-warning-text",
         // Results computed but not published. The publish button lives on the
         // exam's own results tab, so go to the exam that is waiting; with more
         // than one, filter to the completed exams instead of picking for them.
@@ -1113,7 +1116,7 @@ export default function ExamsPage() {
       },
       {
         id: "missing", label: t("exams.missingGrades"),
-        value: r.missingGrades ?? 0, color: "text-red-600",
+        value: r.missingGrades ?? 0, color: "text-danger-text",
         // One unmarked pupil-subject. The mark is entered on the exam's marks
         // tab, which is the only place this number can honestly point.
         go: (r.missingGrades ?? 0) > 0 && missingExam
@@ -1124,7 +1127,7 @@ export default function ExamsPage() {
       {
         id: "avg", label: t("exams.avgScore"),
         // On /20, over this school year's results (as the pass rate beside it).
-        value: `${Number(r.averagePerformance ?? 0).toFixed(2)}/20`, color: "text-green-600",
+        value: `${Number(r.averagePerformance ?? 0).toFixed(2)}/20`, color: "text-accent-amber-deep",
         // The analytics page is where this figure is computed and broken down.
         go: (r.published ?? 0) + (r.pending ?? 0) > 0
           ? () => navigate("/exams/results")
@@ -1133,7 +1136,7 @@ export default function ExamsPage() {
       },
       {
         id: "passRate", label: t("exams.passRate"),
-        value: `${r.passRate ?? 0}%`, color: "text-primary-600",
+        value: `${r.passRate ?? 0}%`, color: "text-accent-slate-deep",
         go: (r.published ?? 0) + (r.pending ?? 0) > 0
           ? () => navigate("/exams/results")
           : null,
@@ -1438,7 +1441,7 @@ export default function ExamsPage() {
                   }`}
                 >
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
-                  <p className="text-xs text-gray-400 font-medium">{item.label}</p>
+                  <p className="text-xs text-ink-muted font-medium">{item.label}</p>
                 </button>
               ))}
             </div>
@@ -1591,9 +1594,8 @@ export default function ExamsPage() {
 
         ) : filtered.length === 0 ? (
           <div className="text-center py-20">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center
-                            justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-gray-300" />
+            <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4", DASH_TINT.amber.box)}>
+              <FileText className="w-8 h-8" />
             </div>
             <p className="font-semibold text-gray-700">{t("exams.none")}</p>
             <p className="text-gray-400 text-sm mt-1">

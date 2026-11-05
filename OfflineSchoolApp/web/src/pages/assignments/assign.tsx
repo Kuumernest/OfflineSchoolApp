@@ -120,8 +120,8 @@ const StepCard = ({ step, children }: { step: Step; children: React.ReactNode })
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-          <Icon size={20} className="text-primary-600" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-violet-solid text-white">
+          <Icon size={20} />
         </div>
         <div>
           <p className="text-xs font-medium text-gray-400">{t("assignments.stepOf", { step, total: 4 })}</p>

@@ -19,6 +19,8 @@ import { subjectService }  from "@/services/subject.service";
 import { fetchClasses }    from "@/services/class.service";
 import { useUser }         from "@/store/auth.store";
 import { cn }              from "@/utils/cn";
+import { CARD_SHELL }      from "@/config/sections";
+import { DASH_TINT }       from "@/config/dashboardTint";
 import type { RawSubject } from "@/services/subject.service";
 import type { Class }      from "@/types/classes.types";
 import { useTranslation } from "react-i18next";
@@ -137,26 +139,27 @@ interface StatsBannerProps {
 const StatsBanner = ({ total, assigned, unassigned }: StatsBannerProps) => {
   const { t } = useTranslation();
   const items: StatItem[] = [
-    { label: t("common.total"),      value: total,      color: "text-gray-900"    },
-    { label: t("subjects.assigned"), value: assigned,   color: "text-emerald-600" },
+    { label: t("common.total"),      value: total,      color: "text-accent-slate-deep" },
+    { label: t("subjects.assigned"), value: assigned,   color: "text-success-text" },
     {
       label: t("subjects.unassigned"),
       value: unassigned,
-      color: unassigned > 0 ? "text-amber-600" : "text-gray-900",
+      color: unassigned > 0 ? "text-warning-text" : "text-accent-slate-deep",
     },
   ];
 
   return (
-    <div className="flex items-center justify-center gap-8 border-b border-gray-100 bg-white px-6 py-3">
+    // The subjects' slate tint, as on the dashboard: a wash and a 3px top edge.
+    <div className="flex items-center justify-center gap-8 border-b border-line border-t-[3px] border-t-accent-slate bg-accent-slate-soft px-6 py-3">
       {items.map(({ label, value, color }, i) => (
         <div key={label} className="flex items-center gap-8">
           <div className="flex flex-col items-center">
             <span className={cn("text-xl font-bold", color)}>{value}</span>
-            <span className="mt-0.5 text-xs font-medium text-gray-400">
+            <span className="mt-0.5 text-xs font-medium text-ink-muted">
               {label}
             </span>
           </div>
-          {i < items.length - 1 && <div className="h-7 w-px bg-gray-200" />}
+          {i < items.length - 1 && <div className="h-7 w-px bg-line" />}
         </div>
       ))}
     </div>
@@ -187,9 +190,9 @@ const SubjectCard = ({
   canManage = true,
 }: SubjectCardProps) => {
   const { t } = useTranslation();
-  return <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-      <BookOpen size={20} className="text-emerald-600" />
+  return <div className={cn("flex items-center gap-4 p-4", CARD_SHELL)}>
+    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", DASH_TINT.slate.box)}>
+      <BookOpen size={20} />
     </div>
 
     <div className="min-w-0 flex-1">

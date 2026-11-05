@@ -24,17 +24,17 @@ const EMAIL_REGEX     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NEXT_STEPS = [
   {
     icon:     Key,
-    box:      "bg-accent-blue-soft text-accent-blue",
+    box:      "bg-accent-blue-solid text-white",
     labelKey: "teachersAdd.step1",
   },
   {
     icon:     Mail,
-    box:      "bg-accent-teal-soft text-accent-teal",
+    box:      "bg-accent-teal-solid text-white",
     labelKey: "teachersAdd.step2",
   },
   {
     icon:     Lock,
-    box:      "bg-accent-indigo-soft text-accent-indigo",
+    box:      "bg-accent-indigo-solid text-white",
     labelKey: "teachersAdd.step3",
   },
 ];

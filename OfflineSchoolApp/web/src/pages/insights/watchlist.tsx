@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }    from "@/i18n/format";
 import { cn }           from "@/utils/cn";
+import { DASH_TINT }    from "@/config/dashboardTint";
 import { fetchClasses } from "@/services/class.service";
 import {
   fetchWatchlist,
@@ -37,6 +38,13 @@ const TIER_STYLE: Record<WatchTier, { badge: string; dot: string }> = {
   high:   { badge: "bg-red-50 text-red-700",       dot: "bg-red-500" },
   medium: { badge: "bg-amber-50 text-amber-700",   dot: "bg-amber-500" },
   low:    { badge: "bg-slate-100 text-slate-600",  dot: "bg-slate-400" },
+};
+
+/** The tier count cards: high risk red, medium amber, low blue. */
+const TIER_TINT: Record<WatchTier, (typeof DASH_TINT)[keyof typeof DASH_TINT]> = {
+  high:   DASH_TINT.red,
+  medium: DASH_TINT.amber,
+  low:    DASH_TINT.blue,
 };
 
 export default function WatchlistPage() {
@@ -120,16 +128,17 @@ export default function WatchlistPage() {
             <Card
               className={cn(
                 "h-full transition-shadow",
+                TIER_TINT[c.key].card,
                 tier === c.key && "ring-2 ring-primary-400"
               )}
             >
               <div className="flex items-center gap-2">
                 <span className={cn("h-2 w-2 rounded-full", TIER_STYLE[c.key].dot)} />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                   {t(`watch.tier.${c.key}`)}
                 </p>
               </div>
-              <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+              <p className={cn("mt-2 font-display text-[30px] leading-none tabular", TIER_TINT[c.key].number)}>
                 {c.count}
               </p>
               <p className="mt-1.5 text-xs text-ink-muted">{c.hint}</p>

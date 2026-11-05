@@ -14,15 +14,26 @@ import { BarChart3, CalendarCheck, Wallet, Phone, Mail, Users } from "lucide-rea
 import { useFormat }      from "@/i18n/format";
 import { cn }             from "@/utils/cn";
 import { fetchStudentOverview } from "@/services/student.service";
+import { CARD_SHELL }     from "@/config/sections";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
-function Panel({ icon: Icon, title, children, action }: {
+/**
+ * One block of the overview. The icon sits white on a solid square of the
+ * panel's colour; a `tinted` panel (one figure about one kind) also takes the
+ * kind's wash and top edge.
+ */
+function Panel({ icon: Icon, title, children, action, accent, tinted = false }: {
   icon: typeof BarChart3; title: string; children: React.ReactNode; action?: React.ReactNode;
+  accent: DashAccent; tinted?: boolean;
 }) {
+  const tint = DASH_TINT[accent];
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={cn("p-5", tinted ? tint.card : CARD_SHELL)}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900">
-          <Icon className="h-4 w-4 text-gray-400" aria-hidden />
+        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", tint.box)}>
+            <Icon className="h-4 w-4" aria-hidden />
+          </span>
           {title}
         </h2>
         {action}
@@ -59,7 +70,7 @@ export function StudentOverviewCard({ studentId }: { studentId: string }) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* ── Results ── */}
-      <Panel icon={BarChart3} title={t("studentOverview.results")}>
+      <Panel icon={BarChart3} accent="slate" title={t("studentOverview.results")}>
         {results.length === 0 ? (
           <p className="text-sm text-gray-500">{t("studentOverview.noResults")}</p>
         ) : (
@@ -85,11 +96,11 @@ export function StudentOverviewCard({ studentId }: { studentId: string }) {
       </Panel>
 
       {/* ── Attendance ── */}
-      <Panel icon={CalendarCheck} title={t("studentOverview.attendance", { days: attendance.days })}>
-        <p className="text-2xl font-bold tabular-nums text-gray-900">
+      <Panel icon={CalendarCheck} accent="green" tinted title={t("studentOverview.attendance", { days: attendance.days })}>
+        <p className="text-2xl font-bold tabular-nums text-accent-green-deep">
           {attendance.rate != null ? `${fmt.decimal(attendance.rate, 1)}%` : "–"}
         </p>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-ink-muted">
           {attendance.marked
             ? t("studentOverview.attendanceBreakdown", attendance)
             : t("studentOverview.notMarked")}
@@ -98,7 +109,7 @@ export function StudentOverviewCard({ studentId }: { studentId: string }) {
 
       {/* ── Fees ── (absent for a reader without fees.view) */}
       {fees && (
-        <Panel icon={Wallet} title={t("studentOverview.fees", { year: fees.academicYear })}
+        <Panel icon={Wallet} accent="teal" tinted title={t("studentOverview.fees", { year: fees.academicYear })}
           action={
             <Link to={`/fees/students/${studentId}?year=${encodeURIComponent(fees.academicYear)}`}
               className="text-xs font-semibold text-primary-600 hover:underline">
@@ -106,17 +117,17 @@ export function StudentOverviewCard({ studentId }: { studentId: string }) {
             </Link>
           }>
           <p className={cn("text-2xl font-bold tabular-nums",
-            fees.balance > 0 ? "text-red-600" : "text-green-700")}>
+            fees.balance > 0 ? "text-danger-text" : "text-success-text")}>
             {fees.balance > 0 ? fmt.money(fees.balance) : t("studentOverview.settled")}
           </p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-ink-muted">
             {t("studentOverview.feesBreakdown", { charged: fmt.money(fees.charged), paid: fmt.money(fees.paid) })}
           </p>
         </Panel>
       )}
 
       {/* ── Guardian ── */}
-      <Panel icon={Users} title={t("studentOverview.guardian")}>
+      <Panel icon={Users} accent="blue" title={t("studentOverview.guardian")}>
         {!guardian.name && !guardian.phone && !guardian.email ? (
           <p className="text-sm text-gray-500">{t("studentOverview.noGuardian")}</p>
         ) : (
