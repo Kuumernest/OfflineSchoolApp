@@ -357,6 +357,13 @@ const saveProfile = async (form, userId) => {
     console.warn("[profile/setup] SQLite save error:", err.message);
     throw err;
   }
+
+  // Not reached the server: queued, so it is sent when the phone is next
+  // online (and counts as unsent work until it is). It used to be dropped.
+  if (!serverSaved) {
+    await TeacherProfile.queueUpload(userId, { ...payload, profileCompleted: true }, fullName)
+      .catch((err) => console.warn("[profile/setup] could not queue the profile:", err.message));
+  }
   return { serverSaved };
 };
 
@@ -381,13 +388,11 @@ export const isTeacherProfileComplete = async (userId) => {
   try {
     const { token } = useAuthStore.getState();
     if (token && token !== "offline_mode") {
-      const res = await withRetry(
-        () => api.get("/teacher/profile"),
-        3,
-        1_000
-      );
-      const data = res.data?.data || res.data;
-      if (data?.profileCompleted) return true;
+      // The server's copy merged with this phone's: saves what the server
+      // adds, and queues a profile that so far lives only on this phone —
+      // which is how a profile saved before the server stored them gets there.
+      const { profile } = await TeacherProfile.loadProfile(userId, { api });
+      if (profile?.profileCompleted) return true;
     }
   } catch { /* fall through to SQLite */ }
 
@@ -414,7 +419,7 @@ export const isTeacherProfileComplete = async (userId) => {
 export default function TeacherProfileSetup() {
   const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
-  const setUser             = useAuthStore((s) => s.setUser);
+  const updateUser          = useAuthStore((s) => s.updateUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
 
   const userId = String(user?._id || user?.id || "");
@@ -465,59 +470,22 @@ export default function TeacherProfileSetup() {
   // ── Load existing profile ─────────────────────────────
   useEffect(() => {
     const loadExisting = async () => {
-      // Try API first (with retry so transient WiFi blip doesn't break it)
+      // The server's copy merged with this phone's, field by field. It used
+      // to take the server's reply alone — a reply that carried no profile —
+      // and blank every field whenever the phone was online.
       try {
-        const res = await withRetry(
-          () => api.get("/teacher/profile", { timeout: 8_000 }),
-          3,
-          1_000
-        );
-        const p = res.data?.data || res.data;
-        if (p && typeof p === "object") {
-          setForm((prev) => ({
-            ...prev,
-            firstName:         p.firstName         || prev.firstName,
-            lastName:          p.lastName          || prev.lastName,
-            gender:            p.gender            || prev.gender,
-            dateOfBirth:       p.dateOfBirth       || "",
-            nationalId:        p.nationalId        || "",
-            staffId:           p.staffId           || "",
-            qualification:     p.qualification     || "",
-            employmentType:    p.employmentType    || "full_time",
-            joinDate:          p.joinDate          || "",
-            yearsOfExperience: p.yearsOfExperience || "",
-            previousSchool:    p.previousSchool    || "",
-            phone:             p.phone             || prev.phone,
-            alternatePhone:    p.alternatePhone    || "",
-            address:           p.address           || "",
-            city:              p.city              || "",
-            state:             p.state             || "",
-            emergencyName:     p.emergencyName     || "",
-            emergencyPhone:    p.emergencyPhone    || "",
-            emergencyRelation: p.emergencyRelation || "",
-            bloodGroup:        p.bloodGroup        || "",
-            medicalConditions: p.medicalConditions || "",
-            bio:               p.bio               || "",
-          }));
-          return; // API succeeded — no need for SQLite fallback
-        }
-      } catch { /* fall through to SQLite */ }
-
-      // Fallback: local cache. Returns the form's own shape, so there is no
-      // column-name mapping here to drift out of step with the writer.
-      try {
-        const saved = await TeacherProfile.getLocal(userId);
-        if (saved) {
+        const { profile } = await TeacherProfile.loadProfile(userId, { api });
+        if (profile) {
           setForm((prev) => {
             const merged = { ...prev };
-            for (const [key, value] of Object.entries(saved)) {
+            for (const [key, value] of Object.entries(profile)) {
               if (key === "profileCompleted" || key === "updatedAt") continue;
               if (value !== "" && value != null) merged[key] = value;
             }
             return merged;
           });
         }
-      } catch { /* ignore */ }
+      } catch { /* the form keeps what it has */ }
     };
 
     if (userId) loadExisting();
@@ -567,7 +535,9 @@ export default function TeacherProfileSetup() {
       const fullName = `${form.firstName} ${form.lastName}`.trim();
 
       setProfileCompleted(true);
-      if (user) setUser?.({ ...user, name: fullName, profileCompleted: true });
+      // updateUser, not setUser: setUser(user) with no token wrote an empty
+      // token, and the teacher was signed out on the next launch.
+      if (user) updateUser?.({ name: fullName, profileCompleted: true });
 
       Alert.alert(
         t("profileTeacher.savedTitle"),

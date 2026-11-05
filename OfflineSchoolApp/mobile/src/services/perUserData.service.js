@@ -976,6 +976,47 @@ export const prepareSession = async (user, { online = true } = {}) => {
   }
 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// THE ACCOUNT'S OWN PROFILE — local tables nothing syncs down
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A teacher's and a pupil's own profile are kept in local tables that no pull
+ * fills (the server copy comes back only when a profile screen opens). A new
+ * store got their schema and no rows, so switching to it left the profile in
+ * the shared file — out of sight, and gone with it if that file was reset.
+ * The signed-in account's row is copied across; a row the store already has
+ * is its own, newer copy and is kept.
+ */
+export const OWN_PROFILE_TABLES = Object.freeze([
+  { table: "teacher_self_profile", key: "teacher_id" },
+  { table: "student_profiles",     key: "student_id" },
+]);
+
+export const placeOwnProfile = async ({ legacy, store, uid }) => {
+  let placed = 0;
+  if (!legacy || !store || legacy === store || !uid) return placed;
+  for (const { table, key } of OWN_PROFILE_TABLES) {
+    if (!(await tableExists(legacy, table)) || !(await tableExists(store, table))) continue;
+    const row = await legacy.getFirstAsync(
+      `SELECT * FROM ${q(table)} WHERE ${q(key)} = ? LIMIT 1`, [String(uid)]
+    ).catch(() => null);
+    if (!row) continue;
+    const have = await store.getFirstAsync(
+      `SELECT ${q(key)} FROM ${q(table)} WHERE ${q(key)} = ? LIMIT 1`, [String(uid)]
+    ).catch(() => null);
+    if (have) continue;
+    const storeCols = new Set((await columnsOf(store, table)).map((c) => c.name));
+    const cols = Object.keys(row).filter((c) => storeCols.has(c));
+    await store.runAsync(
+      `INSERT OR IGNORE INTO ${q(table)} (${cols.map(q).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+      cols.map((c) => row[c])
+    );
+    placed += 1;
+  }
+  return placed;
+};
+
 /** Placement (local only) and the switch, once a store is primed. */
 const finishFlip = async (dev, uid) => {
   const legacy = await openDatabaseFile(LEGACY_DB_NAME);
@@ -991,6 +1032,7 @@ const finishFlip = async (dev, uid) => {
   await runStep(dev, `flip:${uid}:dirty`, async () => dirty);
   const review = await placeAssigned({ legacy, store, dev, uid });
   await runStep(dev, `flip:${uid}:review`, async () => review);
+  await placeOwnProfile({ legacy, store, uid });
   await attributeLegacy(legacy, dev, { persist: false });
   await runStep(dev, `flip:${uid}:switched`, async () => {
     await dev.runAsync("UPDATE stores SET switched_at = COALESCE(switched_at, ?) WHERE user_id = ?", [nowIso(), uid]);
