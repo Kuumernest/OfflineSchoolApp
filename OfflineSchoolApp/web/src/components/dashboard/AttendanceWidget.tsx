@@ -3,6 +3,7 @@ import { useTranslation }   from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useFormat }        from "@/i18n/format";
 import { cn }               from "@/utils/cn";
+import { DASH_TINT }        from "@/config/dashboardTint";
 
 interface Props {
   present:  number;
@@ -38,7 +39,8 @@ export default function AttendanceWidget({
   const pct = Math.max(0, Math.min(rate ?? 0, 100));
 
   return (
-    <Card>
+    // Attendance is green across the dashboard.
+    <Card className={DASH_TINT.green.edge}>
       <CardHeader title={t("dashboard.attendanceToday")} />
 
       {loading ? (

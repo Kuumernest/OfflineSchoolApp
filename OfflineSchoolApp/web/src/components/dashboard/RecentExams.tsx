@@ -1,10 +1,12 @@
 // web/src/components/dashboard/RecentExams.tsx
 import { useNavigate }        from "react-router-dom";
 import { useTranslation }      from "react-i18next";
-import { ArrowRight }         from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 import { Card, CardHeader }   from "@/components/ui/Card";
 import { Badge }              from "@/components/ui/Badge";
 import { type RecentExam }    from "@/services/dashboard.service";
+import { DASH_TINT }          from "@/config/dashboardTint";
+import { cn }                 from "@/utils/cn";
 
 interface Props {
   exams:    RecentExam[];
@@ -17,7 +19,8 @@ export default function RecentExams({ exams, loading = false, error }: Props) {
   const navigate = useNavigate();
 
   return (
-    <Card>
+    // Exams are amber across the dashboard: the panel's top edge and each row's icon.
+    <Card className={DASH_TINT.amber.edge}>
       <CardHeader
         title={t("dashboard.recentExams")}
         action={
@@ -59,6 +62,9 @@ export default function RecentExams({ exams, loading = false, error }: Props) {
                 onClick={() => navigate(`/exams/${exam._id}`)}
                 className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
               >
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.softBox)}>
+                  <FileText className="h-4 w-4" aria-hidden="true" />
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium text-ink">
                     {exam.title}
