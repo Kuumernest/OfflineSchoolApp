@@ -20,6 +20,8 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PeriodsService } from "../../../src/services/periods.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, Badge } from "../../../src/components/Tinted";
 
 const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown, isFirst, isLast }) => {
                                 const { t } = useTranslation();
@@ -33,19 +35,25 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
           {period.name}
         </Text>
         {period.isBreak && (
-          <View style={styles.breakBadge}>
-            <Text style={styles.breakBadgeText}>{t("timetable.break")}</Text>
-          </View>
+          <Badge
+            label={t("timetable.break")}
+            tone="warning"
+            style={styles.breakBadge}
+            textStyle={styles.breakBadgeText}
+          />
         )}
         {!period.isActive && (
-          <View style={styles.inactiveBadge}>
-            <Text style={styles.inactiveBadgeText}>{t("common.inactive")}</Text>
-          </View>
+          <Badge
+            label={t("common.inactive")}
+            tone="error"
+            style={styles.inactiveBadge}
+            textStyle={styles.inactiveBadgeText}
+          />
         )}
       </View>
 
       <View style={styles.timeRow}>
-        <Ionicons name="time-outline" size={13} color="#6B7280" />
+        <Ionicons name="time-outline" size={13} color={ACCENT.teal.solid} />
         <Text style={styles.timeText}>
           {period.startTime} – {period.endTime}
         </Text>
@@ -62,7 +70,7 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
         <Ionicons
           name="chevron-up"
           size={16}
-          color={isFirst ? "#D1D5DB" : "#6B7280"}
+          color={isFirst ? COLORS.textMuted : COLORS.textSecondary}
         />
       </TouchableOpacity>
       <TouchableOpacity
@@ -74,7 +82,7 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
         <Ionicons
           name="chevron-down"
           size={16}
-          color={isLast ? "#D1D5DB" : "#6B7280"}
+          color={isLast ? COLORS.textMuted : COLORS.textSecondary}
         />
       </TouchableOpacity>
     </View>
@@ -88,7 +96,7 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
         <Ionicons
           name={period.isActive ? "eye-off-outline" : "eye-outline"}
           size={18}
-          color={period.isActive ? "#D97706" : "#059669"}
+          color={period.isActive ? COLORS.warning : COLORS.success}
         />
       </TouchableOpacity>
       <TouchableOpacity
@@ -96,7 +104,7 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
         style={styles.actionBtn}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="pencil-outline" size={18} color="#4F46E5" />
+        <Ionicons name="pencil-outline" size={18} color={ACCENT.teal.solid} />
       </TouchableOpacity>
     </View>
   </View>
@@ -187,7 +195,7 @@ export default function PeriodsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.teal.solid} />
         <Text style={styles.loadingText}>{t("periodsAdmin.loadingPeriods")}</Text>
       </View>
     );
@@ -203,8 +211,9 @@ export default function PeriodsScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("periodsAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>
@@ -218,7 +227,7 @@ export default function PeriodsScreen() {
           style={styles.addButton}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={22} color="#FFFFFF" />
+          <Ionicons name="add" size={22} color={COLORS.onPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -229,20 +238,20 @@ export default function PeriodsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadPeriods(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.teal.solid}
+            colors={[ACCENT.teal.solid]}
           />
         }
       >
         {error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
 
         <View style={styles.infoBanner}>
-          <Ionicons name="information-circle-outline" size={16} color="#4F46E5" />
+          <Ionicons name="information-circle-outline" size={16} color={SEMANTIC.info.icon} />
           <Text style={styles.infoBannerText}>
             {t("periodsAdmin.infoBanner")}
           </Text>
@@ -250,9 +259,7 @@ export default function PeriodsScreen() {
 
         {periods.length === 0 ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="time-outline" size={36} color="#9CA3AF" />
-            </View>
+            <IconSquare icon="time-outline" accent="teal" size={80} radius={20} style={styles.emptyIconWrap} />
             <Text style={styles.emptyTitle}>{t("periodsAdmin.noPeriodsYet")}</Text>
             <Text style={styles.emptySubtitle}>
               {t("periodsAdmin.noPeriodsHint")}
@@ -262,7 +269,7 @@ export default function PeriodsScreen() {
               onPress={() => router.push("/admin/periods/add")}
               activeOpacity={0.8}
             >
-              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="add-circle-outline" size={20} color={COLORS.onPrimary} />
               <Text style={styles.emptyButtonText}>{t("periodsAdmin.addFirst")}</Text>
             </TouchableOpacity>
           </View>
@@ -286,7 +293,7 @@ export default function PeriodsScreen() {
               onPress={() => router.push("/admin/periods/add")}
               activeOpacity={0.8}
             >
-              <Ionicons name="add-circle-outline" size={20} color="#4F46E5" />
+              <Ionicons name="add-circle-outline" size={20} color={ACCENT.teal.solid} />
               <Text style={styles.addMoreText}>{t("periodsAdmin.addAnother")}</Text>
             </TouchableOpacity>
           </>
@@ -307,7 +314,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: "#6B7280",
+    color: COLORS.textSecondary,
     fontWeight: "500",
   },
   header: {
@@ -316,26 +323,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center",
     justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.teal.solid,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -347,7 +355,7 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     padding: 12,
     borderRadius: 10,
     marginBottom: 12,
@@ -356,13 +364,13 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 13,
-    color: "#991B1B",
+    color: SEMANTIC.error.text,
     fontWeight: "500",
   },
   infoBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: SEMANTIC.info.bg,
     padding: 12,
     borderRadius: 10,
     marginBottom: 16,
@@ -371,30 +379,30 @@ const styles = StyleSheet.create({
   infoBannerText: {
     flex: 1,
     fontSize: 12,
-    color: "#3730A3",
+    color: SEMANTIC.info.text,
     lineHeight: 18,
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ACCENT.teal.wash,
     borderRadius: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: COLORS.border,
     overflow: "hidden",
   },
   cardInactive: {
     opacity: 0.6,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
   cardAccent: {
     width: 5,
     alignSelf: "stretch",
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.teal.base,
   },
   cardAccentInactive: {
-    backgroundColor: "#D1D5DB",
+    backgroundColor: COLORS.textMuted,
   },
   cardInfo: {
     flex: 1,
@@ -411,10 +419,10 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
+    color: COLORS.text,
   },
   cardNameInactive: {
-    color: "#9CA3AF",
+    color: COLORS.textSecondary,
   },
   timeRow: {
     flexDirection: "row",
@@ -424,11 +432,10 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 13,
-    color: "#6B7280",
+    color: COLORS.textSecondary,
     fontWeight: "500",
   },
   breakBadge: {
-    backgroundColor: "#FEF3C7",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 20,
@@ -436,10 +443,8 @@ const styles = StyleSheet.create({
   breakBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#D97706",
   },
   inactiveBadge: {
-    backgroundColor: "#F3F4F6",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 20,
@@ -447,7 +452,6 @@ const styles = StyleSheet.create({
   inactiveBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#9CA3AF",
   },
   reorderButtons: {
     justifyContent: "center",
@@ -458,7 +462,7 @@ const styles = StyleSheet.create({
   reorderBtn: {
     padding: 4,
     borderRadius: 6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
   },
   reorderBtnDisabled: {
     backgroundColor: "transparent",
@@ -473,7 +477,7 @@ const styles = StyleSheet.create({
   actionBtn: {
     padding: 6,
     borderRadius: 8,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.surface,
   },
   addMoreButton: {
     flexDirection: "row",
@@ -483,14 +487,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#4F46E5",
+    borderColor: ACCENT.teal.base,
     borderStyle: "dashed",
     marginTop: 4,
   },
   addMoreText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#4F46E5",
+    color: ACCENT.teal.deep,
   },
   emptyState: {
     alignItems: "center",
@@ -498,23 +502,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: COLORS.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: "#6B7280",
+    color: COLORS.textSecondary,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
@@ -523,13 +521,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.teal.solid,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
   },
   emptyButtonText: {
-    color: "#FFFFFF",
+    color: COLORS.onPrimary,
     fontSize: 15,
     fontWeight: "700",
   },

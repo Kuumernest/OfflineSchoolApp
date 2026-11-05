@@ -10,21 +10,23 @@ import { router, useLocalSearchParams } from "expo-router";
 import { WebView }         from "react-native-webview";
 import { Ionicons }        from "@expo/vector-icons";
 import { TemplateService } from "../../../../src/services/template.service";
+import { COLORS, SEMANTIC } from "../../../../src/theme/colors";
+import { HeaderIcon } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#2563EB",
-  primaryBg: "#EFF6FF",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray900:   "#111827",
-  error:     "#DC2626",
+  primary:   COLORS.primary,
+  primaryBg: COLORS.primaryLight,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   COLORS.border,
+  gray400:   COLORS.textSubtle,
+  gray500:   COLORS.textSecondary,
+  gray900:   COLORS.text,
+  error:     SEMANTIC.error.text,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -75,6 +77,7 @@ export default function TemplatePreviewScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={s.headerIcon} />
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={1}>{name}</Text>
           <Text style={s.headerSub}>
@@ -123,7 +126,7 @@ export default function TemplatePreviewScreen() {
       {/* Error */}
       {error && !loading && (
         <View style={s.centered}>
-          <Ionicons name="alert-circle-outline" size={48} color={C.error} />
+          <Ionicons name="alert-circle-outline" size={48} color={SEMANTIC.error.icon} />
           <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity
             style={s.retryBtn}
@@ -177,6 +180,7 @@ const s = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -192,13 +196,13 @@ const s = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "flex-start",
     gap:               8,
-    backgroundColor:   C.primaryBg,
+    backgroundColor:   SEMANTIC.info.bg,
     paddingHorizontal: 16,
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: C.primary + "20",
+    borderBottomColor: SEMANTIC.info.box,
   },
-  rawBannerText: { flex: 1, fontSize: 12, color: C.primary, lineHeight: 18 },
+  rawBannerText: { flex: 1, fontSize: 12, color: SEMANTIC.info.text, lineHeight: 18 },
   loadingText:   { fontSize: 14, color: C.gray500 },
   errorText: {
     fontSize:   14,

@@ -13,6 +13,8 @@ import { SubjectService } from "@/services/subject.service";
 import { createAssignment } from "@/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -367,7 +369,7 @@ export default function AddSubjectScreen() {
         {/* Info banner */}
         {!isEdit && (
           <View style={styles.infoBanner}>
-            <Ionicons name="book-outline" size={15} color="#1D4ED8" />
+            <Ionicons name="book-outline" size={15} color={SEMANTIC.info.icon} />
             <Text style={styles.infoBannerText}>
               {t("subjectsAdd.multiHint")}
             </Text>
@@ -375,7 +377,7 @@ export default function AddSubjectScreen() {
         )}
         {isEdit && missing && (
           <View style={styles.infoBanner}>
-            <Ionicons name="alert-circle-outline" size={15} color="#1D4ED8" />
+            <Ionicons name="alert-circle-outline" size={15} color={SEMANTIC.info.icon} />
             <Text style={styles.infoBannerText}>{t("subjectsAdd.notFound")}</Text>
           </View>
         )}
@@ -518,7 +520,7 @@ export default function AddSubjectScreen() {
                     <Ionicons
                       name={allSelected ? "checkbox-outline" : "square-outline"}
                       size={18}
-                      color={allSelected ? "#4F46E5" : "#9CA3AF"}
+                      color={allSelected ? ACCENT.indigo.solid : COLORS.textSubtle}
                     />
                     <Text style={styles.classSelectAllText}>
                       {allSelected ? t("subjectsAdd.deselectAll") : t("subjectsAdd.selectAll")}
@@ -546,7 +548,7 @@ export default function AddSubjectScreen() {
                         <Ionicons
                           name={checked ? "checkbox-outline" : "square-outline"}
                           size={18}
-                          color={checked ? "#4F46E5" : "#D1D5DB"}
+                          color={checked ? ACCENT.indigo.solid : COLORS.textMuted}
                         />
                         <Text style={[
                           styles.className,
@@ -577,11 +579,17 @@ export default function AddSubjectScreen() {
                 {form.classIds.map((id) => {
                   const cls = classes.find((c) => c._id === id);
                   return (
-                    <View key={id} style={styles.chip}>
-                      <Ionicons name="school-outline" size={11} color="#4338CA" />
-                      <Text style={styles.chipText}>{cls?.name ?? id}</Text>
+                    <View
+                      key={id}
+                      style={[styles.chip, {
+                        backgroundColor: ACCENT[levelAccent(cls?.level)].wash,
+                        borderColor: ACCENT[levelAccent(cls?.level)].base,
+                      }]}
+                    >
+                      <Ionicons name="school-outline" size={11} color={ACCENT[levelAccent(cls?.level)].deep} />
+                      <Text style={[styles.chipText, { color: ACCENT[levelAccent(cls?.level)].deep }]}>{cls?.name ?? id}</Text>
                       <TouchableOpacity onPress={() => removeClass(id)}>
-                        <Ionicons name="close" size={12} color="#6366F1" />
+                        <Ionicons name="close" size={12} color={ACCENT[levelAccent(cls?.level)].deep} />
                       </TouchableOpacity>
                     </View>
                   );
@@ -611,7 +619,7 @@ export default function AddSubjectScreen() {
                   <Ionicons
                     name={form.teacherId === "" ? "radio-button-on" : "radio-button-off"}
                     size={18}
-                    color={form.teacherId === "" ? "#4F46E5" : "#D1D5DB"}
+                    color={form.teacherId === "" ? ACCENT.violet.solid : COLORS.textMuted}
                   />
                   <Text style={[
                     styles.className,
@@ -637,7 +645,7 @@ export default function AddSubjectScreen() {
                         ? "radio-button-on"
                         : "radio-button-off"}
                       size={18}
-                      color={form.teacherId === teacher._id ? "#4F46E5" : "#D1D5DB"}
+                      color={form.teacherId === teacher._id ? ACCENT.violet.solid : COLORS.textMuted}
                     />
                     <Text style={[
                       styles.className,
@@ -702,8 +710,9 @@ function ScreenHeader({ title, subtitle, onBack }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={20} color="#374151" />
+        <Ionicons name="arrow-back" size={20} color={COLORS.text} />
       </TouchableOpacity>
+      <HeaderIcon style={styles.headerIcon} />
       <View>
         <Text style={styles.headerTitle}>{title}</Text>
         {subtitle && <Text style={styles.headerSub}>{subtitle}</Text>}
@@ -720,24 +729,26 @@ const styles = StyleSheet.create({
   scroll:        { padding: 16, gap: 14 },
 
   header:        { flexDirection: "row", alignItems: "center", gap: 12,
-                   backgroundColor: "#fff", borderBottomWidth: 1,
-                   borderBottomColor: "#E5E7EB", paddingHorizontal: 16, paddingVertical: 14 },
-  backBtn:       { width: 38, height: 38, borderRadius: 10, backgroundColor: "#F3F4F6",
+                   backgroundColor: COLORS.surface, borderBottomWidth: 1,
+                   borderBottomColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 14 },
+  backBtn:       { width: 38, height: 38, borderRadius: 10, backgroundColor: COLORS.page,
                    alignItems: "center", justifyContent: "center" },
-  headerTitle:   { fontSize: 17, fontWeight: "800", color: "#111827" },
-  headerSub:     { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerIcon:    { marginRight: 0 },
+  headerTitle:   { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  headerSub:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   infoBanner:     { flexDirection: "row", alignItems: "flex-start", gap: 10,
-                    backgroundColor: "#EFF6FF", borderRadius: 12, borderWidth: 1,
-                    borderColor: "#BFDBFE", padding: 14 },
-  infoBannerText: { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 19 },
+                    backgroundColor: SEMANTIC.info.bg, borderRadius: 12, borderWidth: 1,
+                    borderColor: SEMANTIC.info.box, padding: 14 },
+  infoBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.info.text, lineHeight: 19 },
 
-  card:          { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
-                   borderColor: "#E5E7EB", padding: 16, gap: 16,
+  card:          { backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1,
+                   borderColor: COLORS.border, padding: 16, gap: 16,
+                   borderTopWidth: 3, borderTopColor: ACCENT.slate.base,
                    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
 
   fieldWrap:     { gap: 6 },
-  fieldLabel:    { fontSize: 14, fontWeight: "700", color: "#374151" },
+  fieldLabel:    { fontSize: 14, fontWeight: "700", color: COLORS.text },
   inputWrap:     { flexDirection: "row", alignItems: "center", gap: 10,
                    borderWidth: 2, borderColor: "#E5E7EB", borderRadius: 12,
                    backgroundColor: "#F9FAFB", paddingHorizontal: 14, paddingVertical: 12 },
@@ -755,39 +766,41 @@ const styles = StyleSheet.create({
 
   // Examples
   examplesRow:   { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },
-  examplesLabel: { fontSize: 11, color: "#9CA3AF" },
-  exampleChip:   { backgroundColor: "#EEF2FF", borderRadius: 8,
+  examplesLabel: { fontSize: 11, color: COLORS.textSecondary },
+  exampleChip:   { backgroundColor: ACCENT.slate.wash, borderRadius: 8,
+                   borderWidth: 1, borderColor: ACCENT.slate.base,
                    paddingHorizontal: 10, paddingVertical: 5 },
-  exampleChipText: { fontSize: 12, fontWeight: "700", color: "#4F46E5" },
+  exampleChipText: { fontSize: 12, fontWeight: "700", color: ACCENT.slate.deep },
 
   // Class list
-  classList:       { borderWidth: 2, borderColor: "#E5E7EB", borderRadius: 12,
+  classList:       { borderWidth: 2, borderColor: COLORS.border, borderRadius: 12,
                      overflow: "hidden" },
   loadingRow:      { flexDirection: "row", alignItems: "center", gap: 8, padding: 14 },
   classSelectAll:  { flexDirection: "row", alignItems: "center", gap: 10,
-                     backgroundColor: "#F3F4F6", borderBottomWidth: 1,
-                     borderBottomColor: "#E5E7EB", paddingHorizontal: 14, paddingVertical: 12 },
-  classSelectAllText: { flex: 1, fontSize: 12, fontWeight: "700", color: "#374151",
+                     backgroundColor: COLORS.page, borderBottomWidth: 1,
+                     borderBottomColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 12 },
+  classSelectAllText: { flex: 1, fontSize: 12, fontWeight: "700", color: COLORS.text,
                         textTransform: "uppercase", letterSpacing: 0.5 },
-  classCountBadge: { fontSize: 12, color: "#9CA3AF" },
+  classCountBadge: { fontSize: 12, fontWeight: "700", color: ACCENT.indigo.deep },
   classRow:        { flexDirection: "row", alignItems: "center", gap: 10,
                      paddingHorizontal: 14, paddingVertical: 13 },
-  classRowBorder:  { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  classRowChecked: { backgroundColor: "#EEF2FF" },
-  className:       { flex: 1, fontSize: 14, color: "#374151" },
-  classNameChecked: { fontWeight: "700", color: "#3730A3" },
-  classLevel:      { fontSize: 12, color: "#9CA3AF" },
+  classRowBorder:  { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  classRowChecked: { backgroundColor: ACCENT.indigo.wash },
+  className:       { flex: 1, fontSize: 14, color: COLORS.text },
+  classNameChecked: { fontWeight: "700", color: ACCENT.indigo.deep },
+  classLevel:      { fontSize: 12, color: COLORS.textSecondary },
 
   // Chips
   chipsRow:        { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip:            { flexDirection: "row", alignItems: "center", gap: 4,
-                     backgroundColor: "#EEF2FF", borderRadius: 8,
+                     backgroundColor: ACCENT.indigo.wash, borderRadius: 8,
+                     borderWidth: 1, borderColor: ACCENT.indigo.base,
                      paddingHorizontal: 10, paddingVertical: 5 },
-  chipText:        { fontSize: 12, fontWeight: "700", color: "#4338CA" },
+  chipText:        { fontSize: 12, fontWeight: "700", color: ACCENT.indigo.deep },
 
   // Submit
   submitBtn:       { flexDirection: "row", alignItems: "center", justifyContent: "center",
-                     gap: 8, backgroundColor: "#059669", borderRadius: 12,
+                     gap: 8, backgroundColor: ACCENT.slate.solid, borderRadius: 12,
                      paddingVertical: 14 },
   submitDisabled:  { backgroundColor: "#D1D5DB" },
   submitText:      { fontSize: 15, fontWeight: "800", color: "#fff" },
@@ -795,21 +808,23 @@ const styles = StyleSheet.create({
   discardText:     { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
 
   // Results
-  resultsHeading:    { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 8 },
+  resultsHeading:    { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 8 },
   resultCard:        { borderRadius: 14, borderWidth: 1, padding: 14, gap: 6 },
-  resultSuccess:     { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" },
-  resultFail:        { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
-  resultCardTitle:   { fontSize: 14, fontWeight: "800", color: "#065F46" },
-  resultCardTitleFail: { fontSize: 14, fontWeight: "800", color: "#991B1B" },
-  resultSuccessItem: { fontSize: 13, color: "#047857" },
-  resultFailItem:    { fontSize: 13, color: "#B91C1C" },
-  resultFailErr:     { fontSize: 11, color: "#EF4444" },
+  resultSuccess:     { backgroundColor: SEMANTIC.success.bg, borderColor: COLORS.border,
+                       borderLeftWidth: 3, borderLeftColor: ACCENT.green.base },
+  resultFail:        { backgroundColor: SEMANTIC.error.bg, borderColor: COLORS.border,
+                       borderLeftWidth: 3, borderLeftColor: ACCENT.red.base },
+  resultCardTitle:   { fontSize: 14, fontWeight: "800", color: SEMANTIC.success.text },
+  resultCardTitleFail: { fontSize: 14, fontWeight: "800", color: SEMANTIC.error.text },
+  resultSuccessItem: { fontSize: 13, color: SEMANTIC.success.text },
+  resultFailItem:    { fontSize: 13, color: SEMANTIC.error.text },
+  resultFailErr:     { fontSize: 11, color: SEMANTIC.error.text },
 
   // Shared buttons (results view)
   outlineBtn:      { borderWidth: 2, borderColor: "#4F46E5", borderRadius: 12,
                      paddingVertical: 14, alignItems: "center" },
   outlineBtnText:  { fontSize: 15, fontWeight: "800", color: "#4F46E5" },
-  primaryBtn:      { backgroundColor: "#059669", borderRadius: 12,
+  primaryBtn:      { backgroundColor: ACCENT.slate.solid, borderRadius: 12,
                      paddingVertical: 14, alignItems: "center" },
   primaryBtnText:  { fontSize: 15, fontWeight: "800", color: "#fff" },
 });

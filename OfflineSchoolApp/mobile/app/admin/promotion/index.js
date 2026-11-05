@@ -23,37 +23,47 @@ import { Ionicons } from "@expo/vector-icons";
 import PromotionService   from "../../../src/services/promotion.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import {
+  COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge,
+} from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+
+// Promotion is blue, as on the dashboard and the web console.
+const PROMO = ACCENT.blue;
 
 const C = {
-  primary:   "#3B4996",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  info:      "#1B4F8A",
-  infoBg:    "#EFF4FB",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   PROMO.solid,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  info:      PROMO.deep,
+  infoBg:    PROMO.wash,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSecondary,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
+/** A badge's colours as { bg, fg, border } — never grey. */
+const pill = ({ bg, text, border }) => ({ bg, fg: text, border });
+
 const STATUS_TONE = {
-  draft:     { bg: C.warningBg, fg: C.warning },
-  committed: { bg: C.successBg, fg: C.success },
-  reversed:  { bg: C.canvas,    fg: C.inkMuted },
+  draft:     pill(statusBadge("warning")),
+  committed: pill(statusBadge("success")),
+  reversed:  pill(statusBadge("info")),
 };
 
 const OUTCOME_TONE = {
-  promoted:   { bg: C.successBg, fg: C.success },
-  repeated:   { bg: C.warningBg, fg: C.warning },
-  graduated:  { bg: C.infoBg,    fg: C.info },
-  unassigned: { bg: C.dangerBg,  fg: C.danger },
+  promoted:   pill(statusBadge("success")),
+  repeated:   pill(statusBadge("warning")),
+  graduated:  pill(accentBadge("blue")),
+  unassigned: pill(statusBadge("error")),
 };
 
 export default function PromotionScreen() {
@@ -123,6 +133,7 @@ export default function PromotionScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={22} color={C.inkBody} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>{t("promo.title")}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
@@ -146,10 +157,12 @@ export default function PromotionScreen() {
 
         {runs.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.emptyTitle}>{t("promo.none")}</Text>
-            <Text style={styles.empty}>
-              {offline ? t("promo.offline") : t("promo.noneHint")}
-            </Text>
+            <EmptyState
+              icon="trending-up"
+              accent="blue"
+              title={t("promo.none")}
+              message={offline ? t("promo.offline") : t("promo.noneHint")}
+            />
           </View>
         ) : (
           runs.map((r) => {
@@ -159,7 +172,7 @@ export default function PromotionScreen() {
             const blocked = counts.unassigned ?? 0;
 
             return (
-              <View key={r._id} style={styles.card}>
+              <View key={r._id} style={[styles.card, styles.runCard]}>
                 <TouchableOpacity
                   style={styles.runRow}
                   onPress={() => toggle(r._id)}
@@ -173,7 +186,7 @@ export default function PromotionScreen() {
                       {t("promo.students", { count: counts.total ?? 0 })}
                     </Text>
                   </View>
-                  <View style={[styles.badge, { backgroundColor: tone.bg }]}>
+                  <View style={[styles.badge, { backgroundColor: tone.bg, borderColor: tone.border }]}>
                     <Text style={[styles.badgeText, { color: tone.fg }]}>
                       {t(`promo.${r.status}`)}
                     </Text>
@@ -181,7 +194,7 @@ export default function PromotionScreen() {
                   <Ionicons
                     name={open ? "chevron-up" : "chevron-down"}
                     size={16}
-                    color={C.inkFaint}
+                    color={COLORS.textSecondary}
                   />
                 </TouchableOpacity>
 
@@ -191,7 +204,7 @@ export default function PromotionScreen() {
                     ["promo.promoted",  counts.promoted  ?? 0, C.success],
                     ["promo.repeated",  counts.repeated  ?? 0, C.warning],
                     ["promo.graduated", counts.graduated ?? 0, C.info],
-                    ["promo.unassigned", blocked, blocked > 0 ? C.danger : C.inkFaint],
+                    ["promo.unassigned", blocked, blocked > 0 ? C.danger : COLORS.textSecondary],
                   ].map(([key, value, colour]) => (
                     <View key={key} style={styles.tally}>
                       <Text style={[styles.tallyValue, { color: colour }]}>{value}</Text>
@@ -225,7 +238,7 @@ export default function PromotionScreen() {
                               {t(`promo.basis_${d.basis}`)}
                             </Text>
                           </View>
-                          <View style={[styles.badge, { backgroundColor: ot.bg }]}>
+                          <View style={[styles.badge, { backgroundColor: ot.bg, borderColor: ot.border }]}>
                             <Text style={[styles.badgeText, { color: ot.fg }]}>
                               {t(`promo.${d.outcome}`)}
                             </Text>
@@ -253,6 +266,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
+  headerIcon: { marginRight: 0 },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
 
@@ -261,7 +275,7 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.warningBg, borderWidth: 1, borderColor: "#F0DCBB",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: statusBadge("warning").border,
   },
   bannerText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
@@ -269,12 +283,16 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface, borderRadius: 12,
     borderWidth: 1, borderColor: C.line, paddingHorizontal: 14, paddingVertical: 12,
   },
+  runCard: {
+    backgroundColor: PROMO.wash,
+    borderTopWidth: 3, borderTopColor: PROMO.base,
+  },
 
   runRow:   { flexDirection: "row", alignItems: "center", gap: 10 },
   runYears: { fontSize: 14, fontWeight: "700", color: C.ink },
   runMeta:  { marginTop: 2, fontSize: 11, color: C.inkMuted },
 
-  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   badgeText: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
 
   tallies: {
@@ -298,6 +316,5 @@ const styles = StyleSheet.create({
   lineLabel: { fontSize: 13, color: C.inkBody, fontWeight: "500" },
   lineMeta:  { marginTop: 2, fontSize: 11, color: C.inkFaint },
 
-  emptyTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 4 },
   empty:      { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
 });
