@@ -11,12 +11,13 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, X, Clock, CircleDashed, ShieldCheck, ChevronLeft, ChevronRight, CalendarCheck } from "lucide-react";
+import { Check, X, Clock, CircleDashed, ShieldCheck, ChevronLeft, ChevronRight, CalendarCheck, CalendarDays, List, BookOpen } from "lucide-react";
 
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
 import { fetchAttendance, type PortalAttendance } from "@/services/portal.service";
-import { PortalCard, Skeleton, EmptyState } from "./ui";
+import { PortalCard, Skeleton, EmptyState, SectionIcon } from "./ui";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 type DayState = "present" | "absent" | "late" | "partial" | "excused";
 type Day = NonNullable<PortalAttendance["dailySummaries"]>[number];
@@ -82,7 +83,10 @@ export function AttendanceScreen({ studentId }: { studentId: string | null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold text-ink">{t("portal.attendanceScreen.title")}</h1>
+        <div className="flex items-center gap-3">
+          <PageIcon icon={CalendarCheck} accent="green" />
+          <h1 className="text-xl font-semibold text-ink">{t("portal.attendanceScreen.title")}</h1>
+        </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => shift(-1)} aria-label={t("portal.attendanceScreen.prevMonth")}
             className="flex h-11 w-11 items-center justify-center rounded-control text-ink-muted hover:bg-surface hover:text-ink">
@@ -127,7 +131,7 @@ export function AttendanceScreen({ studentId }: { studentId: string | null }) {
           </PortalCard>
 
           <PortalCard className="p-4">
-            <h2 className="mb-3 text-sm font-semibold text-ink">{t("portal.attendanceScreen.calendar")}</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><SectionIcon icon={CalendarDays} accent="green" />{t("portal.attendanceScreen.calendar")}</h2>
             <div role="grid" aria-label={fmt.monthLabel(month)} className="grid grid-cols-5 gap-1.5">
               {weekdays.map((w) => <div key={w} role="columnheader" className="pb-1 text-center text-[11px] font-medium text-ink-muted">{w}</div>)}
               {weeks.flat().map((date, i) => {
@@ -157,7 +161,7 @@ export function AttendanceScreen({ studentId }: { studentId: string | null }) {
           </PortalCard>
 
           <PortalCard className="overflow-hidden">
-            <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("portal.attendanceScreen.days")}</h2>
+            <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink"><SectionIcon icon={List} accent="green" />{t("portal.attendanceScreen.days")}</h2>
             <ul>
               {days.map((d) => {
                 const st = stateOf(d);
@@ -184,7 +188,7 @@ export function AttendanceScreen({ studentId }: { studentId: string | null }) {
 
           {(data.subjectSummary?.filter((s) => s.subjectId).length ?? 0) > 0 && (
             <PortalCard className="p-4">
-              <h2 className="mb-3 text-sm font-semibold text-ink">{t("portal.attendanceScreen.bySubject")}</h2>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><SectionIcon icon={BookOpen} accent="slate" />{t("portal.attendanceScreen.bySubject")}</h2>
               <ul className="space-y-3">
                 {data.subjectSummary!.filter((s) => s.subjectId).map((s) => {
                   const pct = s.total ? Math.round((s.present / s.total) * 100) : 0;

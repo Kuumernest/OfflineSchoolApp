@@ -32,7 +32,10 @@ import {
   Users,
   Printer,
   RefreshCw,
+  CalendarX,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -309,11 +312,14 @@ export default function TimetablePage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("timetable.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("timetable.gridHint")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("timetable.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("timetable.gridHint")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -479,6 +485,8 @@ export default function TimetablePage() {
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader
+                icon={CalendarX}
+                accent="teal"
                 title={t("timetable.unfilled")}
                 subtitle={
                   gaps.length === 0
@@ -492,13 +500,13 @@ export default function TimetablePage() {
                     <button
                       key={`${day}-${period._id}`}
                       onClick={() => setCell({ day, periodId: period._id })}
-                      className="px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-xs text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors"
+                      className={cn("px-2 py-1 rounded-md text-xs ring-1 ring-inset hover:shadow-lift transition-shadow", ACCENT_BADGE.teal)}
                     >
                       {t(DAY_SHORT_KEYS[day])} · {period.name}
                     </button>
                   ))}
                   {gaps.length > 24 && (
-                    <span className="px-2 py-1 text-xs text-gray-400">
+                    <span className="px-2 py-1 text-xs text-ink-muted">
                       {t("timetable.gapsMore", { count: gaps.length - 24 })}
                     </span>
                   )}
@@ -508,17 +516,19 @@ export default function TimetablePage() {
 
             <Card>
               <CardHeader
+                icon={Users}
+                accent="teal"
                 title={t("timetable.teacherLoad")}
                 subtitle={t("timetable.blurb")}
               />
               {workload.length === 0 ? (
-                <p className="text-sm text-gray-500">{t("timetable.nothingYet")}</p>
+                <p className="text-sm text-ink-muted">{t("timetable.nothingYet")}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {workload.slice(0, 8).map((w) => (
                     <li key={w.teacherId} className="flex items-center gap-3">
-                      <Users className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                      <span className="text-sm text-gray-700 truncate flex-1">
+                      <Users className={cn("w-3.5 h-3.5 shrink-0", DASH_TINT.teal.glyph)} />
+                      <span className="text-sm text-ink truncate flex-1">
                         {w.name}
                       </span>
                       <Badge

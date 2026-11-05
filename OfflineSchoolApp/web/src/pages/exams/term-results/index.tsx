@@ -16,6 +16,7 @@ import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
 import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
 import NeedsInternet from "@/components/offline/NeedsInternet";
 import { useNeedsInternet } from "@/hooks/useNeedsInternet";
@@ -110,12 +111,13 @@ export default function TermResultsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/exams" className="rounded-lg p-2 hover:bg-gray-100 transition">
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
+          <Link to="/exams" className="rounded-lg p-2 hover:bg-accent-blue-soft transition">
+            <ArrowLeft className="h-5 w-5 text-ink-body" />
           </Link>
+          <PageIcon />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t("termResults.title")}</h1>
-            <p className="text-sm text-gray-500">{t("termResults.description")}</p>
+            <h1 className="text-2xl font-bold text-ink">{t("termResults.title")}</h1>
+            <p className="text-sm text-ink-muted">{t("termResults.description")}</p>
           </div>
         </div>
       </div>
@@ -123,13 +125,13 @@ export default function TermResultsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {t("academicStructure.academicYear")}
           </label>
           <select
             value={academicYear}
             onChange={(e) => { setAcademicYear(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {ACADEMIC_YEARS.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -137,13 +139,13 @@ export default function TermResultsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {t("academicStructure.term")}
           </label>
           <select
             value={term}
             onChange={(e) => { setTerm(Number(e.target.value) as TermNumber); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             {periods.terms.map((te) => (
               <option key={te.number} value={te.number}>
@@ -153,13 +155,13 @@ export default function TermResultsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {t("termResults.className")}
           </label>
           <select
             value={classId}
             onChange={(e) => { setClassId(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           >
             <option value="">{t("termResults.allClasses")}</option>
             {classes.map((c) => (
@@ -255,10 +257,10 @@ export default function TermResultsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className={cn("overflow-x-auto rounded-2xl border border-line bg-surface shadow-card", DASH_TINT.slate.edge)}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <tr className="border-b border-line bg-surface text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
               <th className="px-4 py-3">#</th>
               <th className="px-4 py-3">{t("termResults.studentName")}</th>
               <th className="px-4 py-3">{t("termResults.admissionNo")}</th>
@@ -272,7 +274,7 @@ export default function TermResultsPage() {
               <th className="px-4 py-3 text-center">{t("termResults.status")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-line">
             {isLoading ? (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-12 text-center">
@@ -281,7 +283,7 @@ export default function TermResultsPage() {
               </tr>
             ) : results.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={columnCount} className="px-4 py-12 text-center text-ink-muted">
                   {t("termResults.noResults")}
                 </td>
               </tr>
@@ -291,10 +293,10 @@ export default function TermResultsPage() {
                   <tr
                     key={r._id}
                     className={cn("transition",
-                      r.isStale ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-gray-50")}
+                      r.isStale ? "bg-accent-amber-soft hover:bg-accent-amber-soft/70" : "hover:bg-accent-blue-soft/70")}
                   >
-                    <td className="px-4 py-3 text-gray-500">{(page - 1) * 50 + idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-4 py-3 text-ink-muted">{(page - 1) * 50 + idx + 1}</td>
+                    <td className="px-4 py-3 font-medium text-ink">
                       {r.studentName}
                       {/* Marked per pupil, not only counted: "4 need
                           recomputing" is little use without knowing which. */}
@@ -309,17 +311,17 @@ export default function TermResultsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
-                    <td className="px-4 py-3 text-gray-500">{r.className}</td>
+                    <td className="px-4 py-3 text-ink-muted">{r.admissionNo}</td>
+                    <td className="px-4 py-3 text-ink-muted">{r.className}</td>
                     {termSequences.map((sq) => {
                       const sa = r.sequenceAverages?.find((s) => s.sequence === sq.number);
                       return (
-                        <td key={sq.number} className="px-4 py-3 text-center text-gray-700">
+                        <td key={sq.number} className="px-4 py-3 text-center text-ink-body">
                           {sa?.average?.toFixed(1) ?? "—"}
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                    <td className="px-4 py-3 text-center font-semibold text-ink">
                       {r.termAverage?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -327,7 +329,7 @@ export default function TermResultsPage() {
                         {r.overallRemark ?? "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
+                    <td className="px-4 py-3 text-center text-ink-body">
                       {r.classPosition ? `${r.classPosition}/${r.totalInClass}` : "—"}
                     </td>
                     <td className="px-4 py-3 text-center">

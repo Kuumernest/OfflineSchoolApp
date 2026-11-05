@@ -8,13 +8,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  GraduationCap, CalendarCheck, Wallet, CalendarClock, Megaphone,
+  GraduationCap, CalendarCheck, Wallet, CalendarClock, Megaphone, House,
   TrendingUp, TrendingDown, Minus, ChevronRight, Users,
 } from "lucide-react";
 
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
-import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { DASH_TINT, ACCENT_BADGE, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { fetchHome, type PortalHomeChild } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { ordinal, on20 } from "./format";
@@ -28,9 +29,12 @@ export function HomeScreen({ onOpen }: { onOpen: (childId: string, screen: Porta
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-ink">{t("portal.home.title")}</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">{t("portal.home.subtitle")}</p>
+      <div className="flex items-center gap-3">
+        <PageIcon icon={House} accent="blue" />
+        <div>
+          <h1 className="text-xl font-semibold text-ink">{t("portal.home.title")}</h1>
+          <p className="mt-0.5 text-sm text-ink-muted">{t("portal.home.subtitle")}</p>
+        </div>
       </div>
 
       {homeQ.isLoading && <HomeSkeleton />}
@@ -84,7 +88,7 @@ function ChildCard({ child, index, onOpen }: {
         <div className="min-w-0 flex-1">
           <h2 id={`child-${child._id}`} className="truncate text-base font-semibold text-ink">{child.name ?? child.enrollmentNo}</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-            {child.className && <span className="rounded-full bg-primary-50 px-2 py-0.5 font-medium text-primary-700">{child.className}</span>}
+            {child.className && <span className={cn("rounded-full px-2 py-0.5 font-medium ring-1 ring-inset", ACCENT_BADGE.indigo)}>{child.className}</span>}
             {child.enrollmentNo && <span>{child.enrollmentNo}</span>}
           </div>
         </div>

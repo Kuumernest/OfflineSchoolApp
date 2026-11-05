@@ -18,8 +18,11 @@ import type {
   ResultSummary,
   SubjectStat,
 }                                     from "@/types/exam.types";
-import { Trophy, BarChart3, Calculator, Pin, Printer } from "lucide-react";
+import { Trophy, BarChart3, Calculator, Pin, Printer, PieChart, Layers, ListOrdered, BookOpen, Percent, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { cn } from "@/utils/cn";
+import { type DashAccent } from "@/config/dashboardTint";
 import { DASH_TINT } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────
@@ -108,6 +111,13 @@ const Spinner = () => (
                   border-t-transparent rounded-full animate-spin" />
 );
 
+/** A small solid icon square in front of a panel's heading. */
+const HeadBox = ({ icon: Icon, accent = "slate" }: { icon: LucideIcon; accent?: DashAccent }) => (
+  <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)} aria-hidden="true">
+    <Icon className="h-4 w-4" />
+  </span>
+);
+
 const EmptyState = ({
   icon, title, subtitle,
 }: {
@@ -116,9 +126,11 @@ const EmptyState = ({
   const Icon = icon;
   return (
   <div className="flex flex-col items-center justify-center
-                  py-20 text-center text-gray-400">
-    <Icon className="w-12 h-12 mb-3 text-gray-300" strokeWidth={1.5} aria-hidden />
-    <p className="font-semibold text-gray-600 text-lg">{title}</p>
+                  py-20 text-center text-ink-muted">
+    <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.slate.box)} aria-hidden="true">
+      <Icon className="w-6 h-6" aria-hidden />
+    </div>
+    <p className="font-semibold text-ink text-lg">{title}</p>
     {subtitle && <p className="text-sm mt-1 max-w-sm">{subtitle}</p>}
   </div>
   );
@@ -141,9 +153,9 @@ const ExamPicker = ({
   onSelect:   (id: string) => void;
 }) => {
   const { t } = useTranslation();
-  return <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+  return <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+    <div className="px-4 py-3 bg-accent-slate-soft border-b border-line">
+      <p className="text-xs font-bold text-accent-slate-deep uppercase tracking-wide">
         {t("results.selectExam")}
       </p>
     </div>
@@ -151,11 +163,11 @@ const ExamPicker = ({
     {loading ? (
       <div className="flex justify-center py-8"><Spinner /></div>
     ) : exams.length === 0 ? (
-      <div className="px-4 py-8 text-center text-sm text-gray-400">
+      <div className="px-4 py-8 text-center text-sm text-ink-muted">
         {t("results.noneCompleted")}
       </div>
     ) : (
-      <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+      <div className="max-h-80 overflow-y-auto divide-y divide-line">
         {exams.map((exam) => {
           const meta     = EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
           const isActive = selectedId === exam._id;
@@ -167,21 +179,21 @@ const ExamPicker = ({
                 gap-3 transition-colors
                 ${isActive
                   ? "bg-primary-50 border-l-4 border-primary-600"
-                  : "hover:bg-gray-50 border-l-4 border-transparent"
+                  : "hover:bg-accent-blue-soft/70 border-l-4 border-transparent"
                 }`}
             >
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-semibold truncate
-                  ${isActive ? "text-primary-700" : "text-gray-900"}`}>
+                  ${isActive ? "text-primary-700" : "text-ink"}`}>
                   {exam.name}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                <p className="text-xs text-ink-muted mt-0.5 truncate">
                   {examTypeLabel(t, exam.type)}
                   {exam.term         ? ` · ${exam.term}`         : ""}
                   {exam.academicYear ? ` · ${exam.academicYear}` : ""}
                 </p>
                 {exam.classNames && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">
+                  <p className="text-xs text-ink-muted truncate mt-0.5">
                     {exam.classNames}
                   </p>
                 )}
@@ -258,10 +270,10 @@ const PassFailDonut = ({
              style={{ margin: "12px", width: "calc(100% - 24px)",
                       height: "calc(100% - 24px)" }}>
           <div className="text-center">
-            <p className="text-sm font-bold text-gray-900">
+            <p className="text-sm font-bold text-ink">
               {total > 0 ? Math.round((passed / total) * 100) : 0}%
             </p>
-            <p className="text-xs text-gray-400">{t("examCreate.pass")}</p>
+            <p className="text-xs text-ink-muted">{t("examCreate.pass")}</p>
           </div>
         </div>
       </div>
@@ -269,19 +281,19 @@ const PassFailDonut = ({
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-ink">
             {t("results.passed")} — <strong>{passed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-ink">
             {t("results.failed")} — <strong>{failed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-gray-300 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="w-3 h-3 rounded-full bg-accent-slate shrink-0" />
+          <span className="text-sm text-ink">
             {t("common.total")} — <strong>{total}</strong>
           </span>
         </div>
@@ -308,14 +320,14 @@ const ScoreDistributionBar = ({
       { id: "lowest",  label: t("results.lowest"),   value: lowest,  color: "bg-red-500"     },
     ].map(({ id, label, value, color }) => (
       <div key={id} className="flex items-center gap-3">
-        <span className="w-14 text-xs text-gray-500 text-right">{label}</span>
-        <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+        <span className="w-14 text-xs text-ink-muted text-right">{label}</span>
+        <div className="flex-1 h-4 bg-accent-slate-soft rounded-full overflow-hidden">
           <div
             className={`h-full ${color} rounded-full transition-all`}
             style={{ width: `${Math.min((value / 20) * 100, 100)}%` }}
           />
         </div>
-        <span className="w-16 text-xs font-bold text-gray-700 text-right">
+        <span className="w-16 text-xs font-bold text-ink text-right">
           {on20(value)}
         </span>
       </div>
@@ -337,7 +349,7 @@ const RemarkDistributionChart = ({
   const { t, i18n } = useTranslation();
   if (bands.every((b) => b.count === 0)) {
     return (
-      <p className="text-sm text-gray-400 text-center py-6">
+      <p className="text-sm text-ink-muted text-center py-6">
         {t("results.noGradeData")}
       </p>
     );
@@ -357,13 +369,13 @@ const RemarkDistributionChart = ({
         const label    = (i18n.language?.startsWith("fr") ? b.remarkFr : b.remark) || b.remark || "—";
         return (
           <div key={`${b.minMark}-${b.maxMark}`} className="flex items-center gap-3">
-            <span className="w-40 text-xs font-semibold text-gray-700 text-right truncate" title={label}>
+            <span className="w-40 text-xs font-semibold text-ink text-right truncate" title={label}>
               {label}
-              <span className="block text-[10px] font-normal text-gray-400">
+              <span className="block text-[10px] font-normal text-ink-muted">
                 {b.minMark}–{b.maxMark}/20
               </span>
             </span>
-            <div className="flex-1 h-7 bg-gray-100 rounded-lg overflow-hidden relative">
+            <div className="flex-1 h-7 bg-accent-slate-soft rounded-lg overflow-hidden relative">
               <div
                 className={`h-full ${SHADES[Math.min(i, SHADES.length - 1)]} rounded-lg flex items-center
                             justify-end pr-2 transition-all`}
@@ -374,7 +386,7 @@ const RemarkDistributionChart = ({
                 )}
               </div>
             </div>
-            <span className="w-8 text-sm text-gray-500 font-medium">
+            <span className="w-8 text-sm text-ink-muted font-medium">
               {b.count}
             </span>
           </div>
@@ -396,7 +408,7 @@ const SubjectPerformanceTable = ({
   const { t } = useTranslation();
   if (subjects.length === 0) {
     return (
-      <p className="text-sm text-gray-400 text-center py-6">
+      <p className="text-sm text-ink-muted text-center py-6">
         {t("results.noBreakdown")}
       </p>
     );
@@ -408,7 +420,7 @@ const SubjectPerformanceTable = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-xs font-bold text-gray-500
+        <thead className="bg-surface text-xs font-bold text-ink-muted
                           uppercase tracking-wide">
           <tr>
             <th className="px-4 py-2.5 text-left">{t("academic.subject")}</th>
@@ -419,7 +431,7 @@ const SubjectPerformanceTable = ({
             <th className="px-4 py-2.5 text-right">{t("academic.student_other")}</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {sorted.map((s) => {
             const passColor = s.passRate >= 70
               ? "text-green-600"
@@ -429,8 +441,8 @@ const SubjectPerformanceTable = ({
 
             return (
               <tr key={s.subjectId}
-                  className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-medium text-gray-900">
+                  className="hover:bg-accent-blue-soft/70 transition-colors">
+                <td className="px-4 py-2.5 font-medium text-ink">
                   {s.subjectName}
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-primary-600">
@@ -445,7 +457,7 @@ const SubjectPerformanceTable = ({
                 <td className={`px-4 py-2.5 text-right font-bold ${passColor}`}>
                   {s.passRate.toFixed(1)}%
                 </td>
-                <td className="px-4 py-2.5 text-right text-gray-500">
+                <td className="px-4 py-2.5 text-right text-ink-muted">
                   {s.total}
                 </td>
               </tr>
@@ -527,13 +539,13 @@ const RankingsTable = ({
   return (
     <div>
       {/* Search */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-line">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("results.searchPh")}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg
+          className="w-full px-3 py-2 border border-line rounded-lg
                      text-sm focus:outline-none focus:ring-2
                      focus:ring-primary-400"
         />
@@ -541,7 +553,7 @@ const RankingsTable = ({
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs font-bold text-gray-500
+          <thead className="bg-surface text-xs font-bold text-ink-muted
                             uppercase tracking-wide">
             <tr>
               <th className="px-4 py-3 text-left">{t("results.pos")}</th>
@@ -553,7 +565,7 @@ const RankingsTable = ({
               <th className="px-4 py-3 text-center">{t("common.status")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {filtered.map((r, idx) => {
               const pos     = (r[posField] as number | null) ?? idx + 1;
               const total   = (r[totalField] as number | null) ?? rankings.length;
@@ -564,16 +576,16 @@ const RankingsTable = ({
 
               return (
                 <tr key={r._id || r.studentId}
-                    className="hover:bg-gray-50 transition-colors">
+                    className="hover:bg-accent-blue-soft/70 transition-colors">
 
                   {/* Position */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <span className={`font-bold ${podium ? "text-amber-600" : "text-gray-500"}`}>
+                      <span className={`font-bold ${podium ? "text-amber-600" : "text-ink-muted"}`}>
                         #{pos}
                       </span>
                       {total > 0 && (
-                        <span className="text-xs text-gray-300">
+                        <span className="text-xs text-ink-muted">
                           /{total}
                         </span>
                       )}
@@ -582,18 +594,18 @@ const RankingsTable = ({
 
                   {/* Student */}
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-ink">
                       {r.studentName || t("results.unknownStudent")}
                     </p>
                     {r.admissionNo && (
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-ink-muted">
                         #{r.admissionNo}
                       </p>
                     )}
                   </td>
 
                   {/* Class */}
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-ink-muted text-xs">
                     {r.className || "—"}
                   </td>
 
@@ -603,16 +615,16 @@ const RankingsTable = ({
                   </td>
 
                   {/* The school's remark */}
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-4 py-3 text-ink-body">
                     {remarkText(r) || "—"}
                   </td>
 
                   {/* Subjects passed/total */}
-                  <td className="px-4 py-3 text-center text-xs text-gray-500">
+                  <td className="px-4 py-3 text-center text-xs text-ink-muted">
                     <span className="text-green-600 font-semibold">
                       {r.subjectsPassed}
                     </span>
-                    <span className="text-gray-300 mx-0.5">/</span>
+                    <span className="text-ink-muted mx-0.5">/</span>
                     <span>{r.subjectsTotal}</span>
                   </td>
 
@@ -634,7 +646,7 @@ const RankingsTable = ({
         </table>
 
         {filtered.length === 0 && search && (
-          <div className="text-center py-8 text-sm text-gray-400">
+          <div className="text-center py-8 text-sm text-ink-muted">
             {t("results.noStudentsMatch", { query: search })}
           </div>
         )}
@@ -662,7 +674,7 @@ const TopBottomStudents = ({
   // list runs weakest first, so it reads 5, 4, … not 4, 5.
   if (!topBottom) {
     return (
-      <p className="text-sm text-gray-400 text-center py-4 bg-white rounded-xl border border-gray-100">
+      <p className={cn("text-sm text-ink-muted text-center py-4 bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
         {t("results.chooseClassForTop")}
       </p>
     );
@@ -675,15 +687,15 @@ const TopBottomStudents = ({
 
   const Row = ({ r, rank }: { r: PlacedPupil; rank: number }) => (
     <div className="flex items-center gap-3 py-2 border-b
-                    border-gray-50 last:border-0">
-      <span className="w-6 text-sm font-bold text-gray-400 text-center">
+                    border-line last:border-0">
+      <span className="w-6 text-sm font-bold text-ink-muted text-center">
         {rank}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">
+        <p className="text-sm font-semibold text-ink truncate">
           {r.studentName || t("results.unknownStudent")}
         </p>
-        <p className="text-xs text-gray-400 truncate">
+        <p className="text-xs text-ink-muted truncate">
           {r.className || "—"}
           {r.admissionNo ? ` · #${r.admissionNo}` : ""}
         </p>
@@ -693,7 +705,7 @@ const TopBottomStudents = ({
           ${r.passes ? "text-green-600" : "text-red-600"}`}>
           {on20(r.average20)}
         </p>
-        <p className="text-xs text-gray-400">{remarkOf(r) || "—"}</p>
+        <p className="text-xs text-ink-muted">{remarkOf(r) || "—"}</p>
       </div>
     </div>
   );
@@ -701,10 +713,10 @@ const TopBottomStudents = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* Top performers */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-4", DASH_TINT.slate.edge)}>
         <div className="flex items-center gap-2 mb-3">
-          <Trophy className="w-5 h-5 text-amber-500" aria-hidden />
-          <h3 className="font-semibold text-gray-900 text-sm">
+          <HeadBox icon={Trophy} accent="amber" />
+          <h3 className="font-semibold text-ink text-sm">
             {t("results.topStudents", { count: n })}
           </h3>
         </div>
@@ -714,15 +726,15 @@ const TopBottomStudents = ({
       </div>
 
       {/* Bottom performers — need attention */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-4", DASH_TINT.slate.edge)}>
         <div className="flex items-center gap-2 mb-3">
-          <Pin className="w-5 h-5 text-red-500" aria-hidden />
-          <h3 className="font-semibold text-gray-900 text-sm">
+          <HeadBox icon={Pin} accent="red" />
+          <h3 className="font-semibold text-ink text-sm">
             {t("results.needsAttention", { count: n })}
           </h3>
         </div>
         {bottom.length === 0 && (
-          <p className="text-xs text-gray-400 py-2">{t("results.allInTop")}</p>
+          <p className="text-xs text-ink-muted py-2">{t("results.allInTop")}</p>
         )}
         {bottom.map((r) => (
           <Row key={r.studentId} r={r} rank={r.position} />
@@ -799,13 +811,16 @@ export default function ExamResultsPage() {
 
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t("results.analytics")}
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {t("results.selectCompletedExam")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t("results.analytics")}
+            </h1>
+            <p className="text-ink-muted text-sm mt-1">
+              {t("results.selectCompletedExam")}
+            </p>
+          </div>
         </div>
         <Link
           to="/reports/cards"
@@ -828,7 +843,7 @@ export default function ExamResultsPage() {
             selectedId={selectedExamId}
             onSelect={handleSelectExam}
           />
-          <p className="text-xs text-gray-400 text-center">
+          <p className="text-xs text-ink-muted text-center">
             {t("results.onlyCompleted")}
           </p>
         </div>
@@ -836,7 +851,7 @@ export default function ExamResultsPage() {
         {/* Right — Results panel */}
         <div className="space-y-5">
           {!selectedExamId ? (
-            <div className="bg-white rounded-xl border border-gray-100">
+            <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
               <EmptyState
                 icon={BarChart3}
                 title={t("results.selectToView")}
@@ -848,7 +863,7 @@ export default function ExamResultsPage() {
               <Spinner />
             </div>
           ) : !stats || stats.totalStudents === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-100">
+            <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
               <EmptyState
                 icon={Calculator}
                 title={t("results.none")}
@@ -871,13 +886,13 @@ export default function ExamResultsPage() {
             <>
               {/* Exam title bar */}
               {selectedExam && (
-                <div className="bg-white rounded-xl border border-gray-100
-                                px-5 py-4 flex items-center justify-between">
+                <div className={cn("bg-surface rounded-xl border border-line px-5 py-4 flex items-center justify-between", DASH_TINT.slate.edge)}>
                   <div>
-                    <h2 className="font-bold text-gray-900 text-lg">
+                    <h2 className="flex items-center gap-2 font-bold text-ink text-lg">
+                      <HeadBox icon={FileText} accent="amber" />
                       {selectedExam.name}
                     </h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-ink-muted mt-0.5">
                       {examTypeLabel(t, selectedExam.type)}
                       {selectedExam.term         ? ` · ${selectedExam.term}`         : ""}
                       {selectedExam.academicYear ? ` · ${selectedExam.academicYear}` : ""}
@@ -890,7 +905,7 @@ export default function ExamResultsPage() {
                         value={activeClassId}
                         onChange={(e) => setClassId(e.target.value)}
                         aria-label={t("academic.class")}
-                        className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700"
+                        className="rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-ink"
                       >
                         <option value="">{t("results.allClasses")}</option>
                         {classOptions.map((c) => (
@@ -910,7 +925,7 @@ export default function ExamResultsPage() {
               )}
 
               {/* Section tabs */}
-              <div className="flex border-b border-gray-200 bg-white
+              <div className="flex border-b border-line bg-surface
                               rounded-t-xl overflow-hidden">
                 {(["overview", "rankings", "subjects"] as const).map((s) => (
                   <button
@@ -920,7 +935,7 @@ export default function ExamResultsPage() {
                       transition-colors
                       ${activeSection === s
                         ? "text-primary-600 border-b-2 border-primary-600"
-                        : "text-gray-500 hover:text-gray-700"
+                        : "text-ink-muted hover:text-ink"
                       }`}
                   >
                     {t(SECTION_LABEL_KEYS[s])}
@@ -937,8 +952,9 @@ export default function ExamResultsPage() {
 
                   {/* Pass/fail + score distribution */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 mb-4 text-sm">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                        <HeadBox icon={PieChart} />
                         {t("results.passFailSplit")}
                       </h3>
                       <PassFailDonut
@@ -948,8 +964,9 @@ export default function ExamResultsPage() {
                       />
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 mb-4 text-sm">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                        <HeadBox icon={BarChart3} />
                         {t("results.scoreDistribution")}
                       </h3>
                       <ScoreDistributionBar
@@ -961,8 +978,9 @@ export default function ExamResultsPage() {
                   </div>
 
                   {/* Grade distribution */}
-                  <div className="bg-white rounded-xl border border-gray-100 p-5">
-                    <h3 className="font-semibold text-gray-900 mb-4 text-sm">
+                  <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                    <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                      <HeadBox icon={Layers} />
                       {t("results.remarkDistribution")}
                     </h3>
                     <RemarkDistributionChart
@@ -981,9 +999,8 @@ export default function ExamResultsPage() {
                 <div className="space-y-4">
 
                   {/* Scope selector */}
-                  <div className="bg-white rounded-xl border border-gray-100 p-4
-                                  flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-700">
+                  <div className={cn("bg-surface rounded-xl border border-line p-4 flex items-center justify-between", DASH_TINT.slate.edge)}>
+                    <p className="text-sm font-semibold text-ink">
                       {t("results.rankBy")}
                     </p>
                     <div className="flex gap-1">
@@ -995,7 +1012,7 @@ export default function ExamResultsPage() {
                             font-semibold transition-colors
                             ${rankScope === s.key
                               ? "bg-primary-600 text-white"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              : "bg-accent-slate-soft text-accent-slate-deep hover:bg-accent-blue-soft"
                             }`}
                         >
                           {t(s.labelKey)}
@@ -1005,13 +1022,13 @@ export default function ExamResultsPage() {
                   </div>
 
                   {/* Table */}
-                  <div className="bg-white rounded-xl border border-gray-100
-                                  overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100
+                  <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+                    <div className="px-5 py-3 border-b border-line
                                     flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900 text-sm">
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm">
+                        <HeadBox icon={ListOrdered} />
                         {t(RANKINGS_TITLE_KEYS[rankScope])}
-                        <span className="ml-2 text-xs text-gray-400 font-normal">
+                        <span className="ml-2 text-xs text-ink-muted font-normal">
                           {rankingsLoading ? "…" : t("results.studentCount", { count: rankings.length })}
                         </span>
                       </h3>
@@ -1028,12 +1045,12 @@ export default function ExamResultsPage() {
               {/* ── SUBJECT ANALYSIS SECTION ── */}
               {activeSection === "subjects" && (
                 <div className="space-y-4">
-                  <div className="bg-white rounded-xl border border-gray-100
-                                  overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100">
-                      <h3 className="font-semibold text-gray-900 text-sm">
+                  <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+                    <div className="px-5 py-3 border-b border-line">
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm">
+                        <HeadBox icon={BookOpen} />
                         {t("results.bySubject")}
-                        <span className="ml-2 text-xs text-gray-400 font-normal">
+                        <span className="ml-2 text-xs text-ink-muted font-normal">
                           {t("results.subjectCount", { count: stats.subjectStats.length })}
                         </span>
                       </h3>
@@ -1043,8 +1060,9 @@ export default function ExamResultsPage() {
 
                   {/* Subject pass rate bars */}
                   {stats.subjectStats.length > 0 && (
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-4">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm mb-4">
+                        <HeadBox icon={Percent} />
                         {t("results.subjectPassRates")}
                       </h3>
                       <div className="space-y-3">
@@ -1058,11 +1076,11 @@ export default function ExamResultsPage() {
                             return (
                               <div key={s.subjectId}
                                    className="flex items-center gap-3">
-                                <span className="w-28 text-xs text-gray-600
+                                <span className="w-28 text-xs text-ink-body
                                                  truncate text-right">
                                   {s.subjectName}
                                 </span>
-                                <div className="flex-1 h-5 bg-gray-100
+                                <div className="flex-1 h-5 bg-accent-slate-soft
                                                 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full ${color} rounded-full
@@ -1080,7 +1098,7 @@ export default function ExamResultsPage() {
                                     )}
                                   </div>
                                 </div>
-                                <span className="w-10 text-xs text-gray-500
+                                <span className="w-10 text-xs text-ink-muted
                                                  text-right">
                                   {s.total}
                                 </span>

@@ -35,6 +35,7 @@ import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 const QK = {
@@ -84,12 +85,12 @@ export default function AttendanceReportsPage() {
     return (
       <Card>
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">
+            <h3 className="text-sm font-semibold text-ink">
               {t("attendance.figuresFailed")}
             </h3>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-muted mt-0.5">
               {getErrorMessage(overviewQ.error)}
             </p>
           </div>
@@ -106,16 +107,19 @@ export default function AttendanceReportsPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("attendance.reportsTitle")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("attendance.reportBlurb")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("attendance.reportsTitle")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("attendance.reportBlurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-end gap-2">
           <label className="block">
-            <span className="block text-xs font-medium text-gray-500 mb-1.5">{t("common.date")}</span>
+            <span className="block text-xs font-medium text-ink-muted mb-1.5">{t("common.date")}</span>
             <input
               type="date"
               value={date}
@@ -161,26 +165,28 @@ export default function AttendanceReportsPage() {
       {/* ── Trend ───────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
+          icon={TrendingUp}
+          accent="green"
           title={t("attendance.last7d")}
           subtitle={t("attendance.shareMarked")}
           action={
             movement && (
               <div className="flex items-center gap-1.5">
                 {movement.delta > 1 ? (
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <TrendingUp className="w-4 h-4 text-success-text" />
                 ) : movement.delta < -1 ? (
-                  <TrendingDown className="w-4 h-4 text-red-600" />
+                  <TrendingDown className="w-4 h-4 text-danger-text" />
                 ) : (
-                  <Minus className="w-4 h-4 text-gray-400" />
+                  <Minus className="w-4 h-4 text-ink-muted" />
                 )}
                 <span
                   className={cn(
                     "text-sm font-medium",
                     movement.delta > 1
-                      ? "text-emerald-600"
+                      ? "text-success-text"
                       : movement.delta < -1
-                        ? "text-red-600"
-                        : "text-gray-500",
+                        ? "text-danger-text"
+                        : "text-ink-muted",
                   )}
                 >
                   {t("attendance.ptsVsWeek", { delta: `${movement.delta > 0 ? "+" : ""}${movement.delta}` })}
@@ -192,12 +198,12 @@ export default function AttendanceReportsPage() {
 
         {weeklyQ.isLoading ? (
           <div className="h-48 flex items-center justify-center">
-            <span className="text-sm text-gray-400">{t("attendance.loadingTrend")}</span>
+            <span className="text-sm text-ink-muted">{t("attendance.loadingTrend")}</span>
           </div>
         ) : trend.length === 0 ? (
           <div className="h-48 flex flex-col items-center justify-center gap-2">
-            <BarChart3 className="w-7 h-7 text-gray-300" />
-            <p className="text-sm text-gray-500">
+            <BarChart3 className={cn("w-7 h-7", DASH_TINT.green.glyph)} />
+            <p className="text-sm text-ink-muted">
               {t("attendance.noneLastWeek")}
             </p>
           </div>
@@ -351,7 +357,7 @@ function TrendChart({ points }: { points: { date: string; rate: number | null }[
               key={pct}
               x1={PAD} y1={y} x2={W - PAD} y2={y}
               stroke="currentColor"
-              className="text-gray-100"
+              className="text-line"
               strokeWidth="0.3"
               vectorEffect="non-scaling-stroke"
             />
@@ -383,8 +389,8 @@ function TrendChart({ points }: { points: { date: string; rate: number | null }[
       <div className="flex justify-between mt-1">
         {points.map((p) => (
           <div key={p.date} className="text-center flex-1 min-w-0">
-            <p className="text-[11px] text-gray-400">{weekdayOf(p.date)}</p>
-            <p className="text-xs font-medium text-gray-700 tabular-nums">
+            <p className="text-[11px] text-ink-muted">{weekdayOf(p.date)}</p>
+            <p className="text-xs font-medium text-ink tabular-nums">
               {p.rate == null ? "–" : `${p.rate}%`}
             </p>
           </div>

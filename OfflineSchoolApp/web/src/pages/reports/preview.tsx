@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth.store";
 import api from "@/services/api";
 import { ArrowLeft, Edit2, Loader2, AlertCircle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 export default function TemplatePreviewPage() {
   const { t } = useTranslation();
@@ -69,7 +70,7 @@ export default function TemplatePreviewPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex
+      <div className="bg-surface border-b border-line px-6 py-3 flex
                       items-center gap-4 shrink-0">
         <button
           onClick={() => navigate(-1)}
@@ -78,11 +79,14 @@ export default function TemplatePreviewPage() {
         >
           <ArrowLeft size={20} className="text-gray-700" />
         </button>
-        <div className="flex-1">
-          <h1 className="text-lg font-bold text-gray-900 truncate">{name}</h1>
-          <p className="text-xs text-gray-500">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <PageIcon />
+          <div className="min-w-0">
+          <h1 className="text-lg font-bold text-ink truncate">{name}</h1>
+          <p className="text-xs text-ink-muted">
             {examId ? t("reports.livePreview") : t("builder.layoutPreview")}
           </p>
+          </div>
         </div>
         {templateId && (
           <button

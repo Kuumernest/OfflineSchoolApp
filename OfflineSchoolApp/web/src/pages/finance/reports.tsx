@@ -10,7 +10,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, CalendarDays, PieChart, AlertTriangle } from "lucide-react";
 
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
@@ -220,7 +220,12 @@ export default function FinanceReportsPage() {
       {/* Month by month */}
       <Card padding={false}>
         <div className="border-b border-line px-5 py-3">
-          <h2 className="text-sm font-semibold text-ink">{t("finrep.monthly")}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+              <CalendarDays className="h-4 w-4" />
+            </span>
+            {t("finrep.monthly")}
+          </h2>
         </div>
         {months.length === 0 ? (
           <EmptyTable title={t("finrep.noData")} subtitle={t("finrep.noDataHint")} />
@@ -242,13 +247,13 @@ export default function FinanceReportsPage() {
                   <Td className="w-[38%]">
                     {/* Two bars on one scale — the shape of the month at a glance. */}
                     <div className="flex flex-col gap-1">
-                      <div className="h-1.5 w-full rounded-full bg-canvas">
+                      <div className="h-1.5 w-full rounded-full bg-accent-teal-soft">
                         <div
                           className="h-full rounded-full bg-success transition-[width] duration-300"
                           style={{ width: `${(m.income / peak) * 100}%` }}
                         />
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-canvas">
+                      <div className="h-1.5 w-full rounded-full bg-accent-teal-soft">
                         <div
                           className="h-full rounded-full bg-danger transition-[width] duration-300"
                           style={{ width: `${(m.expenditure / peak) * 100}%` }}
@@ -278,7 +283,12 @@ export default function FinanceReportsPage() {
         {/* By category */}
         <Card padding={false}>
           <div className="border-b border-line px-5 py-3">
-            <h2 className="text-sm font-semibold text-ink">{t("finrep.byCategory")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+                <PieChart className="h-4 w-4" />
+              </span>
+              {t("finrep.byCategory")}
+            </h2>
           </div>
           {(summary?.byCategory.length ?? 0) === 0 ? (
             <EmptyTable title={t("expenses.none")} subtitle={t("expenses.noneHint")} />
@@ -312,7 +322,12 @@ export default function FinanceReportsPage() {
 
         {/* Arrears — a position, not a flow. */}
         <Card>
-          <h2 className="text-sm font-semibold text-ink">{t("finrep.arrears")}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+            {t("finrep.arrears")}
+          </h2>
           <p className="mt-1 text-xs text-ink-muted">{t("finrep.arrearsNote")}</p>
 
           <p className="mt-4 font-display text-[28px] leading-none text-danger-text tabular">
@@ -346,7 +361,7 @@ export default function FinanceReportsPage() {
                   {arrears.collectionRate}%
                 </span>
               </div>
-              <div className="mt-1.5 h-2 w-full rounded-full bg-canvas">
+              <div className="mt-1.5 h-2 w-full rounded-full bg-accent-teal-soft">
                 <div
                   className="h-full rounded-full bg-primary-600 transition-[width] duration-300"
                   style={{ width: `${Math.min(100, Math.max(0, arrears.collectionRate))}%` }}

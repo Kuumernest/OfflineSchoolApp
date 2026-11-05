@@ -10,6 +10,7 @@ import { Link, useNavigate }    from "react-router-dom";
 import { Building2, Plus, LogIn, Eye, Power, PowerOff } from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
 import { Card }                 from "@/components/ui/Card";
+import { DASH_TINT }            from "@/config/dashboardTint";
 import { Button }               from "@/components/ui/Button";
 import { Badge }                from "@/components/ui/Badge";
 import { Modal }                from "@/components/ui/Modal";
@@ -119,7 +120,7 @@ export default function SchoolsPage() {
         }
       />
 
-      <Card>
+      <Card className={DASH_TINT.indigo.edge}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px] flex-1">
             <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder={s("search")} />
@@ -137,7 +138,7 @@ export default function SchoolsPage() {
         </div>
       </Card>
 
-      <Card padding={false}>
+      <Card padding={false} className={DASH_TINT.indigo.edge}>
         {listQ.isError ? (
           <EmptyTable icon={<Building2 className="h-8 w-8" />} title={s("loadFailed")} />
         ) : !listQ.isLoading && items.length === 0 ? (

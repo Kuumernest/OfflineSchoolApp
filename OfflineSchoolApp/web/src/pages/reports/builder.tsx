@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
+import { PageIcon }       from "@/components/ui/PageHeader";
 
 // ─────────────────────────────────────────────────────────
 // VARIABLE REFERENCE
@@ -398,7 +399,7 @@ export default function TemplateBuilderPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
 
       {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex
+      <div className="bg-surface border-b border-line px-6 py-3 flex
                       items-center gap-4 shrink-0">
         <button
           onClick={() => navigate("/reports/templates")}
@@ -408,11 +409,14 @@ export default function TemplateBuilderPage() {
           <ArrowLeft size={20} className="text-gray-700" />
         </button>
 
-        <div className="flex-1">
-          <h1 className="text-lg font-bold text-gray-900">
+        <div className="flex flex-1 items-center gap-3">
+          <PageIcon />
+          <div>
+          <h1 className="text-lg font-bold text-ink">
             {isEditing ? t("builder.editTemplate") : t("templates.new")}
           </h1>
-          <p className="text-xs text-gray-500">{t("builder.title")}</p>
+          <p className="text-xs text-ink-muted">{t("builder.title")}</p>
+          </div>
         </div>
 
         {/* Name input */}
@@ -508,7 +512,7 @@ export default function TemplateBuilderPage() {
       )}
 
       {/* Tab bar */}
-      <div className="bg-white border-b border-gray-200 px-6 flex shrink-0">
+      <div className="bg-surface border-b border-line px-6 flex shrink-0">
         {(
           [
             // "HTML" and "CSS" are format names, identical in both languages.
@@ -575,7 +579,7 @@ export default function TemplateBuilderPage() {
             </p>
             {VARIABLE_GROUPS.map((group) => (
               <div key={group.labelKey}>
-                <h3 className="text-xs font-bold text-gray-500 uppercase
+                <h3 className="text-xs font-bold text-ink-muted uppercase
                                tracking-wider mb-2">
                   {t(group.labelKey)}
                 </h3>

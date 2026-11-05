@@ -152,7 +152,7 @@ export default function ClassIntelligencePage() {
           </div>
           {data && (
             <div className="flex flex-wrap gap-2 text-xs text-ink-muted">
-              <Badge variant="default" label={t("classIntel.countStudents", { n: data.counts.students })} />
+              <Badge accent="blue" label={t("classIntel.countStudents", { n: data.counts.students })} />
               <Badge variant="danger"  label={t("classIntel.countAttention", { n: data.counts.withRisk })} />
               <Badge variant="success" label={t("classIntel.countStrength", { n: data.counts.withStrength })} />
             </div>
@@ -357,7 +357,7 @@ function StudentPanel({
 
         {/* ── Why am I seeing this? ───────────────────────────────────── */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
             {t("classIntel.evidenceHeading")}
           </h3>
           {guidanceQ.isLoading && <PageSpinner />}
@@ -382,7 +382,7 @@ function StudentPanel({
 
         {/* ── What was done ───────────────────────────────────────────── */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
             {t("intervention.heading")}
           </h3>
           {listQ.isLoading && <PageSpinner />}
@@ -427,7 +427,7 @@ function GuidanceCard({
         )}
         <Badge variant={PRIORITY_VARIANT[item.priority]}
                label={t(`guidance.${item.rationaleCode}`)} />
-        <Badge variant="secondary" label={t(`confidence.${item.confidence}`)} />
+        <Badge variant="info" label={t(`confidence.${item.confidence}`)} />
       </div>
 
       {/* The evidence, exactly as the engine reported it. Nothing is derived
@@ -561,7 +561,7 @@ function EvidenceComparison({ ev }: { ev: Awaited<ReturnType<typeof fetchOutcome
         <span className="tabular text-ink">
           {t("evidence.before")}: {ev.before?.average}/{ev.scale}
         </span>
-        <ArrowRight className="h-4 w-4 text-ink-faint" />
+        <ArrowRight className="h-4 w-4 text-accent-violet-solid" />
         <span className="tabular text-ink">
           {t("evidence.after")}: {ev.after?.average}/{ev.scale}
         </span>

@@ -32,7 +32,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Lock, ShieldCheck, RotateCcw, Save } from "lucide-react";
+import { Lock, ShieldCheck, RotateCcw, Save, KeyRound } from "lucide-react";
 
 import api from "@/services/api";
 import { Card } from "@/components/ui/Card";
@@ -41,6 +41,7 @@ import { PageSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, categoryAccent } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WIRE SHAPES
@@ -239,8 +240,14 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
 
       {/* ── The matrix ───────────────────────────────────────────────────── */}
       {grouped.map(({ module, rows: moduleRows }) => (
-        <Card key={module}>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <Card key={module} className={DASH_TINT[categoryAccent(module)].edge}>
+          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <span
+              aria-hidden="true"
+              className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(module)].box)}
+            >
+              <KeyRound className="h-4 w-4" />
+            </span>
             {t(`permissions.module.${module}`, { defaultValue: module })}
           </h3>
 

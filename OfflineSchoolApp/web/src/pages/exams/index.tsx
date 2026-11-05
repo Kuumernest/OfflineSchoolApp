@@ -25,6 +25,7 @@ import { useToast }           from "@/components/ui/Toast";
 import { type TileTone } from "@/config/sections";
 import { DASH_TINT, dashTint } from "@/config/dashboardTint";
 import { cn }                 from "@/utils/cn";
+import { PageIcon }           from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
 import { formatDay } from "../../../../shared/dateFormat.js";
@@ -232,13 +233,15 @@ const AlertsPanel = ({
   };
 
   return (
-    <div className="fixed right-4 top-20 w-80 z-50 bg-white rounded-xl
-                    shadow-xl border border-gray-200 overflow-hidden">
+    <div className="fixed right-4 top-20 w-80 z-50 bg-surface rounded-xl
+                    shadow-xl border border-line overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3
-                      border-b border-gray-100 bg-gray-50">
+                      border-b border-line bg-accent-amber-soft">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-900">{t("exams.alerts")}</span>
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Bell className="w-4 h-4" />
+          </span>
+          <span className="text-sm font-semibold text-ink">{t("exams.alerts")}</span>
           {alerts.length > 0 && (
             <span className="bg-red-500 text-white text-xs rounded-full
                              w-5 h-5 flex items-center justify-center font-bold">
@@ -395,9 +398,9 @@ const ExamRow = ({
   }, [menuOpen]);
 
   return (
-    <tr className="hover:bg-gray-50/60 transition-colors group">
+    <tr className="hover:bg-accent-blue-soft/70 transition-colors group">
       {/* # */}
-      <td className="px-4 py-3 text-xs text-gray-400 font-medium">
+      <td className="px-4 py-3 text-xs text-ink-muted font-medium">
         {index + 1}
       </td>
 
@@ -405,12 +408,12 @@ const ExamRow = ({
       <td className="px-4 py-3 min-w-[200px]">
         <button
           onClick={() => navigate(`/exams/${exam._id}`)}
-          className="font-semibold text-gray-900 text-sm hover:text-primary-600
+          className="font-semibold text-ink text-sm hover:text-primary-600
                      text-left transition-colors leading-snug"
         >
           {exam.name}
         </button>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs text-ink-muted mt-0.5">
           {examTypeLabel(t, exam.type)}
           {exam.term         ? ` · ${exam.term}`         : ""}
           {exam.academicYear ? ` · ${exam.academicYear}` : ""}
@@ -418,7 +421,7 @@ const ExamRow = ({
       </td>
 
       {/* Class */}
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
+      <td className="px-4 py-3 text-sm text-ink-body max-w-[140px]">
         <span className="truncate block">
           {exam.classNames || exam.className || t("exams.allClasses")}
         </span>
@@ -426,9 +429,9 @@ const ExamRow = ({
 
       {/* Dates */}
       <td className="px-4 py-3">
-        <div className="text-sm text-gray-700">{fmtDate(exam.startDate)}</div>
+        <div className="text-sm text-ink">{fmtDate(exam.startDate)}</div>
         {exam.endDate && exam.endDate !== exam.startDate && (
-          <div className="text-xs text-gray-400">→ {fmtDate(exam.endDate)}</div>
+          <div className="text-xs text-ink-muted">→ {fmtDate(exam.endDate)}</div>
         )}
         {exam.status === "scheduled" && days !== null && days >= 0 && days <= 7 && (
           <div className={`text-xs font-semibold mt-0.5
@@ -586,14 +589,17 @@ const CalendarView = ({
   const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className={cn("bg-surface rounded-xl border border-line shadow-card overflow-hidden", DASH_TINT.amber.edge)}>
       {/* Nav */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-line">
         <button onClick={prevMonth}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <h3 className="font-semibold text-gray-900 text-lg capitalize">
+        <h3 className="flex items-center gap-2 font-semibold text-ink text-lg capitalize">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Calendar className="h-4 w-4" />
+          </span>
           {monthLabel(year, month)}
         </h3>
         <button onClick={nextMonth}
@@ -603,10 +609,10 @@ const CalendarView = ({
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+      <div className="grid grid-cols-7 border-b border-line bg-accent-amber-soft">
         {shortWeekdays().map((label, i) => (
           <div key={i}
-            className="py-2 text-center text-xs font-semibold text-gray-400 uppercase">
+            className="py-2 text-center text-xs font-semibold text-accent-amber-deep uppercase">
             {label}
           </div>
         ))}
@@ -617,7 +623,7 @@ const CalendarView = ({
         {/* Blank cells */}
         {Array.from({ length: blanks }).map((_, i) => (
           <div key={`b${i}`}
-            className="min-h-[100px] border-b border-r border-gray-50 bg-gray-50/30" />
+            className="min-h-[100px] border-b border-r border-line bg-canvas" />
         ))}
 
         {/* Day cells */}
@@ -632,12 +638,12 @@ const CalendarView = ({
 
           return (
             <div key={day}
-              className={`min-h-[100px] border-b border-r border-gray-50 p-1.5
-                ${isToday ? "bg-blue-50/60" : "hover:bg-gray-50/60"} transition-colors`}>
+              className={`min-h-[100px] border-b border-r border-line p-1.5
+                ${isToday ? "bg-accent-blue-soft" : "hover:bg-accent-blue-soft/70"} transition-colors`}>
               {/* Day number */}
               <div className={`w-6 h-6 flex items-center justify-center
                 text-xs font-semibold mb-1 rounded-full
-                ${isToday ? "bg-primary-600 text-white" : "text-gray-600"}`}>
+                ${isToday ? "bg-primary-600 text-white" : "text-ink-body"}`}>
                 {day}
               </div>
 
@@ -656,7 +662,7 @@ const CalendarView = ({
                   );
                 })}
                 {dayExams.length > 3 && (
-                  <p className="text-xs text-gray-400 px-1">
+                  <p className="text-xs text-ink-muted px-1">
                     {t("exams.moreCount", { count: dayExams.length - 3 })}
                   </p>
                 )}
@@ -711,10 +717,12 @@ const TimelineView = ({
 
   if (!allDates.length) {
     return (
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <BarChart2 className="w-12 h-12 mb-3 text-gray-200" />
-          <p className="font-medium text-gray-500">{t("exams.noDates")}</p>
+      <div className={cn("bg-surface rounded-xl border border-line shadow-card", DASH_TINT.amber.edge)}>
+        <div className="flex flex-col items-center justify-center py-20 text-ink-muted">
+          <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.amber.box)} aria-hidden="true">
+            <BarChart2 className="w-6 h-6" />
+          </div>
+          <p className="font-medium text-ink">{t("exams.noDates")}</p>
           <p className="text-sm mt-1">{t("exams.addDates")}</p>
         </div>
       </div>
@@ -750,13 +758,13 @@ const TimelineView = ({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className={cn("bg-surface rounded-xl border border-line shadow-card overflow-hidden", DASH_TINT.amber.edge)}>
       <div className="overflow-x-auto">
         <div className="min-w-[640px]">
           {/* Month header */}
-          <div className="flex border-b border-gray-100 bg-gray-50">
+          <div className="flex border-b border-line bg-accent-amber-soft">
             <div className="w-36 shrink-0 px-4 py-3 text-xs font-semibold
-                            text-gray-400 uppercase tracking-wide">
+                            text-accent-amber-deep uppercase tracking-wide">
               {t("common.type")}
             </div>
             <div className="flex-1 relative h-10">
@@ -764,8 +772,8 @@ const TimelineView = ({
                 <div key={m.label}
                   className="absolute top-0 h-full flex items-center"
                   style={{ left: `${m.pct}%` }}>
-                  <div className="w-px h-full bg-gray-200" />
-                  <span className="ml-1 text-xs text-gray-400 whitespace-nowrap">
+                  <div className="w-px h-full bg-accent-amber/30" />
+                  <span className="ml-1 text-xs text-accent-amber-deep whitespace-nowrap">
                     {m.label}
                   </span>
                 </div>
@@ -776,8 +784,8 @@ const TimelineView = ({
           {/* Rows */}
           {byType.map(({ id, label, exams: typeExams }) => (
             <div key={id}
-              className="flex border-b border-gray-50 hover:bg-gray-50/40 group">
-              <div className="w-36 shrink-0 px-4 py-3 text-sm text-gray-700
+              className="flex border-b border-line hover:bg-accent-blue-soft/70 group">
+              <div className="w-36 shrink-0 px-4 py-3 text-sm text-ink
                               font-medium truncate">
                 {label}
               </div>
@@ -873,19 +881,19 @@ const ExamDetailSlideOver = ({
               { labelKey: "academic.passMark",     value: String(exam.passMark)                    },
             ].map(({ labelKey, value }) => (
               <div key={labelKey}>
-                <p className="text-xs text-gray-400 font-medium">{t(labelKey)}</p>
-                <p className="font-semibold text-gray-800 mt-0.5">{value || "—"}</p>
+                <p className="text-xs text-ink-muted font-medium">{t(labelKey)}</p>
+                <p className="font-semibold text-ink mt-0.5">{value || "—"}</p>
               </div>
             ))}
           </div>
 
           {/* Description */}
           {exam.description && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase mb-1">
+            <div className="bg-accent-slate-soft rounded-xl p-4">
+              <p className="text-xs font-semibold text-ink-muted uppercase mb-1">
                 {t("common.description")}
               </p>
-              <p className="text-sm text-gray-700 leading-relaxed">{exam.description}</p>
+              <p className="text-sm text-ink leading-relaxed">{exam.description}</p>
             </div>
           )}
 
@@ -1274,11 +1282,14 @@ export default function ExamsPage() {
 
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("exams.title")}</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {t("exams.blurb")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">{t("exams.title")}</h1>
+            <p className="text-ink-muted text-sm mt-1">
+              {t("exams.blurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1297,7 +1308,7 @@ export default function ExamsPage() {
               className="relative p-2 border border-gray-200 rounded-xl bg-white
                          hover:bg-gray-50 transition-colors"
               title={t("exams.alerts")}>
-              <Bell className="w-4 h-4 text-gray-500" />
+              <Bell className={cn("w-4 h-4", DASH_TINT.amber.glyph)} />
               {alerts.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white
                                  text-xs rounded-full w-4 h-4 flex items-center
@@ -1423,9 +1434,14 @@ export default function ExamsPage() {
                 results tab of the exam awaiting a publish, and the analytics
                 page for the two figures that page actually computes. */}
       {dashData?.dashboard?.results && (
-        <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
+        <div className={cn("bg-surface rounded-xl border border-line px-5 py-4 shadow-card", DASH_TINT.slate.edge)}>
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+                <BarChart3 className="h-4 w-4" />
+              </span>
+              {t("exams.resultsOverview")}
+            </h3>
             <div className="flex flex-wrap gap-6">
               {resultTiles.map((item) => (
                 <button
@@ -1450,7 +1466,7 @@ export default function ExamsPage() {
       )}
 
       {/* ── Filters Bar ─────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+      <div className="bg-surface rounded-xl border border-line shadow-card">
         {/* Primary filter row */}
         <div className="p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           {/* Search */}
@@ -1597,8 +1613,8 @@ export default function ExamsPage() {
             <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4", DASH_TINT.amber.box)}>
               <FileText className="w-8 h-8" />
             </div>
-            <p className="font-semibold text-gray-700">{t("exams.none")}</p>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="font-semibold text-ink">{t("exams.none")}</p>
+            <p className="text-ink-muted text-sm mt-1">
               {activeFilterCount > 0
                 ? t("exams.adjustFilters")
                 : t("exams.createFirst")
@@ -1641,8 +1657,8 @@ export default function ExamsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 text-xs font-semibold text-gray-500
-                               uppercase tracking-wide border-b border-gray-100">
+                <tr className="bg-surface text-xs font-semibold text-ink-muted
+                               uppercase tracking-wide border-b border-line">
                   <th className="px-4 py-3 text-left w-8">#</th>
                   <th className="px-4 py-3 text-left">{t("academic.exam")}</th>
                   <th className="px-4 py-3 text-left">{t("academic.class")}</th>
@@ -1652,7 +1668,7 @@ export default function ExamsPage() {
                   <th className="px-4 py-3 text-left">{t("common.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-line">
                 {filtered.map((exam, i) => (
                   <ExamRow
                     key={exam._id}

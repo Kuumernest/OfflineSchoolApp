@@ -39,10 +39,10 @@ import type {
   Outcome, RunStatus, PromotionDecision,
 } from "@/types/promotion.types";
 
-const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "default"> = {
+const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "danger"> = {
   draft:     "warning",
   committed: "success",
-  reversed:  "default",
+  reversed:  "danger",
 };
 
 const OUTCOME_VARIANT: Record<Outcome, "success" | "warning" | "info" | "danger"> = {

@@ -10,13 +10,15 @@ import { useState, useMemo }              from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                 from "react-i18next";
-import { ArrowLeft, Receipt, Undo2, Printer } from "lucide-react";
+import { ArrowLeft, Receipt, Undo2, Printer, FileText } from "lucide-react";
 
 import { useUser }        from "@/store/auth.store";
 import { PageHeader }     from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button }         from "@/components/ui/Button";
 import { Badge }          from "@/components/ui/Badge";
+import { DASH_TINT }      from "@/config/dashboardTint";
+import { cn }             from "@/utils/cn";
 import { Modal }          from "@/components/ui/Modal";
 import { PageSpinner }    from "@/components/ui/Spinner";
 import { FormField, Input, SelectField, Textarea } from "@/components/ui/FormField";
@@ -224,18 +226,18 @@ export default function StudentFeeAccountPage() {
           { label: t("fees.waived"),  value: totals?.waived  ?? 0 },
           { label: t("fees.paid"),    value: totals?.paid    ?? 0 },
         ].map((s) => (
-          <Card key={s.label}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          <Card key={s.label} className={DASH_TINT.teal.card}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {s.label}
             </p>
-            <p className="mt-1.5 font-display text-[22px] leading-none text-ink tabular">
+            <p className={cn("mt-1.5 font-display text-[22px] leading-none tabular", DASH_TINT.teal.number)}>
               {fmt.money(s.value)}
             </p>
           </Card>
         ))}
 
-        <Card>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+        <Card className={DASH_TINT[balance > 0 ? "red" : "teal"].card}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             {t("fees.balance")}
           </p>
           <p
@@ -254,7 +256,7 @@ export default function StudentFeeAccountPage() {
       {/* Charges */}
       <Card padding={false}>
         <div className="p-5 pb-0">
-          <CardHeader title={t("fees.charges")} />
+          <CardHeader title={t("fees.charges")} icon={FileText} accent="teal" />
         </div>
         {(account?.charges.length ?? 0) === 0 ? (
           <EmptyTable title={t("fees.noCharges")} subtitle={t("fees.noChargesHint")} />
@@ -274,7 +276,7 @@ export default function StudentFeeAccountPage() {
                   <Td className="font-medium text-ink">
                     {c.label}
                     {c.voidedAt && (
-                      <Badge variant="default" className="ml-2">
+                      <Badge variant="danger" className="ml-2">
                         {t("fees.reversed")}
                       </Badge>
                     )}
@@ -296,7 +298,7 @@ export default function StudentFeeAccountPage() {
       {/* Payments */}
       <Card padding={false}>
         <div className="p-5 pb-0">
-          <CardHeader title={t("fees.payments")} />
+          <CardHeader title={t("fees.payments")} icon={Receipt} accent="teal" />
         </div>
         {(account?.payments.length ?? 0) === 0 ? (
           <EmptyTable title={t("fees.noPayments")} />
@@ -360,7 +362,7 @@ export default function StudentFeeAccountPage() {
                         {isReversal ? (
                           <Badge variant="danger">{t("fees.reversalOf")}</Badge>
                         ) : isReversed ? (
-                          <Badge variant="default">{t("fees.reversed")}</Badge>
+                          <Badge variant="danger">{t("fees.reversed")}</Badge>
                         ) : (
                           <button
                             type="button"

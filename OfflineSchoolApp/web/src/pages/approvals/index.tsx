@@ -57,7 +57,7 @@ const STATUS_STYLE: Record<ApprovalStatus, string> = {
   pending:   "bg-warning-soft text-warning-text",
   approved:  "bg-success-soft text-success-text",
   rejected:  "bg-danger-soft text-danger-text",
-  cancelled: "bg-surface-muted text-ink-faint",
+  cancelled: "bg-info-soft text-info-text",
 };
 
 const FILTERS: Array<ApprovalStatus | "all"> = ["pending", "approved", "rejected", "all"];
@@ -214,7 +214,7 @@ export default function ApprovalsPage() {
                     <Td>
                       <div className="flex items-start gap-2.5">
                         <Icon
-                          className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint"
+                          className="mt-0.5 h-4 w-4 shrink-0 text-accent-amber-solid"
                           aria-hidden="true"
                         />
                         <div className="min-w-0">

@@ -41,6 +41,8 @@ import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { conversationMatches, participantName } from "./participants";
 import { threadOrder, newestSeq } from "./order";
 import { clientIds } from "./clientId";
@@ -83,9 +85,9 @@ const titleFor = (
 };
 
 const KindIcon = ({ kind }: { kind: Conversation["kind"] }) => {
-  if (kind === "group")  return <Users size={14} className="text-gray-400" />;
-  if (kind === "class" || kind === "subject") return <Hash size={14} className="text-gray-400" />;
-  return <MessageSquare size={14} className="text-gray-400" />;
+  if (kind === "group")  return <Users size={14} className={DASH_TINT.sky.glyph} />;
+  if (kind === "class" || kind === "subject") return <Hash size={14} className={DASH_TINT.sky.glyph} />;
+  return <MessageSquare size={14} className={DASH_TINT.sky.glyph} />;
 };
 
 /**
@@ -331,13 +333,16 @@ export default function MessagesPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200
-                      bg-white px-4 py-4 md:px-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">{t("messages.title")}</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {t("messages.blurb")}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line
+                      bg-surface px-4 py-4 md:px-6">
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-xl font-bold text-ink">{t("messages.title")}</h1>
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {t("messages.blurb")}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => setComposing(true)}
@@ -356,10 +361,10 @@ export default function MessagesPage() {
 
         {/* ── Conversation list ──────────────────────────────────────────── */}
         <aside className={cn(
-          "w-full md:w-72 shrink-0 border-r border-gray-200 bg-white overflow-y-auto",
+          "w-full md:w-72 shrink-0 border-r border-line bg-surface overflow-y-auto",
           threadOpen ? "hidden md:block" : "block",
         )}>
-          <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2.5">
+          <div className="sticky top-0 z-10 border-b border-line bg-surface p-2.5">
             <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200
                             bg-gray-50 px-2.5 py-1.5
                             focus-within:border-blue-500 focus-within:bg-white">
@@ -454,12 +459,12 @@ export default function MessagesPage() {
           threadOpen ? "flex" : "hidden md:flex",
         )}>
           {!active ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
+            <div className="flex flex-1 items-center justify-center text-sm text-ink-muted">
               {t("messages.selectOne")}
             </div>
           ) : (
             <>
-              <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-5">
+              <header className="border-b border-line bg-surface px-4 py-3 md:px-5">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -507,11 +512,11 @@ export default function MessagesPage() {
                             ? "bg-gray-100 text-gray-400 italic"
                             : mine
                               ? "bg-blue-600 text-white"
-                              : "bg-white text-gray-900 border border-gray-200",
+                              : "bg-surface text-ink border border-line",
                         )}
                       >
                         {!mine && !m.isDeleted && (
-                          <div className="mb-0.5 text-[11px] font-semibold text-gray-500">
+                          <div className="mb-0.5 text-[11px] font-semibold text-ink-muted">
                             {(m.sender ? participantName(m.sender, t) : "") || t("messages.unknownSender")}
                           </div>
                         )}
@@ -600,7 +605,7 @@ export default function MessagesPage() {
               )}
 
               {!active.isReadOnly && (
-                <div className="border-t border-gray-200 bg-white px-5 py-3">
+                <div className="border-t border-line bg-surface px-5 py-3">
                   {pending.length > 0 && (
                     <div className="mb-2 flex flex-wrap gap-2">
                       {pending.map((a, i) => (

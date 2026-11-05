@@ -11,6 +11,7 @@ import { Link }                 from "react-router-dom";
 import { ScrollText }           from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
 import { Card }                 from "@/components/ui/Card";
+import { DASH_TINT }            from "@/config/dashboardTint";
 import { Badge }                from "@/components/ui/Badge";
 import { Pagination }           from "@/components/ui/Pagination";
 import { FormField, Input, SelectField } from "@/components/ui/FormField";
@@ -77,7 +78,7 @@ export default function AuditLogPage() {
     <div className="space-y-6">
       <PageHeader title={a("title")} description={a("subtitle")} />
 
-      <Card>
+      <Card className={DASH_TINT.slate.edge}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <FormField label={a("school")}>
             <SelectField value={schoolId} onChange={(e) => { setSchoolId(e.target.value); reset(); }}
@@ -98,7 +99,7 @@ export default function AuditLogPage() {
         </div>
       </Card>
 
-      <Card padding={false}>
+      <Card padding={false} className={DASH_TINT.slate.edge}>
         {logQ.isError ? (
           <EmptyTable icon={<ScrollText className="h-8 w-8" />} title={a("loadFailed")} />
         ) : !logQ.isLoading && entries.length === 0 ? (

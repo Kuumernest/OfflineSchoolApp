@@ -397,24 +397,24 @@ export default function SalariesPage() {
           </div>
 
           {/* The figure that will actually be paid, before it is saved. */}
-          <div className="flex flex-wrap gap-6 rounded-card border border-line bg-canvas px-4 py-3">
+          <div className="flex flex-wrap gap-6 rounded-card border border-line border-t-[3px] border-t-accent-teal bg-accent-teal-soft px-4 py-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                 {t("salaries.gross")}
               </p>
-              <p className="mt-1 text-lg font-semibold text-ink tabular">{fmt.money(gross)}</p>
+              <p className="mt-1 text-lg font-semibold text-accent-teal-deep tabular">{fmt.money(gross)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                 {t("salaries.deductions")}
               </p>
-              <p className="mt-1 text-lg font-semibold text-ink-muted tabular">{fmt.money(dedTotal)}</p>
+              <p className="mt-1 text-lg font-semibold text-accent-red-deep tabular">{fmt.money(dedTotal)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                 {t("salaries.net")}
               </p>
-              <p className="mt-1 text-lg font-semibold text-primary tabular">{fmt.money(net)}</p>
+              <p className="mt-1 text-lg font-semibold text-accent-teal-deep tabular">{fmt.money(net)}</p>
             </div>
           </div>
           {form.payType === "hourly" && (

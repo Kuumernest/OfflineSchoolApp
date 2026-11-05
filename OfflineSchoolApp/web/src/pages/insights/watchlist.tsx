@@ -147,7 +147,7 @@ export default function WatchlistPage() {
         ))}
       </div>
 
-      <Card>
+      <Card className={DASH_TINT.violet.edge}>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[9rem]">
             <label
@@ -192,7 +192,7 @@ export default function WatchlistPage() {
         </div>
       </Card>
 
-      <Card padding={false}>
+      <Card padding={false} className={DASH_TINT.red.edge}>
         {rows.length === 0 ? (
           <EmptyTable
             icon={list?.students.length ? <Search /> : <Eye />}

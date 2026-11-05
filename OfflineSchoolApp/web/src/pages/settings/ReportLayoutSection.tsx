@@ -93,7 +93,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
             <h2 className="text-sm font-semibold text-ink">{t("reportLayout.title")}</h2>
             <p className="mt-1 text-sm text-ink-muted">{t("reportLayout.intro")}</p>
           </div>
-          <Badge variant={layout.source === "default" ? "default" : "primary"}>
+          <Badge variant={layout.source === "default" ? "info" : "primary"}>
             {layout.source === "default" ? t("reportLayout.defaultLayout") : t("reportLayout.version", { version: layout.version })}
           </Badge>
         </div>
@@ -102,7 +102,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
       <Card>
         <div className="space-y-2">
           {sectionsQ.data.map((s) => (
-            <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div key={s.id} className="rounded-xl border border-line bg-surface p-3">
               <Checkbox
                 checked={form[s.id] ?? true}
                 onChange={(e) => setDraft({ ...(draft ?? saved!), [s.id]: e.target.checked })}
@@ -133,7 +133,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
 
       {(versionsQ.data?.length ?? 0) > 0 && (
         <Card>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{t("reportLayout.history")}</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("reportLayout.history")}</h3>
           <ul className="mt-3 space-y-1 text-sm">
             {versionsQ.data!.map((v) => (
               <li key={v.id ?? v.version} className="flex flex-wrap justify-between gap-2 text-ink-muted">

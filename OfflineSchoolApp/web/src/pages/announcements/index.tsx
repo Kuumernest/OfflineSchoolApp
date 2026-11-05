@@ -29,6 +29,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import { Modal } from "@/components/ui/Modal";
 import { FormField, Input, Textarea, SelectField, Checkbox } from "@/components/ui/FormField";
 import { Select } from "@/components/ui/Select";
@@ -78,6 +80,14 @@ const PRIORITY_VARIANT: Record<Priority, "default" | "info" | "warning" | "dange
   normal: "info",
   high:   "warning",
   urgent: "danger",
+};
+
+/** The card's icon square by priority: urgent red, high amber, normal sky, low slate. */
+const PRIORITY_ACCENT: Record<Priority, DashAccent> = {
+  low:    "slate",
+  normal: "sky",
+  high:   "amber",
+  urgent: "red",
 };
 
 const LIFECYCLE_LABEL = {
@@ -263,10 +273,10 @@ export default function AnnouncementsPage() {
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">
+            <h3 className="text-sm font-semibold text-ink">
               {t("announcements.loadFailed")}
             </h3>
-            <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(listQ.error)}</p>
+            <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(listQ.error)}</p>
           </div>
         </div>
       </Card>
@@ -278,11 +288,14 @@ export default function AnnouncementsPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("announcements.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("announcements.countLine", { count: listQ.data?.total ?? 0 })}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("announcements.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("announcements.countLine", { count: listQ.data?.total ?? 0 })}
+            </p>
+          </div>
         </div>
 
         {/* flex-wrap, and the button may wrap its own text: "Tout marquer
@@ -328,11 +341,13 @@ export default function AnnouncementsPage() {
       {/* ── List ────────────────────────────────────────────────────────── */}
       {items.length === 0 ? (
         <Card className="text-center py-16">
-          <Megaphone className="w-8 h-8 text-gray-300 mx-auto" />
-          <p className="mt-3 text-sm font-medium text-gray-700">
+          <span className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.sky.box)} aria-hidden="true">
+            <Megaphone className="w-6 h-6" />
+          </span>
+          <p className="mt-3 text-sm font-medium text-ink">
             {audience || priority ? t("announcements.noneMatch") : t("announcements.none")}
           </p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {audience || priority
               ? t("announcements.clearFilters")
               : t("announcements.noneHint")}
@@ -355,43 +370,50 @@ export default function AnnouncementsPage() {
                 <Card
                   key={a._id}
                   className={cn(
-                    "transition-shadow hover:shadow-md",
-                    a.isPinned && "border-primary-300 bg-primary-50/30",
+                    DASH_TINT.sky.card,
+                    "transition-shadow hover:shadow-lift",
+                    a.isPinned && "ring-2 ring-accent-sky",
                   )}
                 >
                   <div className="flex items-start justify-between gap-4">
+                    <span
+                      aria-hidden="true"
+                      className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", DASH_TINT[PRIORITY_ACCENT[a.priority] ?? "sky"].box)}
+                    >
+                      <Megaphone className="w-4 h-4" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         {a.isPinned && (
-                          <Pin className="w-3.5 h-3.5 text-primary-600 shrink-0" />
+                          <Pin className={cn("w-3.5 h-3.5 shrink-0", DASH_TINT.sky.glyph)} />
                         )}
-                        <h3 className="text-sm font-semibold text-gray-900">
+                        <h3 className="text-sm font-semibold text-ink">
                           {a.title}
                         </h3>
                         <Badge label={t(`announcements.priorityOpt.${a.priority}`)} variant={PRIORITY_VARIANT[a.priority]} />
                         <Badge label={t(meta.labelKey)} variant={meta.variant} />
                       </div>
 
-                      <p className="mt-1.5 text-sm text-gray-600 line-clamp-2">
+                      <p className="mt-1.5 text-sm text-ink-body line-clamp-2">
                         {a.body}
                       </p>
 
-                      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
                         <span>{t(`announcements.audienceOpt.${a.audience}`)}</span>
                         {targets.length > 0 && (
-                          <span className="text-gray-500">{targets.join(", ")}</span>
+                          <span className="text-ink-muted">{targets.join(", ")}</span>
                         )}
                         {a.authorName && <span>{t("announcements.byAuthor", { name: a.authorName })}</span>}
                         {a.createdAt && <span>{formatDate(a.createdAt)}</span>}
                         {a.expiresAt && (
                           <span className="inline-flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
+                            <Clock className={cn("w-3 h-3", DASH_TINT.sky.glyph)} />
                             expires {formatDate(a.expiresAt)}
                           </span>
                         )}
                         {typeof a.readCount === "number" && (
                           <span className="inline-flex items-center gap-1">
-                            <Eye className="w-3 h-3" />
+                            <Eye className={cn("w-3 h-3", DASH_TINT.sky.glyph)} />
                             {a.readCount} read
                           </span>
                         )}
@@ -581,7 +603,7 @@ export default function AnnouncementsPage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge label={t(`announcements.priorityOpt.${reading.priority}`)} variant={PRIORITY_VARIANT[reading.priority]} />
-              <Badge label={t(`announcements.audienceOpt.${reading.audience}`)} variant="default" />
+              <Badge label={t(`announcements.audienceOpt.${reading.audience}`)} accent="sky" />
               {reading.authorName && (
                 <span className="text-xs text-gray-500">{t("announcements.byAuthor", { name: reading.authorName })}</span>
               )}
