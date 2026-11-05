@@ -24,19 +24,21 @@ import { StudentService } from "../../../src/services/student.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.slate.solid,
+  primaryBg: ACCENT.slate.wash,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
 const VARIANTS = ["plain", "register", "contacts"];
@@ -156,6 +158,7 @@ export default function DocumentsScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={22} color={C.inkBody} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>{t("doc.title")}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{t("doc.blurb")}</Text>
@@ -184,35 +187,45 @@ export default function DocumentsScreen() {
         {BY_CLASS.has(tab) ? (
           <>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t("cl.pick")}</Text>
+              <View style={styles.cardHead}>
+                <IconSquare icon="school" accent="indigo" size={28} />
+                <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("cl.pick")}</Text>
+              </View>
               {classes.length === 0 ? (
                 <Text style={styles.empty}>{t("classes.none")}</Text>
               ) : (
                 <View style={styles.chips}>
-                  {classes.map((c) => (
-                    <TouchableOpacity
-                      key={c._id}
-                      style={[styles.chip, classId === c._id && styles.chipOn]}
-                      onPress={() => setClassId(c._id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.chipText, classId === c._id && styles.chipTextOn]}>
-                        {c.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {classes.map((c) => {
+                    const ca = ACCENT[levelAccent(c.level)];
+                    const on = classId === c._id;
+                    return (
+                      <TouchableOpacity
+                        key={c._id}
+                        style={[styles.chip, on && { backgroundColor: ca.wash, borderColor: ca.base }]}
+                        onPress={() => setClassId(c._id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.chipText, on && { color: ca.deep, fontWeight: "700" }]}>
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
             </View>
 
             {tab === "idCards" && (
-              <View style={styles.card}>
+              <View style={[styles.card, styles.infoCard]}>
                 <Text style={styles.optionHint}>{t("idc.hint")} {t("idc.blank")}</Text>
               </View>
             )}
 
             {tab === "classList" && <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t("cl.variant")}</Text>
+              <View style={styles.cardHead}>
+                <IconSquare icon="list" accent="slate" size={28} />
+                <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("cl.variant")}</Text>
+              </View>
               {VARIANTS.map((v) => (
                 <TouchableOpacity
                   key={v}
@@ -233,7 +246,10 @@ export default function DocumentsScreen() {
           </>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t("tr.pick")}</Text>
+            <View style={styles.cardHead}>
+              <IconSquare icon="person" accent="blue" size={28} />
+              <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("tr.pick")}</Text>
+            </View>
             <TextInput
               style={styles.input}
               value={query}
@@ -247,7 +263,7 @@ export default function DocumentsScreen() {
               filteredStudents.slice(0, 60).map((s) => (
                 <TouchableOpacity
                   key={studentKey(s)}
-                  style={[styles.option, studentId === studentKey(s) && styles.optionOn]}
+                  style={[styles.option, studentId === studentKey(s) && styles.optionOnStudent]}
                   onPress={() => setStudentId(studentKey(s))}
                   activeOpacity={0.8}
                 >
@@ -258,7 +274,7 @@ export default function DocumentsScreen() {
                     <Text style={styles.optionHint}>{studentNo(s) || "—"}</Text>
                   </View>
                   {studentId === studentKey(s) && (
-                    <Ionicons name="checkmark-circle" size={18} color={C.primary} />
+                    <Ionicons name="checkmark-circle" size={18} color={ACCENT.blue.solid} />
                   )}
                 </TouchableOpacity>
               ))
@@ -284,10 +300,10 @@ export default function DocumentsScreen() {
             activeOpacity={0.85}
           >
             {busy
-              ? <ActivityIndicator color="#fff" />
+              ? <ActivityIndicator color={COLORS.onPrimary} />
               : (
                 <>
-                  <Ionicons name="print-outline" size={16} color="#fff" />
+                  <Ionicons name="print-outline" size={16} color={COLORS.onPrimary} />
                   <Text style={styles.actionSolidText}>{t("doc.print")}</Text>
                 </>
               )}
@@ -309,6 +325,7 @@ const styles = StyleSheet.create({
   },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  headerIcon: { marginRight: 0 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
@@ -317,27 +334,34 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.line, padding: 14,
   },
   cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 10 },
+  cardHead:  { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  cardTitleInHead: { marginBottom: 0, flex: 1 },
+  infoCard:  {
+    backgroundColor: SEMANTIC.info.bg, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: SEMANTIC.info.icon,
+  },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: C.surface,
   },
-  chipOn:     { backgroundColor: C.primary, borderColor: C.primary },
+  chipOn:     { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base },
   chipText:   { fontSize: 12, color: C.inkBody, fontWeight: "500" },
-  chipTextOn: { color: "#fff" },
+  chipTextOn: { color: ACCENT.slate.deep, fontWeight: "700" },
 
   option: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 10, paddingHorizontal: 10, borderRadius: 9,
     borderWidth: 1, borderColor: C.line, marginTop: 6,
   },
-  optionOn:    { borderColor: C.primary, backgroundColor: C.primaryBg },
+  optionOn:    { borderColor: ACCENT.slate.base, backgroundColor: ACCENT.slate.wash },
+  optionOnStudent: { borderColor: ACCENT.blue.base, backgroundColor: ACCENT.blue.wash },
   optionTitle: { fontSize: 13, fontWeight: "600", color: C.ink },
   optionHint:  { marginTop: 1, fontSize: 11, color: C.inkMuted },
 
   input: {
-    height: 42, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 42, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 12, fontSize: 15, color: C.ink,
     backgroundColor: C.surface, marginBottom: 6,
   },
@@ -350,8 +374,8 @@ const styles = StyleSheet.create({
   actionGhost:     { borderWidth: 1, borderColor: C.primary, backgroundColor: C.surface },
   actionGhostText: { color: C.primary, fontSize: 15, fontWeight: "600" },
   actionSolid:     { backgroundColor: C.primary },
-  actionSolidText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  actionSolidText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "600" },
   actionOff:       { opacity: 0.45 },
 
-  empty: { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+  empty: { fontSize: 12, color: COLORS.textSecondary, paddingVertical: 8 },
 });

@@ -20,24 +20,27 @@ import FeeService           from "../../../src/services/fee.service";
 import { useTranslation }   from "../../../src/i18n/useTranslation";
 import { formatMoney }      from "../../../src/i18n/format";
 import { useAuthStore }     from "../../../src/store/auth.store";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.teal.solid,
+  primaryBg: ACCENT.teal.wash,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
+const STRUCT_BADGE = accentBadge("indigo");
 
 /** Cameroonian school years run September–July. */
 const currentAcademicYear = () => {
@@ -140,6 +143,7 @@ export default function FeesIndexScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{t("fees.title")}</Text>
           <Text style={styles.subtitle}>{year}</Text>
@@ -152,7 +156,7 @@ export default function FeesIndexScreen() {
           onPress={() => router.push("/admin/fees/structures")}
           activeOpacity={0.8}
         >
-          <Ionicons name="document-text-outline" size={16} color="#4F46E5" />
+          <Ionicons name="document-text-outline" size={16} color={ACCENT.indigo.solid} />
           <Text style={styles.structuresText}>{t("feeStructures.short")}</Text>
         </TouchableOpacity>
       </View>
@@ -193,8 +197,7 @@ export default function FeesIndexScreen() {
         }
         ListEmptyComponent={
           <View style={styles.centre}>
-            <Ionicons name="people-outline" size={28} color={C.inkFaint} />
-            <Text style={styles.emptyText}>{t("students.none")}</Text>
+            <EmptyState icon="people-outline" accent="teal" message={t("students.none")} />
           </View>
         }
         renderItem={({ item }) => {
@@ -232,7 +235,7 @@ export default function FeesIndexScreen() {
                 </Text>
               </View>
 
-              <Ionicons name="chevron-forward" size={16} color={C.inkFaint} />
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
             </TouchableOpacity>
           );
         }}
@@ -244,18 +247,19 @@ export default function FeesIndexScreen() {
 const styles = StyleSheet.create({
   screen:   { flex: 1, backgroundColor: C.canvas },
   centre:   { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  emptyText:{ marginTop: 8, color: C.inkMuted, fontSize: 13 },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8,
+    backgroundColor: COLORS.surface,
   },
+  headerIcon: { marginRight: 0 },
   structuresBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    borderWidth: 1, borderColor: "#C7D2FE", borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#EEF2FF",
+    borderWidth: 1, borderColor: STRUCT_BADGE.border, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: STRUCT_BADGE.bg,
   },
-  structuresText: { color: "#4F46E5", fontWeight: "700", fontSize: 12.5 },
+  structuresText: { color: STRUCT_BADGE.text, fontWeight: "700", fontSize: 12.5 },
   title:    { fontSize: 22, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 2, fontSize: 12, color: C.inkMuted },
 
@@ -264,7 +268,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 8,
     paddingHorizontal: 12, paddingVertical: 10,
     borderRadius: 10, backgroundColor: C.warningBg,
-    borderWidth: 1, borderColor: "#F0DCBB",
+    borderWidth: 1, borderColor: SEMANTIC.warning.box,
   },
   pendingText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
@@ -282,14 +286,15 @@ const styles = StyleSheet.create({
 
   row: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: C.surface, borderRadius: 10,
-    borderWidth: 1, borderColor: C.line,
+    backgroundColor: ACCENT.teal.wash, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base,
     paddingHorizontal: 12, paddingVertical: 12, marginBottom: 8,
   },
   rowMain:  { flex: 1, minWidth: 0 },
   rowName:  { fontSize: 14, fontWeight: "600", color: C.ink },
-  rowMeta:  { marginTop: 2, fontSize: 11, color: C.inkFaint },
+  rowMeta:  { marginTop: 2, fontSize: 11, color: COLORS.textSecondary },
   rowRight: { alignItems: "flex-end" },
   rowAmount:{ fontSize: 14, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  rowLabel: { marginTop: 1, fontSize: 10, color: C.inkFaint, textTransform: "uppercase" },
+  rowLabel: { marginTop: 1, fontSize: 10, color: COLORS.textSecondary, textTransform: "uppercase" },
 });

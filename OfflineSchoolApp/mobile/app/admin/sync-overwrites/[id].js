@@ -11,7 +11,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import SyncOverwriteService from "@/services/sync-overwrite.service";
 import { getStudentById }   from "@/services/student.service";
-import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -32,12 +33,12 @@ const formatDateTime = (value) => {
 
 const getActionConfig = (action) => {
   switch (action) {
-    case "suspend": return { icon: "ban-outline",              color: "#D97706", labelKey: "syncScreens.aSuspended" };
-    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", labelKey: "syncScreens.aRestored"  };
-    case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.aDeleted"   };
-    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.aMoved"     };
+    case "suspend": return { icon: "ban-outline",              color: ACCENT.amber.solid,  deep: ACCENT.amber.deep,  labelKey: "syncScreens.aSuspended" };
+    case "restore": return { icon: "checkmark-circle-outline", color: ACCENT.green.solid,  deep: ACCENT.green.deep,  labelKey: "syncScreens.aRestored"  };
+    case "delete":  return { icon: "trash-outline",            color: ACCENT.red.solid,    deep: ACCENT.red.deep,    labelKey: "syncScreens.aDeleted"   };
+    case "move":    return { icon: "swap-horizontal-outline",  color: ACCENT.indigo.solid, deep: ACCENT.indigo.deep, labelKey: "syncScreens.aMoved"     };
     // `raw` keeps an unrecognised action visible instead of mislabelling it.
-    default:        return { icon: "sync-outline",             color: ACCENT.slate.solid, labelKey: "syncScreens.aUpdated", raw: action };
+    default:        return { icon: "sync-outline",             color: ACCENT.slate.solid,  deep: ACCENT.slate.deep,  labelKey: "syncScreens.aUpdated", raw: action };
   }
 };
 
@@ -148,7 +149,7 @@ export default function OverwriteDetailScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.amber.solid} />
         <Text style={styles.loadingText}>{t("common.loading")}</Text>
       </View>
     );
@@ -157,7 +158,7 @@ export default function OverwriteDetailScreen() {
   if (!overwrite) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} />
         <Text style={styles.errorTitle}>{t("syncScreens.notFound")}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.errorBtn}>
           <Text style={styles.errorBtnText}>{t("common.goBack")}</Text>
@@ -177,12 +178,13 @@ export default function OverwriteDetailScreen() {
   // ── Render ───────────────────────────────────────────
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.page }}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#374151" />
+          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("syncScreens.detailTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -190,7 +192,7 @@ export default function OverwriteDetailScreen() {
           </Text>
         </View>
         <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={18} color="#DC2626" />
+          <Ionicons name="trash-outline" size={18} color={SEMANTIC.error.icon} />
         </TouchableOpacity>
       </View>
 
@@ -203,11 +205,11 @@ export default function OverwriteDetailScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.summaryAction}>
-              <Text style={{ color: action.color, fontWeight: "700" }}>
+              <Text style={{ color: action.deep, fontWeight: "700" }}>
                 {overwrite.overwritten_by_name || t("syncScreens.someone")}
               </Text>
               {" "}
-              <Text style={{ color: "#6B7280" }}>{(action.raw || t(action.labelKey)).toLowerCase()}</Text>
+              <Text style={{ color: COLORS.textSecondary }}>{(action.raw || t(action.labelKey)).toLowerCase()}</Text>
               {" "}
               {t("syncScreens.thisRecord")}
             </Text>
@@ -219,7 +221,10 @@ export default function OverwriteDetailScreen() {
 
         {/* Timeline */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{t("syncScreens.timeline")}</Text>
+          <View style={styles.sectionHead}>
+            <IconSquare icon="time" accent="amber" size={28} />
+            <Text style={[styles.sectionTitle, styles.sectionTitleInHead]}>{t("syncScreens.timeline")}</Text>
+          </View>
 
           <View style={styles.timelineRow}>
             <View style={styles.timelineDotMine} />
@@ -255,9 +260,12 @@ export default function OverwriteDetailScreen() {
         {/* Diff */}
         {diffs.length > 0 ? (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              {t("syncScreens.changesCount", { count: diffs.filter((d) => d.changed).length })}
-            </Text>
+            <View style={styles.sectionHead}>
+              <IconSquare icon="git-compare" accent="amber" size={28} />
+              <Text style={[styles.sectionTitle, styles.sectionTitleInHead]}>
+                {t("syncScreens.changesCount", { count: diffs.filter((d) => d.changed).length })}
+              </Text>
+            </View>
             {diffs.map((d, i) => {
                          return (
               <View
@@ -280,7 +288,7 @@ export default function OverwriteDetailScreen() {
                     </Text>
                   </View>
 
-                  <Ionicons name="arrow-forward" size={14} color="#9CA3AF" />
+                  <Ionicons name="arrow-forward" size={14} color={ACCENT.amber.solid} />
 
                   <View style={styles.diffCol}>
                     <Text style={styles.diffColLabel}>{t("syncScreens.current")}</Text>
@@ -298,7 +306,10 @@ export default function OverwriteDetailScreen() {
           </View>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>{t("syncScreens.changes")}</Text>
+            <View style={styles.sectionHead}>
+              <IconSquare icon="git-compare" accent="amber" size={28} />
+              <Text style={[styles.sectionTitle, styles.sectionTitleInHead]}>{t("syncScreens.changes")}</Text>
+            </View>
             <Text style={styles.noDiffText}>
               {currentVersion
                 ? t("syncScreens.noDiffs")
@@ -311,7 +322,10 @@ export default function OverwriteDetailScreen() {
 
         {/* Raw metadata */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{t("syncScreens.metadata")}</Text>
+          <View style={styles.sectionHead}>
+            <IconSquare icon="information-circle" accent="slate" size={28} />
+            <Text style={[styles.sectionTitle, styles.sectionTitleInHead]}>{t("syncScreens.metadata")}</Text>
+          </View>
 
           <MetaRow label={t("syncScreens.mEntityType")}      value={overwrite.entity_type} />
           <MetaRow label={t("syncScreens.mEntityId")}        value={overwrite.entity_id} mono />
@@ -362,44 +376,45 @@ function MetaRow({ label, value, mono = false }) {
 const styles = StyleSheet.create({
   scroll:      { padding: 16, gap: 12 },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
-  loadingText: { color: "#6B7280", fontSize: 14 },
-  errorTitle:  { fontSize: 18, fontWeight: "800", color: "#111827" },
+  loadingText: { color: COLORS.textSecondary, fontSize: 14 },
+  errorTitle:  { fontSize: 18, fontWeight: "800", color: COLORS.text },
   errorBtn: {
     marginTop:        16,
-    backgroundColor:  "#4F46E5",
+    backgroundColor:  ACCENT.amber.solid,
     borderRadius:     12,
     paddingHorizontal:20,
     paddingVertical:  10,
   },
-  errorBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  errorBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   // Header
   header: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               12,
-    backgroundColor:   "#fff",
+    backgroundColor:   COLORS.surface,
     paddingHorizontal: 16,
     paddingTop:        50,
     paddingBottom:     14,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: COLORS.border,
   },
+  headerIcon: { marginRight: 0 },
   backBtn: {
     width:           38,
     height:          38,
     borderRadius:    10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerTitle: { fontSize: 17, fontWeight: "800", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerTitle: { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   deleteBtn: {
     width:           38,
     height:          38,
     borderRadius:    10,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -409,10 +424,12 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             12,
-    backgroundColor: "#fff",
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    14,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.amber.base,
     padding:         14,
   },
   actionIcon: {
@@ -422,23 +439,25 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  summaryAction: { fontSize: 14, color: "#111827", lineHeight: 20 },
-  summaryTime:   { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  summaryAction: { fontSize: 14, color: COLORS.text, lineHeight: 20 },
+  summaryTime:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   // Card
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     padding:         16,
   },
   sectionTitle: {
     fontSize:     13,
     fontWeight:   "800",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 12,
   },
+  sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  sectionTitleInHead: { marginBottom: 0, flex: 1 },
 
   // Timeline
   timelineRow: {
@@ -450,20 +469,20 @@ const styles = StyleSheet.create({
     width:           12,
     height:          12,
     borderRadius:    6,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.indigo.solid,
     marginTop:       4,
   },
   timelineDotTheirs: {
     width:           12,
     height:          12,
     borderRadius:    6,
-    backgroundColor: "#DC2626",
+    backgroundColor: ACCENT.red.solid,
     marginTop:       4,
   },
   timelineLine: {
     width:            2,
     height:           16,
-    backgroundColor:  "#E5E7EB",
+    backgroundColor:  COLORS.border,
     marginLeft:       5,
     marginVertical:   2,
   },
@@ -471,11 +490,11 @@ const styles = StyleSheet.create({
   timelineLabel: {
     fontSize:   13,
     fontWeight: "600",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   timelineTime: {
     fontSize:  12,
-    color:     "#9CA3AF",
+    color:     COLORS.textSecondary,
     marginTop: 2,
   },
 
@@ -486,12 +505,12 @@ const styles = StyleSheet.create({
   },
   diffRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   diffField: {
     fontSize:      11,
     fontWeight:    "700",
-    color:         "#6B7280",
+    color:         ACCENT.amber.deep,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
@@ -506,31 +525,31 @@ const styles = StyleSheet.create({
   },
   diffColLabel: {
     fontSize: 10,
-    color:    "#9CA3AF",
+    color:    COLORS.textSecondary,
   },
   diffValue: {
     fontSize:   13,
-    color:      "#111827",
+    color:      COLORS.text,
     fontWeight: "500",
   },
   diffValueOld: {
-    color:                "#991B1B",
-    backgroundColor:      "#FEF2F2",
+    color:                SEMANTIC.error.text,
+    backgroundColor:      SEMANTIC.error.bg,
     textDecorationLine:   "line-through",
     paddingHorizontal:    6,
     paddingVertical:      2,
     borderRadius:         4,
   },
   diffValueNew: {
-    color:            "#065F46",
-    backgroundColor:  "#ECFDF5",
+    color:            SEMANTIC.success.text,
+    backgroundColor:  SEMANTIC.success.bg,
     paddingHorizontal:6,
     paddingVertical:  2,
     borderRadius:     4,
   },
   noDiffText: {
     fontSize:   13,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontStyle:  "italic",
     lineHeight: 19,
   },
@@ -542,10 +561,10 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     paddingVertical:8,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
-  metaLabel: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
-  metaValue: { fontSize: 13, color: "#111827", flex: 1, textAlign: "right", marginLeft: 12 },
+  metaLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  metaValue: { fontSize: 13, color: COLORS.text, flex: 1, textAlign: "right", marginLeft: 12 },
   mono: {
     fontFamily: "monospace",
     fontSize:   11,

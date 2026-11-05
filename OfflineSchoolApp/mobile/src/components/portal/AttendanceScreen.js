@@ -18,6 +18,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDate, formatTime, formatMonth } from "../../i18n/format";
+import { ACCENT, SEMANTIC } from "../../theme/colors";
+import { IconSquare } from "../Tinted";
 import { Card, CardTitle, Skeleton, EmptyState, said } from "./ui";
 import { C, TAP } from "./theme";
 
@@ -26,7 +28,7 @@ const STATE = {
   absent:  { icon: "close",               fg: C.danger,  bg: C.dangerBg,  line: C.dangerLine },
   late:    { icon: "time-outline",        fg: C.warning, bg: C.warningBg, line: C.warningLine },
   partial: { icon: "ellipse-outline",     fg: C.warning, bg: C.warningBg, line: C.warningLine },
-  excused: { icon: "shield-checkmark-outline", fg: C.primary, bg: C.primaryBg, line: C.primaryLine },
+  excused: { icon: "shield-checkmark-outline", fg: SEMANTIC.info.text, bg: SEMANTIC.info.bg, line: SEMANTIC.info.box },
 };
 
 const stateOf = (d) =>
@@ -96,7 +98,10 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
   return (
     <View style={s.stack}>
       <View style={s.titleRow}>
-        <Text style={s.h1} accessibilityRole="header">{t("portal.attendanceScreen.title")}</Text>
+        <View style={s.h1Row}>
+          <IconSquare icon="calendar" accent="green" size={32} />
+          <Text style={s.h1} accessibilityRole="header">{t("portal.attendanceScreen.title")}</Text>
+        </View>
         <View style={s.monthNav}>
           <Pressable onPress={() => onMonth(shiftMonth(month, -1))} accessibilityRole="button"
             accessibilityLabel={t("portal.attendanceScreen.prevMonth")} style={s.navBtn} testID="portal-month-prev">
@@ -120,14 +125,14 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
 
       {data && !hasRegister && days.length === 0 ? (
         <Card>
-          <EmptyState icon="calendar-outline"
+          <EmptyState icon="calendar-outline" accent="green"
             title={t("portal.attendanceScreen.empty", { month: label })} hint={t("portal.attendanceScreen.emptyHint")} />
         </Card>
       ) : null}
 
       {data && hasRegister ? (
         <>
-          <Card style={s.pad}>
+          <Card style={[s.pad, s.rateCard]}>
             <View style={s.rateRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.kicker}>{t("portal.attendanceScreen.rate")}</Text>
@@ -153,7 +158,7 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
           </Card>
 
           <Card style={s.pad}>
-            <CardTitle style={{ marginBottom: 12 }}>{t("portal.attendanceScreen.calendar")}</CardTitle>
+            <CardTitle icon="calendar" accent="green" style={{ marginBottom: 12 }}>{t("portal.attendanceScreen.calendar")}</CardTitle>
             <View style={s.calRow}>
               {(Array.isArray(weekdays) ? weekdays : []).map((w) => (
                 <Text key={w} style={s.weekday}>{w}</Text>
@@ -202,7 +207,7 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
 
       {data && days.length > 0 ? (
         <Card>
-          <View style={s.listHead}><CardTitle>{t("portal.attendanceScreen.days")}</CardTitle></View>
+          <View style={s.listHead}><CardTitle icon="list" accent="green">{t("portal.attendanceScreen.days")}</CardTitle></View>
           {days.map((d) => {
             const st = d.summary ? stateOf(d.summary) : null;
             return (
@@ -231,7 +236,7 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
 
       {data && (data.subjectSummary?.filter((x) => x.subjectId).length ?? 0) > 0 ? (
         <Card style={s.pad}>
-          <CardTitle style={{ marginBottom: 12 }}>{t("portal.attendanceScreen.bySubject")}</CardTitle>
+          <CardTitle icon="book" accent="green" style={{ marginBottom: 12 }}>{t("portal.attendanceScreen.bySubject")}</CardTitle>
           {data.subjectSummary.filter((x) => x.subjectId).map((x) => {
             const pct = x.total ? Math.round((x.present / x.total) * 100) : 0;
             return (
@@ -253,7 +258,9 @@ export default function AttendanceScreen({ data, loading, month, onMonth }) {
 const s = StyleSheet.create({
   stack: { gap: 14 },
   pad:   { padding: 16 },
+  rateCard: { backgroundColor: ACCENT.green.wash, borderTopWidth: 3, borderTopColor: ACCENT.green.base },
   h1:    { fontSize: 22, fontWeight: "700", color: C.ink },
+  h1Row: { flexDirection: "row", alignItems: "center", gap: 10 },
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   monthNav: { flexDirection: "row", alignItems: "center" },
   navBtn:   { width: TAP, height: TAP, alignItems: "center", justifyContent: "center", borderRadius: 10 },
@@ -261,7 +268,7 @@ const s = StyleSheet.create({
 
   kicker:  { fontSize: 13, fontWeight: "600", color: C.inkMuted },
   rateRow: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
-  rate:    { fontSize: 36, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  rate:    { fontSize: 36, fontWeight: "700", color: ACCENT.green.deep, fontVariant: ["tabular-nums"] },
   marked:  { fontSize: 13, color: C.inkBody, textAlign: "right" },
   faint:   { marginTop: 2, fontSize: 12, color: C.inkMuted },
 
@@ -301,5 +308,5 @@ const s = StyleSheet.create({
   subjName:  { fontSize: 14, color: C.ink },
   subjCount: { fontSize: 14, color: C.inkBody, fontVariant: ["tabular-nums"] },
   bar:       { marginTop: 6, height: 8, borderRadius: 4, backgroundColor: C.line, overflow: "hidden" },
-  barFill:   { height: "100%", borderRadius: 4, backgroundColor: C.primary },
+  barFill:   { height: "100%", borderRadius: 4, backgroundColor: ACCENT.green.solid },
 });

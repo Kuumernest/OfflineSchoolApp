@@ -24,18 +24,20 @@ import { useAuthStore }   from "../../src/store/auth.store";
 import { errorText }      from "../../src/utils/appError";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { useSafeLogout }   from "../../src/hooks/useSafeLogout";
+import { COLORS, ACCENT, SEMANTIC } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
-  danger:    "#B42318",
+  primary:   ACCENT.indigo.solid,
+  primaryBg: ACCENT.indigo.wash,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
+  danger:    SEMANTIC.error.text,
 };
 
 export default function SchoolPickerScreen() {
@@ -112,6 +114,7 @@ export default function SchoolPickerScreen() {
             <Ionicons name="chevron-back" size={22} color={C.inkBody} />
           </TouchableOpacity>
         ) : null}
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>{t("schoolPick.title")}</Text>
           <Text style={styles.subtitle} numberOfLines={2}>{t("schoolPick.blurb")}</Text>
@@ -126,6 +129,7 @@ export default function SchoolPickerScreen() {
       <View style={styles.body}>
         {current ? (
           <View style={styles.currentRow}>
+            <IconSquare icon="business" accent="indigo" size={28} />
             <Text style={styles.currentText} numberOfLines={1}>
               {t("schoolPick.current", { name: current.name })}
             </Text>
@@ -159,7 +163,7 @@ export default function SchoolPickerScreen() {
             keyExtractor={(s) => String(s._id)}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: pad.paddingBottom }}
-            ListEmptyComponent={<Text style={styles.empty}>{t("schoolPick.none")}</Text>}
+            ListEmptyComponent={<EmptyState icon="business-outline" accent="indigo" message={t("schoolPick.none")} />}
             renderItem={({ item }) => {
               const on = current?._id === String(item._id);
               return (
@@ -169,6 +173,7 @@ export default function SchoolPickerScreen() {
                   disabled={Boolean(busyId)}
                   activeOpacity={0.8}
                 >
+                  <IconSquare icon="business" accent="indigo" size={36} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.optionTitle} numberOfLines={1}>{item.name}</Text>
                     <Text style={styles.optionHint} numberOfLines={1}>
@@ -179,7 +184,7 @@ export default function SchoolPickerScreen() {
                     ? <ActivityIndicator color={C.primary} />
                     : on
                       ? <Ionicons name="checkmark-circle" size={20} color={C.primary} />
-                      : <Ionicons name="chevron-forward" size={18} color={C.inkFaint} />}
+                      : <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />}
                 </TouchableOpacity>
               );
             }}
@@ -201,18 +206,20 @@ const styles = StyleSheet.create({
   },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  headerIcon: { marginRight: 0 },
 
   body: { flex: 1, padding: 16 },
 
   currentRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: C.primaryBg, borderRadius: 9, padding: 10, marginBottom: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
   },
   currentText: { flex: 1, fontSize: 13, color: C.ink, fontWeight: "600" },
-  leave:       { fontSize: 13, color: C.primary, fontWeight: "700" },
+  leave:       { fontSize: 13, color: ACCENT.indigo.deep, fontWeight: "700" },
 
   input: {
-    height: 42, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 42, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 12, fontSize: 15, color: C.ink,
     backgroundColor: C.surface, marginBottom: 6,
   },
@@ -220,14 +227,15 @@ const styles = StyleSheet.create({
   option: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 12, paddingHorizontal: 12, borderRadius: 9,
-    borderWidth: 1, borderColor: C.line, backgroundColor: C.surface, marginTop: 6,
+    borderWidth: 1, borderColor: C.line, backgroundColor: ACCENT.indigo.wash, marginTop: 6,
+    borderTopWidth: 3, borderTopColor: ACCENT.indigo.base,
   },
-  optionOn:    { borderColor: C.primary, backgroundColor: C.primaryBg },
+  optionOn:    { borderColor: ACCENT.indigo.base, borderWidth: 2, borderTopWidth: 3 },
   optionTitle: { fontSize: 14, fontWeight: "600", color: C.ink },
   optionHint:  { marginTop: 1, fontSize: 11, color: C.inkMuted },
 
   error:     { fontSize: 13, color: C.danger, textAlign: "center" },
   retry:     { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: C.primary },
   retryText: { color: C.primary, fontWeight: "600" },
-  empty:     { fontSize: 12, color: C.inkFaint, paddingVertical: 12, textAlign: "center" },
+
 });

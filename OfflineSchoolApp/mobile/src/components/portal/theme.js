@@ -1,32 +1,34 @@
 // src/components/portal/theme.js
 //
 // The parent portal's colours and the two ways it says a number. The brand
-// blue and the neutrals come from the app's theme (src/theme/colors.js) so the
-// portal is the same blue as everything else; the status colours are the
-// portal's own. The number helpers are web/src/pages/portal/format.ts, copied
-// because Metro does not reach outside the app folder. Change both together.
+// blue, the neutrals and the status colours come from the app's theme
+// (src/theme/colors.js) so the portal is the same blue, grey, green, amber and
+// red as everything else; section accents (fees teal, attendance green,
+// results slate, messages sky) come from ACCENT. The number helpers are
+// web/src/pages/portal/format.ts, copied because Metro does not reach outside
+// the app folder. Change both together.
 
-import { COLORS } from "../../theme/colors";
+import { COLORS, SEMANTIC } from "../../theme/colors";
 
 export const C = {
   primary:     COLORS.primary,
   primaryBg:   COLORS.primaryLight,
   primaryLine: COLORS.contextBorder,
-  danger:      "#9F2318",
-  dangerBg:    "#FDF2F1",
-  dangerLine:  "#F2D3CF",
-  success:     "#12683A",
-  successBg:   "#EEF7F1",
-  successLine: "#C3E2D0",
-  warning:     "#96570B",
-  warningBg:   "#FDF6EC",
-  warningLine: "#F0DCBB",
+  danger:      SEMANTIC.error.text,
+  dangerBg:    SEMANTIC.error.bg,
+  dangerLine:  SEMANTIC.error.box,
+  success:     SEMANTIC.success.text,
+  successBg:   SEMANTIC.success.bg,
+  successLine: SEMANTIC.success.box,
+  warning:     SEMANTIC.warning.text,
+  warningBg:   SEMANTIC.warning.bg,
+  warningLine: SEMANTIC.warning.box,
   ink:         COLORS.text,
-  inkBody:     "#334155",
+  inkBody:     COLORS.textSecondary,
   inkMuted:    COLORS.textSecondary,
   inkFaint:    COLORS.textSubtle,
   line:        COLORS.border,
-  lineStrong:  "#CBD5E1",
+  lineStrong:  COLORS.border,
   surface:     COLORS.surface,
   canvas:      COLORS.page,
 };

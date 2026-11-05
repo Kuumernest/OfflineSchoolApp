@@ -24,10 +24,13 @@ import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { formatTime } from "../../../src/i18n/format";
 import { participantName, conversationName } from "../../../src/utils/participantName";
 
+import { C as P } from "../../../src/components/portal/theme";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+
 const C = {
-  ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
-  line: "#E9EBF0", canvas: "#F7F8FA", surface: "#FFFFFF",
-  danger: "#DC2626",
+  // The neutrals and the danger red are the portal's, which are the app's.
+  ...P,
 
   // The parent's own messages, and the receipts that sit on them. Measured
   // against mine (#3B4996), which is the portal's primary:
@@ -41,9 +44,9 @@ const C = {
   // sent from delivered, so colour only has to separate delivered from read,
   // and it does that by brightness.
   mine:       "#3B4996",
-  onMine:     "#FFFFFF",
+  onMine:     COLORS.onPrimary,
   onMineFaint:"#C7D2FE",
-  tickRead:   "#FFFFFF",
+  tickRead:   COLORS.onPrimary,
   tickFailed: "#FECACA",
 };
 
@@ -228,7 +231,10 @@ export default function PortalThreadScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="chevron-back" size={24} color={C.ink} />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{title || t("msgMobile.conversation")}</Text>
+        <View style={s.headerTitleRow}>
+          <HeaderIcon size={28} style={s.headerIcon} />
+          <Text style={s.headerTitle} numberOfLines={1}>{title || t("msgMobile.conversation")}</Text>
+        </View>
         <View style={s.iconBtn} />
       </View>
 
@@ -250,7 +256,7 @@ export default function PortalThreadScreen() {
           contentContainerStyle={s.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
-            <Text style={s.empty}>{t("msgMobile.noMessages")}</Text>
+            <EmptyState icon="chatbubbles-outline" accent="sky" message={t("msgMobile.noMessages")} />
           }
         />
       )}
@@ -274,8 +280,8 @@ export default function PortalThreadScreen() {
           activeOpacity={0.85}
         >
           {sending
-            ? <ActivityIndicator size="small" color="#FFFFFF" />
-            : <Ionicons name="send" size={17} color="#FFFFFF" />}
+            ? <ActivityIndicator size="small" color={COLORS.onPrimary} />
+            : <Ionicons name="send" size={17} color={COLORS.onPrimary} />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -292,7 +298,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
   iconBtn:     { width: 40, alignItems: "center" },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: C.ink, textAlign: "center" },
+  headerTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  headerIcon:  { marginRight: 8 },
+  headerTitle: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: C.ink, textAlign: "center" },
 
   note: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -301,7 +309,6 @@ const s = StyleSheet.create({
   noteText: { fontSize: 11, color: C.inkMuted },
 
   list:  { padding: 12, gap: 8 },
-  empty: { textAlign: "center", paddingTop: 40, fontSize: 13, color: C.inkFaint },
 
   bubble: {
     backgroundColor: C.surface, borderRadius: 12, padding: 10,
@@ -312,7 +319,7 @@ const s = StyleSheet.create({
     backgroundColor: C.mine, borderColor: C.mine,
     alignSelf: "flex-end", borderBottomRightRadius: 4,
   },
-  sender:     { fontSize: 11, fontWeight: "700", color: C.inkMuted, marginBottom: 2 },
+  sender:     { fontSize: 11, fontWeight: "700", color: ACCENT.sky.deep, marginBottom: 2 },
   body:       { fontSize: 14, color: C.inkBody, lineHeight: 20 },
   bodyMine:   { color: C.onMine },
   attachment: { fontSize: 12, color: C.ink, textDecorationLine: "underline" },
@@ -325,7 +332,7 @@ const s = StyleSheet.create({
   timeMine:   { color: C.onMineFaint },
 
   error: {
-    fontSize: 12, color: C.danger, backgroundColor: "#FEF2F2",
+    fontSize: 12, color: C.danger, backgroundColor: C.dangerBg,
     paddingHorizontal: 16, paddingVertical: 8,
   },
 

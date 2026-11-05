@@ -22,24 +22,25 @@ import ReportService      from "../../../src/services/financeReport.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatMonth, formatDateTime } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
-import { SEMANTIC } from "../../../src/theme/colors";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent } from "../../../src/theme/colors";
 import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.teal.solid,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
 /** Cameroonian school years run September–July. */
@@ -140,6 +141,7 @@ export default function FinanceReportsScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={22} color={C.inkBody} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>{t("finrep.title")}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
@@ -172,10 +174,12 @@ export default function FinanceReportsScreen() {
         {loading ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
         ) : !report ? (
-          <View style={styles.card}>
-            <Text style={styles.emptyTitle}>{t("finrep.noData")}</Text>
-            <Text style={styles.empty}>{t("finrep.offline")}</Text>
-          </View>
+          <EmptyState
+            icon="bar-chart-outline"
+            accent="teal"
+            title={t("finrep.noData")}
+            message={t("finrep.offline")}
+          />
         ) : (
           <>
             {report.stale && (
@@ -201,7 +205,15 @@ export default function FinanceReportsScreen() {
               </View>
             </View>
 
-            <View style={styles.card}>
+            <View
+              style={[
+                styles.card,
+                styles.toneCard,
+                net < 0
+                  ? { backgroundColor: SEMANTIC.error.bg, borderLeftColor: ACCENT.red.base }
+                  : { backgroundColor: SEMANTIC.success.bg, borderLeftColor: ACCENT.green.base },
+              ]}
+            >
               <Text style={styles.statLabel}>
                 {net < 0 ? t("finrep.deficit") : t("finrep.surplus")}
               </Text>
@@ -219,7 +231,10 @@ export default function FinanceReportsScreen() {
 
             {/* Month by month */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t("finrep.monthly")}</Text>
+              <View style={styles.cardHead}>
+                <IconSquare icon="calendar" accent="teal" size={28} />
+                <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("finrep.monthly")}</Text>
+              </View>
               {months.length === 0 ? (
                 <Text style={styles.empty}>{t("finrep.noData")}</Text>
               ) : (
@@ -260,15 +275,21 @@ export default function FinanceReportsScreen() {
             {/* By category */}
             {(summary?.byCategory?.length ?? 0) > 0 && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t("finrep.byCategory")}</Text>
+                <View style={styles.cardHead}>
+                  <IconSquare icon="pie-chart" accent="teal" size={28} />
+                  <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("finrep.byCategory")}</Text>
+                </View>
                 {summary.byCategory.map((c) => (
-                  <View key={c.categoryId} style={styles.line}>
+                  <View
+                    key={c.categoryId}
+                    style={[styles.line, styles.lineEdge, { borderLeftColor: ACCENT[categoryAccent(c.label)].base }]}
+                  >
                     <Text style={styles.lineLabel} numberOfLines={1}>{c.label}</Text>
                     <Text style={styles.lineAmount}>{formatMoney(c.total)}</Text>
                   </View>
                 ))}
                 {/* Salaries are expenditure but not an expense category. */}
-                <View style={styles.line}>
+                <View style={[styles.line, styles.lineEdge, { borderLeftColor: ACCENT.violet.base }]}>
                   <Text style={[styles.lineLabel, { color: C.inkMuted }]}>
                     {t("finrep.payrollLine")}
                   </Text>
@@ -281,7 +302,10 @@ export default function FinanceReportsScreen() {
 
             {/* Arrears — a position, not a flow. */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t("finrep.arrears")}</Text>
+              <View style={styles.cardHead}>
+                <IconSquare icon="alert-circle" accent="red" size={28} />
+                <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("finrep.arrears")}</Text>
+              </View>
               <Text style={styles.note}>{t("finrep.arrearsNote")}</Text>
               <Text style={[styles.bigValue, { color: C.danger }]}>
                 {formatMoney(arrears?.outstanding ?? 0)}
@@ -292,13 +316,13 @@ export default function FinanceReportsScreen() {
               </View>
               <View style={styles.line}>
                 <Text style={styles.lineLabel}>{t("finrep.collected")}</Text>
-                <Text style={styles.lineAmount}>{formatMoney(arrears?.paid ?? 0)}</Text>
+                <Text style={[styles.lineAmount, { color: C.success }]}>{formatMoney(arrears?.paid ?? 0)}</Text>
               </View>
               {arrears?.collectionRate !== null && arrears?.collectionRate !== undefined && (
                 <>
                   <View style={[styles.line, { borderBottomWidth: 0 }]}>
                     <Text style={styles.lineLabel}>{t("finrep.collectionRate")}</Text>
-                    <Text style={styles.lineAmount}>{arrears.collectionRate}%</Text>
+                    <Text style={[styles.lineAmount, { color: ACCENT.teal.deep }]}>{arrears.collectionRate}%</Text>
                   </View>
                   <View style={styles.track}>
                     <View
@@ -337,22 +361,23 @@ const styles = StyleSheet.create({
   },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  headerIcon: { marginRight: 0 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: C.surface,
   },
-  chipOn:     { backgroundColor: C.primary, borderColor: C.primary },
+  chipOn:     { backgroundColor: ACCENT.teal.wash, borderColor: ACCENT.teal.base },
   chipText:   { fontSize: 12, color: C.inkBody, fontWeight: "500" },
-  chipTextOn: { color: "#fff" },
+  chipTextOn: { color: ACCENT.teal.deep, fontWeight: "700" },
 
   staleBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.warningBg, borderWidth: 1, borderColor: "#F0DCBB",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: SEMANTIC.warning.box,
   },
   staleText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
@@ -371,11 +396,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.line, padding: 14,
   },
   cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 8 },
+  cardHead:  { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  cardTitleInHead: { marginBottom: 0, flex: 1 },
+  toneCard:  { borderLeftWidth: 3 },
   bigValue: {
     marginTop: 6, fontSize: 28, fontWeight: "700", fontVariant: ["tabular-nums"],
   },
   meta: { marginTop: 6, fontSize: 11, color: C.inkMuted },
-  note: { fontSize: 11, color: C.inkFaint, marginBottom: 2 },
+  note: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 2 },
 
   monthRow:  { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, gap: 4 },
   monthHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
@@ -389,10 +417,10 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line,
   },
+  lineEdge:   { borderLeftWidth: 3, paddingLeft: 8 },
   lineLabel:  { flex: 1, fontSize: 13, color: C.inkBody },
   lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
 
-  stamp:      { fontSize: 10, color: C.inkFaint, textAlign: "center" },
-  emptyTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 4 },
-  empty:      { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+  stamp:      { fontSize: 10, color: COLORS.textSecondary, textAlign: "center" },
+  empty:      { fontSize: 12, color: COLORS.textSecondary, paddingVertical: 8 },
 });

@@ -27,23 +27,25 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.teal.solid,
+  primaryBg: ACCENT.teal.wash,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
 const METHODS = ["cash", "mobile_money", "bank", "cheque"];
@@ -205,6 +207,7 @@ export default function StudentFeeScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={22} color={C.inkBody} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>
             {student?.name || t("academic.student")}
@@ -226,7 +229,7 @@ export default function StudentFeeScreen() {
             <Text style={styles.balanceMeta}>
               {t("fees.charged")} {formatMoney(totals.charged)}
             </Text>
-            <Text style={styles.balanceMeta}>
+            <Text style={[styles.balanceMeta, { color: C.success }]}>
               {t("fees.paid")} {formatMoney(totals.paid)}
             </Text>
           </View>
@@ -243,7 +246,10 @@ export default function StudentFeeScreen() {
 
         {/* Take a payment */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t("fees.recordPayment")}</Text>
+          <View style={styles.cardHead}>
+            <IconSquare icon="cash" accent="teal" size={28} />
+            <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("fees.recordPayment")}</Text>
+          </View>
 
           <Text style={styles.label}>{t("fees.amount")}</Text>
           <TextInput
@@ -289,14 +295,17 @@ export default function StudentFeeScreen() {
             activeOpacity={0.85}
           >
             {saving
-              ? <ActivityIndicator color="#fff" />
+              ? <ActivityIndicator color={COLORS.onPrimary} />
               : <Text style={styles.submitText}>{t("fees.recordPayment")}</Text>}
           </TouchableOpacity>
         </View>
 
         {/* Charges */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t("fees.charges")}</Text>
+          <View style={styles.cardHead}>
+            <IconSquare icon="receipt" accent="teal" size={28} />
+            <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("fees.charges")}</Text>
+          </View>
           {(account?.charges?.length ?? 0) === 0 ? (
             <Text style={styles.empty}>{t("fees.noCharges")}</Text>
           ) : (
@@ -311,12 +320,15 @@ export default function StudentFeeScreen() {
 
         {/* Payments */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t("fees.payments")}</Text>
+          <View style={styles.cardHead}>
+            <IconSquare icon="wallet" accent="teal" size={28} />
+            <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("fees.payments")}</Text>
+          </View>
           {(account?.payments?.length ?? 0) === 0 ? (
             <Text style={styles.empty}>{t("fees.noPayments")}</Text>
           ) : (
             account.payments.map((p) => (
-              <View key={p._id} style={styles.line}>
+              <View key={p._id} style={[styles.line, styles.paymentLine]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.lineLabel} numberOfLines={1}>
                     {/* No receipt number yet means the server has not seen it. */}
@@ -354,7 +366,7 @@ export default function StudentFeeScreen() {
                 <Text
                   style={[
                     styles.lineAmount,
-                    p.amount < 0 && { color: C.danger },
+                    { color: p.amount < 0 ? C.danger : C.success },
                   ]}
                 >
                   {formatMoney(p.amount)}
@@ -379,12 +391,13 @@ const styles = StyleSheet.create({
   },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  headerIcon: { marginRight: 0 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
   balanceCard: { borderRadius: 12, borderWidth: 1, padding: 16 },
-  balanceOwes:  { backgroundColor: C.dangerBg,  borderColor: "#F2D3CF" },
-  balanceClear: { backgroundColor: C.successBg, borderColor: "#C3E2D0" },
+  balanceOwes:  { backgroundColor: C.dangerBg,  borderColor: SEMANTIC.error.box },
+  balanceClear: { backgroundColor: C.successBg, borderColor: SEMANTIC.success.box },
   balanceLabel: { fontSize: 11, fontWeight: "600", color: C.inkMuted, textTransform: "uppercase", letterSpacing: 0.6 },
   balanceValue: { marginTop: 6, fontSize: 30, fontWeight: "700", fontVariant: ["tabular-nums"] },
   balanceRow:   { flexDirection: "row", gap: 16, marginTop: 8 },
@@ -393,7 +406,7 @@ const styles = StyleSheet.create({
   pendingBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.warningBg, borderWidth: 1, borderColor: "#F0DCBB",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: SEMANTIC.warning.box,
   },
   pendingText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
@@ -402,10 +415,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.line, padding: 14,
   },
   cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 10 },
+  cardHead:  { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  cardTitleInHead: { marginBottom: 0, flex: 1 },
 
   label: { fontSize: 12, fontWeight: "600", color: C.inkBody, marginBottom: 5, marginTop: 8 },
   input: {
-    height: 42, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 42, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 12, fontSize: 15, color: C.ink, backgroundColor: C.surface,
   },
   hint: { marginTop: 4, fontSize: 11, color: C.inkFaint },
@@ -413,25 +428,28 @@ const styles = StyleSheet.create({
   methods: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   method: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: C.surface,
   },
-  methodOn:      { backgroundColor: C.primary, borderColor: C.primary },
+  methodOn:      { backgroundColor: ACCENT.teal.wash, borderColor: ACCENT.teal.base },
   methodText:    { fontSize: 12, color: C.inkBody, fontWeight: "500" },
-  methodTextOn:  { color: "#fff" },
+  methodTextOn:  { color: ACCENT.teal.deep, fontWeight: "700" },
 
   submit: {
     marginTop: 16, height: 46, borderRadius: 10, backgroundColor: C.primary,
     alignItems: "center", justifyContent: "center",
   },
   submitOff:  { opacity: 0.45 },
-  submitText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  submitText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "600" },
 
   line: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
   },
+  paymentLine: {
+    borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base, paddingLeft: 8,
+  },
   lineLabel:  { flex: 1, fontSize: 13, color: C.inkBody },
-  lineMeta:   { marginTop: 2, fontSize: 11, color: C.inkFaint },
+  lineMeta:   { marginTop: 2, fontSize: 11, color: COLORS.textSecondary },
   lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
-  empty:      { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+  empty:      { fontSize: 12, color: COLORS.textSecondary, paddingVertical: 8 },
 });

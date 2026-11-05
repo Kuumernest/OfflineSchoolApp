@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTranslation } from "../../i18n/useTranslation";
+import { COLORS } from "../../theme/colors";
 import { C, TAP } from "./theme";
 
 export const PORTAL_SCREENS = [
@@ -88,5 +89,5 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     borderWidth: 2, borderColor: C.surface,
   },
-  badgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  badgeText: { fontSize: 10, fontWeight: "700", color: COLORS.onPrimary },
 });
