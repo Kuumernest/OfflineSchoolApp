@@ -65,6 +65,7 @@ const QUICK_ACTIONS = [
   // cash at a desk with no signal.
   {
     id:    "collect-fees",
+    kind:  "fees",
     // The one primary action on this screen: taking a payment is what the
     // office does most from a phone.
     primary: true,
@@ -76,6 +77,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "print-register",
+    kind:  "attendance",
     titleKey: "dashAdmin.qa_print_register",
     icon:  "print-outline",
     route: "/admin/documents",
@@ -84,6 +86,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "gate-scan",
+    kind:  "attendance",
     titleKey: "dashAdmin.qa_gate_scan",
     icon:  "qr-code-outline",
     route: "/admin/gate",
@@ -93,6 +96,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "record-expense",
+    kind:  "finance",
     titleKey: "dashAdmin.qa_record_expense",
     icon:  "receipt-outline",
     route: "/admin/finance/expenses",
@@ -101,6 +105,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "add-student",
+    kind:  "students",
     titleKey: "dashAdmin.qa_add_student",
     icon:  "person-add-outline",
     route: "/admin/students/add",
@@ -109,6 +114,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "add-class",
+    kind:  "classes",
     titleKey: "dashAdmin.qa_add_class",
     icon:  "add-circle-outline",
     route: "/admin/classes/add",
@@ -116,6 +122,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "add-subject",
+    kind:  "subjects",
     titleKey: "dashAdmin.qa_add_subject",
     icon:  "add-circle-outline",
     route: "/admin/subjects/add",
@@ -123,6 +130,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "add-teacher",
+    kind:  "teachers",
     titleKey: "dashAdmin.qa_add_teacher",
     icon:  "add-circle-outline",
     route: "/admin/teachers/add",
@@ -130,6 +138,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "assign-teacher",
+    kind:  "teachers",
     titleKey: "dashAdmin.qa_assign_teacher",
     icon:  "git-branch-outline",
     route: "/admin/assignments",
@@ -138,6 +147,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "review-apps",
+    kind:  "students",
     titleKey: "dashAdmin.qa_review_apps",
     icon:  "clipboard-outline",
     route: "/admin/students/applications",
@@ -146,6 +156,7 @@ const QUICK_ACTIONS = [
   },
   {
     id:    "build-timetable",
+    kind:  "timetable",
     titleKey: "dashAdmin.qa_build_timetable",
     icon:  "time-outline",
     route: "/admin/timetable",
@@ -336,24 +347,27 @@ const ALL_MODULES = [
   },
 ];
 
+// The same rule as the web console's Setup health: every tile wears its
+// kind's tint and solid icon square; a count that is a problem turns its
+// border and figure amber above zero (red for a timetable conflict).
 const STAT_ROWS = [
   [
     { key: "pendingApplications", labelKey: "dashAdmin.hPending",      icon: "document-text",    kind: "students", toneWhenAny: "warning" },
     { key: "approvedStudents",    labelKey: "dashAdmin.sStudents",     icon: "people-circle",    kind: "students" },
     { key: "totalTeachers",       labelKey: "dashAdmin.sTeachers",     icon: "people",           kind: "teachers" },
-    { key: "unassignedTeachers",  labelKey: "dashAdmin.hUnassigned",   icon: "person-remove",    kind: "teachers", toneWhenAny: "error" },
+    { key: "unassignedTeachers",  labelKey: "dashAdmin.hUnassigned",   icon: "person-remove",    kind: "teachers", toneWhenAny: "warning" },
   ],
   [
     { key: "totalClasses",        labelKey: "dashAdmin.sClasses",      icon: "school",           kind: "classes" },
     { key: "totalSubjects",       labelKey: "dashAdmin.sSubjects",     icon: "book",             kind: "subjects" },
-    { key: "unassignedClassSubjects", labelKey: "dashAdmin.hNoTeacher", icon: "git-branch",       kind: "subjects", toneWhenAny: "error" },
-    { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        kind: "announcements", toneWhenAny: "info" },
+    { key: "unassignedClassSubjects", labelKey: "dashAdmin.hNoTeacher", icon: "git-branch",       kind: "subjects", toneWhenAny: "warning" },
+    { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        kind: "announcements" },
   ],
   [
     { key: "totalPeriods",             labelKey: "dashAdmin.hPeriods",      icon: "time",             kind: "timetable" },
-    { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", kind: "timetable", toneWhenAny: "error" },
+    { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", kind: "timetable", toneWhenAny: "warning" },
     { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          kind: "timetable", toneWhenAny: "error" },
-    { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     kind: "classes", toneWhenAny: "error" },
+    { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     kind: "classes", toneWhenAny: "warning" },
   ],
 ];
 
@@ -511,6 +525,7 @@ const ActionButton = React.memo(({ action, onPress }) => {
   return (
     <ActionTile
       primary={action.primary}
+      kind={action.kind}
       icon={action.icon}
       label={t(action.titleKey)}
       style={styles.actionButton}

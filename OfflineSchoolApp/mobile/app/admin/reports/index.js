@@ -16,6 +16,7 @@ import { currentLocale }   from "../../../src/i18n";
 // Results, report cards and PDFs are online-only: a failure for want of a
 // connection says so rather than "Network Error".
 import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -180,7 +181,7 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
       {/* Header */}
       <View style={styles.cardHeader}>
         <View style={styles.cardIconBg}>
-          <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+          <Ionicons name="document-text-outline" size={18} color={THEME.onPrimary} />
         </View>
         <View style={styles.cardHeaderText}>
           <Text style={styles.examName} numberOfLines={1}>{item.name}</Text>
@@ -222,7 +223,7 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, {
-                color: item.passRate >= 70 ? COLORS.success : COLORS.warning,
+                color: item.passRate >= 70 ? SEMANTIC.success.text : SEMANTIC.warning.text,
               }]}>
                 {item.passRate}%
               </Text>
@@ -641,7 +642,7 @@ const styles = StyleSheet.create({
     width:           40,
     height:          40,
     borderRadius:    10,
-    backgroundColor: COLORS.primaryBg,
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -658,16 +659,16 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: COLORS.gray50,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    10,
     padding:         10,
   },
   statItem:   { flex: 1, alignItems: "center" },
-  statValue:  { fontSize: 16, fontWeight: "800", color: COLORS.gray900 },
+  statValue:  { fontSize: 16, fontWeight: "800", color: ACCENT.slate.deep },
   statLabel: {
     fontSize:      9,
     fontWeight:    "600",
-    color:         COLORS.gray400,
+    color:         THEME.textSecondary,
     textTransform: "uppercase",
     marginTop:     2,
   },

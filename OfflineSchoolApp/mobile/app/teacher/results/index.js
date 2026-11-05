@@ -52,6 +52,8 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
+import { COLORS, TILE, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 // #R1 — correct wrapper: _tableExists(db, tableName)
 const tableExists = async (tableName) => {
@@ -1509,12 +1511,12 @@ export default function TeacherResultsScreen() {
             }
             ListHeaderComponent={
               flatListAnalytics ? (
-                <View style={styles.summaryStrip}>
+                <View style={[styles.summaryStrip, tileShell("results")]}>
                   {[
                     { id: "average",  label: t("teacherResults.stats.average"),  value: `${flatListAnalytics.avg}%` },
-                    { id: "passRate", label: t("teacherResults.stats.passRate"), value: `${flatListAnalytics.passRate}%`, color: C.success },
+                    { id: "passRate", label: t("teacherResults.stats.passRate"), value: `${flatListAnalytics.passRate}%`, color: SEMANTIC.success.text },
                     { id: "results",  label: t("teacherResults.stats.results"),  value: flatListData.length },
-                    { id: "topScore", label: t("teacherResults.stats.topScore"), value: `${flatListAnalytics.max}%`,      color: C.primary },
+                    { id: "topScore", label: t("teacherResults.stats.topScore"), value: `${flatListAnalytics.max}%` },
                   ].map(({ id, label, value, color }, i, arr) => (
                     <React.Fragment key={id}>
                       <View style={styles.summaryItem}>
@@ -1670,10 +1672,10 @@ const styles = StyleSheet.create({
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
   refreshBtn:   { padding: 8 },
 
-  summaryStrip:   { flexDirection: "row", backgroundColor: C.white, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
+  summaryStrip:   { flexDirection: "row", backgroundColor: TILE.results.wash, borderWidth: 1, borderColor: COLORS.border, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   summaryItem:    { flex: 1, alignItems: "center" },
-  summaryValue:   { fontSize: 16, fontWeight: "800", color: C.gray900 },
-  summaryLabel:   { fontSize: 10, color: C.gray400, fontWeight: "600", marginTop: 2 },
+  summaryValue:   { fontSize: 16, fontWeight: "800", color: TILE.results.deep },
+  summaryLabel:   { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600", marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: C.gray200, marginVertical: 4 },
 
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginVertical: 8, padding: 12, backgroundColor: C.errorBg, borderRadius: 10, borderWidth: 1, borderColor: "#FECACA" },

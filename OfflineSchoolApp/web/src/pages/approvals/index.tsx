@@ -181,7 +181,7 @@ export default function ApprovalsPage() {
       <Card padding={false}>
         {rows.length === 0 ? (
           <EmptyTable
-            icon={<ShieldCheck className="h-6 w-6 text-ink-faint" aria-hidden="true" />}
+            icon={<ShieldCheck className="h-6 w-6" aria-hidden="true" />}
             title={
               status === "pending"
                 ? t("approvals.noneWaiting")

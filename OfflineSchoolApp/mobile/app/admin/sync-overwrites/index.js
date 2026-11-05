@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore }     from "@/store/auth.store";
 import SyncOverwriteService from "@/services/sync-overwrite.service";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -50,7 +51,7 @@ const getActionConfig = (action) => {
     case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.vDelete"  };
     case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.vMove"    };
     // `raw` keeps an unrecognised action visible instead of mislabelling it.
-    default:        return { icon: "sync-outline",             color: "#6B7280", labelKey: "syncScreens.vUpdate", raw: action };
+    default:        return { icon: "sync-outline",             color: ACCENT.slate.solid, labelKey: "syncScreens.vUpdate", raw: action };
   }
 };
 
@@ -83,8 +84,8 @@ function OverwriteRow({ item, onPress, onDismiss }) {
     >
       {isUnseen && <View style={styles.unseenDot} />}
 
-      <View style={[styles.iconWrap, { backgroundColor: action.color + "15" }]}>
-        <Ionicons name={action.icon} size={20} color={action.color} />
+      <View style={[styles.iconWrap, { backgroundColor: action.color }]}>
+        <Ionicons name={action.icon} size={20} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.rowBody}>

@@ -14,6 +14,8 @@ import {
 } from "../../../src/services/subject.service";
 import { ClassService } from "../../../src/services/class.service";
 import { getDatabase }  from "../../../src/db/database";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const normaliseId = (id) => {
   if (id === null || id === undefined) return null;
@@ -69,7 +71,7 @@ const SubjectCard = React.memo(
     return (
     <View style={styles.card}>
       <View style={styles.iconBox}>
-        <Ionicons name="book-outline" size={22} color="#059669" />
+        <Ionicons name="book-outline" size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.cardInfo}>
@@ -388,12 +390,12 @@ export default function AdminSubjects() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.assigned}</Text>
+            <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>{stats.assigned}</Text>
             <Text style={styles.statLabel}>{t("subjectsList.assigned")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
+            <Text style={[styles.statNumber, stats.unassigned > 0 && { color: SEMANTIC.warning.text }]}>
               {stats.unassigned}
             </Text>
             <Text style={styles.statLabel}>{t("subjectsList.unassigned")}</Text>
@@ -517,14 +519,15 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: "#FFFFFF" },
   statsBanner: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#FFFFFF", paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    paddingVertical: 12,
+    ...tileShell("subjects"),
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     gap: 24, flexShrink: 0,
   },
   statItem: { alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 1 },
-  statDivider: { width: 1, height: 24, backgroundColor: "#E5E7EB" },
+  statNumber: { fontSize: 18, fontWeight: "700", color: ACCENT.slate.deep },
+  statLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 1 },
+  statDivider: { width: 1, height: 24, backgroundColor: COLORS.border },
   mainScroll: { flex: 1 },
   scrollContent: { paddingTop: 12, paddingBottom: 12, flexGrow: 1 },
   errorBanner: {
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
   },
   iconBox: {
     width: 46, height: 46, borderRadius: 12,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: ACCENT.slate.solid,
     alignItems: "center", justifyContent: "center",
     marginRight: 14, flexShrink: 0,
   },

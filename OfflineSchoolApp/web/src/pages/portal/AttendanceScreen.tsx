@@ -111,7 +111,7 @@ export function AttendanceScreen({ studentId }: { studentId: string | null }) {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-ink-muted">{t("portal.attendanceScreen.rate")}</p>
-                <p className="text-4xl font-semibold tabular-nums text-ink">{data.rate == null ? "–" : `${data.rate}%`}</p>
+                <p className="text-4xl font-semibold tabular-nums text-accent-green-deep">{data.rate == null ? "–" : `${data.rate}%`}</p>
                 <p className="mt-0.5 text-xs text-ink-muted">{t("portal.attendanceScreen.rateHint")}</p>
               </div>
               <p className="text-right text-sm text-ink-body">{t("portal.attendanceScreen.marked", { count: data.total })}</p>

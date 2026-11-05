@@ -25,6 +25,8 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const C = {
   primary:   "#3B4996",
@@ -383,14 +385,14 @@ const styles = StyleSheet.create({
 
   totalCard: {
     borderRadius: 12, borderWidth: 1, padding: 16,
-    backgroundColor: C.surface, borderColor: C.line,
+    ...tileShell("finance"),
   },
   totalLabel: {
-    fontSize: 11, fontWeight: "600", color: C.inkMuted,
+    fontSize: 11, fontWeight: "600", color: COLORS.textSecondary,
     textTransform: "uppercase", letterSpacing: 0.6,
   },
   totalValue: {
-    marginTop: 6, fontSize: 30, fontWeight: "700", color: C.ink,
+    marginTop: 6, fontSize: 30, fontWeight: "700", color: ACCENT.teal.deep,
     fontVariant: ["tabular-nums"],
   },
 

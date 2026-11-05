@@ -31,6 +31,7 @@ import {
 
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 import { authHeaders, openStoredFile } from "../../../src/utils/storedFile";
 
 let IntentLauncher = null;
@@ -122,7 +123,7 @@ const getContentVisuals = (type) => {
     case "audio":     return { icon: "musical-notes",  color: "#D97706", bg: "#FEF3C7" };
     case "image":     return { icon: "image",          color: "#0284C7", bg: "#F0F9FF" };
     case "document":  return { icon: "document",       color: "#059669", bg: "#ECFDF5" };
-    default:          return { icon: "document-text",  color: "#6B7280", bg: "#F3F4F6" };
+    default:          return { icon: "document-text",  color: ACCENT.slate.solid, bg: ACCENT.slate.wash };
   }
 };
 
@@ -395,8 +396,8 @@ const ContentCard = React.memo(({ item }) => {
   return (
     <View style={cc.card}>
       <View style={cc.topRow}>
-        <View style={[cc.iconBg, { backgroundColor: bg }]}>
-          <Ionicons name={icon} size={22} color={color} />
+        <View style={[cc.iconBg, { backgroundColor: color }]}>
+          <Ionicons name={icon} size={22} color={THEME.onPrimary} />
         </View>
 
         <View style={cc.titleArea}>

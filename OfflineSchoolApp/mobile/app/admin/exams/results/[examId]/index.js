@@ -21,7 +21,8 @@ import { Ionicons }                     from "@expo/vector-icons";
 import { useResultsStore }   from "../../../../../src/store/results.store";
 import { useAuthStore }      from "../../../../../src/store/auth.store";
 import { useTranslation }    from "../../../../../src/i18n/useTranslation";
-import { StatTile } from "../../../../../src/components/Tiles";
+import { StatTile, tileShell } from "../../../../../src/components/Tiles";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../../../src/theme/colors";
 import ResultsProcessingCard from "../../../components/ResultsProcessingCard";
 import RankingsTable         from "../../../components/RankingsTable";
 
@@ -359,17 +360,17 @@ function StatsView({ stats }) {
         </Text>
         <View style={styles.statsGrid}>
           <StatBox label={t("examResults.students")} value={stats.totalStudents} />
-          <StatBox label={t("examResults.passed")} value={stats.passed}  color={COLORS.success} />
-          <StatBox label={t("examResults.failed")} value={stats.failed}  color={COLORS.error}   />
+          <StatBox label={t("examResults.passed")} value={stats.passed}  color={SEMANTIC.success.text} />
+          <StatBox label={t("examResults.failed")} value={stats.failed}  color={SEMANTIC.error.text}   />
           <StatBox
             label={t("exams.passRate")}
             value={`${stats.passRate?.toFixed(1) ?? 0}%`}
-            color={(stats.passRate ?? 0) >= 50 ? COLORS.success : COLORS.error}
+            color={(stats.passRate ?? 0) >= 50 ? SEMANTIC.success.text : SEMANTIC.error.text}
           />
           {/* On /20 (shared/examAnalytics on the server) — no percentages, no GPA. */}
           <StatBox label={t("results.average")} value={on20(stats.average)} />
-          <StatBox label={t("results.highest")} value={on20(stats.highest)} color={COLORS.success} />
-          <StatBox label={t("results.lowest")}  value={on20(stats.lowest)}  color={COLORS.error}   />
+          <StatBox label={t("results.highest")} value={on20(stats.highest)} color={SEMANTIC.success.text} />
+          <StatBox label={t("results.lowest")}  value={on20(stats.lowest)}  color={SEMANTIC.error.text}   />
         </View>
       </View>
 
@@ -580,15 +581,16 @@ const styles = StyleSheet.create({
   statsGrid:    { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   statBox: {
     width:           "30%",
-    backgroundColor: COLORS.gray50,
+    borderWidth:     1,
+    ...tileShell("results"),
     borderRadius:    10,
     padding:         12,
     alignItems:      "center",
   },
-  statBoxValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
+  statBoxValue: { fontSize: 18, fontWeight: "800", color: ACCENT.slate.deep },
   statBoxLabel: {
     fontSize:  11,
-    color:     COLORS.gray500,
+    color:     THEME.textSecondary,
     marginTop: 4,
     textAlign: "center",
   },

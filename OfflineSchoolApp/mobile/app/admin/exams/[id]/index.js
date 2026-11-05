@@ -21,6 +21,20 @@ import { useTranslation } from "../../../../src/i18n/useTranslation";
 // Results, report cards and PDFs are online-only: a failure for want of a
 // connection says so rather than "Network Error".
 import { needsInternetErrorText } from "../../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT } from "../../../../src/theme/colors";
+
+// A summary chip's status colour → the accent it stands for, so the chip takes
+// that accent's wash and its figure the deep shade. A colour with no accent
+// (the grey "total") keeps its own faint tint.
+const CHIP_ACCENT = {
+  "#D97706": ACCENT.amber,
+  "#4F46E5": ACCENT.indigo,
+  "#059669": ACCENT.green,
+  "#DC2626": ACCENT.red,
+  "#6B7280": ACCENT.slate, // the "total" chip: slate, not grey
+};
+const chipBg  = (color) => CHIP_ACCENT[color]?.wash ?? color + "12";
+const chipVal = (color) => CHIP_ACCENT[color]?.deep ?? color;
 
 // ─────────────────────────────────────────────────────────
 // UUID VALIDATOR
@@ -641,7 +655,7 @@ const cp = StyleSheet.create({
 const InfoRow = ({ icon, label, value }) => (
   <View style={ir.row}>
     <View style={ir.iconBox}>
-      <Ionicons name={icon} size={16} color="#6B7280" />
+      <Ionicons name={icon} size={16} color={COLORS.onPrimary} />
     </View>
     <View style={ir.content}>
       <Text style={ir.label}>{label}</Text>
@@ -663,7 +677,7 @@ const ir = StyleSheet.create({
     width:           32,
     height:          32,
     borderRadius:    8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.amber.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -1748,9 +1762,9 @@ export default function ExamDetailScreen() {
                 ].map((s) => (
                   <View
                     key={s.id}
-                    style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                    style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                   >
-                    <Text style={[styles.statVal, { color: s.color }]}>
+                    <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                       {s.val}
                     </Text>
                     <Text style={styles.statLbl}>{s.label}</Text>
@@ -1777,9 +1791,9 @@ export default function ExamDetailScreen() {
                 ].map((s) => (
                   <View
                     key={s.id}
-                    style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                    style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                   >
-                    <Text style={[styles.statVal, { color: s.color }]}>
+                    <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                       {s.val}
                     </Text>
                     <Text style={styles.statLbl}>{s.label}</Text>
@@ -1884,9 +1898,9 @@ export default function ExamDetailScreen() {
                   ].map((s) => (
                     <View
                       key={s.id}
-                      style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                      style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                     >
-                      <Text style={[styles.statVal, { color: s.color }]}>
+                      <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                         {s.val}
                       </Text>
                       <Text style={styles.statLbl}>{s.label}</Text>
@@ -2099,7 +2113,7 @@ const styles = StyleSheet.create({
   statVal: { fontSize: 16, fontWeight: "800" },
   statLbl: {
     fontSize:      9,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },

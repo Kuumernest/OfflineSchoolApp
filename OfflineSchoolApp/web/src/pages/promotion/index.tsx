@@ -29,7 +29,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { cn }              from "@/utils/cn";
-import { CARD_SHELL, SEMANTIC } from "@/config/sections";
+import { DASH_TINT }       from "@/config/dashboardTint";
 import { getErrorMessage } from "@/lib/axios";
 import {
   fetchRuns, fetchRun, generateRun, setDecision,
@@ -251,30 +251,28 @@ export default function PromotionPage() {
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {([
-                ["promo.promoted",   run.counts.promoted],
-                ["promo.repeated",   run.counts.repeated],
-                ["promo.graduated",  run.counts.graduated],
-                ["promo.unassigned", run.counts.unassigned],
-              ] as const).map(([key, value]) => (
-                // White counts; a pupil left unassigned is a problem, so that
-                // card alone takes the error tint when it is above zero.
+                ["promo.promoted",   run.counts.promoted,   DASH_TINT.green],
+                ["promo.repeated",   run.counts.repeated,   DASH_TINT.amber],
+                ["promo.graduated",  run.counts.graduated,  DASH_TINT.blue],
+                ["promo.unassigned", run.counts.unassigned, DASH_TINT.blue],
+              ] as const).map(([key, value, tint]) => {
+                // Tinted counts; a pupil left unassigned is a problem, so that
+                // card alone takes a red border and figure when above zero.
+                const fault = key === "promo.unassigned" && value > 0;
+                return (
                 <div
                   key={key}
-                  className={cn(
-                    "min-w-0 p-5",
-                    key === "promo.unassigned" && value > 0
-                      ? cn(SEMANTIC.error.card, SEMANTIC.error.text)
-                      : cn(CARD_SHELL, "text-ink")
-                  )}
+                  className={cn("min-w-0 p-5", fault ? tint.errorCard : tint.card)}
                 >
-                  <p className="text-[28px] font-bold leading-none tracking-tight tabular">
+                  <p className={cn("text-[28px] font-bold leading-none tracking-tight tabular", fault ? "text-danger-text" : tint.number)}>
                     {value}
                   </p>
-                  <p className="mt-2 text-sm font-medium">
+                  <p className="mt-2 text-sm font-medium text-ink-muted">
                     {t(key)}
                   </p>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <Card padding={false}>

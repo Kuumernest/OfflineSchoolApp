@@ -35,6 +35,7 @@ import {
   resetStudentPassword,
 }                               from "@/services/student.service";
 import { cn }                   from "@/utils/cn";
+import { DASH_TINT }            from "@/config/dashboardTint";
 import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -223,6 +224,14 @@ function ActionButton({
     success: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
   };
 
+  // The icon square: solid, in the action's colour, with a white icon.
+  const boxes = {
+    default: DASH_TINT.blue.box,
+    warning: DASH_TINT.amber.box,
+    danger:  DASH_TINT.red.box,
+    success: DASH_TINT.green.box,
+  };
+
   return (
     <button
       onClick={onClick}
@@ -232,7 +241,7 @@ function ActionButton({
         variants[variant]
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-sm", boxes[variant])}>
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -977,8 +986,8 @@ export default function StudentDetailPage() {
   if (studentQuery.isError || !student) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
-          <AlertCircle className="h-7 w-7 text-red-500" />
+        <div className={cn("flex h-16 w-16 items-center justify-center rounded-2xl", DASH_TINT.red.box)}>
+          <AlertCircle className="h-7 w-7" />
         </div>
         <p className="text-lg font-bold text-gray-900">{t("studentDetail.notFound")}</p>
         <p className="text-sm text-gray-400">

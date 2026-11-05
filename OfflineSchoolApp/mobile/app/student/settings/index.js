@@ -25,6 +25,7 @@ import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 import * as ImagePicker from "expo-image-picker";
 import { errorText } from "../../../src/utils/appError";
 import { needsInternetFailureText, requireOnline } from "../../../src/hooks/useNeedsInternet";
@@ -95,8 +96,8 @@ function SettingRow({
       disabled={disabled || type === "toggle"}
       activeOpacity={0.7}
     >
-      <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-        <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+      <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+        <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
       </View>
       <View style={sr.textWrap}>
         <Text style={[sr.title, destructive && sr.destructive]}>{title}</Text>
@@ -1035,7 +1036,7 @@ export default function StudentSettingsScreen() {
         {/* ── ACCOUNT ── */}
         <Section title={t("studentSettings.accountSection")}>
           <SettingRow
-            icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
+            icon="person-outline" iconBg={ACCENT.indigo.solid}
             title={t("studentSettings.editProfile")}
             subtitle={
               profileComplete
@@ -1046,7 +1047,7 @@ export default function StudentSettingsScreen() {
             onPress={() => router.push("/student/profile/setup")}
           />
           <SettingRow
-            icon="lock-closed-outline" iconBg="#FEF3C7" iconColor={C.warning}
+            icon="lock-closed-outline" iconBg={ACCENT.amber.solid}
             title={t("studentSettings.changePassword")}
             subtitle={
               mustReset
@@ -1069,7 +1070,7 @@ export default function StudentSettingsScreen() {
               </Text>
             </View>
             <SettingRow
-              icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
+              icon="id-card-outline" iconBg={ACCENT.violet.solid}
               title={t("studentSettings.enrollmentNumber")}
               subtitle={t("studentSettings.uniqueLoginId")}
               type="value"
@@ -1085,44 +1086,44 @@ export default function StudentSettingsScreen() {
           <Section title={t("studentSettings.personalDetails")}>
             {!!genderDisplay && (
               <SettingRow
-                icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
+                icon="person-outline" iconBg={ACCENT.indigo.solid}
                 title={t("studentSettings.gender")} type="value" value={genderDisplay}
               />
             )}
             {!!profile.dateOfBirth && (
               <SettingRow
-                icon="calendar-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="calendar-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.dateOfBirth")} type="value" value={profile.dateOfBirth}
               />
             )}
             {!!profile.placeOfBirth && (
               <SettingRow
-                icon="location-outline" iconBg="#DBEAFE" iconColor="#2563EB"
+                icon="location-outline" iconBg={ACCENT.blue.solid}
                 title={t("studentSettings.placeOfBirth")} type="value" value={profile.placeOfBirth}
               />
             )}
             {!!profile.nationalId && (
               <SettingRow
-                icon="card-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="card-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.nationalId")} type="value" value={profile.nationalId}
               />
             )}
             {!!profile.bloodGroup && (
               <SettingRow
-                icon="water-outline" iconBg={C.errorBg} iconColor={C.error}
+                icon="water-outline" iconBg={ACCENT.red.solid}
                 title={t("studentSettings.bloodGroup")} type="value" value={profile.bloodGroup}
               />
             )}
             {!!profile.bio && (
               <SettingRow
-                icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="document-text-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.aboutMe")} type="value" value={profile.bio}
                 last={!profile.medicalConditions && !isRepeating}
               />
             )}
             {!!profile.medicalConditions && (
               <SettingRow
-                icon="medical-outline" iconBg={C.errorBg} iconColor={C.error}
+                icon="medical-outline" iconBg={ACCENT.red.solid}
                 title={t("studentSettings.healthMedical")}
                 subtitle={t("studentSettings.healthMedicalHint")}
                 type="value" value={profile.medicalConditions}
@@ -1131,7 +1132,7 @@ export default function StudentSettingsScreen() {
             )}
             {isRepeating && (
               <SettingRow
-                icon="repeat-outline" iconBg={C.warningBg} iconColor={C.warning}
+                icon="repeat-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.academicStatus")} type="value"
                 value={t("studentSettings.repeating")}
                 last
@@ -1145,19 +1146,19 @@ export default function StudentSettingsScreen() {
           <Section title={t("studentSettings.contactAddress")}>
             {!!profile.phone && (
               <SettingRow
-                icon="call-outline" iconBg={C.successBg} iconColor={C.success}
+                icon="call-outline" iconBg={ACCENT.green.solid}
                 title={t("studentSettings.phone")} type="value" value={profile.phone}
               />
             )}
             {!!profile.alternatePhone && (
               <SettingRow
-                icon="call-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="call-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.alternatePhone")} type="value" value={profile.alternatePhone}
               />
             )}
             {!!fullAddress && (
               <SettingRow
-                icon="home-outline" iconBg="#DBEAFE" iconColor="#2563EB"
+                icon="home-outline" iconBg={ACCENT.blue.solid}
                 title={t("studentSettings.address")} type="value" value={fullAddress}
                 last
               />
@@ -1170,7 +1171,7 @@ export default function StudentSettingsScreen() {
           <Section title={t("studentSettings.guardianParent")}>
             {!!profile.guardianName && (
               <SettingRow
-                icon="people-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="people-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianName")}
                 subtitle={
                   profile.guardianRelation
@@ -1183,13 +1184,13 @@ export default function StudentSettingsScreen() {
             )}
             {!!profile.guardianPhone && (
               <SettingRow
-                icon="call-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="call-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianPhone")} type="value" value={profile.guardianPhone}
               />
             )}
             {!!profile.guardianEmail && (
               <SettingRow
-                icon="mail-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="mail-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianEmail")} type="value" value={profile.guardianEmail}
                 last
               />
@@ -1208,21 +1209,21 @@ export default function StudentSettingsScreen() {
             </View>
             {!!profile.admissionNo && (
               <SettingRow
-                icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
+                icon="id-card-outline" iconBg={ACCENT.violet.solid}
                 title={t("studentSettings.admissionNo")} type="value" value={profile.admissionNo}
                 disabled
               />
             )}
             {!!profile.className && (
               <SettingRow
-                icon="school-outline" iconBg={C.primaryBg} iconColor={C.primary}
+                icon="school-outline" iconBg={ACCENT.indigo.solid}
                 title={t("studentSettings.classTitle")} type="value" value={profile.className}
                 disabled
               />
             )}
             {!!profile.grade && profile.grade !== profile.className && (
               <SettingRow
-                icon="ribbon-outline" iconBg={C.successBg} iconColor={C.success}
+                icon="ribbon-outline" iconBg={ACCENT.green.solid}
                 title={t("studentSettings.gradeYear")} type="value" value={profile.grade}
                 disabled last
               />
@@ -1245,7 +1246,7 @@ export default function StudentSettingsScreen() {
           </View>
 
           <SettingRow
-            icon="notifications-outline" iconBg="#FEF3C7" iconColor={C.warning}
+            icon="notifications-outline" iconBg={ACCENT.amber.solid}
             title={t("studentSettings.pushNotifications")}
             subtitle={t("studentSettings.pushNotificationsHint")}
             type="toggle" value={notifEnabled} onToggle={setNotifEnabled} last
@@ -1255,7 +1256,7 @@ export default function StudentSettingsScreen() {
         {/* ── SUPPORT ── */}
         <Section title={t("studentSettings.support")}>
           <SettingRow
-            icon="help-circle-outline" iconBg={C.primaryBg} iconColor={C.primary}
+            icon="help-circle-outline" iconBg={ACCENT.indigo.solid}
             title={t("studentSettings.helpFaqs")} type="arrow"
             onPress={() =>
               Alert.alert(
@@ -1265,11 +1266,11 @@ export default function StudentSettingsScreen() {
             }
           />
           <SettingRow
-            icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
+            icon="document-text-outline" iconBg={ACCENT.slate.solid}
             title={t("studentSettings.terms")} type="arrow" onPress={() => {}}
           />
           <SettingRow
-            icon="shield-outline" iconBg={C.gray100} iconColor={C.gray500}
+            icon="shield-outline" iconBg={ACCENT.slate.solid}
             title={t("studentSettings.privacy")} type="arrow" onPress={() => {}} last
           />
         </Section>
@@ -1277,7 +1278,7 @@ export default function StudentSettingsScreen() {
         {/* ── SESSION ── */}
         <Section title={t("studentSettings.session")}>
           <SettingRow
-            icon="log-out-outline" iconBg={C.errorBg} iconColor={C.error}
+            icon="log-out-outline" iconBg={ACCENT.red.solid}
             title={t("studentSettings.logout")}
             subtitle={t("studentSettings.signOutHint")}
             type="arrow" destructive onPress={handleLogout} last

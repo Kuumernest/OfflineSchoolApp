@@ -26,7 +26,8 @@ import {
 } from "lucide-react";
 
 import { Card, CardHeader } from "@/components/ui/Card";
-import { CARD_SHELL, iconBox, type TileTone } from "@/config/sections";
+import { type TileTone } from "@/config/sections";
+import { DASH_TINT, dashTint, type DashAccent } from "@/config/dashboardTint";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -153,24 +154,28 @@ export default function ReportsOverviewPage() {
         <div className="grid sm:grid-cols-2 gap-3">
           <ToolLink
             to="/reports/templates"
+            accent="teal"
             icon={LayoutTemplate}
             title={t("reports.cardTemplates")}
             description={t("reports.cardTemplatesBlurb")}
           />
           <ToolLink
             to="/reports/cards"
+            accent="slate"
             icon={FileText}
             title={t("reports.generateCards")}
             description={t("reports.generateCardsBlurb")}
           />
           <ToolLink
             to="/exams/results"
+            accent="amber"
             icon={TrendingUp}
             title={t("reports.examResults")}
             description={t("reports.examResultsBlurb")}
           />
           <ToolLink
             to="/attendance/reports"
+            accent="green"
             icon={ClipboardCheck}
             title={t("reports.attendance")}
             description={t("reports.attendanceBlurb")}
@@ -208,10 +213,11 @@ function StatCard({
   failed:   boolean;
 }) {
   const { t } = useTranslation();
+  const tint = dashTint(tone);
   return (
-    <div className={cn("min-w-0 p-5", CARD_SHELL)}>
+    <div className={cn("min-w-0 p-5", tint.card)}>
       <div className="flex items-start justify-between gap-2">
-        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", iconBox(tone))}>
+        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tint.box)}>
           <Icon className="w-[18px] h-[18px]" />
         </div>
         {/* A failed card says so rather than showing a confident zero — "0
@@ -225,7 +231,8 @@ function StatCard({
         ) : (
           <p className={cn(
             "text-[34px] font-bold leading-none tracking-tight tabular-nums",
-            failed ? "text-ink-placeholder" : "text-ink",
+            // ink-placeholder is under AA on a wash.
+            failed ? "text-ink-muted" : tint.number,
           )}>
             {failed || value == null ? "—" : value.toLocaleString()}
             {!failed && value != null && suffix}
@@ -233,7 +240,7 @@ function StatCard({
         )}
         <p className="mt-2 text-sm font-medium text-ink-muted">{label}</p>
         {detail && !failed && (
-          <p className="text-xs mt-0.5 text-ink-faint">{detail}</p>
+          <p className="text-xs mt-0.5 text-ink-muted">{detail}</p>
         )}
       </div>
     </div>
@@ -242,33 +249,39 @@ function StatCard({
 
 function ToolLink({
   to,
+  accent,
   icon: Icon,
   title,
   description,
 }: {
   to:          string;
+  /** The tool's kind colour, as on the dashboard's quick actions. */
+  accent:      DashAccent;
   icon:        React.ComponentType<{ className?: string }>;
   title:       string;
   description: string;
 }) {
+  const tint = DASH_TINT[accent];
   return (
     <Link
       to={to}
       className={cn(
-        "group flex items-start gap-3 p-4 rounded-lg border border-gray-200",
-        "hover:border-primary-300 hover:bg-primary-50/40 transition-colors",
+        "group flex items-start gap-3 p-4",
+        tint.card,
+        // A tinted card keeps its coloured top edge on hover.
+        "hover:shadow-lift transition",
       )}
     >
-      <div className="w-9 h-9 rounded-lg bg-gray-50 group-hover:bg-white flex items-center justify-center shrink-0 transition-colors">
-        <Icon className="w-4 h-4 text-gray-500 group-hover:text-primary-600 transition-colors" />
+      <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tint.box)}>
+        <Icon className="w-4 h-4" />
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-800 flex items-center gap-1">
+        <p className="text-sm font-medium text-ink flex items-center gap-1">
           {title}
-          <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-500 group-hover:translate-x-0.5 transition-all" />
+          <ArrowRight className={cn("w-3.5 h-3.5 group-hover:translate-x-0.5 transition-all", tint.glyph)} />
         </p>
-        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+        <p className="text-xs text-ink-muted mt-0.5">{description}</p>
       </div>
     </Link>
   );

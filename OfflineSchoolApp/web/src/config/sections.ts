@@ -1,22 +1,23 @@
 // web/src/config/sections.ts
 /**
- * How the rail is grouped, and which accent a card's icon box takes.
+ * How the rail is grouped, and which colour a card takes.
  *
  * ── Colour ────────────────────────────────────────────────────────────────
  *
- * The console is neutral: white cards, slate text, one brand blue for what is
- * interactive. Colour appears in two places only:
+ * The console is a calm blue SaaS frame: white panels, slate text, one brand
+ * blue for what is interactive. Colour appears in two places:
  *
- *   1. The icon box of a normal stat / module card, tinted by what the card
- *      counts (CARD_ACCENT). The card itself stays white. The mapping is the
- *      same as the mobile app's (mobile/src/theme/colors.js, TILE), so a pupil
- *      count is a blue box on both.
- *   2. Status (SEMANTIC): warning, error, info, success — a light tint, never
- *      a solid fill, and only when the value means something.
+ *   1. Every stat card, summary tile and icon square takes its kind's colour
+ *      (config/dashboardTint.ts): a soft wash, a 3px top edge, a solid icon
+ *      square with a white icon. The mapping is the same as the mobile app's
+ *      (mobile/src/theme/colors.js, TILE), so a pupil count is blue on both.
+ *   2. Status (SEMANTIC): warning, error, info, success — for banners and
+ *      messages whose value means something.
  *
  * Class strings are written out in full, never composed at runtime: Tailwind
  * only emits classes it can read in source.
  */
+import { DASH_ACCENT, DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
 /** What a card is about. `neutral` is a figure that belongs to no kind. */
 export type TileTone =
@@ -24,36 +25,13 @@ export type TileTone =
   | "attendance" | "exams"  | "homework" | "reports"  | "finance"
   | "comms"    | "settings" | "neutral";
 
-export type Accent = "blue" | "indigo" | "violet" | "slate" | "teal";
+export type Accent = DashAccent;
 
-/** Icon box classes per accent: a pale box, the accent on the glyph. */
-export const ACCENT_BOX: Record<Accent, string> = {
-  blue:   "bg-accent-blue-soft text-accent-blue",
-  indigo: "bg-accent-indigo-soft text-accent-indigo",
-  violet: "bg-accent-violet-soft text-accent-violet",
-  slate:  "bg-accent-slate-soft text-accent-slate",
-  teal:   "bg-accent-teal-soft text-accent-teal",
-};
+/** Which colour each kind takes — the same as mobile. */
+export const CARD_ACCENT: Record<TileTone, Accent> = DASH_ACCENT;
 
-/** Which accent each kind takes — the same as mobile. */
-export const CARD_ACCENT: Record<TileTone, Accent> = {
-  students:   "blue",
-  teachers:   "indigo",
-  classes:    "violet",
-  subjects:   "slate",
-  timetable:  "teal",
-  attendance: "teal",
-  exams:      "blue",
-  homework:   "indigo",
-  reports:    "violet",
-  finance:    "teal",
-  comms:      "blue",
-  settings:   "slate",
-  neutral:    "slate",
-};
-
-/** Icon box classes for a kind. */
-export const iconBox = (tone: TileTone): string => ACCENT_BOX[CARD_ACCENT[tone]];
+/** The icon square for a kind: solid, with a white icon. */
+export const iconBox = (tone: TileTone): string => DASH_TINT[DASH_ACCENT[tone]].box;
 
 /** The shell every normal card shares: white, a hairline, a faint shadow. */
 export const CARD_SHELL = "rounded-card border border-line bg-surface shadow-card";

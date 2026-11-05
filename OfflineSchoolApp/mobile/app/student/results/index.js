@@ -10,6 +10,8 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import ExamService      from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS as THEME, TILE, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const COLORS = {
   primary:   "#2563EB",
@@ -107,16 +109,16 @@ const ResultPreviewCard = ({ item, onPress }) => {
         </View>
 
         {/* Stats */}
-        <View style={rc.statsRow}>
+        <View style={[rc.statsRow, tileShell("results")]}>
           <View style={rc.statItem}>
-            <Text style={[rc.statVal, { color: passColor }]}>
+            <Text style={[rc.statVal, { color: isPassing ? SEMANTIC.success.text : SEMANTIC.error.text }]}>
               {pct.toFixed(1)}%
             </Text>
             <Text style={rc.statLbl}>{t("results.my.scoreStat")}</Text>
           </View>
 
           <View style={rc.statItem}>
-            <Text style={[rc.statVal, { color: COLORS.primary }]}>
+            <Text style={rc.statVal}>
               {item.overallGrade || "—"}
             </Text>
             <Text style={rc.statLbl}>{t("results.my.gradeStat")}</Text>
@@ -124,7 +126,7 @@ const ResultPreviewCard = ({ item, onPress }) => {
 
           {item.classPosition != null && (
             <View style={rc.statItem}>
-              <Text style={[rc.statVal, { color: COLORS.warning }]}>
+              <Text style={rc.statVal}>
                 #{item.classPosition}
                 {item.totalInClass ? `/${item.totalInClass}` : ""}
               </Text>
@@ -189,12 +191,17 @@ const rc = StyleSheet.create({
     alignItems:    "center",
     gap:           14,
     flexWrap:      "wrap",
+    backgroundColor: TILE.results.wash,
+    borderWidth:   1,
+    borderColor:   THEME.border,
+    borderRadius:  10,
+    padding:       10,
   },
   statItem: { alignItems: "center" },
-  statVal:  { fontSize: 16, fontWeight: "800" },
+  statVal:  { fontSize: 16, fontWeight: "800", color: TILE.results.deep },
   statLbl:  {
     fontSize:      9,
-    color:         COLORS.gray400,
+    color:         THEME.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },

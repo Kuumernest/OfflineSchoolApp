@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import SyncOverwriteService from "@/services/sync-overwrite.service";
 import { getStudentById }   from "@/services/student.service";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -36,7 +37,7 @@ const getActionConfig = (action) => {
     case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.aDeleted"   };
     case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.aMoved"     };
     // `raw` keeps an unrecognised action visible instead of mislabelling it.
-    default:        return { icon: "sync-outline",             color: "#6B7280", labelKey: "syncScreens.aUpdated", raw: action };
+    default:        return { icon: "sync-outline",             color: ACCENT.slate.solid, labelKey: "syncScreens.aUpdated", raw: action };
   }
 };
 
@@ -197,8 +198,8 @@ export default function OverwriteDetailScreen() {
 
         {/* Summary card */}
         <View style={styles.summaryCard}>
-          <View style={[styles.actionIcon, { backgroundColor: action.color + "15" }]}>
-            <Ionicons name={action.icon} size={22} color={action.color} />
+          <View style={[styles.actionIcon, { backgroundColor: action.color }]}>
+            <Ionicons name={action.icon} size={22} color={COLORS.onPrimary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.summaryAction}>

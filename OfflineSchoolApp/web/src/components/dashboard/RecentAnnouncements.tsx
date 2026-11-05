@@ -92,7 +92,7 @@ export default function RecentAnnouncements({
               className="w-full rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
             >
               <div className="flex items-start gap-3">
-                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.sky.softBox)}>
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.sky.box)}>
                   <Megaphone className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">

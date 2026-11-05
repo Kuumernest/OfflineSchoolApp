@@ -31,6 +31,7 @@ import {
 } from "@/services/assignment.service";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import { useTranslation } from "react-i18next";
 
 const QK = {
@@ -121,11 +122,12 @@ export default function AssignmentsPage() {
 
       {/* ── Totals ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat icon={Users}      label={t("assignments.teachersAssigned")} value={totals.teachers} />
-        <Stat icon={School}     label={t("assignments.classesCovered")}   value={totals.classes} />
-        <Stat icon={BookMarked} label={t("teachers.subjectsCovered")}  value={totals.subjects} />
+        <Stat icon={Users}      accent="violet" label={t("assignments.teachersAssigned")} value={totals.teachers} />
+        <Stat icon={School}     accent="indigo" label={t("assignments.classesCovered")}   value={totals.classes} />
+        <Stat icon={BookMarked} accent="slate"  label={t("teachers.subjectsCovered")}  value={totals.subjects} />
         <Stat
           icon={AlertCircle}
+          accent="violet"
           label={t("assignments.brokenLinks")}
           value={totals.orphaned}
           tone={totals.orphaned > 0 ? "warn" : "default"}
@@ -229,35 +231,38 @@ export default function AssignmentsPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A count on its kind's tinted card, with a solid icon square. A "warn" count
+ * keeps the kind's wash but takes an amber border and an amber figure.
+ */
 function Stat({
   icon: Icon,
+  accent,
   label,
   value,
   tone = "default",
 }: {
-  icon:  React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
-  tone?: "default" | "warn";
+  icon:   React.ComponentType<{ className?: string }>;
+  accent: DashAccent;
+  label:  string;
+  value:  number;
+  tone?:  "default" | "warn";
 }) {
+  const tint = DASH_TINT[accent];
+  const warn = tone === "warn";
   return (
-    <Card className="flex items-center gap-3" padding>
+    <Card className={cn("flex items-center gap-3", warn ? tint.warnCard : tint.card)} padding>
       <div
         className={cn(
           "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
-          tone === "warn" ? "bg-amber-50" : "bg-primary-50",
+          tint.box,
         )}
       >
-        <Icon
-          className={cn(
-            "w-4 h-4",
-            tone === "warn" ? "text-amber-600" : "text-primary-600",
-          )}
-        />
+        <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0">
-        <p className="text-xl font-semibold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs text-gray-500 truncate">{label}</p>
+        <p className={cn("text-xl font-semibold leading-tight", warn ? "text-warning-text" : tint.number)}>{value}</p>
+        <p className="text-xs text-ink-muted truncate">{label}</p>
       </div>
     </Card>
   );

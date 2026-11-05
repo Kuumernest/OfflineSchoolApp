@@ -22,6 +22,8 @@ import ReportService      from "../../../src/services/financeReport.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatMonth, formatDateTime } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const C = {
   primary:   "#3B4996",
@@ -185,15 +187,15 @@ export default function FinanceReportsScreen() {
 
             {/* Headline */}
             <View style={styles.row}>
-              <View style={[styles.statCard, { backgroundColor: C.successBg, borderColor: "#C3E2D0" }]}>
+              <View style={[styles.statCard, tileShell("finance")]}>
                 <Text style={styles.statLabel}>{t("finrep.income")}</Text>
-                <Text style={[styles.statValue, { color: C.success }]}>
+                <Text style={[styles.statValue, { color: SEMANTIC.success.text }]}>
                   {formatMoney(summary?.income?.total ?? 0)}
                 </Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: C.dangerBg, borderColor: "#F2D3CF" }]}>
+              <View style={[styles.statCard, tileShell("finance")]}>
                 <Text style={styles.statLabel}>{t("finrep.expenditure")}</Text>
-                <Text style={[styles.statValue, { color: C.danger }]}>
+                <Text style={[styles.statValue, { color: SEMANTIC.error.text }]}>
                   {formatMoney(summary?.expenditure?.total ?? 0)}
                 </Text>
               </View>

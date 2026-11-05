@@ -17,6 +17,8 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, TILE } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -506,13 +508,13 @@ const persistAssignmentsToSQLite = async (
 // SUMMARY CARD
 // ─────────────────────────────────────────────────────────
 
-function SummaryCard({ icon, count, label, color, bg }) {
+function SummaryCard({ icon, count, label, kind }) {
   return (
-    <View style={[sc2.card, { borderColor: color + "25" }]}>
-      <View style={[sc2.iconBg, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={18} color={color} />
+    <View style={[sc2.card, tileShell(kind)]}>
+      <View style={[sc2.iconBg, { backgroundColor: TILE[kind].solid }]}>
+        <Ionicons name={icon} size={18} color={COLORS.onPrimary} />
       </View>
-      <Text style={[sc2.count, { color }]}>{count}</Text>
+      <Text style={[sc2.count, { color: TILE[kind].deep }]}>{count}</Text>
       <Text style={sc2.label}>{label}</Text>
     </View>
   );
@@ -529,7 +531,7 @@ const sc2 = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 2,
   },
   count: { fontSize: 22, fontWeight: "800" },
-  label: { fontSize: 10, fontWeight: "600", color: C.gray500 },
+  label: { fontSize: 10, fontWeight: "600", color: COLORS.textSecondary },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -688,22 +690,19 @@ export default function TeacherSubjectsScreen() {
           icon="school-outline"
           count={stats.classes}
           label={t("teacherSubjects.classes")}
-          color={C.primary}
-          bg={C.primaryBg}
+          kind="classes"
         />
         <SummaryCard
           icon="book-outline"
           count={stats.subjects}
           label={t("teacherSubjects.subjects")}
-          color={C.success}
-          bg={C.successBg}
+          kind="subjects"
         />
         <SummaryCard
           icon="people-outline"
           count={stats.students}
           label={t("teacherSubjects.students")}
-          color={C.warning}
-          bg={C.warningBg}
+          kind="students"
         />
       </View>
 

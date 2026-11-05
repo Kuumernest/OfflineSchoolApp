@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
 import NeedsInternet from "@/components/offline/NeedsInternet";
 import { useNeedsInternet } from "@/hooks/useNeedsInternet";
@@ -229,11 +230,11 @@ export default function AnnualResultsPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        <SummaryCard icon={Users} label={t("annualResults.totalStudents")} value={String(total)} />
-        <SummaryCard icon={TrendingUp} label={t("annualResults.schoolAverage")} value={avg} />
-        <SummaryCard icon={Award} label={t("annualResults.passed")} value={String(passed)} />
-        <SummaryCard icon={Award} label={t("annualResults.passRate")} value={`${passRate}%`} />
-        <SummaryCard icon={GraduationCap} label={t("annualResults.promoted")} value={String(promoted)} />
+        <SummaryCard icon={Users} accent="blue" label={t("annualResults.totalStudents")} value={String(total)} />
+        <SummaryCard icon={TrendingUp} accent="slate" label={t("annualResults.schoolAverage")} value={avg} />
+        <SummaryCard icon={Award} accent="green" label={t("annualResults.passed")} value={String(passed)} />
+        <SummaryCard icon={Award} accent="slate" label={t("annualResults.passRate")} value={`${passRate}%`} />
+        <SummaryCard icon={GraduationCap} accent="blue" label={t("annualResults.promoted")} value={String(promoted)} />
       </div>
 
       {/* Table */}
@@ -358,21 +359,25 @@ export default function AnnualResultsPage() {
 
 function SummaryCard({
   icon: Icon,
+  accent,
   label,
   value,
 }: {
   icon: React.ComponentType<{ className?: string }>;
+  /** The figure's kind colour (config/dashboardTint.ts). */
+  accent: DashAccent;
   label: string;
   value: string;
 }) {
+  const tint = DASH_TINT[accent];
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50">
-        <Icon className="h-5 w-5 text-primary-600" />
+    <div className={cn("flex items-center gap-3 p-4", tint.card)}>
+      <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", tint.box)}>
+        <Icon className="h-5 w-5" />
       </div>
       <div>
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-lg font-bold text-gray-900">{value}</p>
+        <p className="text-xs text-ink-muted">{label}</p>
+        <p className={cn("text-lg font-bold", tint.number)}>{value}</p>
       </div>
     </div>
   );

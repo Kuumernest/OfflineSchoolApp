@@ -13,6 +13,8 @@ import { getDatabase } from "../../src/db/database";
 import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { errorText } from "../../src/utils/appError";
+import { COLORS, ACCENT } from "../../src/theme/colors";
+import { tileShell } from "../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -26,10 +28,10 @@ const TABS = [
 ];
 
 const STATUS_META = {
-  present: { labelKey: "studentAttendance.statusPresent", color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle"  },
-  absent:  { labelKey: "studentAttendance.statusAbsent",  color: "#DC2626", bg: "#FEE2E2", icon: "close-circle"      },
-  late:    { labelKey: "studentAttendance.statusLate",    color: "#D97706", bg: "#FEF3C7", icon: "time"               },
-  excused: { labelKey: "studentAttendance.statusExcused", color: "#7C3AED", bg: "#EDE9FE", icon: "information-circle" },
+  present: { labelKey: "studentAttendance.statusPresent", color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle",   accent: ACCENT.green },
+  absent:  { labelKey: "studentAttendance.statusAbsent",  color: "#DC2626", bg: "#FEE2E2", icon: "close-circle",       accent: ACCENT.red },
+  late:    { labelKey: "studentAttendance.statusLate",    color: "#D97706", bg: "#FEF3C7", icon: "time",                accent: ACCENT.amber },
+  excused: { labelKey: "studentAttendance.statusExcused", color: "#7C3AED", bg: "#EDE9FE", icon: "information-circle",  accent: ACCENT.violet },
 };
 
 const MONTH_KEYS = [
@@ -354,19 +356,22 @@ const StatCard = ({ status, count, total }) => {
   const meta = STATUS_META[status] || STATUS_META.present;
   const pct  = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
-    <View style={[sc.card, { backgroundColor: meta.bg }]}>
-      <Ionicons name={meta.icon} size={22} color={meta.color} />
-      <Text style={[sc.count, { color: meta.color }]}>{count}</Text>
-      <Text style={[sc.label, { color: meta.color }]}>{t(meta.labelKey)}</Text>
-      <Text style={[sc.pct,   { color: meta.color }]}>{pct}%</Text>
+    <View style={[sc.card, tileShell("attendance")]}>
+      <View style={[sc.box, { backgroundColor: meta.accent.solid }]}>
+        <Ionicons name={meta.icon} size={18} color={COLORS.onPrimary} />
+      </View>
+      <Text style={[sc.count, { color: meta.accent.deep }]}>{count}</Text>
+      <Text style={sc.label}>{t(meta.labelKey)}</Text>
+      <Text style={sc.pct}>{pct}%</Text>
     </View>
   );
 };
 const sc = StyleSheet.create({
-  card:  { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center", gap: 3 },
+  card:  { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center", gap: 3, borderWidth: 1 },
+  box:   { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   count: { fontSize: 22, fontWeight: "800" },
-  label: { fontSize: 10, fontWeight: "600" },
-  pct:   { fontSize: 10, color: "#6B7280" },
+  label: { fontSize: 10, fontWeight: "600", color: COLORS.textSecondary },
+  pct:   { fontSize: 10, color: COLORS.textSecondary },
 });
 
 const RateRing = ({ rate, label }) => {
@@ -571,7 +576,7 @@ const RatePill = ({ rate }) => {
   const { t } = useTranslation();
   return (
     <View style={s.ratePill}>
-      <Text style={[s.ratePillText, { color: getRateColor(rate) }]}>
+      <Text style={[s.ratePillText, { color: rate >= 90 ? ACCENT.green.deep : rate >= 75 ? ACCENT.amber.deep : ACCENT.red.deep }]}>
         {t("studentAttendance.ratePill", { rate })}
       </Text>
     </View>
@@ -1069,7 +1074,7 @@ const s = StyleSheet.create({
   statCardsWrap: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 6 },
   rateRow:       { flexDirection: "row", alignItems: "center", gap: 16 },
 
-  ratePill:     { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: "#F3F4F6" },
+  ratePill:     { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: ACCENT.green.wash },
   ratePillText: { fontSize: 11, fontWeight: "700" },
 
   navigator: {

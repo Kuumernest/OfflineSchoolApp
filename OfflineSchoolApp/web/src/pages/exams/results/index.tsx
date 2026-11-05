@@ -20,6 +20,7 @@ import type {
 }                                     from "@/types/exam.types";
 import { Trophy, BarChart3, Calculator, Pin, Printer } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { DASH_TINT } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -204,22 +205,24 @@ const ExamPicker = ({
 const StatsOverview = ({ stats }: { stats: Stats }) => {
   const { t } = useTranslation();
   const cards = [
-    { id: "students", label: t("academic.student_other"), value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
-    { id: "passed",   label: t("results.passed"),         value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
-    { id: "failed",   label: t("results.failed"),         value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
-    { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             color: "text-primary-600",  bg: "bg-primary-50"   },
-    { id: "highest",  label: t("results.highest"),        value: on20(stats.highest),             color: "text-emerald-600", bg: "bg-emerald-50"  },
-    { id: "lowest",   label: t("results.lowest"),         value: on20(stats.lowest),              color: "text-rose-600",    bg: "bg-rose-50"     },
+    // Tinted cards (config/dashboardTint.ts): the kind's wash and top edge,
+    // the figure in its deep shade.
+    { id: "students", label: t("academic.student_other"), value: stats.totalStudents,             tint: DASH_TINT.blue  },
+    { id: "passed",   label: t("results.passed"),         value: stats.passed,                    tint: DASH_TINT.green },
+    { id: "failed",   label: t("results.failed"),         value: stats.failed,                    tint: DASH_TINT.red   },
+    { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, tint: DASH_TINT.slate },
+    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             tint: DASH_TINT.amber },
+    { id: "highest",  label: t("results.highest"),        value: on20(stats.highest),             tint: DASH_TINT.green },
+    { id: "lowest",   label: t("results.lowest"),         value: on20(stats.lowest),              tint: DASH_TINT.red   },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
       {cards.map((c) => (
         <div key={c.id}
-             className={`rounded-xl border border-gray-100 p-3 text-center ${c.bg}`}>
-          <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">{c.label}</p>
+             className={`p-3 text-center ${c.tint.card}`}>
+          <p className={`text-xl font-bold ${c.tint.number}`}>{c.value}</p>
+          <p className="text-xs text-ink-muted font-medium mt-0.5">{c.label}</p>
         </div>
       ))}
     </div>

@@ -225,7 +225,7 @@ export default function TeacherAssignmentDetailPage() {
       {/* TEACHER PROFILE CARD */}
       {teacher && (
         <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-100 text-xl font-bold text-primary-700">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-violet-solid text-xl font-bold text-white">
             {teacher.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -236,14 +236,14 @@ export default function TeacherAssignmentDetailPage() {
           </div>
           <div className="flex shrink-0 items-center gap-6">
             <div className="text-center">
-              <p className="text-xl font-bold text-primary-600">
+              <p className="text-xl font-bold text-accent-slate-deep">
                 {assignments.length}
               </p>
               <p className="text-xs text-gray-400">{t("academic.subject_other")}</p>
             </div>
             <div className="h-8 w-px bg-gray-200" />
             <div className="text-center">
-              <p className="text-xl font-bold text-purple-600">
+              <p className="text-xl font-bold text-accent-indigo-deep">
                 {classCount}
               </p>
               <p className="text-xs text-gray-400">{t("academic.class_other")}</p>
@@ -255,8 +255,8 @@ export default function TeacherAssignmentDetailPage() {
       {/* EMPTY STATE */}
       {assignments.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
-            <BookOpen size={28} className="text-gray-300" />
+          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-violet-solid text-white">
+            <BookOpen size={28} />
           </div>
           <p className="text-base font-bold text-gray-900">{t("assignments.none")}</p>
           <p className="mt-1 text-sm text-gray-400">
@@ -294,8 +294,8 @@ export default function TeacherAssignmentDetailPage() {
               className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
             >
               <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100">
-                  <School size={16} className="text-purple-700" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-indigo-solid text-white">
+                  <School size={16} />
                 </div>
                 <span className="flex-1 truncate text-sm font-bold text-gray-900">
                   {group.className}

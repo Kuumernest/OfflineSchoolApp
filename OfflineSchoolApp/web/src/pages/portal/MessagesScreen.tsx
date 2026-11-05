@@ -29,21 +29,22 @@ import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
 export type MsgView = "messages" | "notices" | "news";
 
 /**
- * One row per notification kind the portal may show, keyed on the kind the
- * server sends, so a kind added server-side falls back rather than being
- * mislabelled. The same keys and wording as the phone's NOTICE_META.
+ * One row per notification kind the portal may show (its icon white on a
+ * solid circle: sky by default, green / red / amber for good news, a problem
+ * or a warning), keyed on the kind the server sends, so a kind added
+ * server-side falls back rather than being mislabelled. The same keys and wording as the phone's NOTICE_META.
  */
 const NOTICE_META: Record<string, { icon: React.ReactNode; tone: string; labelKey: string }> = {
-  "gate.arrival":      { icon: <LogIn className="h-4 w-4" />,         tone: "bg-success-soft text-success-text",   labelKey: "portal.noticeArrival" },
-  "gate.departure":    { icon: <LogOut className="h-4 w-4" />,        tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeDeparture" },
-  "attendance.absent": { icon: <AlertCircle className="h-4 w-4" />,   tone: "bg-danger-soft text-danger-text",     labelKey: "portal.noticeAbsent" },
-  "fee.reminder":      { icon: <Wallet2 className="h-4 w-4" />,       tone: "bg-warning-soft text-warning-text",   labelKey: "portal.noticeFeeReminder" },
-  "fee.payment":       { icon: <Receipt className="h-4 w-4" />,       tone: "bg-success-soft text-success-text",   labelKey: "portal.noticePayment" },
-  "result.published":  { icon: <GraduationCap className="h-4 w-4" />, tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeResults" },
-  "announcement":      { icon: <Megaphone className="h-4 w-4" />,     tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeAnnouncement" },
+  "gate.arrival":      { icon: <LogIn className="h-4 w-4" />,         tone: "bg-accent-green-solid text-white",  labelKey: "portal.noticeArrival" },
+  "gate.departure":    { icon: <LogOut className="h-4 w-4" />,        tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeDeparture" },
+  "attendance.absent": { icon: <AlertCircle className="h-4 w-4" />,   tone: "bg-accent-red-solid text-white",    labelKey: "portal.noticeAbsent" },
+  "fee.reminder":      { icon: <Wallet2 className="h-4 w-4" />,       tone: "bg-accent-amber-solid text-white",  labelKey: "portal.noticeFeeReminder" },
+  "fee.payment":       { icon: <Receipt className="h-4 w-4" />,       tone: "bg-accent-green-solid text-white",  labelKey: "portal.noticePayment" },
+  "result.published":  { icon: <GraduationCap className="h-4 w-4" />, tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeResults" },
+  "announcement":      { icon: <Megaphone className="h-4 w-4" />,     tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeAnnouncement" },
   // Derived by the server from unread threads, not a row in the queue.
-  "message":           { icon: <MessageSquare className="h-4 w-4" />, tone: "bg-primary-50 text-primary-700", labelKey: "portal.noticeMessage" },
-  default:             { icon: <Bell className="h-4 w-4" />,          tone: "bg-canvas text-ink-muted",       labelKey: "portal.noticeOther" },
+  "message":           { icon: <MessageSquare className="h-4 w-4" />, tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeMessage" },
+  default:             { icon: <Bell className="h-4 w-4" />,          tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeOther" },
 };
 
 export function MessagesScreen({ view, onView, children, unreadMessages, unreadNotices }: {
@@ -179,7 +180,7 @@ function News({ family }: { family: PortalStudent[] }) {
         return (
           <PortalCard key={a._id} as="article" className="p-4">
             <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600" aria-hidden="true"><Megaphone className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-sky-solid text-white" aria-hidden="true"><Megaphone className="h-4 w-4" /></span>
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold text-ink">{a.title ?? "—"}</h2>
                 <p className="text-xs text-ink-faint">{fmt.date(a.createdAt)}{about.length ? ` · ${t("portal.messagesScreen.about", { names: about.join(", ") })}` : ""}</p>

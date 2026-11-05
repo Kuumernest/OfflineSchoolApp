@@ -27,7 +27,7 @@ export function PortalCard({ className, children, as: Tag = "section", ...rest }
 export function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title: string; hint?: string }) {
   return (
     <div className="flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600" aria-hidden="true">
+      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent-blue-solid text-white" aria-hidden="true">
         {icon}
       </div>
       <p className="text-sm font-medium text-ink">{title}</p>

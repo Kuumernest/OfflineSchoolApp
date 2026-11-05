@@ -14,6 +14,7 @@ import {
 
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import { fetchHome, type PortalHomeChild } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { ordinal, on20 } from "./format";
@@ -45,7 +46,7 @@ export function HomeScreen({ onOpen }: { onOpen: (childId: string, screen: Porta
       {homeQ.data?.latestNews && (
         <PortalCard className="p-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600" aria-hidden="true">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-sky-solid text-white" aria-hidden="true">
               <Megaphone className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
@@ -91,26 +92,26 @@ function ChildCard({ child, index, onOpen }: {
 
       <div className="grid grid-cols-2 gap-px bg-line">
         {/* Latest result */}
-        <Tile icon={<GraduationCap className="h-4 w-4" />} label={t("portal.home.latestResult")} onClick={() => onOpen(child._id, "results")}>
+        <Tile accent="slate" icon={<GraduationCap className="h-4 w-4" />} label={t("portal.home.latestResult")} onClick={() => onOpen(child._id, "results")}>
           {latest?.average != null ? (
             <>
-              <p className="text-2xl font-semibold tabular-nums text-ink">
-                {on20(latest.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span>
+              <p className="text-2xl font-semibold tabular-nums text-accent-slate-deep">
+                {on20(latest.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-muted">/20</span>
               </p>
               {latest.position != null && latest.outOf != null && (
                 <p className="text-sm text-ink-body">{t("portal.home.rank", { position: ordinal(latest.position, i18n.resolvedLanguage), outOf: latest.outOf })}</p>
               )}
-              {latest.examName && <p className="text-xs text-ink-faint">{latest.examName}</p>}
+              {latest.examName && <p className="text-xs text-ink-muted">{latest.examName}</p>}
               {delta != null && latest.previousExamName && <Change delta={delta} exam={latest.previousExamName} />}
             </>
           ) : <p className="text-sm text-ink-muted">{t("portal.home.noResults")}</p>}
         </Tile>
 
         {/* Attendance this month */}
-        <Tile icon={<CalendarCheck className="h-4 w-4" />} label={t("portal.home.attendanceMonth")} onClick={() => onOpen(child._id, "attendance")}>
+        <Tile accent="green" icon={<CalendarCheck className="h-4 w-4" />} label={t("portal.home.attendanceMonth")} onClick={() => onOpen(child._id, "attendance")}>
           {child.attendance.rate != null ? (
             <>
-              <p className={cn("text-2xl font-semibold tabular-nums", child.attendance.rate >= 90 ? "text-ink" : "text-warning-text")}>
+              <p className={cn("text-2xl font-semibold tabular-nums", child.attendance.rate >= 90 ? "text-accent-green-deep" : "text-warning-text")}>
                 {child.attendance.rate}%
               </p>
               <p className="text-sm text-ink-body">{t("portal.home.daysPresent", { present: child.attendance.present, marked: child.attendance.marked })}</p>
@@ -119,10 +120,10 @@ function ChildCard({ child, index, onOpen }: {
         </Tile>
 
         {/* Fees */}
-        <Tile icon={<Wallet className="h-4 w-4" />} label={t("portal.home.balance")} onClick={() => onOpen(child._id, "fees")}>
+        <Tile accent="teal" icon={<Wallet className="h-4 w-4" />} label={t("portal.home.balance")} onClick={() => onOpen(child._id, "fees")}>
           {child.fees == null ? <Skeleton className="h-7 w-24" /> : child.fees.balance > 0 ? (
             <>
-              <p className={cn("text-xl font-semibold tabular-nums", child.fees.isOverdue ? "text-danger-text" : "text-ink")}>{fmt.money(child.fees.balance)}</p>
+              <p className={cn("text-xl font-semibold tabular-nums", child.fees.isOverdue ? "text-danger-text" : "text-accent-teal-deep")}>{fmt.money(child.fees.balance)}</p>
               {child.fees.isOverdue ? (
                 <span className="mt-1 inline-flex items-center rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger-text">
                   {t("portal.home.overdue")}
@@ -139,7 +140,7 @@ function ChildCard({ child, index, onOpen }: {
         </Tile>
 
         {/* Next exam */}
-        <Tile icon={<CalendarClock className="h-4 w-4" />} label={t("portal.home.nextExam")}>
+        <Tile accent="amber" icon={<CalendarClock className="h-4 w-4" />} label={t("portal.home.nextExam")}>
           {child.nextExam ? (
             <>
               <p className="font-semibold text-ink">{child.nextExam.name}</p>
@@ -152,24 +153,42 @@ function ChildCard({ child, index, onOpen }: {
   );
 }
 
-/** One figure on a child's card; tappable when it leads somewhere. */
-function Tile({ icon, label, children, onClick }: {
-  icon: React.ReactNode; label: string; children: React.ReactNode; onClick?: () => void;
+/** The wash for each tile's kind (DASH_TINT's card wash, without the card's border). */
+const TILE_WASH: Record<DashAccent, string> = {
+  blue:   "bg-accent-blue-soft",
+  violet: "bg-accent-violet-soft",
+  indigo: "bg-accent-indigo-soft",
+  slate:  "bg-accent-slate-soft",
+  amber:  "bg-accent-amber-soft",
+  green:  "bg-accent-green-soft",
+  teal:   "bg-accent-teal-soft",
+  sky:    "bg-accent-sky-soft",
+  red:    "bg-accent-red-soft",
+};
+
+/**
+ * One figure on a child's card; tappable when it leads somewhere. It takes its
+ * kind's wash and top edge, with the icon white on a solid square.
+ */
+function Tile({ accent, icon, label, children, onClick }: {
+  accent: DashAccent; icon: React.ReactNode; label: string; children: React.ReactNode; onClick?: () => void;
 }) {
+  const tint = DASH_TINT[accent];
+  const shell = cn("min-h-[7.5rem] p-4", TILE_WASH[accent], tint.edge);
   const body = (
     <>
       <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
-        <span className="text-primary-600" aria-hidden="true">{icon}</span>{label}
+        <span className={cn("flex h-6 w-6 items-center justify-center rounded-control", tint.box)} aria-hidden="true">{icon}</span>{label}
       </p>
       {children}
     </>
   );
   return onClick ? (
     <button type="button" onClick={onClick}
-      className="min-h-[7.5rem] bg-surface p-4 text-left transition-colors hover:bg-surface-muted focus-visible:relative focus-visible:z-10">
+      className={cn(shell, "text-left transition-shadow hover:relative hover:z-10 hover:shadow-lift focus-visible:relative focus-visible:z-10")}>
       {body}
     </button>
-  ) : <div className="min-h-[7.5rem] bg-surface p-4">{body}</div>;
+  ) : <div className={shell}>{body}</div>;
 }
 
 function Change({ delta, exam }: { delta: number; exam: string }) {

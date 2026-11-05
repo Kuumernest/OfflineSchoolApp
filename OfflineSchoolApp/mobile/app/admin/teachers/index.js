@@ -23,6 +23,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
 import { errorText } from "../../../src/utils/appError";
 import { staffNoStatus, staffNoText } from "../../../src/utils/staffNumber";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -48,7 +50,7 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
       onPress={() => onEdit(teacher)}
     >
       <View style={styles.cardIcon}>
-        <Ionicons name="person" size={22} color="#4F46E5" />
+        <Ionicons name="person" size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.cardInfo}>
@@ -158,14 +160,14 @@ const StatsBanner = React.memo(({ stats }) => {
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
-      <Text style={[styles.statNumber, { color: "#059669" }]}>
+      <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>
         {stats.total - stats.unassigned}
       </Text>
       <Text style={styles.statLabel}>{t("teachers.assigned")}</Text>
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
-      <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
+      <Text style={[styles.statNumber, stats.unassigned > 0 && { color: SEMANTIC.warning.text }]}>
         {stats.unassigned}
       </Text>
       <Text style={styles.statLabel}>{t("teachers.unassigned")}</Text>
@@ -583,17 +585,15 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#FFFFFF",
     paddingVertical: 12,
-    borderTopWidth:  1,
     borderBottomWidth: 1,
-    borderColor:     "#F3F4F6",
+    ...tileShell("teachers"),
     gap:             24,
   },
   statItem:   { alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel:  { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 1 },
-  statDivider:{ width: 1, height: 24, backgroundColor: "#E5E7EB" },
+  statNumber: { fontSize: 18, fontWeight: "700", color: ACCENT.violet.deep },
+  statLabel:  { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 1 },
+  statDivider:{ width: 1, height: 24, backgroundColor: COLORS.border },
 
   card: {
     flexDirection:   "row",
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginRight:     12,

@@ -15,11 +15,10 @@
 //   2. The label and the hint truncate with a title attribute, so a long
 //      French label costs one line, not a taller row.
 //
-// The tile is a white card; only its icon box is tinted, by the kind of
-// figure (config/sections.ts) — students blue, money teal, and so on. With
-// `tinted` (the platform dashboard only) it takes the dashboards' look from
-// config/dashboardTint.ts instead: a wash, a top edge, a solid icon square and
-// a deeper figure, the schools count indigo.
+// Each tile is coloured by the kind of
+// figure — students blue, money teal, and so on. By default (`tinted`) it
+// takes the app's card look from config/dashboardTint.ts: a wash, a top edge,
+// a solid icon square and a deeper figure, the schools count indigo.
 import { Link }               from "react-router-dom";
 import { Info, type LucideIcon } from "lucide-react";
 import { cn }                 from "@/utils/cn";
@@ -57,12 +56,12 @@ interface MetricTileProps {
   href?:    string;
   loading?: boolean;
   className?: string;
-  /** The dashboards' tinted look (config/dashboardTint.ts). Off by default. */
+  /** The app's tinted look (config/dashboardTint.ts). On by default. */
   tinted?:  boolean;
 }
 
 export function MetricTile({
-  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className, tinted = false,
+  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className, tinted = true,
 }: MetricTileProps) {
   const tint = tinted ? tintFor(tone) : null;
   // Intl puts a no-break space between a currency code and its digits, which

@@ -12,7 +12,7 @@ import { Plus, Ban, Receipt } from "lucide-react";
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
 import { Card }             from "@/components/ui/Card";
-import { CARD_SHELL }       from "@/config/sections";
+import { DASH_TINT }        from "@/config/dashboardTint";
 import { cn }               from "@/utils/cn";
 import { Button }           from "@/components/ui/Button";
 import { Badge }            from "@/components/ui/Badge";
@@ -168,11 +168,11 @@ export default function ExpensesPage() {
         }
       />
 
-      <div className={cn("p-5 sm:max-w-xs", CARD_SHELL)}>
+      <div className={cn("p-5 sm:max-w-xs", DASH_TINT.teal.card)}>
         <p className="text-sm font-medium text-ink-muted">
           {t("expenses.totalSpent")}
         </p>
-        <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-ink tabular">
+        <p className={cn("mt-3 text-[30px] font-bold leading-none tracking-tight tabular", DASH_TINT.teal.number)}>
           {fmt.money(total)}
         </p>
       </div>

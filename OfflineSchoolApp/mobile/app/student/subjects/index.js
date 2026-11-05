@@ -19,6 +19,7 @@ import { useAuthStore }          from "../../../src/store/auth.store";
 import { getDatabase }           from "../../../src/db/database";
 import { resolveStudentClassId } from "../../../src/services/student.service";
 import { useTranslation }        from "../../../src/i18n/useTranslation";
+import { COLORS, ACCENT }        from "../../../src/theme/colors";
 
 const SUBJECT_COLORS = [
   { bg: "#EEF2FF", color: "#4F46E5", icon: "calculator-outline"   },
@@ -95,8 +96,8 @@ const SubjectCard = React.memo(({ subject, colorSet, onPress, viewLabel }) => (
     onPress={onPress}
     activeOpacity={0.7}
   >
-    <View style={[st.cardIcon, { backgroundColor: colorSet.bg }]}>
-      <Ionicons name={colorSet.icon} size={24} color={colorSet.color} />
+    <View style={[st.cardIcon, { backgroundColor: colorSet.color }]}>
+      <Ionicons name={colorSet.icon} size={24} color={COLORS.onPrimary} />
     </View>
 
     <View style={st.cardInfo}>
@@ -259,7 +260,7 @@ export default function StudentSubjectsScreen() {
 
       <View style={st.statsRow}>
         <View style={st.statChip}>
-          <Ionicons name="book-outline" size={14} color="#059669" />
+          <Ionicons name="book-outline" size={14} color={ACCENT.slate.solid} />
           <Text style={st.statChipText}>
             {subjects.length === 1
               ? t("subjects.my.oneSubject")
@@ -267,7 +268,7 @@ export default function StudentSubjectsScreen() {
           </Text>
         </View>
         <View style={st.statChip}>
-          <Ionicons name="person-outline" size={14} color="#4F46E5" />
+          <Ionicons name="person-outline" size={14} color={ACCENT.violet.solid} />
           <Text style={st.statChipText}>
             {uniqueTeacherCount === 1
               ? t("subjects.my.oneTeacher")
@@ -275,9 +276,9 @@ export default function StudentSubjectsScreen() {
           </Text>
         </View>
         {!!className && (
-          <View style={[st.statChip, { backgroundColor: "#EEF2FF" }]}>
-            <Ionicons name="school-outline" size={14} color="#4F46E5" />
-            <Text style={[st.statChipText, { color: "#4F46E5" }]} numberOfLines={1}>
+          <View style={st.statChip}>
+            <Ionicons name="school-outline" size={14} color={ACCENT.indigo.solid} />
+            <Text style={st.statChipText} numberOfLines={1}>
               {className}
             </Text>
           </View>
@@ -377,11 +378,12 @@ const st = StyleSheet.create({
   },
   statChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "#FFF", borderRadius: 10,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 10, paddingVertical: 6,
     shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  statChipText: { fontSize: 12, fontWeight: "600", color: "#374151" },
+  statChipText: { fontSize: 12, fontWeight: "600", color: COLORS.text },
 
   listContent: { paddingHorizontal: 16, paddingTop: 4 },
 

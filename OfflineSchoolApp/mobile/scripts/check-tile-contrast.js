@@ -29,8 +29,8 @@ const note = (label) => console.log(`  note ${label}`);
 // colors.js is an ES module with no imports; this is plain node. Evaluate its
 // source with `export` dropped, so the check reads the real objects.
 const src = fs.readFileSync(path.join(ROOT, "src", "theme", "colors.js"), "utf8").replace(/^export /gm, "");
-const { COLORS, ACCENT, TILE, SEMANTIC } =
-  new Function(`${src}\nreturn { COLORS, ACCENT, TILE, SEMANTIC };`)();
+const { COLORS, ACCENT, TILE, SEMANTIC, TONE_EDGE } =
+  new Function(`${src}\nreturn { COLORS, ACCENT, TILE, SEMANTIC, TONE_EDGE };`)();
 
 const lum = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -67,7 +67,32 @@ const loose = Object.entries(TILE).filter(([, a]) => !accents.has(a)).map(([k]) 
 if (loose.length === 0) ok(`${Object.keys(TILE).length} kinds, each on one of ${accents.size} accents`);
 else bad(`kinds without a named accent: ${loose.join(", ")}`);
 
-console.log("--- icons on their boxes (reported, 3:1 is the target) ---");
+console.log("--- tinted tiles: every accent (src/components/Tiles.js) ---");
+const nonText = (name, fg, bg) => {
+  const r = ratio(fg, bg);
+  (r >= 3 ? ok : bad)(`${name.padEnd(34)} ${fg} on ${bg}  ${r.toFixed(2)}:1${r >= 3 ? "" : " is under 3"}`);
+};
+for (const [name, a] of Object.entries(ACCENT)) {
+  text(`${name} white icon on solid square`, COLORS.onPrimary, a.solid);
+  text(`${name} figure (deep) on wash`, a.deep, a.wash);
+  text(`${name} label on wash`, COLORS.textSecondary, a.wash);
+  text(`${name} text on wash`, COLORS.text, a.wash);
+  for (const tone of ["warning", "error", "info", "success"]) text(`${name} ${tone} figure on wash`, SEMANTIC[tone].text, a.wash);
+  for (const tone of ["warning", "error"]) nonText(`${name} ${tone} border on wash`, TONE_EDGE[tone], a.wash);
+}
+const PINNED = {
+  students: "blue", teachers: "violet", classes: "indigo", subjects: "slate", exams: "amber",
+  attendance: "green", timetable: "teal", fees: "teal", finance: "teal",
+  announcements: "sky", messages: "sky", reports: "slate", results: "slate",
+};
+const off = Object.entries(PINNED).filter(([k, a]) => TILE[k] !== ACCENT[a]).map(([k]) => k);
+if (off.length === 0) ok("kinds take the same colour as the web console's dashboards");
+else bad(`kinds not matching the web mapping: ${off.join(", ")}`);
+const tiles = fs.readFileSync(path.join(ROOT, "src", "components", "Tiles.js"), "utf8");
+if (!/primaryLight|onPrimaryBox|backgroundColor: COLORS\.primary\b/.test(tiles)) ok("no pale or solid-filled tile left in Tiles.js");
+else bad("Tiles.js still uses a pale box or a solid primary tile");
+
+console.log("--- the older pale pairs, for a glyph on white (reported, 3:1 is the target) ---");
 for (const [name, a] of Object.entries(ACCENT)) note(`${name.padEnd(8)} ${a.icon} on ${a.box}  ${ratio(a.icon, a.box).toFixed(2)}:1`);
 for (const [name, t] of Object.entries(SEMANTIC)) note(`${name.padEnd(8)} ${t.icon} on ${t.box}  ${ratio(t.icon, t.box).toFixed(2)}:1`);
 

@@ -22,6 +22,8 @@ import { Ionicons }                  from "@expo/vector-icons";
 import { ClassService }              from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const BRAND = "#4F46E5";
 
@@ -149,12 +151,12 @@ const StatsBanner = React.memo(function StatsBanner({ stats }) {
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
-        <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.active}</Text>
+        <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>{stats.active}</Text>
         <Text style={styles.statLabel}>{t("common.active")}</Text>
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
-        <Text style={[styles.statNumber, stats.inactive > 0 && { color: "#D97706" }]}>
+        <Text style={[styles.statNumber, stats.inactive > 0 && { color: SEMANTIC.warning.text }]}>
           {stats.inactive}
         </Text>
         <Text style={styles.statLabel}>{t("common.inactive")}</Text>
@@ -483,16 +485,16 @@ const styles = StyleSheet.create({
 
   statsBanner: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#FFFFFF",
     marginHorizontal: 20, marginBottom: 12, marginTop: 4,
     borderRadius: 12, paddingVertical: 14,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1,
+    ...tileShell("classes"),
     gap: 24,
   },
   statItem:    { alignItems: "center" },
-  statNumber:  { fontSize: 20, fontWeight: "700", color: "#111827" },
-  statLabel:   { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 2 },
-  statDivider: { width: 1, height: 28, backgroundColor: "#E5E7EB" },
+  statNumber:  { fontSize: 20, fontWeight: "700", color: ACCENT.indigo.deep },
+  statLabel:   { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 2 },
+  statDivider: { width: 1, height: 28, backgroundColor: COLORS.border },
 
   classCard: {
     flexDirection: "row", alignItems: "center",

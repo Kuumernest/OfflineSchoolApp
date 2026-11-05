@@ -27,6 +27,7 @@ import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { openStoredFile } from "../../../src/utils/storedFile";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
 import {
   getTeacherContent,
   getTeacherSubjectsForContent,
@@ -66,12 +67,12 @@ const STATUS_COLORS = {
 };
 
 const SUMMARY_TYPES = [
-  { id: "syllabus", icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
-  { id: "notes",    icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
-  { id: "video",    icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "teacherContent.tabVideos"   },
-  { id: "audio",    icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
-  { id: "document", icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "studentSubj.tabDocs"     },
-  { id: "image",    icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "studentSubj.tabImages"   },
+  { id: "syllabus", icon: "list",          accent: ACCENT.violet, labelKey: "studentSubj.tabSyllabus" },
+  { id: "notes",    icon: "document-text", accent: ACCENT.blue,   labelKey: "studentSubj.tabNotes"    },
+  { id: "video",    icon: "videocam",      accent: ACCENT.red,    labelKey: "teacherContent.tabVideos"   },
+  { id: "audio",    icon: "musical-notes", accent: ACCENT.amber,  labelKey: "studentSubj.tabAudio"    },
+  { id: "document", icon: "attach",        accent: ACCENT.green,  labelKey: "studentSubj.tabDocs"     },
+  { id: "image",    icon: "image",         accent: ACCENT.violet, labelKey: "studentSubj.tabImages"   },
 ];
 
 const UPLOAD_ENTRY_ROUTE = "/teacher/content/select-subject";
@@ -105,18 +106,19 @@ const formatCount = (n) => {
 
 const getTypeConfig = (type = "", t) => {
   const map = {
-    syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
-    notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
-    video:    { icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "studentSubj.tabVideo"    },
-    audio:    { icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
-    document: { icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "teacherContent.kDocument" },
-    image:    { icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "teacherContent.kImage"    },
+    syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus", solid: ACCENT.violet.solid },
+    notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes", solid: ACCENT.blue.solid    },
+    video:    { icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "studentSubj.tabVideo", solid: ACCENT.red.solid    },
+    audio:    { icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio", solid: ACCENT.amber.solid    },
+    document: { icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "teacherContent.kDocument", solid: ACCENT.green.solid },
+    image:    { icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "teacherContent.kImage", solid: ACCENT.violet.solid    },
   };
   return (
     map[type?.toLowerCase()] || {
       icon:  "document-outline",
       color: "#6B7280",
       bg:    "#F3F4F6",
+      solid: ACCENT.slate.solid,
       label: type || t("teacherContent.kFile"),
     }
   );
@@ -126,20 +128,21 @@ const getTypeConfig = (type = "", t) => {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon, color, bg, count, label, onPress, active }) {
+function SummaryCard({ icon, accent, count, label, onPress, active }) {
   return (
     <TouchableOpacity
       style={[
         summaryStyles.card,
-        active && { borderColor: color, borderWidth: 1.5 },
+        { backgroundColor: accent.wash, borderTopWidth: 3, borderTopColor: accent.base },
+        active && { borderColor: accent.solid, borderWidth: 1.5, borderTopWidth: 3 },
       ]}
       onPress={onPress}
       activeOpacity={0.75}
     >
-      <View style={[summaryStyles.iconBox, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={18} color={color} />
+      <View style={[summaryStyles.iconBox, { backgroundColor: accent.solid }]}>
+        <Ionicons name={icon} size={18} color={COLORS.onPrimary} />
       </View>
-      <Text style={[summaryStyles.count, active && { color }]}>{count}</Text>
+      <Text style={[summaryStyles.count, { color: accent.deep }]}>{count}</Text>
       <Text style={summaryStyles.label}>{label}</Text>
     </TouchableOpacity>
   );
@@ -191,8 +194,8 @@ function ContentCard({ item, onPress, onOptions }) {
       onPress={() => onPress(item)}
       activeOpacity={0.75}
     >
-      <View style={[cardStyles.iconBox, { backgroundColor: cfg.bg }]}>
-        <Ionicons name={cfg.icon} size={22} color={cfg.color} />
+      <View style={[cardStyles.iconBox, { backgroundColor: cfg.solid }]}>
+        <Ionicons name={cfg.icon} size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={cardStyles.info}>
@@ -230,7 +233,7 @@ function ContentCard({ item, onPress, onOptions }) {
           <View style={cardStyles.statsRow}>
             {item.viewCount > 0 && (
               <View style={cardStyles.statItem}>
-                <Ionicons name="eye-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="eye-outline" size={11} color={ACCENT.indigo.solid} />
                 <Text style={cardStyles.statText}>
                   {formatCount(item.viewCount)}
                 </Text>
@@ -238,7 +241,7 @@ function ContentCard({ item, onPress, onOptions }) {
             )}
             {item.downloadCount > 0 && (
               <View style={cardStyles.statItem}>
-                <Ionicons name="download-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="download-outline" size={11} color={ACCENT.indigo.solid} />
                 <Text style={cardStyles.statText}>
                   {formatCount(item.downloadCount)}
                 </Text>
@@ -874,8 +877,7 @@ function ContentLibraryPage() {
             <SummaryCard
               key={s.id}
               icon={s.icon}
-              color={s.color}
-              bg={s.bg}
+              accent={s.accent}
               label={t(s.labelKey)}
               count={summary[s.id] || 0}
               active={activeTab === s.id}
@@ -1130,7 +1132,7 @@ const summaryStyles = StyleSheet.create({
     gap:             5,
     minWidth:        76,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    3,
@@ -1143,8 +1145,8 @@ const summaryStyles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  count: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  label: { fontSize: 10, color: "#9CA3AF", fontWeight: "500" },
+  count: { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  label: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
 });
 
 const tabStyles = StyleSheet.create({

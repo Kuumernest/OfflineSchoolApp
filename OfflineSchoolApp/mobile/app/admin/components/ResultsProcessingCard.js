@@ -13,6 +13,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 // Results, report cards and PDFs are online-only: a failure for want of a
 // connection says so rather than "Network Error".
 import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -366,8 +367,8 @@ const s = StyleSheet.create({
   dismissBtn:  { padding: 4 },
   statsGrid:   { flexDirection: "row", justifyContent: "space-around" },
   statItem:    { alignItems: "center" },
-  statValue:   { fontSize: 22, fontWeight: "800", color: C.gray900 },
-  statLabel:   { fontSize: 11, color: C.gray500, marginTop: 2 },
+  statValue:   { fontSize: 22, fontWeight: "800", color: ACCENT.slate.deep },
+  statLabel:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   warningBox: {
     flexDirection:   "row",
     alignItems:      "flex-start",

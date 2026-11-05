@@ -15,7 +15,7 @@ import { Wallet, ArrowUpRight, Search } from "lucide-react";
 import { useUser }             from "@/store/auth.store";
 import { PageHeader }          from "@/components/ui/PageHeader";
 import { Card }                from "@/components/ui/Card";
-import { CARD_SHELL, iconBox } from "@/config/sections";
+import { DASH_TINT }           from "@/config/dashboardTint";
 import { cn }                  from "@/utils/cn";
 import { Button }              from "@/components/ui/Button";
 import { Select }              from "@/components/ui/Select";
@@ -146,24 +146,25 @@ export default function FeesPage() {
 
       {/* The headline figure, before the detail. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className={cn("min-w-0 p-5 sm:col-span-1", CARD_SHELL)}>
+        <div className={cn("min-w-0 p-5 sm:col-span-1", DASH_TINT.teal.card)}>
           <div className="flex items-center gap-2.5">
-            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", iconBox("finance"))}>
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)}>
               <Wallet className="h-4 w-4" aria-hidden="true" />
             </span>
             <p className="text-sm font-medium text-ink-muted">
               {t("fees.totalOutstanding")}
             </p>
           </div>
-          <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-ink tabular">
+          <p className={cn("mt-3 text-[30px] font-bold leading-none tracking-tight tabular", DASH_TINT.teal.number)}>
             {fmt.money(report?.totalOutstanding ?? 0)}
           </p>
-          <p className="mt-2 text-xs text-ink-faint">
+          {/* ink-faint is under AA on a wash, so these lines are ink-muted. */}
+          <p className="mt-2 text-xs text-ink-muted">
             {t("fees.studentsOwing", { count: report?.count ?? 0 })}
           </p>
           {/* Owed is everything unpaid; overdue the part past its due date —
               the figure the bell shows, from the same helper. */}
-          <p className="mt-1 text-xs text-ink-faint">
+          <p className="mt-1 text-xs text-ink-muted">
             {(report?.overdueCount ?? 0) > 0 ? (
               <>
                 <span className="rounded-control bg-danger-soft px-1.5 font-semibold text-danger-text tabular">

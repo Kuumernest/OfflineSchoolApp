@@ -1,18 +1,18 @@
 // web/scripts/check-dashboard-colours.mjs
 //
-// The dashboards' tinted cards (config/dashboardTint.ts):
+// The app's tinted cards (config/dashboardTint.ts):
 //   1. every token the tint classes name exists in index.css's @theme;
 //   2. the colours pass WCAG AA — text 4.5:1 (the figure on its wash, white
-//      on a solid square, labels, amber/red figures), icons and borders 3:1
-//      (a soft square's glyph, the amber/red tile border);
+//      on a solid square, labels, amber/red figures), borders 3:1;
 //   3. the kinds take the agreed colours;
-//   4. a warning tile keeps its kind's tint and soft icon at every value, with
-//      a navy figure at 0, amber above it, red for a timetable conflict;
-//      notices stay info; plain counts take their kind's tint;
+//   4. every Setup health tile has the same solid icon square; a warning tile
+//      has a navy figure at 0, amber above it, red for a timetable conflict;
+//      notices take the full sky tint like any count;
 //   5. every quick action is a tinted card in its own colour; Create exam is
 //      highlighted (blue), and no tile in the grid is solid;
-//   6. no grey icons or tiles on the dashboards, no raw hex, and the tint is
-//      opt-in (only the two dashboards pass `tinted`).
+//   6. no grey or pale icon squares: the shared helpers (iconBox, StatCard,
+//      MetricTile, EmptyTable) give the solid look by default, and no raw hex
+//      or bare grey palette on the dashboards.
 //
 //   node scripts/check-dashboard-colours.mjs     (Node 22.18+ / 24: strips TS types)
 
@@ -58,15 +58,9 @@ const ratio = (a, b) => {
   const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 };
-/** `fg` at `alpha` over `bg` — a `bg-x/15` square on its wash. */
-const over = (fg, bg, alpha) => "#" + [1, 3, 5].map((i) =>
-  Math.round(parseInt(fg.slice(i, i + 2), 16) * alpha + parseInt(bg.slice(i, i + 2), 16) * (1 - alpha))
-    .toString(16).padStart(2, "0")).join("");
 const low = [];
 for (const accent of Object.keys(DASH_TINT)) {
   const soft = tokens[`accent-${accent}-soft`];
-  const base = tokens[`accent-${accent}`];
-  const square = base && soft ? over(base, soft, 0.15) : undefined;
   const pairs = [
     // [what, foreground, background, minimum]
     ["deep on soft",          tokens[`accent-${accent}-deep`],  soft,   4.5],
@@ -75,7 +69,6 @@ for (const accent of Object.keys(DASH_TINT)) {
     ["ink-muted on soft",     tokens["ink-muted"],              soft,   4.5],
     ["amber figure on soft",  tokens["warning-text"],           soft,   4.5],
     ["red figure on soft",    tokens["danger-text"],            soft,   4.5],
-    ["soft square's glyph",   tokens[`accent-${accent}-solid`], square, 3],
     ["amber border on soft",  tokens["accent-amber-solid"],     soft,   3],
     ["red border on soft",    tokens["danger"],                 soft,   3],
   ];
@@ -85,7 +78,7 @@ for (const accent of Object.keys(DASH_TINT)) {
     if (r < min) low.push(`${accent}: ${what} ${r.toFixed(2)} < ${min}`);
   }
 }
-check("every tinted pairing is WCAG AA (text 4.5:1, icons and borders 3:1)", low, []);
+check("every tinted pairing is WCAG AA (text 4.5:1, borders 3:1)", low, []);
 
 // ── 3. Mapping ─────────────────────────────────────────────────────────────
 check("headline kinds take the agreed colours", {
@@ -97,10 +90,9 @@ check("headline kinds take the agreed colours", {
 });
 const tt = dashTint("teachers");
 check("a tint is a wash, a 3px top edge, a solid square and a deep figure",
-  { card: tt.card, box: tt.box, softBox: tt.softBox, number: tt.number }, {
+  { card: tt.card, box: tt.box, number: tt.number }, {
   card:    "rounded-card border border-line border-t-[3px] border-t-accent-violet bg-accent-violet-soft shadow-card",
   box:     "bg-accent-violet-solid text-white",
-  softBox: "bg-accent-violet/15 text-accent-violet-solid",
   number:  "text-accent-violet-deep",
 });
 
@@ -130,9 +122,12 @@ check("an amber/red tile keeps its kind's wash, only the border changes",
     "rounded-card border border-danger border-t-[3px] bg-accent-teal-soft shadow-card",
   ]);
 const grid = read("src/components/dashboard/SystemHealthGrid.tsx");
-check("no tile falls back to a white card or a grey box",
-  [/CARD_SHELL/.test(grid), /accent-slate-soft/.test(grid)], [false, false]);
-check("notices stay info", healthLook(byKey.activeAnnouncements, 4), { kind: "status", status: "info" });
+check("no tile falls back to a white card, a grey box or a status tint",
+  [/CARD_SHELL/.test(grid), /accent-slate-soft/.test(grid), /SEMANTIC\[/.test(grid)], [false, false, false]);
+check("every health tile has the same solid icon square", /const box\s*=\s*tint\.box;/.test(grid), true);
+check("notices take the full sky treatment, not the info tint",
+  [healthLook(byKey.activeAnnouncements, 4), DASH_ACCENT[byKey.activeAnnouncements.tone]], [{ kind: "kind" }, "sky"]);
+check("no pale icon square variant is left", Object.values(DASH_TINT).some((t) => "softBox" in t), false);
 check("plain counts take their kind's tint",
   ["approvedStudents", "totalTeachers", "totalClasses", "totalSubjects", "totalPeriods"]
     .map((k) => [k, healthLook(byKey[k], 7).kind, DASH_ACCENT[byKey[k].tone]]),
@@ -177,14 +172,22 @@ check("no grey icons on the dashboards",
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
   e.isDirectory() ? walk(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : []);
-const tintedUsers = walk(path.join(ROOT, "src"))
-  .filter((f) => /<StatCard\b[^>]*\btinted\b/s.test(fs.readFileSync(f, "utf8")))
+// The shared pieces give every screen the tinted look by default.
+check("StatCard and MetricTile are tinted unless told otherwise", [
+  /tinted = true,/.test(read("src/components/dashboard/StatCard.tsx")),
+  /tinted = true,/.test(read("src/components/platform/MetricTile.tsx")),
+], [true, true]);
+const sections = read("src/config/sections.ts");
+check("iconBox() is the solid square and the shared mapping is the dashboards'",
+  [/iconBox = \(tone: TileTone\): string => DASH_TINT\[DASH_ACCENT\[tone\]\]\.box/.test(sections),
+   /CARD_ACCENT: Record<TileTone, Accent> = DASH_ACCENT/.test(sections), /ACCENT_BOX/.test(sections)],
+  [true, true, false]);
+check("the empty-table icon is a solid square with a white icon",
+  /bg-accent-blue-solid text-white \[&_svg\]:h-5 \[&_svg\]:w-5 \[&_svg\]:text-white/.test(read("src/components/ui/DataTable.tsx")), true);
+const opted = walk(path.join(ROOT, "src"))
+  .filter((f) => /<(?:StatCard|MetricTile)\b[^>]*\btinted=\{false\}/s.test(fs.readFileSync(f, "utf8")))
   .map((f) => path.relative(ROOT, f));
-check("only the school dashboard opts into tinted stat cards", tintedUsers, ["src/pages/dashboard/DashboardPage.tsx"]);
-const tintedTiles = walk(path.join(ROOT, "src"))
-  .filter((f) => /<MetricTile\b[^>]*\btinted\b/s.test(fs.readFileSync(f, "utf8")))
-  .map((f) => path.relative(ROOT, f));
-check("only the platform dashboard opts into tinted metric tiles", tintedTiles, ["src/pages/platform/PlatformDashboardPage.tsx"]);
+check("no screen opts out of the tinted cards", opted, []);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -62,7 +62,7 @@ export default function RecentExams({ exams, loading = false, error }: Props) {
                 onClick={() => navigate(`/exams/${exam._id}`)}
                 className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
               >
-                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.softBox)}>
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)}>
                   <FileText className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">

@@ -175,7 +175,8 @@ export function EmptyTable({
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
       {icon && (
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-card bg-canvas text-ink-faint [&_svg]:h-5 [&_svg]:w-5">
+        // A solid icon square with a white icon, as on every card — never a grey well.
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-card bg-accent-blue-solid text-white [&_svg]:h-5 [&_svg]:w-5 [&_svg]:text-white">
           {icon}
         </div>
       )}
