@@ -1,16 +1,18 @@
 // web/scripts/check-dashboard-colours.mjs
 //
-// The school dashboard's tinted cards (config/dashboardTint.ts):
+// The dashboards' tinted cards (config/dashboardTint.ts):
 //   1. every token the tint classes name exists in index.css's @theme;
-//   2. the colours pass WCAG AA (4.5:1) — the figure on its wash, the white
-//      glyph on its solid square, label text on the wash;
+//   2. the colours pass WCAG AA — text 4.5:1 (the figure on its wash, white
+//      on a solid square, labels, amber/red figures), icons and borders 3:1
+//      (a soft square's glyph, the amber/red tile border);
 //   3. the kinds take the agreed colours;
-//   4. a warning tile is neutral at 0, amber above it, red for a timetable
-//      conflict; notices stay info; plain counts take their kind's tint;
-//   5. Create exam is the only primary quick action and every other action
-//      names a kind;
-//   6. no raw hex in the dashboard components, and the tint is opt-in
-//      (only DashboardPage passes `tinted`).
+//   4. a warning tile keeps its kind's tint and soft icon at every value, with
+//      a navy figure at 0, amber above it, red for a timetable conflict;
+//      notices stay info; plain counts take their kind's tint;
+//   5. every quick action is a tinted card in its own colour; Create exam is
+//      highlighted (blue), and no tile in the grid is solid;
+//   6. no grey icons or tiles on the dashboards, no raw hex, and the tint is
+//      opt-in (only the two dashboards pass `tinted`).
 //
 //   node scripts/check-dashboard-colours.mjs     (Node 22.18+ / 24: strips TS types)
 
@@ -28,7 +30,7 @@ const check = (label, actual, expected) => {
   else { fail++; console.log(`  FAIL ${label}\n       got      ${a}\n       expected ${e}`); }
 };
 
-const { DASH_ACCENT, DASH_TINT, dashTint, healthLook } =
+const { ALERT_NUMBER, DASH_ACCENT, DASH_TINT, dashTint, healthLook } =
   await import(path.join(ROOT, "src/config/dashboardTint.ts"));
 
 // ── 1. Tokens ──────────────────────────────────────────────────────────────
@@ -38,8 +40,8 @@ const tokens = Object.fromEntries(
 );
 const used = new Set();
 for (const t of Object.values(DASH_TINT)) {
-  for (const cls of `${t.card} ${t.box} ${t.number}`.split(/\s+/)) {
-    const m = cls.match(/^(?:bg|text|border-t)-(accent-[\w-]+)$/);
+  for (const cls of Object.values(t).join(" ").split(/\s+/)) {
+    const m = cls.match(/^(?:bg|text|border-t|border|ring|ring-offset)-(accent-[\w-]+?)(?:\/\d+)?$/);
     if (m) used.add(m[1]);
   }
 }
@@ -56,22 +58,34 @@ const ratio = (a, b) => {
   const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 };
+/** `fg` at `alpha` over `bg` — a `bg-x/15` square on its wash. */
+const over = (fg, bg, alpha) => "#" + [1, 3, 5].map((i) =>
+  Math.round(parseInt(fg.slice(i, i + 2), 16) * alpha + parseInt(bg.slice(i, i + 2), 16) * (1 - alpha))
+    .toString(16).padStart(2, "0")).join("");
 const low = [];
 for (const accent of Object.keys(DASH_TINT)) {
   const soft = tokens[`accent-${accent}-soft`];
+  const base = tokens[`accent-${accent}`];
+  const square = base && soft ? over(base, soft, 0.15) : undefined;
   const pairs = [
-    ["deep on soft",      tokens[`accent-${accent}-deep`], soft],
-    ["white on solid",    "#FFFFFF",                      tokens[`accent-${accent}-solid`]],
-    ["ink on soft",       tokens["ink"],                  soft],
-    ["ink-muted on soft", tokens["ink-muted"],            soft],
+    // [what, foreground, background, minimum]
+    ["deep on soft",          tokens[`accent-${accent}-deep`],  soft,   4.5],
+    ["white on solid",        "#FFFFFF",                        tokens[`accent-${accent}-solid`], 4.5],
+    ["ink on soft",           tokens["ink"],                    soft,   4.5],
+    ["ink-muted on soft",     tokens["ink-muted"],              soft,   4.5],
+    ["amber figure on soft",  tokens["warning-text"],           soft,   4.5],
+    ["red figure on soft",    tokens["danger-text"],            soft,   4.5],
+    ["soft square's glyph",   tokens[`accent-${accent}-solid`], square, 3],
+    ["amber border on soft",  tokens["accent-amber-solid"],     soft,   3],
+    ["red border on soft",    tokens["danger"],                 soft,   3],
   ];
-  for (const [what, fg, bg] of pairs) {
+  for (const [what, fg, bg, min] of pairs) {
     if (!fg || !bg) { low.push(`${accent}: ${what} (token missing)`); continue; }
     const r = ratio(fg, bg);
-    if (r < 4.5) low.push(`${accent}: ${what} ${r.toFixed(2)}`);
+    if (r < min) low.push(`${accent}: ${what} ${r.toFixed(2)} < ${min}`);
   }
 }
-check("every tinted pairing is WCAG AA (≥ 4.5:1)", low, []);
+check("every tinted pairing is WCAG AA (text 4.5:1, icons and borders 3:1)", low, []);
 
 // ── 3. Mapping ─────────────────────────────────────────────────────────────
 check("headline kinds take the agreed colours", {
@@ -81,10 +95,13 @@ check("headline kinds take the agreed colours", {
   students: "blue", teachers: "violet", classes: "indigo",
   subjects: "slate", exams: "amber", attendance: "green",
 });
-check("a tint is a wash, a 3px top edge, a solid square and a deep figure", dashTint("teachers"), {
-  card:   "rounded-card border border-line border-t-[3px] border-t-accent-violet bg-accent-violet-soft shadow-card",
-  box:    "bg-accent-violet-solid text-white",
-  number: "text-accent-violet-deep",
+const tt = dashTint("teachers");
+check("a tint is a wash, a 3px top edge, a solid square and a deep figure",
+  { card: tt.card, box: tt.box, softBox: tt.softBox, number: tt.number }, {
+  card:    "rounded-card border border-line border-t-[3px] border-t-accent-violet bg-accent-violet-soft shadow-card",
+  box:     "bg-accent-violet-solid text-white",
+  softBox: "bg-accent-violet/15 text-accent-violet-solid",
+  number:  "text-accent-violet-deep",
 });
 
 // ── 4. Overview tiles ──────────────────────────────────────────────────────
@@ -100,11 +117,21 @@ const WARN = ["pendingApplications", "unassignedTeachers", "unassignedClassSubje
   "incompleteTimetableSlots", "timetableConflicts", "classesWithoutSubjects"];
 check("the six warning tiles are alertOnNonZero",
   WARN.filter((k) => !byKey[k]?.alertOnNonZero), []);
-check("a warning tile at 0 is neutral",
-  WARN.map((k) => healthLook(byKey[k], 0).kind), WARN.map(() => "neutral"));
+check("a warning tile at 0 is calm (its kind's tint, a navy figure)",
+  WARN.map((k) => healthLook(byKey[k], 0)), WARN.map(() => ({ kind: "alert", level: "ok" })));
 check("above 0 it is amber, a timetable conflict red",
   WARN.map((k) => healthLook(byKey[k], 3)),
-  WARN.map((k) => ({ kind: "status", status: k === "timetableConflicts" ? "error" : "warning" })));
+  WARN.map((k) => ({ kind: "alert", level: k === "timetableConflicts" ? "error" : "warning" })));
+check("the figure is navy at 0, amber or red above it",
+  ALERT_NUMBER, { ok: "text-ink", warning: "text-warning-text", error: "text-danger-text" });
+check("an amber/red tile keeps its kind's wash, only the border changes",
+  [dashTint("teachers").warnCard, dashTint("timetable").errorCard], [
+    "rounded-card border border-accent-amber-solid border-t-[3px] bg-accent-violet-soft shadow-card",
+    "rounded-card border border-danger border-t-[3px] bg-accent-teal-soft shadow-card",
+  ]);
+const grid = read("src/components/dashboard/SystemHealthGrid.tsx");
+check("no tile falls back to a white card or a grey box",
+  [/CARD_SHELL/.test(grid), /accent-slate-soft/.test(grid)], [false, false]);
 check("notices stay info", healthLook(byKey.activeAnnouncements, 4), { kind: "status", status: "info" });
 check("plain counts take their kind's tint",
   ["approvedStudents", "totalTeachers", "totalClasses", "totalSubjects", "totalPeriods"]
@@ -116,30 +143,48 @@ check("plain counts take their kind's tint",
 // ── 5. Quick actions ───────────────────────────────────────────────────────
 const qa = consts.slice(consts.indexOf("QUICK_ACTIONS: QuickAction[]"));
 const actions = [...qa.slice(0, qa.indexOf("];")).matchAll(/\{ label: "([^"]+)"[^}]*\}/g)].map((m) => m[0]);
-check("Create exam is the only primary action",
+check("Create exam is the one highlighted action",
   actions.filter((a) => /primary:\s*true/.test(a)).map((a) => a.match(/label: "([^"]+)"/)[1]), ["Create exam"]);
-check("every quick action names a kind", actions.filter((a) => !/tone:\s*"\w+"/.test(a)).length, 0);
+check("each quick action takes its agreed colour",
+  Object.fromEntries(actions.map((a) => [a.match(/label: "([^"]+)"/)[1], a.match(/accent:\s*"(\w+)"/)?.[1]])), {
+    "Add student": "blue", "Add teacher": "violet", "Create exam": "blue", "Take attendance": "green",
+    "Post announcement": "sky", "View reports": "slate", "Add class": "indigo",
+    "Assign teacher": "violet", "Report templates": "teal",
+  });
 const qaSrc = read("src/components/dashboard/QuickActions.tsx");
-check("the primary button stays solid primary blue",
-  qaSrc.includes('"bg-primary-600 text-white shadow-card hover:bg-primary-700"'), true);
+check("no solid tile in the quick-action grid",
+  [/bg-primary-\d|bg-white\/15/.test(qaSrc), /DASH_TINT\[accent\]\.card/.test(qaSrc)], [false, true]);
+check("Create exam is the blue tint with a blue border, not a fill",
+  /"rounded-card border border-accent-blue-solid border-t-\[3px\] bg-accent-blue-soft shadow-card"/.test(qaSrc), true);
 
 // ── 6. Hygiene ─────────────────────────────────────────────────────────────
 const files = [
   "src/config/dashboardTint.ts",
-  "src/components/dashboard/StatCard.tsx",
-  "src/components/dashboard/SystemHealthGrid.tsx",
-  "src/components/dashboard/QuickActions.tsx",
+  ...fs.readdirSync(path.join(ROOT, "src/components/dashboard")).map((f) => `src/components/dashboard/${f}`),
+  "src/components/platform/MetricTile.tsx",
   "src/pages/dashboard/DashboardPage.tsx",
+  "src/pages/platform/PlatformDashboardPage.tsx",
 ];
+const code = (f) => read(f).replace(/\/\/.*|\/\*[\s\S]*?\*\//g, "");
 check("no raw hex colours in the dashboard components",
-  files.filter((f) => /#[0-9A-Fa-f]{3,8}\b/.test(read(f).replace(/\/\/.*|\/\*[\s\S]*?\*\//g, ""))), []);
+  files.filter((f) => /#[0-9A-Fa-f]{3,8}\b/.test(code(f))), []);
+check("no bare grey palette (bg-gray-*, bg-line-strong) on the dashboards",
+  files.filter((f) => /\b(?:bg|text)-gray-\d|\bbg-line-strong\b/.test(code(f))), []);
+// An icon element (<SomeIcon className="…text-ink-faint…">) is grey; text in
+// ink-faint on white is fine.
+check("no grey icons on the dashboards",
+  files.filter((f) => /<(?!p\b|span\b|div\b|dt\b|dd\b)[A-Z]\w*\s+className="[^"]*text-ink-faint/.test(code(f))), []);
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
   e.isDirectory() ? walk(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : []);
 const tintedUsers = walk(path.join(ROOT, "src"))
   .filter((f) => /<StatCard\b[^>]*\btinted\b/s.test(fs.readFileSync(f, "utf8")))
   .map((f) => path.relative(ROOT, f));
-check("only the school dashboard opts into tinted cards", tintedUsers, ["src/pages/dashboard/DashboardPage.tsx"]);
+check("only the school dashboard opts into tinted stat cards", tintedUsers, ["src/pages/dashboard/DashboardPage.tsx"]);
+const tintedTiles = walk(path.join(ROOT, "src"))
+  .filter((f) => /<MetricTile\b[^>]*\btinted\b/s.test(fs.readFileSync(f, "utf8")))
+  .map((f) => path.relative(ROOT, f));
+check("only the platform dashboard opts into tinted metric tiles", tintedTiles, ["src/pages/platform/PlatformDashboardPage.tsx"]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
