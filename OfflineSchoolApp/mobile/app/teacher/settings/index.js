@@ -333,30 +333,19 @@ export default function TeacherSettingsScreen() {
     try {
       setLoading(true);
 
-      // Try API first
-      try {
-        const res = await api.get("/teacher/profile", { timeout: 6000 });
-        const p   = res.data?.data || res.data;
-        if (p && typeof p === "object") {
-          setProfile(p);
-          setProfileComplete(p.profileCompleted ?? false);
-          return;
-        }
-      } catch { /* fall through to SQLite */ }
-
       /*
-       * SQLite fallback.
+       * The server's copy merged with this phone's (teacherProfile.service).
        *
-       * This read `teacher_profiles`, which is the attendance directory —
-       * five columns, none of them teacher_id — behind a .catch(() => null).
-       * So offline it found nothing, reported nothing, and the screen showed
-       * an empty profile as though the teacher had never filled the form in.
-       * specialization stays omitted here: it is admin-assigned.
+       * This used to take the server's reply alone — `res.data.data || res.data`
+       * on a reply that had no `data` and no profile — so online it showed an
+       * empty, "incomplete" profile and never looked at this phone's copy.
+       * Offline it showed the phone's copy, which is why the profile seemed to
+       * come and go.
        */
-      const saved = await TeacherProfile.getLocal(userId);
-      if (saved) {
-        setProfile(saved);
-        setProfileComplete(saved.profileCompleted);
+      const { profile: p } = await TeacherProfile.loadProfile(userId, { api, timeout: 6000 });
+      if (p) {
+        setProfile(p);
+        setProfileComplete(p.profileCompleted);
       }
     } catch (err) {
       console.warn("[settings] load profile failed:", err.message);

@@ -539,7 +539,7 @@ const clearDraft = async (uid) => {
 export default function StudentProfileSetup() {
   const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
-  const setUser             = useAuthStore((s) => s.setUser);
+  const updateUser          = useAuthStore((s) => s.updateUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
 
   // Stable derived value
@@ -776,7 +776,9 @@ export default function StudentProfileSetup() {
 
       // Update auth store — guard will not fire again
       setProfileCompleted(true);
-      setUser?.({ ...user, name: fullName, profileCompleted: true });
+      // updateUser, not setUser: setUser(user) with no token wrote an empty
+      // token, and the pupil was signed out on the next launch.
+      updateUser?.({ name: fullName, profileCompleted: true });
 
       Alert.alert(
         t("profileStudent.savedTitle"),
@@ -792,7 +794,7 @@ export default function StudentProfileSetup() {
     } finally {
       setSaving(false);
     }
-  }, [form, userId, user, setUser, setProfileCompleted, goToDashboard, t]);
+  }, [form, userId, updateUser, setProfileCompleted, goToDashboard, t]);
 
   // ─────────────────────────────────────────────────────
   // STEP CONTENT

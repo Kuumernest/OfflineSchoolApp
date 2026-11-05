@@ -97,6 +97,16 @@ it. Also in the repo's `CLAUDE.md`.
   - Delivered in the teacher list/detail, sign-in and `/auth/me`, `/teacher/profile`, the phone's `/sync/pull` (not to pupils) and the desktop's `/sync/changes`; a "Staff no." column on the payroll export. The phone stores it in `users.staff_no` (additive column). The Staff ID a teacher used to type on the phone (never stored by the server) is no longer asked for or shown; old typed values stay in `teacher_profiles.staff_id`.
   - Checks: backend `check:staffno`, web `check:staffno`, mobile `scripts/check-staff-number.js` (in `npm run check`).
 
+## Bug — teacher profile "disappears" (owner, 2026-11-05)
+
+- [x] **P1** The server never stored a teacher's profile: `PUT /teacher/profile` kept name and email and answered 200 for the other 21 fields, so the profile lived only in one phone's SQLite (`teacher_self_profile`). The phone's settings and setup screens read the server first, took its reply (no `data`, no profile) for the profile, and showed blanks whenever the phone was online; re-saving that blank form overwrote the only copy.
+  - Server: `users.teacherProfile` (`backend/src/services/teacherProfile.service.js`), written field by field; a blank never clears a stored value (only `clearFields` does); `profileCompleted: true` is never undone by an omitted value. `GET /teacher/profile` returns it under `data` (and still `teacher`). A save without `name` keeps the name.
+  - Phone: `TeacherProfile.loadProfile` merges the server's copy with the phone's field by field, saves what the server adds, and queues (outbox, `teacher-profile:<id>`) a profile only the phone has — so existing phone-only profiles reach the server the first time the dashboard, settings or setup opens online. A failed online save is queued. A blank never overwrites a stored value locally either.
+  - Profile setup (teacher and pupil) signed the user out on the next launch: `setUser(user)` without a token wrote an empty token. Now `updateUser`.
+  - Per-user stores: the account's own `teacher_self_profile` / `student_profiles` row is copied across at the switch (`placeOwnProfile`).
+  - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
+  - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.

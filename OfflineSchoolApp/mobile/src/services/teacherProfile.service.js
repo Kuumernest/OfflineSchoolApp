@@ -45,6 +45,33 @@
 
 import { getDatabase } from "../db/database";
 import { getTableColumns, safeAddColumn } from "../db/dbHelpers";
+import { MutationQueue } from "./mutationQueue.service";
+
+/**
+ * ── Where the profile lives now ───────────────────────────────────────────
+ *
+ * The server stores it (users.teacherProfile, backend teacherProfile.service).
+ * It used to keep name and email only and answer 200 for the rest, so the
+ * profile lived on one phone — and the screens, reading the server first,
+ * showed blanks whenever the phone was online. Now:
+ *
+ *   - a save goes to this table and to the outbox (`queueUpload`), so it
+ *     reaches the server when the phone is next online;
+ *   - a read (`loadProfile`) merges the server's copy with this one, field by
+ *     field — a value on either side wins over a blank, never the other way —
+ *     and uploads a profile that so far exists only on this phone;
+ *   - a blank never overwrites a stored value, here or on the server.
+ */
+
+/** The profile's fields, in the form's (and the server's) names. */
+export const FIELDS = [
+  "firstName", "lastName", "gender", "dateOfBirth", "nationalId", "qualification",
+  "employmentType", "joinDate", "yearsOfExperience", "previousSchool", "phone",
+  "alternatePhone", "address", "city", "state", "emergencyName", "emergencyPhone",
+  "emergencyRelation", "bloodGroup", "medicalConditions", "bio",
+];
+
+const filled = (v) => v !== null && v !== undefined && String(v).trim() !== "";
 
 /**
  * Deliberately NOT `teacher_profiles`.
@@ -129,6 +156,10 @@ export const resetSchemaCache = () => { ready = false; };
  * Throws. The caller needs to know: on a device with no connection this write
  * IS the save, and a teacher told "saved" over a failed write would lose the
  * lot.
+ *
+ * A blank value never overwrites a stored one, and a completed profile stays
+ * completed: a form that opened before the profile loaded, re-saved, used to
+ * blank every column of the only copy there was.
  */
 export const saveLocal = async (teacherId, p = {}) => {
   if (!teacherId) throw new Error("saveLocal: no teacher id");
@@ -149,29 +180,29 @@ export const saveLocal = async (teacherId, p = {}) => {
        profile_completed, updated_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(teacher_id) DO UPDATE SET
-       first_name         = excluded.first_name,
-       last_name          = excluded.last_name,
-       gender             = excluded.gender,
-       date_of_birth      = excluded.date_of_birth,
-       national_id        = excluded.national_id,
-       staff_id           = excluded.staff_id,
-       qualification      = excluded.qualification,
-       employment_type    = excluded.employment_type,
-       join_date          = excluded.join_date,
-       years_experience   = excluded.years_experience,
-       previous_school    = excluded.previous_school,
-       phone              = excluded.phone,
-       alternate_phone    = excluded.alternate_phone,
-       address            = excluded.address,
-       city               = excluded.city,
-       state              = excluded.state,
-       emergency_name     = excluded.emergency_name,
-       emergency_phone    = excluded.emergency_phone,
-       emergency_relation = excluded.emergency_relation,
-       blood_group        = excluded.blood_group,
-       medical_conditions = excluded.medical_conditions,
-       bio                = excluded.bio,
-       profile_completed  = excluded.profile_completed,
+       first_name         = COALESCE(NULLIF(excluded.first_name, ''), first_name),
+       last_name          = COALESCE(NULLIF(excluded.last_name, ''), last_name),
+       gender             = COALESCE(NULLIF(excluded.gender, ''), gender),
+       date_of_birth      = COALESCE(NULLIF(excluded.date_of_birth, ''), date_of_birth),
+       national_id        = COALESCE(NULLIF(excluded.national_id, ''), national_id),
+       staff_id           = COALESCE(NULLIF(excluded.staff_id, ''), staff_id),
+       qualification      = COALESCE(NULLIF(excluded.qualification, ''), qualification),
+       employment_type    = COALESCE(NULLIF(excluded.employment_type, ''), employment_type),
+       join_date          = COALESCE(NULLIF(excluded.join_date, ''), join_date),
+       years_experience   = COALESCE(NULLIF(excluded.years_experience, ''), years_experience),
+       previous_school    = COALESCE(NULLIF(excluded.previous_school, ''), previous_school),
+       phone              = COALESCE(NULLIF(excluded.phone, ''), phone),
+       alternate_phone    = COALESCE(NULLIF(excluded.alternate_phone, ''), alternate_phone),
+       address            = COALESCE(NULLIF(excluded.address, ''), address),
+       city               = COALESCE(NULLIF(excluded.city, ''), city),
+       state              = COALESCE(NULLIF(excluded.state, ''), state),
+       emergency_name     = COALESCE(NULLIF(excluded.emergency_name, ''), emergency_name),
+       emergency_phone    = COALESCE(NULLIF(excluded.emergency_phone, ''), emergency_phone),
+       emergency_relation = COALESCE(NULLIF(excluded.emergency_relation, ''), emergency_relation),
+       blood_group        = COALESCE(NULLIF(excluded.blood_group, ''), blood_group),
+       medical_conditions = COALESCE(NULLIF(excluded.medical_conditions, ''), medical_conditions),
+       bio                = COALESCE(NULLIF(excluded.bio, ''), bio),
+       profile_completed  = MAX(COALESCE(profile_completed, 0), excluded.profile_completed),
        updated_at         = excluded.updated_at`,
     [
       String(teacherId),
@@ -269,4 +300,98 @@ export const isCompleteLocal = async (teacherId) => {
   }
 };
 
-export default { TABLE, ensureSchema, resetSchemaCache, saveLocal, getLocal, isCompleteLocal };
+/**
+ * The profile out of a GET /teacher/profile reply, flattened, or null when the
+ * server holds none. Reads `data` (this server) and falls back to
+ * `teacher.teacherProfile` — and an older server's reply, which carries
+ * neither, is null rather than an object of blanks (the old screens took that
+ * wrapper for the profile and showed nothing).
+ */
+export const parseServerProfile = (body) => {
+  if (!body || typeof body !== "object") return null;
+  const d = body.data && typeof body.data === "object" ? body.data : null;
+  const nested = body.teacher?.teacherProfile || d?.teacherProfile || null;
+  const src = d && (FIELDS.some((f) => f in d) || "profileCompleted" in d) ? d : nested;
+  if (!src) return null;
+  const out = {};
+  for (const f of FIELDS) out[f] = filled(src[f]) ? String(src[f]) : "";
+  out.profileCompleted = src.profileCompleted === true || src.completed === true;
+  return out;
+};
+
+/** Field by field: a value beats a blank; the server's beats the phone's. */
+export const mergeProfiles = (server, local) => {
+  if (!server && !local) return null;
+  const out = {};
+  for (const f of FIELDS) {
+    out[f] = filled(server?.[f]) ? String(server[f]) : filled(local?.[f]) ? String(local[f]) : "";
+  }
+  out.profileCompleted = !!(server?.profileCompleted || local?.profileCompleted);
+  return out;
+};
+
+/** Does the phone hold a value the server is missing? */
+export const localHasMore = (server, local) =>
+  !!local && (FIELDS.some((f) => filled(local[f]) && !filled(server?.[f]))
+    || (local.profileCompleted && !server?.profileCompleted));
+
+/** The PUT /teacher/profile body for a profile (blanks left out). */
+export const uploadPayload = (profile, name) => {
+  // The name only when there is one: a blank name is refused, and a missing
+  // one leaves the account's name as it is.
+  const full = (name ?? `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`).trim();
+  const body = full ? { name: full } : {};
+  for (const f of FIELDS) if (filled(profile?.[f])) body[f] = String(profile[f]).trim();
+  if (profile?.profileCompleted) body.profileCompleted = true;
+  return body;
+};
+
+/**
+ * Queue the profile for the server. One outbox row per teacher, merged with
+ * any unsent one, so it is sent when the phone is next online and counts as
+ * unsent work (a per-user store holding it is never evicted).
+ */
+export const queueUpload = async (teacherId, profile, name) => {
+  const body = uploadPayload(profile, name);
+  if (!teacherId || Object.keys(body).length === 0) return null;
+  return MutationQueue.enqueue({
+    entityKey: `teacher-profile:${teacherId}`,
+    method:    "PUT",
+    endpoint:  "/teacher/profile",
+    payload:   body,
+    merge:     true,
+  });
+};
+
+/**
+ * The profile to show: the server's copy merged with this phone's. Saves what
+ * the server adds to the phone, and queues what only the phone has. `api` is
+ * the app's axios instance (passed in so this file stays free of it).
+ * @returns {Promise<{ profile: object|null, source: "server"|"local"|"none" }>}
+ */
+export const loadProfile = async (teacherId, { api, name, timeout = 8000 } = {}) => {
+  const local = await getLocal(teacherId).catch(() => null);
+  let server = null;
+  let reached = false;
+  if (api) {
+    try {
+      const res = await api.get("/teacher/profile", { timeout });
+      reached = true;
+      server = parseServerProfile(res?.data);
+    } catch { /* offline: this phone's copy */ }
+  }
+  const profile = mergeProfiles(server, local);
+  if (!profile) return { profile: null, source: "none" };
+  if (server && FIELDS.some((f) => filled(server[f]) && server[f] !== local?.[f])) {
+    await saveLocal(teacherId, profile).catch(() => {});
+  }
+  if (reached && localHasMore(server, local)) {
+    await queueUpload(teacherId, profile, name).catch(() => {});
+  }
+  return { profile, source: reached ? "server" : "local" };
+};
+
+export default {
+  TABLE, FIELDS, ensureSchema, resetSchemaCache, saveLocal, getLocal, isCompleteLocal,
+  parseServerProfile, mergeProfiles, localHasMore, uploadPayload, queueUpload, loadProfile,
+};
