@@ -5,6 +5,7 @@ import { EXAM_STATUS_META, EXAM_STATUSES } from "@/constants/exam.constants";
 import type { ExamStats }   from "@/services/dashboard.service";
 import { percentShares }    from "@/utils/percentShares";
 import type { ExamStatus }  from "@/types/exam.types";
+import { DASH_TINT }        from "@/config/dashboardTint";
 
 interface Props {
   /** Empty while loading: every count reads 0. */
@@ -25,17 +26,18 @@ interface Props {
  * "Total 2" over a bar of 0% segments.
  *
  * The ramp is one hue getting darker along the exam lifecycle — draft is
- * neutral, and each step towards published is a step darker; archived drops
- * back to grey, being out of the cycle. The colours carry the sequence rather
+ * amber (as its badge is, still being written), and each step towards
+ * published is a step darker blue; archived drops to slate, being out of the
+ * cycle. No segment is a bare grey. The colours carry the sequence rather
  * than unrelated hues implying unrelated things.
  */
 const RAMP: Record<ExamStatus, string> = {
-  draft:     "bg-line-strong",
+  draft:     "bg-accent-amber",
   scheduled: "bg-primary-200",
   ongoing:   "bg-primary-400",
   completed: "bg-primary-600",
   published: "bg-primary-900",
-  archived:  "bg-gray-300",
+  archived:  "bg-accent-slate",
 };
 
 const SEGMENTS = EXAM_STATUSES.map((key) => ({
@@ -54,7 +56,8 @@ export default function ExamStatusChart({ stats }: Props) {
   const pcts   = percentShares(values);
 
   return (
-    <Card>
+    // Exams are amber across the dashboard.
+    <Card className={DASH_TINT.amber.edge}>
       <CardHeader
         title={t("dashboard.examsByStatus")}
         action={

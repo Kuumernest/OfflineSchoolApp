@@ -161,15 +161,19 @@
   --color-accent-amber-soft:  #FFFBEB;
   --color-accent-green:       #16A34A;
   --color-accent-green-soft:  #F0FDF4;
+  --color-accent-sky:         #0284C7;
+  --color-accent-sky-soft:    #F0F9FF;
 
   /* ── Dashboard tinted cards ────────────────────────────────────────────────
      The school dashboard's cards (config/dashboardTint.ts) take a soft wash
      (-soft), a 3px top edge (the base colour), a solid icon square (-solid,
      white glyph) and the figure in a deeper shade (-deep). Measured, WCAG:
        -deep on -soft:  blue 8.01 · indigo 8.88 · violet 8.19 · slate 13.35 ·
-                        teal 7.27 · amber 6.84 · green 6.81
+                        teal 7.27 · amber 6.84 · green 6.81 · sky 7.09
        white on -solid: blue 5.17 · indigo 6.29 · violet 5.70 · slate 7.58 ·
-                        teal 5.47 · amber 5.02 · green 5.02
+                        teal 5.47 · amber 5.02 · green 5.02 · sky 5.93
+       A soft icon square is the base colour at 15% over the wash, its glyph
+       -solid (≥ 3:1, the non-text minimum; scripts/check-dashboard-colours)
        ink-muted on -soft ≥ 6.78. ink-faint is NOT used on a wash (4.26 on
        indigo-soft), so words on a tinted card are ink-muted. */
   --color-accent-blue-solid:   #2563EB;
@@ -186,6 +190,8 @@
   --color-accent-amber-deep:   #92400E;
   --color-accent-green-solid:  #15803D;
   --color-accent-green-deep:   #166534;
+  --color-accent-sky-solid:    #0369A1;
+  --color-accent-sky-deep:     #075985;
 
   /* ── Status ────────────────────────────────────────────────────────────────
      Colour that MEANS something, never decoration. Per status:

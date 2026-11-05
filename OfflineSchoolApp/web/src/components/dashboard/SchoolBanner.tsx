@@ -48,7 +48,7 @@ export default function SchoolBanner({ school }: { school: SchoolInfo }) {
           style={logoSrc ? undefined : { display: "flex" }}
           aria-hidden="true"
         >
-          <School className="h-4 w-4 text-ink-faint" />
+          <School className="h-4 w-4 text-accent-indigo-solid" />
         </span>
       </div>
 
@@ -59,7 +59,7 @@ export default function SchoolBanner({ school }: { school: SchoolInfo }) {
         <p className="flex items-center gap-2 text-xs text-ink-faint">
           {location && (
             <span className="flex min-w-0 items-center gap-1">
-              <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <MapPin className="h-3 w-3 shrink-0 text-accent-indigo-solid" aria-hidden="true" />
               <span className="truncate">{location}</span>
             </span>
           )}

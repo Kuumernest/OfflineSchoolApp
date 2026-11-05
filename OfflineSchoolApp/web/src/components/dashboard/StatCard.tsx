@@ -92,7 +92,7 @@ export default function StatCard({
 
         {interactive && (
           <ArrowUpRight
-            className="h-4 w-4 shrink-0 text-ink-faint -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+            className={cn("h-4 w-4 shrink-0 -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100", tint ? tint.glyph : "text-ink-faint")}
             aria-hidden="true"
           />
         )}

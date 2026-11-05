@@ -6,6 +6,8 @@ import { Card, CardHeader }        from "@/components/ui/Card";
 import { Badge }                   from "@/components/ui/Badge";
 import { type RecentAnnouncement } from "@/services/dashboard.service";
 import { timeAgo }                 from "@/i18n";
+import { DASH_TINT }               from "@/config/dashboardTint";
+import { cn }                      from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -74,7 +76,7 @@ export default function RecentAnnouncements({
     if (announcements.length === 0) {
       return (
         <div className="text-center py-8">
-          <Megaphone className="mx-auto mb-2 h-6 w-6 text-ink-faint" aria-hidden="true" />
+          <Megaphone className={cn("mx-auto mb-2 h-6 w-6", DASH_TINT.sky.glyph)} aria-hidden="true" />
           <p className="text-sm text-ink-faint">{t("dashboard.noAnnouncements")}</p>
         </div>
       );
@@ -89,37 +91,44 @@ export default function RecentAnnouncements({
               onClick={() => navigate("/announcements")}
               className="w-full rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
             >
-              <div className="flex items-start justify-between gap-2">
-                <p className="line-clamp-1 text-[13px] font-medium text-ink">
-                  {a.title}
-                </p>
+              <div className="flex items-start gap-3">
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.sky.softBox)}>
+                  <Megaphone className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="line-clamp-1 text-[13px] font-medium text-ink">
+                      {a.title}
+                    </p>
 
-                {/* FIX #PRIORITY — priority is optional on RecentAnnouncement.
-                    Only render the badge when a value is present; pass a
-                    guaranteed string so Badge.label never receives undefined. */}
-                {a.priority && (
-                  <Badge
-                    label={t(`announcements.priorityOpt.${a.priority}`, { defaultValue: a.priority })}
-                    variant={priorityVariant(a.priority)}
-                  />
-                )}
+                    {/* FIX #PRIORITY — priority is optional on RecentAnnouncement.
+                        Only render the badge when a value is present; pass a
+                        guaranteed string so Badge.label never receives undefined. */}
+                    {a.priority && (
+                      <Badge
+                        label={t(`announcements.priorityOpt.${a.priority}`, { defaultValue: a.priority })}
+                        variant={priorityVariant(a.priority)}
+                      />
+                    )}
+                  </div>
+
+                  {/* FIX #BODY — RecentAnnouncement does not have a `body` field.
+                      Use `description` or `message` if present on the type,
+                      otherwise omit this block entirely. Check the dashboard
+                      service type and use the correct field name below. */}
+                  {("description" in a) && (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">
+                      {(a as RecentAnnouncement & { description?: string }).description}
+                    </p>
+                  )}
+
+                  {a.createdAt && (
+                    <p className="mt-1 text-xs text-ink-faint">
+                      {timeAgo(a.createdAt)}
+                    </p>
+                  )}
+                </div>
               </div>
-
-              {/* FIX #BODY — RecentAnnouncement does not have a `body` field.
-                  Use `description` or `message` if present on the type,
-                  otherwise omit this block entirely. Check the dashboard
-                  service type and use the correct field name below. */}
-              {("description" in a) && (
-                <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">
-                  {(a as RecentAnnouncement & { description?: string }).description}
-                </p>
-              )}
-
-              {a.createdAt && (
-                <p className="mt-1 text-xs text-ink-faint">
-                  {timeAgo(a.createdAt)}
-                </p>
-              )}
             </button>
           </li>
         ))}
@@ -128,7 +137,8 @@ export default function RecentAnnouncements({
   })();
 
   return (
-    <Card>
+    // Announcements are sky, as Post announcement is: the top edge and each row's icon.
+    <Card className={DASH_TINT.sky.edge}>
       <CardHeader
         title={t("dashboard.announcementsTitle")}
         subtitle={t("dashboard.announcementsSubtitle")}

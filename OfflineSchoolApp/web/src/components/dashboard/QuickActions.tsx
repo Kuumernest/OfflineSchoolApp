@@ -3,7 +3,7 @@ import { useNavigate }      from "react-router-dom";
 import { useTranslation }    from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { QUICK_ACTIONS }    from "@/constants/dashboard.constants";
-import { dashBox }          from "@/config/dashboardTint";
+import { DASH_TINT }        from "@/config/dashboardTint";
 import { cn }               from "@/utils/cn";
 
 /**
@@ -14,12 +14,15 @@ import { cn }               from "@/utils/cn";
  * under each entry. The sidebar is the navigation — a second copy of it on the
  * landing page is not a feature, it is why the page needed scrolling.
  *
- * What is left is only the actions that *start* something. They are white
- * cards, all at one weight, each with a solid icon square in the colour of
- * what it is about (the same colour as that kind's card above) — except
- * Create exam, the one filled primary action, so the page has a single
- * obvious next step.
+ * What is left is only the actions that *start* something. Each is a soft
+ * tinted card in its own colour with a solid icon square of the same colour,
+ * all at one weight. Create exam is highlighted, not filled: the same blue
+ * tint with a blue border and a ringed icon, so the page still has an obvious
+ * next step without one solid tile shouting over the grid.
  */
+const HIGHLIGHT_CARD =
+  "rounded-card border border-accent-blue-solid border-t-[3px] bg-accent-blue-soft shadow-card";
+
 export default function QuickActions() {
   const { t }    = useTranslation();
   const navigate = useNavigate();
@@ -29,23 +32,23 @@ export default function QuickActions() {
       <CardHeader title={t("dashboard.quickActions")} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, primary, tone }) => (
+        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path, primary, accent }) => (
           <button
             key={path}
             type="button"
             onClick={() => navigate(path)}
             className={cn(
-              "group flex flex-col items-start gap-3 rounded-card p-4 text-left",
-              "transition duration-150 ease-[var(--ease-out-quiet)]",
-              primary
-                ? "bg-primary-600 text-white shadow-card hover:bg-primary-700"
-                : "border border-line bg-surface text-ink shadow-card hover:border-line-strong hover:shadow-lift",
+              "group flex flex-col items-start gap-3 p-4 text-left text-ink",
+              "transition duration-150 ease-[var(--ease-out-quiet)] hover:shadow-lift",
+              // The highlighted action: the same blue tint, a blue border all round.
+              primary ? HIGHLIGHT_CARD : DASH_TINT[accent].card,
             )}
           >
             <span
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-control",
-                primary ? "bg-white/15 text-white" : dashBox(tone ?? "neutral"),
+                DASH_TINT[accent].box,
+                primary && "ring-2 ring-accent-blue ring-offset-2 ring-offset-accent-blue-soft",
               )}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
