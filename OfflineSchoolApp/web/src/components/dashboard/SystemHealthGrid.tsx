@@ -6,7 +6,7 @@ import {
   HEALTH_METRIC_ROWS,
   type HealthMetric,
 } from "@/constants/dashboard.constants";
-import { SEMANTIC, type Semantic } from "@/config/sections";
+import { type Semantic } from "@/config/sections";
 import { ALERT_NUMBER, dashTint, healthLook } from "@/config/dashboardTint";
 import { cn } from "@/utils/cn";
 
@@ -22,13 +22,13 @@ const METRICS: HealthMetric[] = HEALTH_METRIC_ROWS.flat();
  * timetable conflict, an unassigned teacher) were invisible among the twelve
  * that were merely counts.
  *
- * Each count takes its kind's tinted card (config/dashboardTint.ts) — the
- * same colour as that kind's headline card above, with a solid icon square. A
- * metric that is a problem only when non-zero keeps its kind's light tint and
- * a soft icon square in its own colour at every value — no tile is grey; only
- * its figure and border change, from navy at zero to amber above it (red for
- * a timetable conflict). Notices are informational and keep the info tint.
- * When nothing is wrong the header pill is the success tint.
+ * Every tile is the same: its kind's tinted card (config/dashboardTint.ts) —
+ * the same colour as that kind's headline card above — with a solid icon
+ * square and a white icon. Notices are sky, distinct from the students' blue.
+ * A metric that is a problem only when non-zero keeps that look at every
+ * value; only its figure and border change, from navy at zero to amber above
+ * it (red for a timetable conflict). When nothing is wrong the header pill is
+ * the success tint.
  *
  * The tile colours are styling only: the header's count of faults is still
  * each metric's own `alert`, as before.
@@ -88,15 +88,15 @@ export default function SystemHealthGrid({
           const Icon  = metric.icon;
           const value = s[metric.key] ?? 0;
           const look  = healthLook(metric, value);
-          const sem   = look.kind === "status" ? SEMANTIC[look.status] : null;
           const tint  = dashTint(metric.tone);
           const alert = look.kind === "alert" ? look.level : null;
-          const card   = sem ? sem.card
-            : alert === "warning" ? tint.warnCard
-            : alert === "error"   ? tint.errorCard
+          // Every tile has the same solid icon square; a warning metric only
+          // changes its border and figure above zero.
+          const card   = alert === "warning" ? tint.warnCard
+            : alert === "error" ? tint.errorCard
             : tint.card;
-          const box    = sem ? sem.box  : alert ? tint.softBox : tint.box;
-          const number = sem ? sem.text : alert ? ALERT_NUMBER[alert] : tint.number;
+          const box    = tint.box;
+          const number = alert ? ALERT_NUMBER[alert] : tint.number;
 
           return (
             <div
@@ -119,14 +119,14 @@ export default function SystemHealthGrid({
               </div>
 
               <p
-                className={cn("mt-3 text-sm font-medium leading-snug", sem ? sem.text : "text-ink-muted")}
+                className="mt-3 text-sm font-medium leading-snug text-ink-muted"
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
               {/* B4: the pairs, then how many distinct subjects they are. */}
               {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
-                <p className={cn("text-xs", sem ? sem.text : "text-ink-muted")}>
+                <p className="text-xs text-ink-muted">
                   {t("health.distinctSubjects", { count: stats.distinctSubjects })}
                 </p>
               )}

@@ -32,9 +32,9 @@ interface StatCardProps {
   href?:          string;
   loading?:       boolean;
   /**
-   * The school dashboard's look (config/dashboardTint.ts): a soft wash of the
-   * kind's colour, a 3px top edge, a solid icon square and the figure in a
-   * deeper shade. Off everywhere else. A `semantic` tint still wins.
+   * The app's card look (config/dashboardTint.ts): a soft wash of the kind's
+   * colour, a 3px top edge, a solid icon square and the figure in a deeper
+   * shade. On by default. A `semantic` tint still wins.
    */
   tinted?:        boolean;
 }
@@ -55,7 +55,7 @@ export default function StatCard({
   semantic,
   href,
   loading = false,
-  tinted = false,
+  tinted = true,
 }: StatCardProps) {
   const navigate    = useNavigate();
   const interactive = Boolean(href);
