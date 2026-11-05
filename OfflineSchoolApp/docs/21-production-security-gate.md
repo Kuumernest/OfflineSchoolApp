@@ -81,6 +81,7 @@ intentional platform behaviour, verified in docs/20 §11.6.
 | Error handling | Public router: fixed sentences (X23). Global handler: **500 path echoed `err.message` in production** — now generic in production for unexpected exceptions; code-chosen 4xx messages kept. Stack traces never leave. | Closed this pass |
 | Debug routes | `/api/debug/*` registered only when `NODE_ENV !== "production"`; `/api/debug/env` prints `NODE_ENV` and `PORT` only. | Sound |
 | Health | `/api/health` reports status, database state, timestamp, uptime, heap used, environment. | INFORMATIONAL — uptime/heap are harmless but unnecessary; leave or trim |
+| Version | `/api/version` reports the deployed commit and branch (from the host's environment, only if they look like a commit hash and a branch name), the package version, start time and Node version. Public, `no-store`. | INFORMATIONAL — a commit hash and Node version; useful for confirming a deploy, nothing secret |
 | API documentation | None served. | — |
 | Rate limits | Login, portal login, public application (above). No global limiter on authenticated routes. | LOW — a global limiter behind nginx is a future item; not a found exposure |
 

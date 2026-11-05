@@ -317,6 +317,11 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Which build is running: the deployed commit (Render's RENDER_GIT_COMMIT),
+// branch, package version and when this process started. Public, like the
+// health checks, and never cached. See config/buildInfo.js.
+app.get("/api/version", require("./config/buildInfo").versionHandler);
+
 // Readiness, beside the liveness above: 200 only when the database answers a
 // ping, 503 otherwise (services/readiness.service.js). The Docker healthcheck
 // reads this one.
