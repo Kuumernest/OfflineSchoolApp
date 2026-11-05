@@ -16,6 +16,7 @@ import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -65,10 +66,10 @@ function Section({ title, children }) {
 
 function ActionButton({ icon, label, description, onPress, variant = "default", disabled }) {
   const colors = {
-    default: { bg: "#EEF2FF", border: "#C7D2FE", text: "#3730A3" },
-    warning: { bg: "#FFFBEB", border: "#FDE68A", text: "#92400E" },
-    danger:  { bg: "#FEF2F2", border: "#FECACA", text: "#991B1B" },
-    success: { bg: "#ECFDF5", border: "#A7F3D0", text: "#065F46" },
+    default: { bg: ACCENT.blue.wash,  border: COLORS.contextBorder, text: ACCENT.blue.deep,  box: ACCENT.blue.solid },
+    warning: { bg: "#FFFBEB", border: "#FDE68A", text: "#92400E", box: ACCENT.amber.solid },
+    danger:  { bg: "#FEF2F2", border: "#FECACA", text: "#991B1B", box: ACCENT.red.solid },
+    success: { bg: "#ECFDF5", border: "#A7F3D0", text: "#065F46", box: ACCENT.green.solid },
   };
   const c = colors[variant];
 
@@ -83,8 +84,8 @@ function ActionButton({ icon, label, description, onPress, variant = "default", 
       ]}
       activeOpacity={0.75}
     >
-      <View style={[styles.actionIcon, { backgroundColor: "#fff" }]}>
-        <Ionicons name={icon} size={18} color={c.text} />
+      <View style={[styles.actionIcon, { backgroundColor: c.box }]}>
+        <Ionicons name={icon} size={18} color={COLORS.onPrimary} />
       </View>
       <View style={styles.actionText}>
         <Text style={[styles.actionLabel, { color: c.text }]}>{label}</Text>
@@ -871,7 +872,7 @@ const styles = StyleSheet.create({
                      shadowRadius: 3, elevation: 1 },
   actionText:      { flex: 1 },
   actionLabel:     { fontSize: 14, fontWeight: "800" },
-  actionDesc:      { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  actionDesc:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   disabled:        { opacity: 0.5 },
 
   modalOverlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.45)",

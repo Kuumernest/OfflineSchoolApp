@@ -13,6 +13,7 @@ import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -504,7 +505,7 @@ function ExamCard({ item, onPress }) {
     >
       <View style={styles.cardHeader}>
         <View style={styles.cardIconBg}>
-          <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
+          <Ionicons name="document-text-outline" size={20} color={THEME.onPrimary} />
         </View>
         <View style={styles.cardHeaderText}>
           <Text style={styles.cardName} numberOfLines={1}>{exam.name}</Text>
@@ -659,7 +660,7 @@ const styles = StyleSheet.create({
   cardHeader:   { flexDirection: "row", alignItems: "center", gap: 12 },
   cardIconBg: {
     width: 40, height: 40, borderRadius: 10,
-    backgroundColor: COLORS.primaryBg,
+    backgroundColor: ACCENT.amber.solid,
     alignItems: "center", justifyContent: "center",
   },
   cardHeaderText: { flex: 1 },

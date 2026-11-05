@@ -21,6 +21,8 @@ import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 import { useAcademicTerms } from "../../../src/hooks/useAcademicTerms";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -777,16 +779,16 @@ const st = StyleSheet.create({
   summaryBar: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    ...tileShell("exams"),
     paddingHorizontal: 16,
     paddingVertical:   10,
     gap:               12,
   },
   summaryItem:    { alignItems: "center" },
-  summaryNum:     { fontSize: 18, fontWeight: "800", color: "#4F46E5" },
-  summaryLabel:   { fontSize: 10, color: "#6B7280", fontWeight: "600" },
-  summaryDivider: { width: 1, height: 28, backgroundColor: "#C7D2FE" },
-  summaryHint:    { flex: 1, fontSize: 11, color: "#6B7280", lineHeight: 16 },
+  summaryNum:     { fontSize: 18, fontWeight: "800", color: ACCENT.amber.deep },
+  summaryLabel:   { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600" },
+  summaryDivider: { width: 1, height: 28, backgroundColor: COLORS.border },
+  summaryHint:    { flex: 1, fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
   classList: {
     width:            110,
     borderRightWidth: 1,

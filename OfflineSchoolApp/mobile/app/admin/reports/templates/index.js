@@ -13,6 +13,7 @@ import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 // Templates are kept on the server (online-only): offline failures say so.
 import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT } from "../../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -260,14 +261,11 @@ function TemplateCard({
   return (
     <View style={[s.card, item.isDefault && s.cardDefault]}>
       <View style={s.cardTop}>
-        <View style={[
-          s.cardIcon,
-          { backgroundColor: item.isDefault ? C.primaryBg : C.gray100 },
-        ]}>
+        <View style={s.cardIcon}>
           <Ionicons
             name="document-text"
             size={24}
-            color={item.isDefault ? C.primary : C.gray400}
+            color={COLORS.onPrimary}
           />
         </View>
         <View style={{ flex: 1 }}>
@@ -438,6 +436,7 @@ const s = StyleSheet.create({
     width:           48,
     height:          48,
     borderRadius:    12,
+    backgroundColor: ACCENT.teal.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },

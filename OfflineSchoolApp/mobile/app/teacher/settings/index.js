@@ -24,6 +24,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { loadOwnStaffNo } from "../../../src/services/staffNumber.service";
 import { staffNoText } from "../../../src/utils/staffNumber";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -98,8 +99,8 @@ function SettingRow({
 }) {
   const sharedContent = (
     <>
-      <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-        <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+      <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+        <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
       </View>
       <View style={sr.textWrap}>
         <Text style={[sr.title, destructive && sr.destructive]}>{title}</Text>
@@ -120,8 +121,8 @@ function SettingRow({
   if (type === "toggle") {
     return (
       <View style={[sr.row, last && sr.rowLast]}>
-        <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-          <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+        <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+          <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
         </View>
         <View style={sr.textWrap}>
           <Text style={sr.title}>{title}</Text>
@@ -476,8 +477,7 @@ export default function TeacherSettingsScreen() {
         <Section title={t("teacherSettings.accountSection")}>
           <SettingRow
             icon="person-outline"
-            iconBg={C.primaryBg}
-            iconColor={C.primary}
+            iconBg={ACCENT.indigo.solid}
             title={t("teacherSettings.editProfile")}
             subtitle={
               profileComplete
@@ -488,8 +488,7 @@ export default function TeacherSettingsScreen() {
           />
           <SettingRow
             icon="lock-closed-outline"
-            iconBg={C.warningBg}
-            iconColor={C.warning}
+            iconBg={ACCENT.amber.solid}
             title={t("teacherSettings.changePassword")}
             subtitle={t("teacherSettings.updateLoginPassword")}
             onPress={() => router.push("/auth/set-password")}
@@ -502,8 +501,7 @@ export default function TeacherSettingsScreen() {
           <Section title={t("teacherSettings.myDetails")}>
             <SettingRow
               icon="id-card-outline"
-              iconBg="#EDE9FE"
-              iconColor="#7C3AED"
+              iconBg={ACCENT.violet.solid}
               title={t("staffNo.labelLong")}
               type="value"
               value={staffNoText(t, staffNo)}
@@ -511,8 +509,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.qualification && (
               <SettingRow
                 icon="ribbon-outline"
-                iconBg={C.primaryBg}
-                iconColor={C.primary}
+                iconBg={ACCENT.indigo.solid}
                 title={t("teacherSettings.qualification")}
                 type="value"
                 value={profile.qualification}
@@ -521,8 +518,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.employmentType && (
               <SettingRow
                 icon="briefcase-outline"
-                iconBg="#FFF7ED"
-                iconColor="#EA580C"
+                iconBg={ACCENT.amber.solid}
                 title={t("teacherSettings.employment")}
                 type="value"
                 value={profile.employmentType.replace(/_/g, " ")}
@@ -531,8 +527,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.phone && (
               <SettingRow
                 icon="call-outline"
-                iconBg={C.successBg}
-                iconColor={C.success}
+                iconBg={ACCENT.green.solid}
                 title={t("teacherSettings.phone")}
                 type="value"
                 value={profile.phone}
@@ -541,8 +536,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.bloodGroup && (
               <SettingRow
                 icon="water-outline"
-                iconBg={C.errorBg}
-                iconColor={C.error}
+                iconBg={ACCENT.red.solid}
                 title={t("teacherSettings.bloodGroup")}
                 type="value"
                 value={profile.bloodGroup}
@@ -551,8 +545,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.emergencyName && (
               <SettingRow
                 icon="medical-outline"
-                iconBg={C.warningBg}
-                iconColor={C.warning}
+                iconBg={ACCENT.amber.solid}
                 title={t("teacherSettings.emergencyContact")}
                 subtitle={profile.emergencyRelation || undefined}
                 type="value"
@@ -580,8 +573,7 @@ export default function TeacherSettingsScreen() {
           {/* ✅ Fix 2 + Fix 5 — persisted toggle, renders as View not TouchableOpacity */}
           <SettingRow
             icon="notifications-outline"
-            iconBg={C.warningBg}
-            iconColor={C.warning}
+            iconBg={ACCENT.amber.solid}
             title={t("teacherSettings.pushNotifications")}
             subtitle={t("teacherSettings.pushNotificationsHint")}
             type="toggle"
@@ -595,8 +587,7 @@ export default function TeacherSettingsScreen() {
         <Section title={t("teacherSettings.support")}>
           <SettingRow
             icon="help-circle-outline"
-            iconBg={C.primaryBg}
-            iconColor={C.primary}
+            iconBg={ACCENT.indigo.solid}
             title={t("teacherSettings.helpFaqs")}
             onPress={() =>
               Alert.alert(
@@ -608,15 +599,13 @@ export default function TeacherSettingsScreen() {
           {/* ✅ Fix 6 — Terms and Privacy now open real URLs */}
           <SettingRow
             icon="document-text-outline"
-            iconBg={C.gray100}
-            iconColor={C.gray500}
+            iconBg={ACCENT.slate.solid}
             title={t("teacherSettings.terms")}
             onPress={() => Linking.openURL("https://yourapp.com/terms")}
           />
           <SettingRow
             icon="shield-outline"
-            iconBg={C.gray100}
-            iconColor={C.gray500}
+            iconBg={ACCENT.slate.solid}
             title={t("teacherSettings.privacy")}
             onPress={() => Linking.openURL("https://yourapp.com/privacy")}
             last
@@ -627,8 +616,7 @@ export default function TeacherSettingsScreen() {
         <Section title={t("teacherSettings.session")}>
           <SettingRow
             icon="log-out-outline"
-            iconBg={C.errorBg}
-            iconColor={C.error}
+            iconBg={ACCENT.red.solid}
             title={t("teacherSettings.logout")}
             subtitle={t("teacherSettings.signOutHint")}
             destructive

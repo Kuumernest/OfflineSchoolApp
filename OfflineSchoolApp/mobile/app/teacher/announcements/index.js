@@ -23,6 +23,7 @@ import { useRouter }            from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { useAnnouncementStore } from "../../../src/store/announcement.store";
+import { ACCENT }               from "../../../src/theme/colors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -370,14 +371,14 @@ export default function AnnouncementsScreen() {
         <View style={styles.statsBar}>
           {stats.unread > 0 && (
             <View style={styles.statChip}>
-              <Ionicons name="mail-unread-outline" size={13} color="#4F46E5" />
+              <Ionicons name="mail-unread-outline" size={13} color={ACCENT.sky.solid} />
               <Text style={styles.statChipText}>{stats.unread} unread</Text>
             </View>
           )}
           {stats.urgentUnack > 0 && (
-            <View style={[styles.statChip, { backgroundColor: "#FEE2E2" }]}>
-              <Ionicons name="warning-outline" size={13} color="#DC2626" />
-              <Text style={[styles.statChipText, { color: "#DC2626" }]}>
+            <View style={[styles.statChip, { backgroundColor: ACCENT.red.wash }]}>
+              <Ionicons name="warning-outline" size={13} color={ACCENT.red.solid} />
+              <Text style={[styles.statChipText, { color: ACCENT.red.deep }]}>
                 {stats.urgentUnack} urgent
               </Text>
             </View>
@@ -519,12 +520,12 @@ const styles = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               5,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.sky.wash,
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      20,
   },
-  statChipText: { fontSize: 12, fontWeight: "600", color: "#4F46E5" },
+  statChipText: { fontSize: 12, fontWeight: "600", color: ACCENT.sky.deep },
 
   tabBar: {
     flexDirection:     "row",

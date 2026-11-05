@@ -14,7 +14,8 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { formatMoney, formatDate } from "../../i18n/format";
 import { Card, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { C, TAP, ordinal, on20 } from "./theme";
-import { TILE, SEMANTIC, TILE_SHAPE } from "../../theme/colors";
+import { COLORS, TILE, SEMANTIC, TILE_SHAPE } from "../../theme/colors";
+import { tileShell } from "../Tiles";
 
 export default function HomeScreen({ data, loading, onOpen }) {
   const { t } = useTranslation();
@@ -82,11 +83,11 @@ function ChildCard({ child, index, onOpen }) {
         <Tile kind="results" icon="school-outline" label={t("portal.home.latestResult")} onPress={() => onOpen(child._id, "results")} testID={`portal-home-results-${index}`}>
           {latest?.average != null ? (
             <>
-              <Text style={s.big}>{on20(latest.average, language)}<Text style={s.outOf}>/20</Text></Text>
+              <Text style={[s.big, { color: TILE.results.deep }]}>{on20(latest.average, language)}<Text style={s.outOf}>/20</Text></Text>
               {latest.position != null && latest.outOf != null ? (
                 <Text style={s.body}>{t("portal.home.rank", { position: ordinal(latest.position, language), outOf: latest.outOf })}</Text>
               ) : null}
-              {latest.examName ? <Text style={s.faint}>{latest.examName}</Text> : null}
+              {latest.examName ? <Text style={[s.faint, s.onWash]}>{latest.examName}</Text> : null}
               {delta != null && latest.previousExamName ? <Change delta={delta} exam={latest.previousExamName} /> : null}
             </>
           ) : <Text style={s.muted}>{t("portal.home.noResults")}</Text>}
@@ -97,7 +98,7 @@ function ChildCard({ child, index, onOpen }) {
           tone={att.rate != null && att.rate < 90 ? "warning" : undefined}>
           {att.rate != null ? (
             <>
-              <Text style={s.big}>{att.rate}%</Text>
+              <Text style={[s.big, { color: att.rate < 90 ? SEMANTIC.warning.text : TILE.attendance.deep }]}>{att.rate}%</Text>
               <Text style={s.body}>{t("portal.home.daysPresent", { present: att.present, marked: att.marked })}</Text>
             </>
           ) : <Text style={s.muted}>{t("portal.home.noRegister")}</Text>}
@@ -107,7 +108,7 @@ function ChildCard({ child, index, onOpen }) {
           tone={fees?.isOverdue ? "error" : undefined}>
           {fees == null ? <Skeleton width={96} height={24} /> : fees.balance > 0 ? (
             <>
-              <Text style={s.money} numberOfLines={1} adjustsFontSizeToFit>
+              <Text style={[s.money, { color: fees.isOverdue ? SEMANTIC.error.text : TILE.fees.deep }]} numberOfLines={1} adjustsFontSizeToFit>
                 {formatMoney(fees.balance)}
               </Text>
               {fees.isOverdue ? (
@@ -133,21 +134,20 @@ function ChildCard({ child, index, onOpen }) {
 }
 
 /**
- * One figure on a child's card: a white card with its kind's icon box, or a
- * light tint when it carries a warning or an error. Tappable when it leads
- * somewhere.
+ * One figure on a child's card: its kind's wash, a 3px top edge and a solid
+ * icon square, the same as every tile in the app (src/components/Tiles.js).
+ * A warning or an error swaps the border to amber or red. Tappable when it
+ * leads somewhere.
  */
 function Tile({ kind, tone, icon, label, children, onPress, testID }) {
-  const sem = tone ? SEMANTIC[tone] : null;
-  const box = sem ? { bg: sem.box, icon: sem.icon } : { bg: TILE[kind].box, icon: TILE[kind].icon };
-  const tint = sem ? { backgroundColor: sem.bg, borderColor: sem.box } : null;
+  const tint = tileShell(kind, tone);
   const body = (
     <>
       <View style={s.tileHead}>
-        <View style={[s.tileIcon, { backgroundColor: box.bg }]}>
-          <Ionicons name={icon} size={15} color={box.icon} />
+        <View style={[s.tileIcon, { backgroundColor: TILE[kind].solid }]}>
+          <Ionicons name={icon} size={15} color={COLORS.onPrimary} />
         </View>
-        <Text style={[s.tileLabel, sem && { color: sem.text }]} numberOfLines={2}>{label}</Text>
+        <Text style={s.tileLabel} numberOfLines={2}>{label}</Text>
         {onPress ? <Ionicons name="chevron-forward" size={14} color={C.inkFaint} style={{ marginLeft: "auto" }} /> : null}
       </View>
       {children}
@@ -214,7 +214,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden",
   },
 
-  // Two by two: the card's grid of white tiles.
+  // Two by two: the card's grid of tinted tiles.
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, padding: 12 },
   tile: {
     ...TILE_SHAPE,
@@ -226,12 +226,13 @@ const s = StyleSheet.create({
   tileLabel: { flexShrink: 1, fontSize: 12, fontWeight: "600", color: C.inkMuted },
 
   big:      { fontSize: 28, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  outOf:    { fontSize: 14, fontWeight: "600", color: C.inkFaint },
+  outOf:    { fontSize: 14, fontWeight: "600", color: C.inkMuted },
   money:    { fontSize: 20, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
   examName: { fontSize: 15, fontWeight: "700", color: C.ink },
   body:     { marginTop: 2, fontSize: 13, color: C.inkBody, lineHeight: 18 },
   muted:    { fontSize: 13, color: C.inkMuted, lineHeight: 18 },
   faint:    { marginTop: 2, fontSize: 12, color: C.inkFaint },
+  onWash:   { color: C.inkMuted },
 
   pill: {
     alignSelf: "flex-start", marginTop: 6, fontSize: 12, fontWeight: "700",

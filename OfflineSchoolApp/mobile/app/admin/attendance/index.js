@@ -22,6 +22,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 const STATUS_COLORS = {
   present:  { bg: "#ECFDF5", text: "#059669", icon: "checkmark-circle" },
@@ -509,28 +511,28 @@ export default function AttendanceReportScreen() {
                   label:  t("attAdmin.qaMarkStudents"),
                   sub:    t("attAdmin.qaMarkStudentsSub"),
                   icon:   "people-outline",
-                  color:  "#4F46E5",
+                  color:  ACCENT.indigo.solid,
                   route:  "/admin/attendance/students",
                 },
                 {
                   label:  t("attAdmin.qaMarkTeachers"),
                   sub:    t("attAdmin.qaMarkTeachersSub"),
                   icon:   "person-outline",
-                  color:  "#059669",
+                  color:  ACCENT.green.solid,
                   route:  "/admin/attendance/teachers",
                 },
                 {
                   label:  t("attAdmin.qaStudentReports"),
                   sub:    t("attAdmin.qaStudentReportsSub"),
                   icon:   "document-text-outline",
-                  color:  "#7C3AED",
+                  color:  ACCENT.violet.solid,
                   route:  "/admin/attendance/report/students",
                 },
                 {
                   label:  t("attAdmin.qaTeacherReports"),
                   sub:    t("attAdmin.qaTeacherReportsSub"),
                   icon:   "bar-chart-outline",
-                  color:  "#D97706",
+                  color:  ACCENT.amber.solid,
                   route:  "/admin/attendance/report/teachers",
                 },
               ].map((action) => (
@@ -543,13 +545,13 @@ export default function AttendanceReportScreen() {
                   <View
                     style={[
                       styles.actionIcon,
-                      { backgroundColor: action.color + "15" },
+                      { backgroundColor: action.color },
                     ]}
                   >
                     <Ionicons
                       name={action.icon}
                       size={20}
-                      color={action.color}
+                      color={COLORS.onPrimary}
                     />
                   </View>
                   <View style={styles.actionInfo}>
@@ -760,7 +762,8 @@ const styles = StyleSheet.create({
   },
 
   quickActions: {
-    backgroundColor: "#FFF",
+    borderWidth:     1,
+    ...tileShell("attendance"),
     borderRadius:    16,
     padding:         20,
     shadowColor:     "#000",
@@ -773,7 +776,7 @@ const styles = StyleSheet.create({
     alignItems:    "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
     gap: 12,
   },
   actionIcon: {
@@ -784,8 +787,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionInfo:  { flex: 1 },
-  actionLabel: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  actionSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  actionLabel: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  actionSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   tableCard: {
     backgroundColor: "#FFF",

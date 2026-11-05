@@ -18,6 +18,7 @@ import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
+import { COLORS as THEME, ACCENT } from "../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -84,13 +85,13 @@ const getPriorityConfig = (priority = "normal") => {
   const p = (priority || "normal").toLowerCase();
   switch (p) {
     case "urgent":
-      return { labelKey: "annStudent.prioUrgent", icon: "alert-circle",       color: C.error,   bg: C.errorBg,   border: "#FECACA" };
+      return { labelKey: "annStudent.prioUrgent", icon: "alert-circle",       color: C.error,   bg: C.errorBg,   border: "#FECACA", solid: ACCENT.red.solid };
     case "high":
-      return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A" };
+      return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A", solid: ACCENT.amber.solid };
     case "low":
-      return { labelKey: "annStudent.prioLow", icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200 };
+      return { labelKey: "annStudent.prioLow", icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200, solid: ACCENT.slate.solid };
     default:
-      return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE" };
+      return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE", solid: ACCENT.sky.solid };
   }
 };
 
@@ -512,8 +513,8 @@ export default function StudentAnnouncements() {
         {isUnread && <View style={s.unreadStrip} />}
         {isUnread && <View style={s.unreadDot} />}
 
-        <View style={[s.cardIcon, { backgroundColor: pri.bg }]}>
-          <Ionicons name={pri.icon} size={20} color={pri.color} />
+        <View style={[s.cardIcon, { backgroundColor: pri.solid }]}>
+          <Ionicons name={pri.icon} size={20} color={THEME.onPrimary} />
         </View>
 
         <View style={{ flex: 1, minWidth: 0 }}>

@@ -22,6 +22,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -112,9 +113,9 @@ const buildStudentSummaries = (records, t) => {
 // STAT CHIP
 // ─────────────────────────────────────────────────────────────
 
-const StatChip = ({ label, value, color }) => (
-  <View style={[chipS.chip, { backgroundColor: color + "15" }]}>
-    <Text style={[chipS.val, { color }]}>{value}</Text>
+const StatChip = ({ label, value, accent }) => (
+  <View style={[chipS.chip, { backgroundColor: accent.wash }]}>
+    <Text style={[chipS.val, { color: accent.deep }]}>{value}</Text>
     <Text style={chipS.lbl}>{label}</Text>
   </View>
 );
@@ -122,7 +123,7 @@ const StatChip = ({ label, value, color }) => (
 const chipS = StyleSheet.create({
   chip: { flex: 1, borderRadius: 10, padding: 8, alignItems: "center", gap: 2 },
   val:  { fontSize: 14, fontWeight: "800" },
-  lbl:  { fontSize: 9, color: "#6B7280", fontWeight: "600", textTransform: "uppercase" },
+  lbl:  { fontSize: 9, color: THEME.textSecondary, fontWeight: "600", textTransform: "uppercase" },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -278,11 +279,11 @@ const StudentCard = React.memo(({ student, isExpanded, onPress }) => {
       </View>
 
       <View style={cardS.stats}>
-        <StatChip label={t("attStatus.present")} value={summary?.present ?? 0} color="#059669" />
-        <StatChip label={t("attStatus.absent")}  value={summary?.absent  ?? 0} color="#DC2626" />
-        <StatChip label={t("attStatus.late")}    value={summary?.late    ?? 0} color="#D97706" />
-        <StatChip label={t("attStatus.excused")} value={summary?.excused ?? 0} color="#4F46E5" />
-        <StatChip label={t("common.total")}   value={summary?.total   ?? 0} color="#6B7280" />
+        <StatChip label={t("attStatus.present")} value={summary?.present ?? 0} accent={ACCENT.green} />
+        <StatChip label={t("attStatus.absent")}  value={summary?.absent  ?? 0} accent={ACCENT.red} />
+        <StatChip label={t("attStatus.late")}    value={summary?.late    ?? 0} accent={ACCENT.amber} />
+        <StatChip label={t("attStatus.excused")} value={summary?.excused ?? 0} accent={ACCENT.indigo} />
+        <StatChip label={t("common.total")}   value={summary?.total   ?? 0} accent={ACCENT.slate} />
       </View>
 
       <View style={cardS.barBg}>

@@ -19,6 +19,7 @@ import { ExamService }  from "../../../src/services/exam.service";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
 import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
 import { MarkInputRow }  from "../../../src/components/MarkInputRow";
 import * as ExamCache    from "../../../src/services/examCache.service";
@@ -1376,13 +1377,13 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 <View
                   style={[
                     sv.iconWrap,
-                    { backgroundColor: isRejected ? C.errorBg : cls.bg },
+                    { backgroundColor: isRejected ? ACCENT.red.solid : ACCENT.amber.solid },
                   ]}
                 >
                   <Ionicons
                     name="book"
                     size={20}
-                    color={isRejected ? C.error : cls.color}
+                    color={THEME.onPrimary}
                   />
                 </View>
                 <View style={sv.cardInfo}>

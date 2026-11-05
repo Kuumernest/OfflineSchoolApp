@@ -21,6 +21,8 @@ import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, TILE } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
 
 /**
  * One-argument wrapper — preserves the existing call signature.
@@ -433,9 +435,9 @@ export default function TeacherStudentsScreen() {
       {/* ── Stats Bar ── */}
       {students.length > 0 && (
         <View style={styles.statsBar}>
-                    <StatChip label={t("teacher.students.total")} value={stats.total}  color={C.primary} />
-          <StatChip label={t("teacher.students.male")} value={stats.male}   color="#0284C7" />
-          <StatChip label={t("teacher.students.female")} value={stats.female} color="#DB2777" />
+                    <StatChip label={t("teacher.students.total")} value={stats.total} />
+          <StatChip label={t("teacher.students.male")} value={stats.male} />
+          <StatChip label={t("teacher.students.female")} value={stats.female} />
         </View>
       )}
 
@@ -523,10 +525,10 @@ function Header({ title, count }) {
   );
 }
 
-function StatChip({ label, value, color }) {
+function StatChip({ label, value }) {
   return (
-    <View style={styles.statChip}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
+    <View style={[styles.statChip, tileShell("students")]}>
+      <Text style={[styles.statValue, { color: TILE.students.deep }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -650,12 +652,12 @@ const styles = StyleSheet.create({
   statChip: {
     flex: 1, alignItems: "center",
     paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.gray50,
-    borderWidth: 1, borderColor: C.gray100,
+    backgroundColor: TILE.students.wash,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   statValue: { fontSize: 18, fontWeight: "800" },
   statLabel: {
-    fontSize: 10, color: C.gray500,
+    fontSize: 10, color: COLORS.textSecondary,
     fontWeight: "600", marginTop: 2,
     textTransform: "uppercase", letterSpacing: 0.5,
   },
