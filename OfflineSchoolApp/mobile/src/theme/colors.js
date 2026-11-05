@@ -132,3 +132,79 @@ export const TILE_SHAPE = {
   shadowOffset: { width: 0, height: 1 },
   elevation: 1,
 };
+
+// ── One colour per entity ───────────────────────────────────────────────────
+//
+// The same rules as the web console (web/src/config/dashboardTint.ts), so a
+// class, a fee structure or a person is the same colour on the phone and the
+// web: a class by its level, a fee structure by its term, a person by role,
+// anything else by a stable hash of its name. Red is never an entity colour —
+// it is kept for bad news. scripts/check-entity-colours.js holds the two in step.
+
+/** The accents an entity colour is drawn from (keys of ACCENT). */
+export const ENTITY_ACCENTS = ["blue", "violet", "indigo", "teal", "amber", "green", "sky"];
+
+const hashAccent = (text) => {
+  let h = 0;
+  for (const ch of String(text).trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ENTITY_ACCENTS[h % ENTITY_ACCENTS.length];
+};
+const firstNumber = (text) => {
+  const m = String(text).match(/\d+/);
+  return m ? Number(m[0]) : null;
+};
+
+/** A class's accent name, by its level ("1", "JHS 2", "Form 3" …). No level: indigo. */
+export const levelAccent = (level) => {
+  if (level == null || !String(level).trim()) return "indigo";
+  const n = firstNumber(level);
+  return n != null && n > 0 ? ENTITY_ACCENTS[(n - 1) % ENTITY_ACCENTS.length] : hashAccent(level);
+};
+
+/** A term's accent name: Term 1 blue, 2 green, 3 amber; a whole-year item teal. */
+export const termAccent = (term) => {
+  if (term == null || !String(term).trim()) return "teal";
+  const n = firstNumber(term);
+  if (n === 1) return "blue";
+  if (n === 2) return "green";
+  if (n === 3) return "amber";
+  return hashAccent(term);
+};
+
+/** A person's accent name by role — the same as their kind on the dashboard. */
+export const ROLE_ACCENT = {
+  super_admin:  "slate",
+  school_admin: "indigo",
+  admin:        "indigo",
+  teacher:      "violet",
+  student:      "blue",
+  pupil:        "blue",
+  bursar:       "teal",
+  accountant:   "teal",
+  parent:       "sky",
+  guardian:     "sky",
+};
+export const roleAccent = (role) => (role && ROLE_ACCENT[String(role).toLowerCase()]) || "slate";
+
+/** Any other category (a subject type, an exam type…): a stable accent from its name. */
+export const categoryAccent = (name) => (name != null && String(name).trim() ? hashAccent(name) : "slate");
+
+/** A kind's accent name ("students" → "blue"), for components that take either. */
+export const kindAccent = (kind) => {
+  const a = TILE[kind];
+  return (a && Object.keys(ACCENT).find((k) => ACCENT[k] === a)) || "blue";
+};
+
+/**
+ * Badge colours. An entity badge is its accent's wash with the deep shade
+ * (≥ 6.8:1); a status badge is the status tint with its text colour. No badge
+ * is grey.
+ */
+export const accentBadge = (accent) => {
+  const a = ACCENT[accent] ?? ACCENT.blue;
+  return { bg: a.wash, text: a.deep, border: a.base + "4D" };
+};
+export const statusBadge = (tone) => {
+  const s = SEMANTIC[tone] ?? SEMANTIC.info;
+  return { bg: s.bg, text: s.text, border: s.icon + "4D" };
+};
