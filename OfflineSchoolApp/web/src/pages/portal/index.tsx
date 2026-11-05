@@ -22,6 +22,7 @@ import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui/FormField";
 import { cn }          from "@/utils/cn";
+import { PageIcon }    from "@/components/ui/PageHeader";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import { HomeScreen, type PortalScreen } from "./HomeScreen";
 import { ResultsScreen } from "./ResultsScreen";
@@ -97,9 +98,7 @@ export default function ParentPortalPage() {
         <div className="flex flex-1 items-start justify-center px-4 pb-10 pt-6 sm:items-center sm:pt-0">
           <div className="w-full max-w-sm">
             <div className="mb-6 text-center">
-              <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-white shadow-card" aria-hidden="true">
-                <GraduationCap className="h-7 w-7" />
-              </span>
+              <PageIcon icon={GraduationCap} accent="blue" className="mx-auto mb-3 h-14 w-14 shadow-card" />
               <h1 className="text-2xl font-semibold text-ink">{t("portal.title")}</h1>
               <p className="mt-1 text-sm text-ink-muted">{t("portal.intro")}</p>
             </div>

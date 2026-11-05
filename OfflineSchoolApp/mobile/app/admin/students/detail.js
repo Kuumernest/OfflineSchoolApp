@@ -16,7 +16,10 @@ import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
-import { COLORS, ACCENT } from "../../../src/theme/colors";
+import {
+  COLORS, ACCENT, SEMANTIC, levelAccent, accentBadge, statusBadge,
+} from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -38,6 +41,16 @@ const formatDate = (value) => {
  */
 const getStatusConfig = getStudentStatusConfig;
 
+/** A status's badge tone: active is good news, pending waits, the rest are bad news. */
+const STATUS_TONE = {
+  approved:  "success",
+  pending:   "warning",
+  suspended: "error",
+  rejected:  "error",
+  inactive:  "error",
+};
+const statusTone = (key) => STATUS_TONE[key] ?? "info";
+
 // ─────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
@@ -46,7 +59,7 @@ function InfoRow({ icon, label, value, mono = false }) {
   if (!value) return null;
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon} size={16} color="#9CA3AF" style={styles.infoIcon} />
+      <Ionicons name={icon} size={16} color={ACCENT.blue.solid} style={styles.infoIcon} />
       <View style={styles.infoText}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={[styles.infoValue, mono && styles.mono]}>{value}</Text>
@@ -55,10 +68,13 @@ function InfoRow({ icon, label, value, mono = false }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, icon, accent = "blue", children }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHead}>
+        <IconSquare icon={icon} accent={accent} size={28} />
+        <Text style={styles.sectionHeadTitle}>{title}</Text>
+      </View>
       {children}
     </View>
   );
@@ -67,9 +83,9 @@ function Section({ title, children }) {
 function ActionButton({ icon, label, description, onPress, variant = "default", disabled }) {
   const colors = {
     default: { bg: ACCENT.blue.wash,  border: COLORS.contextBorder, text: ACCENT.blue.deep,  box: ACCENT.blue.solid },
-    warning: { bg: "#FFFBEB", border: "#FDE68A", text: "#92400E", box: ACCENT.amber.solid },
-    danger:  { bg: "#FEF2F2", border: "#FECACA", text: "#991B1B", box: ACCENT.red.solid },
-    success: { bg: "#ECFDF5", border: "#A7F3D0", text: "#065F46", box: ACCENT.green.solid },
+    warning: { bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, text: SEMANTIC.warning.text, box: ACCENT.amber.solid },
+    danger:  { bg: SEMANTIC.error.bg,   border: statusBadge("error").border,   text: SEMANTIC.error.text,   box: ACCENT.red.solid },
+    success: { bg: SEMANTIC.success.bg, border: statusBadge("success").border, text: SEMANTIC.success.text, box: ACCENT.green.solid },
   };
   const c = colors[variant];
 
@@ -175,7 +191,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
   return (
     <View style={styles.enrollCard}>
       <View style={styles.enrollHeader}>
-        <Ionicons name="card-outline" size={16} color="#4F46E5" />
+        <IconSquare icon="key" accent="indigo" size={28} />
         <Text style={styles.enrollTitle}>{t("studentRecord.loginCredentials")}</Text>
       </View>
 
@@ -197,7 +213,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
 
       {mustResetPassword && (
         <View style={styles.resetWarning}>
-          <Ionicons name="shield-outline" size={14} color="#92400E" />
+          <Ionicons name="shield-outline" size={14} color={SEMANTIC.warning.text} />
           <Text style={styles.resetWarningText}>
             <Text style={{ fontWeight: "700" }}>
               {t("studentRecord.passwordNotChanged")}
@@ -215,7 +231,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
           style={[styles.resetBtn, (resetting || !studentId) && styles.disabled]}
           activeOpacity={0.75}
         >
-          <Ionicons name="key-outline" size={14} color="#92400E" />
+          <Ionicons name="key-outline" size={14} color={SEMANTIC.warning.text} />
           <Text style={styles.resetBtnText}>
             {resetting
               ? t("studentRecord.resetting")
@@ -246,8 +262,8 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
 
       {!!resetNote && (
         <View style={styles.resetWarning}>
-          <Ionicons name="checkmark-circle-outline" size={14} color="#065F46" />
-          <Text style={[styles.resetWarningText, { color: "#065F46" }]}>
+          <Ionicons name="checkmark-circle-outline" size={14} color={SEMANTIC.success.text} />
+          <Text style={[styles.resetWarningText, { color: SEMANTIC.success.text }]}>
             {resetNote}
           </Text>
         </View>
@@ -271,13 +287,13 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
       <View style={styles.modalOverlay}>
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
-            <Ionicons name="swap-horizontal-outline" size={20} color="#4F46E5" />
+            <IconSquare icon="swap-horizontal" accent="indigo" size={28} />
             <Text style={styles.modalTitle}>{t("studentRecord.moveToClass")}</Text>
           </View>
 
           {others.length === 0 ? (
             <View style={styles.modalEmpty}>
-              <Ionicons name="alert-circle-outline" size={16} color="#92400E" />
+              <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.warning.text} />
               <Text style={styles.modalEmptyText}>
                 {t("studentRecord.noOtherClasses")}
               </Text>
@@ -294,7 +310,7 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
                   ]}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="school-outline" size={16} color="#4F46E5" />
+                  <Ionicons name="school-outline" size={16} color={ACCENT[levelAccent(cls.level)].solid} />
                   <View style={{ marginLeft: 10 }}>
                     <Text style={styles.modalItemName}>{cls.name}</Text>
                     {cls.level && (
@@ -534,13 +550,17 @@ export default function StudentDetailScreen() {
   const enrollmentNo     = student?.enrollmentNo ?? student?.enrollment_no ?? null;
   const mustReset        = student?.mustResetPassword ?? student?.must_reset_password ?? false;
   const firstLetter      = (student?.name || "?").charAt(0).toUpperCase();
+  const statusColors     = statusBadge(statusTone(statusConfig.key));
+  const classBadge       = accentBadge(levelAccent(
+    (classes || []).find((c) => String(c._id ?? c.id) === String(classIdForMove ?? ""))?.level
+  ));
 
   // ── Loading ─────────────────────────────────────────────
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>{t("studentRecord.loading")}</Text>
       </View>
     );
@@ -549,7 +569,7 @@ export default function StudentDetailScreen() {
   if (error || !student) {
     return (
       <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <Ionicons name="alert-circle-outline" size={48} color={COLORS.danger} />
         <Text style={styles.errorTitle}>{t("studentRecord.notFoundTitle")}</Text>
         <Text style={styles.errorSub}>
           {error || t("studentRecord.notFoundHint")}
@@ -564,7 +584,7 @@ export default function StudentDetailScreen() {
   // ── Render ──────────────────────────────────────────────
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.page }}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -575,8 +595,9 @@ export default function StudentDetailScreen() {
             onPress={() => router.back()}
             style={styles.backBtn}
           >
-            <Ionicons name="chevron-back" size={20} color="#374151" />
+            <Ionicons name="chevron-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
+          <HeaderIcon style={styles.headerIcon} />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {student.name}
@@ -584,7 +605,7 @@ export default function StudentDetailScreen() {
             <Text style={styles.headerSub}>{t("studentRecord.headerSub")}</Text>
           </View>
           <TouchableOpacity onPress={loadStudent} style={styles.refreshBtn}>
-            <Ionicons name="refresh-outline" size={18} color="#6B7280" />
+            <Ionicons name="refresh-outline" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -592,11 +613,11 @@ export default function StudentDetailScreen() {
         <View style={styles.profileCard}>
           <View style={[
             styles.avatar,
-            { backgroundColor: isSuspended ? "#FEE2E2" : "#EEF2FF" },
+            { backgroundColor: isSuspended ? ACCENT.red.solid : ACCENT.blue.solid },
           ]}>
             <Text style={[
               styles.avatarText,
-              { color: isSuspended ? "#DC2626" : "#4F46E5" },
+              { color: COLORS.onPrimary },
             ]}>
               {firstLetter}
             </Text>
@@ -618,24 +639,24 @@ export default function StudentDetailScreen() {
             <View style={styles.badges}>
               <View style={[
                 styles.badge,
-                { backgroundColor: statusConfig.bg, borderColor: statusConfig.dot },
+                { backgroundColor: statusColors.bg, borderColor: statusColors.border },
               ]}>
-                <View style={[styles.badgeDot, { backgroundColor: statusConfig.dot }]} />
-                <Text style={[styles.badgeText, { color: statusConfig.color }]}>
+                <View style={[styles.badgeDot, { backgroundColor: statusColors.text }]} />
+                <Text style={[styles.badgeText, { color: statusColors.text }]}>
                   {statusConfig.labelKey ? t(statusConfig.labelKey) : statusConfig.label}
                 </Text>
               </View>
 
               {classNameDisplay && classNameDisplay !== "Unassigned" && (
-                <View style={styles.badgeIndigo}>
-                  <Ionicons name="school-outline" size={11} color="#4338CA" />
-                  <Text style={styles.badgeIndigoText}>{classNameDisplay}</Text>
+                <View style={[styles.badgeIndigo, { backgroundColor: classBadge.bg, borderColor: classBadge.border }]}>
+                  <Ionicons name="school-outline" size={11} color={classBadge.text} />
+                  <Text style={[styles.badgeIndigoText, { color: classBadge.text }]}>{classNameDisplay}</Text>
                 </View>
               )}
 
               {mustReset && (
                 <View style={styles.badgeAmber}>
-                  <Ionicons name="key-outline" size={11} color="#92400E" />
+                  <Ionicons name="key-outline" size={11} color={SEMANTIC.warning.text} />
                   <Text style={styles.badgeAmberText}>
                     {t("studentRecord.badgePasswordNotChanged")}
                   </Text>
@@ -653,7 +674,7 @@ export default function StudentDetailScreen() {
         />
 
         {/* Personal info */}
-        <Section title={t("studentRecord.sectionPersonal")}>
+        <Section title={t("studentRecord.sectionPersonal")} icon="person" accent="blue">
           <InfoRow icon="person-outline"   label={t("studentRecord.fullName")}     value={student.name || student.studentName} />
           <InfoRow icon="mail-outline"     label={t("studentRecord.email")}         value={student.email} />
           <InfoRow icon="call-outline"     label={t("studentRecord.phone")}         value={student.phone} />
@@ -665,7 +686,7 @@ export default function StudentDetailScreen() {
         </Section>
 
         {/* School info */}
-        <Section title={t("studentRecord.sectionSchool")}>
+        <Section title={t("studentRecord.sectionSchool")} icon="school" accent="blue">
           <InfoRow icon="school-outline"   label={t("studentRecord.className")}          value={classNameDisplay} />
           <InfoRow icon="people-outline"   label={t("studentRecord.guardianName")}  value={student.guardianName || student.guardian_name} />
           <InfoRow icon="call-outline"     label={t("studentRecord.guardianPhone")} value={student.guardianPhone || student.guardian_phone} />
@@ -701,7 +722,7 @@ export default function StudentDetailScreen() {
               <Ionicons
                 name={pending.state === "failed" ? "alert-circle-outline" : "cloud-upload-outline"}
                 size={15}
-                color={pending.state === "failed" ? "#991B1B" : "#92400E"}
+                color={pending.state === "failed" ? SEMANTIC.error.text : SEMANTIC.warning.text}
               />
               <Text style={[styles.pendingNoteText, pending.state === "failed" && styles.pendingNoteTextFailed]}>
                 {pending.state === "failed" ? t("studentRecord.changeRefused") : t("studentRecord.changePending")}
@@ -770,96 +791,104 @@ export default function StudentDetailScreen() {
 const styles = StyleSheet.create({
   pendingNote: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FFFBEB", borderColor: "#FDE68A", borderWidth: 1, borderRadius: 10,
+    backgroundColor: SEMANTIC.warning.bg, borderColor: statusBadge("warning").border, borderWidth: 1, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 9, marginVertical: 8,
   },
-  pendingNoteFailed:     { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
-  pendingNoteText:       { flex: 1, color: "#92400E", fontSize: 13, fontWeight: "600" },
-  pendingNoteTextFailed: { color: "#991B1B" },
+  pendingNoteFailed:     { backgroundColor: SEMANTIC.error.bg, borderColor: statusBadge("error").border },
+  pendingNoteText:       { flex: 1, color: SEMANTIC.warning.text, fontSize: 13, fontWeight: "600" },
+  pendingNoteTextFailed: { color: SEMANTIC.error.text },
   scroll:          { padding: 16, gap: 12 },
   center:          { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  loadingText:     { marginTop: 12, fontSize: 14, color: "#9CA3AF" },
-  errorTitle:      { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 12 },
-  errorSub:        { fontSize: 14, color: "#9CA3AF", textAlign: "center", marginTop: 4 },
-  errorBtn:        { marginTop: 16, backgroundColor: "#4F46E5", borderRadius: 12,
+  loadingText:     { marginTop: 12, fontSize: 14, color: COLORS.textSecondary },
+  errorTitle:      { fontSize: 18, fontWeight: "700", color: COLORS.text, marginTop: 12 },
+  errorSub:        { fontSize: 14, color: COLORS.textSecondary, textAlign: "center", marginTop: 4 },
+  errorBtn:        { marginTop: 16, backgroundColor: COLORS.primary, borderRadius: 12,
                      paddingHorizontal: 20, paddingVertical: 10 },
-  errorBtnText:    { color: "#fff", fontWeight: "700", fontSize: 14 },
+  errorBtnText:    { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   header:          { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 4 },
-  backBtn:         { width: 40, height: 40, borderRadius: 12, backgroundColor: "#F3F4F6",
+  backBtn:         { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.surface,
+                     borderWidth: 1, borderColor: COLORS.border,
                      alignItems: "center", justifyContent: "center" },
-  refreshBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6",
+  refreshBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.surface,
+                     borderWidth: 1, borderColor: COLORS.border,
                      alignItems: "center", justifyContent: "center" },
-  headerTitle:     { fontSize: 20, fontWeight: "800", color: "#111827" },
-  headerSub:       { fontSize: 13, color: "#6B7280", marginTop: 1 },
+  headerIcon:      { marginRight: 0 },
+  headerTitle:     { fontSize: 20, fontWeight: "800", color: COLORS.text },
+  headerSub:       { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
 
-  profileCard:     { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
-                     borderColor: "#E5E7EB", padding: 16, flexDirection: "row",
-                     alignItems: "flex-start", gap: 12, shadowColor: "#000",
+  profileCard:     { backgroundColor: ACCENT.blue.wash, borderRadius: 16, borderWidth: 1,
+                     borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.blue.base,
+                     padding: 16, flexDirection: "row",
+                     alignItems: "flex-start", gap: 12, shadowColor: COLORS.shadow,
                      shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
                      elevation: 2 },
   avatar:          { width: 56, height: 56, borderRadius: 16,
                      alignItems: "center", justifyContent: "center" },
   avatarText:      { fontSize: 24, fontWeight: "800" },
-  profileName:     { fontSize: 17, fontWeight: "800", color: "#111827" },
+  profileName:     { fontSize: 17, fontWeight: "800", color: COLORS.text },
   profileEnroll:   { fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-                     fontSize: 13, fontWeight: "700", color: "#4F46E5", marginTop: 2,
+                     fontSize: 13, fontWeight: "700", color: ACCENT.blue.deep, marginTop: 2,
                      letterSpacing: 2 },
-  profileAdm:      { fontSize: 13, color: "#9CA3AF", marginTop: 2 },
+  profileAdm:      { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   badges:          { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   badge:           { flexDirection: "row", alignItems: "center", gap: 5,
                      borderRadius: 20, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4 },
   badgeDot:        { width: 6, height: 6, borderRadius: 3 },
   badgeText:       { fontSize: 11, fontWeight: "700" },
   badgeIndigo:     { flexDirection: "row", alignItems: "center", gap: 4,
-                     backgroundColor: "#EEF2FF", borderRadius: 20, borderWidth: 1,
-                     borderColor: "#C7D2FE", paddingHorizontal: 10, paddingVertical: 4 },
-  badgeIndigoText: { fontSize: 11, fontWeight: "700", color: "#3730A3" },
+                     backgroundColor: ACCENT.indigo.wash, borderRadius: 20, borderWidth: 1,
+                     borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeIndigoText: { fontSize: 11, fontWeight: "700", color: ACCENT.indigo.deep },
   badgeAmber:      { flexDirection: "row", alignItems: "center", gap: 4,
-                     backgroundColor: "#FFFBEB", borderRadius: 20, borderWidth: 1,
-                     borderColor: "#FDE68A", paddingHorizontal: 10, paddingVertical: 4 },
-  badgeAmberText:  { fontSize: 11, fontWeight: "700", color: "#92400E" },
+                     backgroundColor: SEMANTIC.warning.bg, borderRadius: 20, borderWidth: 1,
+                     borderColor: statusBadge("warning").border, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeAmberText:  { fontSize: 11, fontWeight: "700", color: SEMANTIC.warning.text },
 
-  enrollCard:      { backgroundColor: "#EEF2FF", borderRadius: 16, borderWidth: 1,
-                     borderColor: "#C7D2FE", padding: 16 },
+  enrollCard:      { backgroundColor: ACCENT.indigo.wash, borderRadius: 16, borderWidth: 1,
+                     borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.indigo.base,
+                     padding: 16 },
   enrollHeader:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  enrollTitle:     { fontSize: 14, fontWeight: "800", color: "#1E1B4B" },
-  enrollHint:      { fontSize: 12, color: "#4338CA", lineHeight: 18, marginBottom: 12 },
-  enrollRow:       { flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
-                     borderRadius: 12, borderWidth: 1, borderColor: "#C7D2FE",
+  enrollTitle:     { fontSize: 14, fontWeight: "800", color: COLORS.text },
+  enrollHint:      { fontSize: 12, color: ACCENT.indigo.deep, lineHeight: 18, marginBottom: 12 },
+  enrollRow:       { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface,
+                     borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
                      paddingHorizontal: 14, paddingVertical: 12 },
   enrollNo:        { flex: 1, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-                     fontSize: 16, fontWeight: "800", color: "#312E81", letterSpacing: 3 },
-  copyBtn:         { backgroundColor: "#EEF2FF", borderRadius: 8,
+                     fontSize: 16, fontWeight: "800", color: ACCENT.indigo.deep, letterSpacing: 3 },
+  copyBtn:         { backgroundColor: ACCENT.indigo.wash, borderRadius: 8,
                      paddingHorizontal: 12, paddingVertical: 6 },
-  copyBtnCopied:   { backgroundColor: "#D1FAE5" },
-  copyBtnText:     { fontSize: 12, fontWeight: "700", color: "#4338CA" },
-  copyBtnTextCopied: { color: "#065F46" },
+  copyBtnCopied:   { backgroundColor: SEMANTIC.success.box },
+  copyBtnText:     { fontSize: 12, fontWeight: "700", color: ACCENT.indigo.deep },
+  copyBtnTextCopied: { color: SEMANTIC.success.text },
   resetWarning:    { flexDirection: "row", alignItems: "flex-start", gap: 8,
-                     backgroundColor: "#FFFBEB", borderRadius: 10, borderWidth: 1,
-                     borderColor: "#FDE68A", padding: 10, marginTop: 10 },
-  resetWarningText:{ fontSize: 12, color: "#92400E", flex: 1, lineHeight: 17 },
+                     backgroundColor: SEMANTIC.warning.bg, borderRadius: 10, borderWidth: 1,
+                     borderColor: statusBadge("warning").border, padding: 10, marginTop: 10 },
+  resetWarningText:{ fontSize: 12, color: SEMANTIC.warning.text, flex: 1, lineHeight: 17 },
   resetBtn:        { flexDirection: "row", alignItems: "center", justifyContent: "center",
-                     gap: 6, backgroundColor: "#FFFBEB", borderRadius: 10,
-                     borderWidth: 1, borderColor: "#FDE68A",
+                     gap: 6, backgroundColor: SEMANTIC.warning.bg, borderRadius: 10,
+                     borderWidth: 1, borderColor: statusBadge("warning").border,
                      paddingVertical: 8, marginTop: 10 },
-  resetBtnText:    { fontSize: 12, fontWeight: "700", color: "#92400E" },
-  newCredsBox:     { backgroundColor: "#ECFDF5", borderRadius: 10, borderWidth: 1,
-                     borderColor: "#A7F3D0", padding: 10, marginTop: 10 },
-  newCredsTitle:   { fontSize: 12, fontWeight: "800", color: "#065F46", marginBottom: 6 },
-  newCredsHint:    { fontSize: 11, color: "#047857", lineHeight: 15, marginTop: 4 },
+  resetBtnText:    { fontSize: 12, fontWeight: "700", color: SEMANTIC.warning.text },
+  newCredsBox:     { backgroundColor: SEMANTIC.success.bg, borderRadius: 10, borderWidth: 1,
+                     borderColor: statusBadge("success").border, padding: 10, marginTop: 10 },
+  newCredsTitle:   { fontSize: 12, fontWeight: "800", color: SEMANTIC.success.text, marginBottom: 6 },
+  newCredsHint:    { fontSize: 11, color: SEMANTIC.success.text, lineHeight: 15, marginTop: 4 },
 
-  section:         { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
-                     borderColor: "#E5E7EB", padding: 16, shadowColor: "#000",
+  section:         { backgroundColor: ACCENT.blue.wash, borderRadius: 16, borderWidth: 1,
+                     borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.blue.base,
+                     padding: 16, shadowColor: COLORS.shadow,
                      shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
-  sectionTitle:    { fontSize: 13, fontWeight: "800", color: "#111827", marginBottom: 14 },
+  sectionHead:     { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
+  sectionHeadTitle:{ flex: 1, fontSize: 13, fontWeight: "800", color: COLORS.text },
+  sectionTitle:    { fontSize: 13, fontWeight: "800", color: COLORS.text, marginBottom: 14 },
 
   infoRow:         { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
   infoIcon:        { marginTop: 2 },
   infoText:        { flex: 1 },
-  infoLabel:       { fontSize: 10, fontWeight: "700", color: "#9CA3AF",
+  infoLabel:       { fontSize: 10, fontWeight: "700", color: COLORS.textSecondary,
                      textTransform: "uppercase", letterSpacing: 0.8 },
-  infoValue:       { fontSize: 14, fontWeight: "600", color: "#111827", marginTop: 2 },
+  infoValue:       { fontSize: 14, fontWeight: "600", color: COLORS.text, marginTop: 2 },
   mono:            { fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
                      letterSpacing: 2 },
 
@@ -868,7 +897,7 @@ const styles = StyleSheet.create({
                      borderRadius: 14, borderWidth: 1, padding: 14 },
   actionIcon:      { width: 36, height: 36, borderRadius: 10,
                      alignItems: "center", justifyContent: "center",
-                     shadowColor: "#000", shadowOpacity: 0.06,
+                     shadowColor: COLORS.shadow, shadowOpacity: 0.06,
                      shadowRadius: 3, elevation: 1 },
   actionText:      { flex: 1 },
   actionLabel:     { fontSize: 14, fontWeight: "800" },
@@ -877,19 +906,19 @@ const styles = StyleSheet.create({
 
   modalOverlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
                      justifyContent: "center", alignItems: "center", padding: 24 },
-  modalSheet:      { backgroundColor: "#fff", borderRadius: 20, padding: 20,
+  modalSheet:      { backgroundColor: COLORS.surface, borderRadius: 20, padding: 20,
                      width: "100%", maxWidth: 380 },
   modalHeader:     { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  modalTitle:      { fontSize: 17, fontWeight: "800", color: "#111827" },
-  modalList:       { maxHeight: 280, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" },
+  modalTitle:      { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  modalList:       { maxHeight: 280, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border },
   modalItem:       { flexDirection: "row", alignItems: "center", padding: 14 },
-  modalItemBorder: { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  modalItemName:   { fontSize: 14, fontWeight: "700", color: "#111827" },
-  modalItemLevel:  { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  modalItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalItemName:   { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  modalItemLevel:  { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   modalEmpty:      { flexDirection: "row", alignItems: "center", gap: 8,
-                     backgroundColor: "#FFFBEB", borderRadius: 12, padding: 14 },
-  modalEmptyText:  { fontSize: 13, color: "#92400E", flex: 1 },
+                     backgroundColor: SEMANTIC.warning.bg, borderRadius: 12, padding: 14 },
+  modalEmptyText:  { fontSize: 13, color: SEMANTIC.warning.text, flex: 1 },
   modalCancel:     { marginTop: 14, borderRadius: 12, borderWidth: 1,
-                     borderColor: "#E5E7EB", paddingVertical: 12, alignItems: "center" },
-  modalCancelText: { fontSize: 14, fontWeight: "700", color: "#6B7280" },
+                     borderColor: COLORS.border, paddingVertical: 12, alignItems: "center" },
+  modalCancelText: { fontSize: 14, fontWeight: "700", color: COLORS.textSecondary },
 });

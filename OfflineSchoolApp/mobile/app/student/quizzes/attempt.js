@@ -33,6 +33,7 @@ import {
 
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -111,7 +112,7 @@ const Timer = ({ totalSeconds, onExpire, paused }) => {
       <Ionicons
         name="time-outline"
         size={14}
-        color={isDanger ? "#DC2626" : isWarning ? "#D97706" : "#4F46E5"}
+        color={isDanger ? SEMANTIC.error.icon : isWarning ? SEMANTIC.warning.icon : ACCENT.indigo.solid}
       />
       <Text
         style={[
@@ -157,17 +158,17 @@ const QuestionNavGrid = ({
     <View style={styles.navGridHeader}>
       <Text style={styles.navGridTitle}>{t("studentQuiz.jumpTo")}</Text>
       <TouchableOpacity onPress={onClose} style={styles.navGridClose}>
-        <Ionicons name="close" size={20} color="#374151" />
+        <Ionicons name="close" size={20} color={COLORS.text} />
       </TouchableOpacity>
     </View>
 
     {/* Legend */}
     <View style={styles.navLegend}>
       {[
-        { color: "#4F46E5", labelKey: "studentQuiz.current"  },
-        { color: "#059669", labelKey: "studentQuiz.answered" },
-        { color: "#F59E0B", labelKey: "studentQuiz.flagged"  },
-        { color: "#E5E7EB", labelKey: "studentQuiz.skipped"  },
+        { color: ACCENT.indigo.solid,  labelKey: "studentQuiz.current"  },
+        { color: SEMANTIC.success.icon, labelKey: "studentQuiz.answered" },
+        { color: ACCENT.amber.base,    labelKey: "studentQuiz.flagged"  },
+        { color: COLORS.border,        labelKey: "studentQuiz.skipped"  },
       ].map((l) => (
         <View key={l.label} style={styles.navLegendItem}>
           <View style={[styles.navLegendDot, { backgroundColor: l.color }]} />
@@ -183,11 +184,11 @@ const QuestionNavGrid = ({
         const isFlagged = flagged.has(qId);
         const isCurrent = i === currentIndex;
 
-        let bg    = "#F3F4F6";
-        let color = "#374151";
-        if (isCurrent)  { bg = "#4F46E5"; color = "#FFF";    }
-        else if (isFlagged)  { bg = "#FEF3C7"; color = "#D97706"; }
-        else if (isAnswered) { bg = "#ECFDF5"; color = "#059669"; }
+        let bg    = ACCENT.slate.wash;
+        let color = COLORS.text;
+        if (isCurrent)  { bg = ACCENT.indigo.solid; color = COLORS.onPrimary; }
+        else if (isFlagged)  { bg = SEMANTIC.warning.box; color = SEMANTIC.warning.text; }
+        else if (isAnswered) { bg = SEMANTIC.success.box; color = SEMANTIC.success.text; }
 
         return (
           <TouchableOpacity
@@ -233,13 +234,13 @@ const ResultScreen = ({ result, quiz, onClose }) => {
         <View
           style={[
             styles.resultBanner,
-            { backgroundColor: isPassed ? "#059669" : "#DC2626" },
+            { backgroundColor: isPassed ? ACCENT.green.solid : ACCENT.red.solid },
           ]}
         >
           <Ionicons
             name={isPassed ? "checkmark-circle" : "close-circle"}
             size={56}
-            color="#FFF"
+            color={COLORS.onPrimary}
           />
           <Text style={styles.resultBannerTitle}>
             {isPassed ? t("studentQuiz.passedTitle") : t("studentQuiz.failedTitle")}
@@ -256,7 +257,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             <Text
               style={[
                 styles.scoreValue,
-                { color: isPassed ? "#059669" : "#DC2626" },
+                { color: isPassed ? SEMANTIC.success.text : SEMANTIC.error.text },
               ]}
             >
               {attempt?.percentage?.toFixed(1) ?? "0"}%
@@ -282,22 +283,19 @@ const ResultScreen = ({ result, quiz, onClose }) => {
               value: attempt?.time_taken_secs
                 ? formatSeconds(attempt.time_taken_secs)
                 : "—",
-              color: "#4F46E5",
-              bg:    "#EEF2FF",
+              accent: ACCENT.indigo,
             },
             {
               icon:  "help-circle-outline",
               labelKey: "studentQuiz.questions",
               value: attempt?.answers?.length ?? 0,
-              color: "#D97706",
-              bg:    "#FEF3C7",
+              accent: ACCENT.amber,
             },
             {
               icon:  "checkmark-circle-outline",
               labelKey: "studentQuiz.correct",
               value: (attempt?.answers || []).filter((a) => a.is_correct).length,
-              color: "#059669",
-              bg:    "#ECFDF5",
+              accent: ACCENT.green,
             },
             {
               icon:  "close-circle-outline",
@@ -305,16 +303,15 @@ const ResultScreen = ({ result, quiz, onClose }) => {
               value: (attempt?.answers || []).filter(
                 (a) => a.is_correct === false
               ).length,
-              color: "#DC2626",
-              bg:    "#FEE2E2",
+              accent: ACCENT.red,
             },
           ].map((s) => (
             <View
               key={s.label}
-              style={[styles.resultStatCard, { backgroundColor: s.bg }]}
+              style={[styles.resultStatCard, { backgroundColor: s.accent.wash, borderTopColor: s.accent.base }]}
             >
-              <Ionicons name={s.icon} size={20} color={s.color} />
-              <Text style={[styles.resultStatValue, { color: s.color }]}>
+              <Ionicons name={s.icon} size={20} color={s.accent.solid} />
+              <Text style={[styles.resultStatValue, { color: s.accent.deep }]}>
                 {s.value}
               </Text>
               <Text style={styles.resultStatLabel}>{s.label}</Text>
@@ -332,7 +329,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             <Ionicons
               name={showAnswers ? "chevron-up" : "chevron-down"}
               size={18}
-              color="#4F46E5"
+              color={ACCENT.indigo.deep}
             />
             <Text style={styles.reviewToggleText}>
               {showAnswers ? t("studentQuiz.hideAnswers") : t("studentQuiz.reviewAnswers")}
@@ -346,7 +343,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             if (!question) return null;
 
             return (
-              <View key={i} style={styles.reviewCard}>
+              <View key={i} style={[styles.reviewCard, { borderLeftColor: answer.is_correct ? SEMANTIC.success.icon : SEMANTIC.error.icon }]}>
                 {/* Question header */}
                 <View style={styles.reviewCardHeader}>
                   <View
@@ -354,7 +351,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
                       styles.reviewCorrectIcon,
                       {
                         backgroundColor:
-                          answer.is_correct ? "#ECFDF5" : "#FEE2E2",
+                          answer.is_correct ? SEMANTIC.success.box : SEMANTIC.error.box,
                       },
                     ]}
                   >
@@ -365,7 +362,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
                           : "close-circle"
                       }
                       size={18}
-                      color={answer.is_correct ? "#059669" : "#DC2626"}
+                      color={answer.is_correct ? SEMANTIC.success.icon : SEMANTIC.error.icon}
                     />
                   </View>
                   <Text style={styles.reviewQNum}>Q{i + 1}</Text>
@@ -408,17 +405,17 @@ const ResultScreen = ({ result, quiz, onClose }) => {
                         size={16}
                         color={
                           opt.is_correct
-                            ? "#059669"
+                            ? SEMANTIC.success.icon
                             : wasSelected
-                            ? "#DC2626"
-                            : "#D1D5DB"
+                            ? SEMANTIC.error.icon
+                            : COLORS.textMuted
                         }
                       />
                       <Text
                         style={[
                           styles.reviewOptionText,
-                          opt.is_correct && { color: "#059669", fontWeight: "600" },
-                          wasSelected && !opt.is_correct && { color: "#DC2626" },
+                          opt.is_correct && { color: SEMANTIC.success.text, fontWeight: "600" },
+                          wasSelected && !opt.is_correct && { color: SEMANTIC.error.text },
                         ]}
                       >
                         {opt.option_text}
@@ -437,8 +434,8 @@ const ResultScreen = ({ result, quiz, onClose }) => {
                           styles.fillAnswerText,
                           {
                             color: answer.is_correct
-                              ? "#059669"
-                              : "#DC2626",
+                              ? SEMANTIC.success.text
+                              : SEMANTIC.error.text,
                           },
                         ]}
                       >
@@ -473,7 +470,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
           onPress={onClose}
           activeOpacity={0.8}
         >
-          <Ionicons name="home-outline" size={18} color="#FFF" />
+          <Ionicons name="home-outline" size={18} color={COLORS.onPrimary} />
           <Text style={styles.doneBtnText}>{t("common.done")}</Text>
         </TouchableOpacity>
       </View>
@@ -720,7 +717,7 @@ export default function AttemptScreen() {
   if (phase === "loading") {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
         <Text style={styles.loadingText}>{t("studentQuiz.starting")}</Text>
       </View>
     );
@@ -774,7 +771,7 @@ export default function AttemptScreen() {
                    }
           }
         >
-          <Ionicons name="close" size={20} color="#374151" />
+          <Ionicons name="close" size={20} color={COLORS.text} />
         </TouchableOpacity>
 
         {/* Center: Question count + Timer */}
@@ -796,7 +793,7 @@ export default function AttemptScreen() {
           style={styles.topBarBtn}
           onPress={() => setShowNav(true)}
         >
-          <Ionicons name="grid-outline" size={20} color="#374151" />
+          <Ionicons name="grid-outline" size={20} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
@@ -823,7 +820,7 @@ export default function AttemptScreen() {
 
           {(currentQ.points_override ?? currentQ.points) && (
             <View style={styles.pointsBadge}>
-              <Ionicons name="star" size={11} color="#D97706" />
+              <Ionicons name="star" size={11} color={SEMANTIC.warning.text} />
               <Text style={styles.pointsBadgeText}>
                 {t("studentQuiz.pointCount", { count: currentQ.points_override ?? currentQ.points })}
               </Text>
@@ -840,7 +837,7 @@ export default function AttemptScreen() {
             <Ionicons
               name={isFlagged ? "flag" : "flag-outline"}
               size={16}
-              color={isFlagged ? "#D97706" : "#9CA3AF"}
+              color={isFlagged ? SEMANTIC.warning.icon : COLORS.textSubtle}
             />
           </TouchableOpacity>
         </View>
@@ -891,7 +888,7 @@ export default function AttemptScreen() {
                       <Ionicons
                         name={isMultiSelect ? "checkmark" : "ellipse"}
                         size={isMultiSelect ? 14 : 8}
-                        color="#FFF"
+                        color={COLORS.onPrimary}
                       />
                     )}
                   </View>
@@ -955,7 +952,7 @@ export default function AttemptScreen() {
           <Ionicons
             name="arrow-back"
             size={18}
-            color={currentIndex === 0 ? "#D1D5DB" : "#374151"}
+            color={currentIndex === 0 ? COLORS.textMuted : COLORS.text}
           />
           <Text
             style={[
@@ -979,10 +976,10 @@ export default function AttemptScreen() {
             activeOpacity={0.8}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator size="small" color={COLORS.onPrimary} />
             ) : (
               <>
-                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                <Ionicons name="checkmark-circle" size={18} color={COLORS.onPrimary} />
                 <Text style={styles.submitBtnText}>{t("studentQuiz.submit")}</Text>
               </>
             )}
@@ -994,7 +991,7 @@ export default function AttemptScreen() {
             activeOpacity={0.8}
           >
             <Text style={styles.nextBtnText}>{t("studentQuiz.next")}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFF" />
+            <Ionicons name="arrow-forward" size={18} color={COLORS.onPrimary} />
           </TouchableOpacity>
         )}
       </View>
@@ -1026,17 +1023,17 @@ export default function AttemptScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: "#F3F4F6" },
+  container:    { flex: 1, backgroundColor: COLORS.page },
   centered:     {
     flex:           1,
     justifyContent: "center",
     alignItems:     "center",
-    backgroundColor:"#F3F4F6",
+    backgroundColor:COLORS.page,
   },
   loadingText: {
     marginTop:  12,
     fontSize:   14,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "500",
   },
 
@@ -1047,15 +1044,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   topBarBtn: {
     width:          36,
     height:         36,
     borderRadius:   10,
-    backgroundColor:"#F3F4F6",
+    backgroundColor:ACCENT.slate.wash,
     alignItems:     "center",
     justifyContent: "center",
   },
@@ -1067,37 +1064,37 @@ const styles = StyleSheet.create({
   topBarCount: {
     fontSize:   15,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
 
   // ── Timer ─────────────────────────────────────────────────
   timer: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.indigo.wash,
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      20,
     gap:               4,
   },
-  timerWarning: { backgroundColor: "#FEF3C7" },
-  timerDanger:  { backgroundColor: "#FEE2E2" },
+  timerWarning: { backgroundColor: SEMANTIC.warning.box },
+  timerDanger:  { backgroundColor: SEMANTIC.error.box },
   timerText: {
     fontSize:   13,
     fontWeight: "700",
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
   },
-  timerTextWarning: { color: "#D97706" },
-  timerTextDanger:  { color: "#DC2626" },
+  timerTextWarning: { color: SEMANTIC.warning.text },
+  timerTextDanger:  { color: SEMANTIC.error.text },
 
   // ── Progress bar ──────────────────────────────────────────
   progressBar: {
     height:          4,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: ACCENT.indigo.wash,
   },
   progressFill: {
     height:          4,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.indigo.base,
     borderRadius:    2,
   },
 
@@ -1112,7 +1109,9 @@ const styles = StyleSheet.create({
   },
   questionTypeBadge: {
     flex:              1,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   accentBadge("indigo").bg,
+    borderWidth:       1,
+    borderColor:       accentBadge("indigo").border,
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      8,
@@ -1121,13 +1120,15 @@ const styles = StyleSheet.create({
   questionTypeText: {
     fontSize:   11,
     fontWeight: "700",
-    color:      "#4F46E5",
+    color:      accentBadge("indigo").text,
   },
   pointsBadge: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   "#FEF3C7",
+    backgroundColor:   statusBadge("warning").bg,
+    borderWidth:       1,
+    borderColor:       statusBadge("warning").border,
     paddingHorizontal: 8,
     paddingVertical:   4,
     borderRadius:      8,
@@ -1135,29 +1136,29 @@ const styles = StyleSheet.create({
   pointsBadgeText: {
     fontSize:   11,
     fontWeight: "700",
-    color:      "#D97706",
+    color:      statusBadge("warning").text,
   },
   flagBtn: {
     width:          32,
     height:         32,
     borderRadius:   8,
-    backgroundColor:"#F3F4F6",
+    backgroundColor:ACCENT.slate.wash,
     alignItems:     "center",
     justifyContent: "center",
   },
-  flagBtnActive: { backgroundColor: "#FEF3C7" },
+  flagBtnActive: { backgroundColor: SEMANTIC.warning.box },
 
   questionText: {
     fontSize:     18,
     fontWeight:   "700",
-    color:        "#111827",
+    color:        COLORS.text,
     lineHeight:   26,
     marginBottom: 16,
   },
 
   multiSelectHint: {
     fontSize:     12,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     fontStyle:    "italic",
     marginBottom: 12,
   },
@@ -1167,20 +1168,20 @@ const styles = StyleSheet.create({
   optionBtn: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         14,
     borderWidth:     2,
-    borderColor:     "transparent",
+    borderColor:     COLORS.border,
     gap:             12,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    2,
     elevation:       1,
   },
   optionBtnSelected: {
-    borderColor:     "#4F46E5",
-    backgroundColor: "#EEF2FF",
+    borderColor:     ACCENT.indigo.base,
+    backgroundColor: ACCENT.indigo.wash,
   },
 
   // Radio button
@@ -1189,13 +1190,13 @@ const styles = StyleSheet.create({
     height:         22,
     borderRadius:   11,
     borderWidth:    2,
-    borderColor:    "#D1D5DB",
+    borderColor:    COLORS.textMuted,
     alignItems:     "center",
     justifyContent: "center",
   },
   optionRadioSelected: {
-    borderColor:     "#4F46E5",
-    backgroundColor: "#4F46E5",
+    borderColor:     ACCENT.indigo.base,
+    backgroundColor: ACCENT.indigo.solid,
   },
 
   // Checkbox
@@ -1204,23 +1205,23 @@ const styles = StyleSheet.create({
     height:         22,
     borderRadius:   6,
     borderWidth:    2,
-    borderColor:    "#D1D5DB",
+    borderColor:    COLORS.textMuted,
     alignItems:     "center",
     justifyContent: "center",
   },
   optionCheckboxSelected: {
-    borderColor:     "#4F46E5",
-    backgroundColor: "#4F46E5",
+    borderColor:     ACCENT.indigo.base,
+    backgroundColor: ACCENT.indigo.solid,
   },
 
   optionText: {
     flex:       1,
     fontSize:   15,
-    color:      "#374151",
+    color:      COLORS.text,
     lineHeight: 22,
   },
   optionTextSelected: {
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
     fontWeight: "600",
   },
 
@@ -1229,23 +1230,23 @@ const styles = StyleSheet.create({
   fillBlankLabel: {
     fontSize:     13,
     fontWeight:   "600",
-    color:        "#374151",
+    color:        COLORS.text,
     marginBottom: 8,
   },
   fillBlankInput: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     borderWidth:     2,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     minHeight:       80,
   },
   fillBlankText: {
     fontSize:  15,
-    color:     "#111827",
+    color:     COLORS.text,
     lineHeight:22,
   },
-  fillBlankPlaceholder: { color: "#9CA3AF" },
+  fillBlankPlaceholder: { color: COLORS.textSubtle },
 
   // ── Nav footer ────────────────────────────────────────────
   navFooter: {
@@ -1254,9 +1255,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical:   12,
     paddingBottom:     32,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderTopWidth:    1,
-    borderTopColor:    "#F3F4F6",
+    borderTopColor:    COLORS.border,
     gap:               10,
   },
   navBtn: {
@@ -1265,29 +1266,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical:   12,
     borderRadius:      12,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   ACCENT.slate.wash,
     gap:               6,
   },
   navBtnDisabled: { opacity: 0.4 },
   navBtnText: {
     fontSize:   14,
     fontWeight: "600",
-    color:      "#374151",
+    color:      COLORS.text,
   },
-  navBtnTextDisabled: { color: "#D1D5DB" },
+  navBtnTextDisabled: { color: COLORS.textMuted },
 
   nextBtn: {
     flex:            1,
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.indigo.solid,
     borderRadius:    12,
     paddingVertical: 12,
     gap:             6,
   },
   nextBtnText: {
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
     fontWeight: "700",
     fontSize:   15,
   },
@@ -1297,14 +1298,14 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.green.solid,
     borderRadius:    12,
     paddingVertical: 12,
     gap:             6,
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: {
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
     fontWeight: "700",
     fontSize:   15,
   },
@@ -1323,7 +1324,7 @@ const styles = StyleSheet.create({
     bottom:          0,
     left:            0,
     right:           0,
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius:  20,
     borderTopRightRadius: 20,
     padding:         20,
@@ -1336,12 +1337,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom:   12,
   },
-  navGridTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  navGridTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text },
   navGridClose: {
     width:          32,
     height:         32,
     borderRadius:   8,
-    backgroundColor:"#F3F4F6",
+    backgroundColor:ACCENT.slate.wash,
     alignItems:     "center",
     justifyContent: "center",
   },
@@ -1356,7 +1357,7 @@ const styles = StyleSheet.create({
     height:       10,
     borderRadius: 5,
   },
-  navLegendText: { fontSize: 11, color: "#6B7280" },
+  navLegendText: { fontSize: 11, color: COLORS.textSecondary },
 
   navGridButtons: {
     flexDirection: "row",
@@ -1378,7 +1379,7 @@ const styles = StyleSheet.create({
     width:           6,
     height:          6,
     borderRadius:    3,
-    backgroundColor: "#F59E0B",
+    backgroundColor: ACCENT.amber.base,
   },
 
   // ── Result ────────────────────────────────────────────────
@@ -1386,15 +1387,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     alignItems:        "center",
   },
   resultHeaderTitle: {
     fontSize:   20,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   resultScroll: { padding: 16 },
 
@@ -1408,7 +1409,7 @@ const styles = StyleSheet.create({
   resultBannerTitle: {
     fontSize:   22,
     fontWeight: "800",
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
   },
   resultBannerSub: {
     fontSize: 14,
@@ -1416,31 +1417,31 @@ const styles = StyleSheet.create({
   },
 
   scoreCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         24,
     alignItems:      "center",
     marginBottom:    12,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    4,
     elevation:       2,
   },
-  scoreLabel:   { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  scoreLabel:   { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   scoreValue: {
     fontSize:   56,
     fontWeight: "900",
     marginVertical: 4,
   },
-  scoreDetail: { fontSize: 14, color: "#9CA3AF" },
+  scoreDetail: { fontSize: 14, color: COLORS.textSubtle },
   scorePassMark: {
     marginTop:         8,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   ACCENT.indigo.wash,
     paddingHorizontal: 12,
     paddingVertical:   4,
     borderRadius:      8,
   },
-  scorePassMarkText: { fontSize: 12, color: "#6B7280" },
+  scorePassMarkText: { fontSize: 12, color: ACCENT.indigo.deep },
 
   resultStats: {
     flexDirection: "row",
@@ -1454,15 +1455,18 @@ const styles = StyleSheet.create({
     padding:        14,
     alignItems:     "center",
     gap:            5,
+    borderWidth:    1,
+    borderColor:    COLORS.border,
+    borderTopWidth: 3,
   },
   resultStatValue: { fontSize: 22, fontWeight: "800" },
-  resultStatLabel: { fontSize: 12, color: "#6B7280" },
+  resultStatLabel: { fontSize: 12, color: COLORS.textSecondary },
 
   reviewToggle: {
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    12,
     paddingVertical: 12,
     marginBottom:    12,
@@ -1471,15 +1475,18 @@ const styles = StyleSheet.create({
   reviewToggleText: {
     fontSize:   14,
     fontWeight: "700",
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
   },
 
   reviewCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    2,
     elevation:       1,
@@ -1501,13 +1508,13 @@ const styles = StyleSheet.create({
     flex:       1,
     fontSize:   13,
     fontWeight: "700",
-    color:      "#374151",
+    color:      COLORS.text,
   },
-  reviewPoints: { fontSize: 12, color: "#9CA3AF" },
+  reviewPoints: { fontSize: 12, color: COLORS.textSubtle },
   reviewQText: {
     fontSize:     14,
     fontWeight:   "600",
-    color:        "#111827",
+    color:        COLORS.text,
     lineHeight:   20,
     marginBottom: 10,
   },
@@ -1520,11 +1527,11 @@ const styles = StyleSheet.create({
     borderRadius:  8,
     marginBottom:  4,
   },
-  reviewOptionCorrect: { backgroundColor: "#F0FDF4" },
-  reviewOptionWrong:   { backgroundColor: "#FEF2F2" },
+  reviewOptionCorrect: { backgroundColor: SEMANTIC.success.bg },
+  reviewOptionWrong:   { backgroundColor: SEMANTIC.error.bg },
   reviewOptionText: {
     fontSize:  13,
-    color:     "#6B7280",
+    color:     COLORS.textSecondary,
     flex:      1,
     lineHeight:18,
   },
@@ -1534,11 +1541,11 @@ const styles = StyleSheet.create({
     marginTop:     8,
     gap:           4,
   },
-  fillAnswerLabel: { fontSize: 13, color: "#6B7280" },
+  fillAnswerLabel: { fontSize: 13, color: COLORS.textSecondary },
   fillAnswerText:  { fontSize: 13, fontWeight: "700" },
 
   explanationBox: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    10,
     padding:         12,
     marginTop:       10,
@@ -1546,12 +1553,12 @@ const styles = StyleSheet.create({
   explanationLabel: {
     fontSize:     12,
     fontWeight:   "700",
-    color:        "#4F46E5",
+    color:        ACCENT.indigo.deep,
     marginBottom: 4,
   },
   explanationText: {
     fontSize:  13,
-    color:     "#374151",
+    color:     COLORS.text,
     lineHeight:18,
   },
 
@@ -1559,21 +1566,21 @@ const styles = StyleSheet.create({
   resultFooter: {
     padding:         16,
     paddingBottom:   32,
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderTopWidth:  1,
-    borderTopColor:  "#F3F4F6",
+    borderTopColor:  COLORS.border,
   },
   doneBtn: {
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.indigo.solid,
     borderRadius:    14,
     paddingVertical: 16,
     gap:             8,
   },
   doneBtnText: {
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
     fontWeight: "800",
     fontSize:   16,
   },

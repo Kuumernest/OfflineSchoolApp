@@ -14,6 +14,8 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, Badge, EmptyState } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -22,12 +24,13 @@ import { errorText } from "../../../src/utils/appError";
 // Object keys are the stored status/type values and must not change - only the
 // labels are localised.
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
+// `tone` is the status badge's colour (statusBadge in src/theme/colors.js).
+  draft:     { tone: "warning", labelKey: "examStatus.draft"     },
+  scheduled: { tone: "info",    labelKey: "examStatus.scheduled" },
+  ongoing:   { tone: "info",    labelKey: "examStatus.ongoing"   },
+  completed: { tone: "success", labelKey: "examStatus.completed" },
+  published: { tone: "success", labelKey: "examStatus.published" },
+  archived:  { tone: "error",   labelKey: "examStatus.archived"  },
 };
 
 const EXAM_TYPE_KEYS = {
@@ -60,29 +63,31 @@ const joinMeta = (parts, sep = " · ") =>
 // STAT CARD
 // ─────────────────────────────────────────────────────────
 
-const StatCard = ({ label, value, color, icon, onPress }) => (
+const StatCard = ({ label, value, accent, icon, onPress }) => (
   <TouchableOpacity
-    style={[sc.card, { borderLeftColor: color, borderLeftWidth: 3 }]}
+    style={[sc.card, { backgroundColor: ACCENT[accent].wash, borderTopColor: ACCENT[accent].base, borderTopWidth: 3 }]}
     onPress={onPress}
     activeOpacity={onPress ? 0.7 : 1}
   >
-    <View style={[sc.iconBox, { backgroundColor: color + "15" }]}>
-      <Ionicons name={icon} size={20} color={color} />
+    <View style={[sc.iconBox, { backgroundColor: ACCENT[accent].solid }]}>
+      <Ionicons name={icon} size={20} color={COLORS.onPrimary} />
     </View>
-    <Text style={[sc.value, { color }]}>{safe(value, "0")}</Text>
+    <Text style={[sc.value, { color: ACCENT[accent].deep }]}>{safe(value, "0")}</Text>
     <Text style={sc.label}>{label}</Text>
   </TouchableOpacity>
 );
 
 const sc = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         14,
     alignItems:      "center",
     gap:             6,
     flex:            1,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -97,7 +102,7 @@ const sc = StyleSheet.create({
   value: { fontSize: 22, fontWeight: "800" },
   label: {
     fontSize:      10,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
     textAlign:     "center",
@@ -137,26 +142,25 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
       activeOpacity={0.7}
     >
       <View style={ec.top}>
+        <IconSquare icon="document-text" accent="amber" size={36} style={ec.icon} />
         <View style={ec.info}>
           <Text style={ec.name} numberOfLines={1}>{examName}</Text>
           {!!subLine  && <Text style={ec.sub} numberOfLines={1}>{subLine}</Text>}
           {!!className && <Text style={ec.cls} numberOfLines={1}>{className}</Text>}
         </View>
-        <View style={[ec.badge, { backgroundColor: meta.bg }]}>
-          <Text style={[ec.badgeText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
-        </View>
+        <Badge label={t(meta.labelKey)} tone={meta.tone} style={ec.badge} textStyle={ec.badgeText} />
       </View>
 
       {!!dateLine && (
         <View style={ec.dateRow}>
-          <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+          <Ionicons name="calendar-outline" size={12} color={ACCENT.amber.solid} />
           <Text style={ec.dateText}>{dateLine}</Text>
         </View>
       )}
 
       {!!exam.resultsPublished && (
         <View style={ec.publishedBadge}>
-          <Ionicons name="checkmark-circle" size={12} color="#7C3AED" />
+          <Ionicons name="checkmark-circle" size={12} color={SEMANTIC.success.icon} />
           <Text style={ec.publishedText}>{t("examsDash.resultsPublished")}</Text>
         </View>
       )}
@@ -167,7 +171,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
           onPress={() => onStatusChange(exam)}
           activeOpacity={0.7}
         >
-          <Ionicons name="swap-horizontal-outline" size={14} color="#4F46E5" />
+          <Ionicons name="swap-horizontal-outline" size={14} color={ACCENT.indigo.solid} />
           <Text style={ec.actionText}>{t("common.status")}</Text>
         </TouchableOpacity>
 
@@ -176,8 +180,8 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
           onPress={onPress}
           activeOpacity={0.7}
         >
-          <Ionicons name="eye-outline" size={14} color="#059669" />
-          <Text style={[ec.actionText, { color: "#059669" }]}>{t("common.view")}</Text>
+          <Ionicons name="eye-outline" size={14} color={ACCENT.green.solid} />
+          <Text style={[ec.actionText, { color: ACCENT.green.deep }]}>{t("common.view")}</Text>
         </TouchableOpacity>
 
         {hasResults && (
@@ -186,8 +190,8 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
             onPress={() => onViewResults(exam)}
             activeOpacity={0.7}
           >
-            <Ionicons name="trophy-outline" size={14} color="#2563EB" />
-            <Text style={[ec.actionText, { color: "#2563EB" }]}>{t("examsDash.rankings")}</Text>
+            <Ionicons name="trophy-outline" size={14} color={ACCENT.blue.solid} />
+            <Text style={[ec.actionText, { color: ACCENT.blue.deep }]}>{t("examsDash.rankings")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -197,51 +201,54 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
 
 const ec = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    10,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.amber.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
   top:       { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
+  icon:      { marginRight: 10 },
   info:      { flex: 1, marginRight: 10 },
-  name:      { fontSize: 15, fontWeight: "700", color: "#111827" },
-  sub:       { fontSize: 12, color: "#6B7280", marginTop: 3 },
-  cls:       { fontSize: 12, color: "#4F46E5", fontWeight: "600", marginTop: 2 },
-  badge:     { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  name:      { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  sub:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 3 },
+  cls:       { fontSize: 12, color: ACCENT.indigo.deep, fontWeight: "600", marginTop: 2 },
+  badge:     { alignSelf: "auto", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 11, fontWeight: "700" },
   dateRow:   { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  dateText:  { fontSize: 12, color: "#9CA3AF" },
+  dateText:  { fontSize: 12, color: COLORS.textSecondary },
   publishedBadge: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               4,
-    backgroundColor:   "#F5F3FF",
+    backgroundColor:   SEMANTIC.success.box,
     alignSelf:         "flex-start",
     borderRadius:      6,
     paddingHorizontal: 8,
     paddingVertical:   3,
     marginBottom:      8,
   },
-  publishedText: { fontSize: 10, fontWeight: "600", color: "#7C3AED" },
+  publishedText: { fontSize: 10, fontWeight: "600", color: SEMANTIC.success.text },
   actions: {
     flexDirection:  "row",
     gap:            12,
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
     alignItems:     "center",
   },
   actionBtn:  { flexDirection: "row", alignItems: "center", gap: 4 },
-  actionText: { fontSize: 12, color: "#4F46E5", fontWeight: "600" },
+  actionText: { fontSize: 12, color: ACCENT.indigo.deep, fontWeight: "600" },
   resultsBtn: {
     marginLeft:        "auto",
-    backgroundColor:   "#EFF6FF",
+    backgroundColor:   ACCENT.blue.wash,
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      8,
@@ -365,8 +372,9 @@ export default function ExamsDashboardScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("examsDash.title")}</Text>
           <Text style={styles.headerSub}>
@@ -405,14 +413,14 @@ export default function ExamsDashboardScreen() {
         {/* Stats grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
-            <StatCard label={t("examStatus.draft")}     value={d.draft     ?? 0} color="#6B7280" icon="document-outline"          onPress={() => setActiveTab("draft")}     />
-            <StatCard label={t("examStatus.scheduled")} value={d.scheduled ?? 0} color="#4F46E5" icon="calendar-outline"          onPress={() => setActiveTab("scheduled")} />
-            <StatCard label={t("examStatus.ongoing")}   value={d.ongoing   ?? 0} color="#D97706" icon="time-outline"              onPress={() => setActiveTab("ongoing")}   />
+            <StatCard label={t("examStatus.draft")}     value={d.draft     ?? 0} accent="amber"  icon="document-outline"          onPress={() => setActiveTab("draft")}     />
+            <StatCard label={t("examStatus.scheduled")} value={d.scheduled ?? 0} accent="blue"   icon="calendar-outline"          onPress={() => setActiveTab("scheduled")} />
+            <StatCard label={t("examStatus.ongoing")}   value={d.ongoing   ?? 0} accent="sky"    icon="time-outline"              onPress={() => setActiveTab("ongoing")}   />
           </View>
           <View style={styles.statsRow}>
-            <StatCard label={t("examStatus.completed")} value={d.completed ?? 0} color="#059669" icon="checkmark-circle-outline"  onPress={() => setActiveTab("completed")} />
-            <StatCard label={t("examStatus.published")} value={d.published ?? 0} color="#7C3AED" icon="megaphone-outline"         onPress={() => setActiveTab("published")} />
-            <StatCard label={t("common.total")}     value={d.total     ?? 0} color="#111827" icon="list-outline"              onPress={() => setActiveTab("all")}       />
+            <StatCard label={t("examStatus.completed")} value={d.completed ?? 0} accent="green"  icon="checkmark-circle-outline"  onPress={() => setActiveTab("completed")} />
+            <StatCard label={t("examStatus.published")} value={d.published ?? 0} accent="green"  icon="megaphone-outline"         onPress={() => setActiveTab("published")} />
+            <StatCard label={t("common.total")}     value={d.total     ?? 0} accent="slate"  icon="list-outline"              onPress={() => setActiveTab("all")}       />
           </View>
         </View>
 
@@ -439,17 +447,17 @@ export default function ExamsDashboardScreen() {
                 // did not have one. React logged a component stack pointing
                 // at the View below, which reads like a render crash and is
                 // not one — it is this line.
-                { id: "published", label: t("results.published"), val: dashboard.results.published, color: "#7C3AED" },
-                { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       color: "#D97706" },
-                { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, color: "#DC2626" },
-                { id: "avg",      label: t("examsDash.avgScore"),      val: `${Number(dashboard.results.averagePerformance ?? 0).toFixed(2)}/20`, color: "#059669" },
-                { id: "passRate", label: t("examsDash.passRate"),      val: `${dashboard.results.passRate ?? 0}%`,           color: "#4F46E5" },
+                { id: "published", label: t("results.published"), val: dashboard.results.published, accent: "green" },
+                { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       accent: "amber" },
+                { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, accent: "red" },
+                { id: "avg",      label: t("examsDash.avgScore"),      val: `${Number(dashboard.results.averagePerformance ?? 0).toFixed(2)}/20`, accent: "green" },
+                { id: "passRate", label: t("examsDash.passRate"),      val: `${dashboard.results.passRate ?? 0}%`,           accent: "indigo" },
               ].map((p) => (
                 <View
                   key={p.id}
-                  style={[styles.pill, { backgroundColor: p.color + "10" }]}
+                  style={[styles.pill, { backgroundColor: ACCENT[p.accent].wash }]}
                 >
-                  <Text style={[styles.pillVal, { color: p.color }]}>
+                  <Text style={[styles.pillVal, { color: ACCENT[p.accent].deep }]}>
                     {safe(p.val, "—")}
                   </Text>
                   <Text style={styles.pillLbl}>{p.label}</Text>
@@ -463,7 +471,7 @@ export default function ExamsDashboardScreen() {
                 onPress={() => setActiveTab("completed")}
                 activeOpacity={0.7}
               >
-                <Ionicons name="alert-circle-outline" size={16} color="#D97706" />
+                <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.warning.icon} />
                 {/* Was two lines of English with an "s" bolted on by a
                     ternary — untranslated, on a screen where everything
                     around it goes through t(), and a pluralisation rule that
@@ -471,7 +479,7 @@ export default function ExamsDashboardScreen() {
                 <Text style={styles.pendingAlertText}>
                   {t("examsDash.pendingResultsAlert", { count: counts.pendingResults })}
                 </Text>
-                <Ionicons name="chevron-forward" size={14} color="#D97706" />
+                <Ionicons name="chevron-forward" size={14} color={SEMANTIC.warning.text} />
               </TouchableOpacity>
             )}
           </View>
@@ -486,7 +494,7 @@ export default function ExamsDashboardScreen() {
               label:   t("examsDash.qaCreate"),
               sub:     t("examsDash.qaCreateSub"),
               icon:    "add-circle-outline",
-              color:   "#4F46E5",
+              accent:  "indigo",
               onPress: () => router.push("/admin/exams/create"),
               badge:   null,
             },
@@ -495,7 +503,7 @@ export default function ExamsDashboardScreen() {
               label:   t("examsDash.qaMarks"),
               sub:     t("examsDash.qaMarksSub"),
               icon:    "create-outline",
-              color:   "#059669",
+              accent:  "green",
               onPress: () => router.push("/admin/exams/marks"),
               badge:   null,
             },
@@ -504,7 +512,7 @@ export default function ExamsDashboardScreen() {
               label:   t("examsDash.qaResults"),
               sub:     t("examsDash.qaResultsSub"),
               icon:    "trophy-outline",
-              color:   "#2563EB",
+              accent:  "blue",
               onPress: handleResultsQuickAction,
               badge:   counts.completedOrPublished > 0 ? counts.completedOrPublished : null,
             },
@@ -513,7 +521,7 @@ export default function ExamsDashboardScreen() {
               label:   t("examsDash.qaReportCards"),
               sub:     t("examsDash.qaReportCardsSub"),
               icon:    "document-text-outline",
-              color:   "#D97706",
+              accent:  "amber",
               onPress: () => router.push("/admin/reports/generate"),
               badge:   null,
             },
@@ -522,7 +530,7 @@ export default function ExamsDashboardScreen() {
               label:   t("examsDash.qaSubmissions"),
               sub:     t("examsDash.qaSubmissionsSub"),
               icon:    "cloud-upload-outline",
-              color:   "#DC2626",
+              accent:  "red",
               onPress: () => router.push("/admin/exams/monitor"),
               badge:   null,
             },
@@ -533,19 +541,19 @@ export default function ExamsDashboardScreen() {
               onPress={a.onPress}
               activeOpacity={0.7}
             >
-              <View style={[styles.actionIcon, { backgroundColor: a.color + "15" }]}>
-                <Ionicons name={a.icon} size={20} color={a.color} />
+              <View style={[styles.actionIcon, { backgroundColor: ACCENT[a.accent].solid }]}>
+                <Ionicons name={a.icon} size={20} color={COLORS.onPrimary} />
               </View>
               <View style={styles.actionInfo}>
                 <Text style={styles.actionLabel}>{a.label}</Text>
                 <Text style={styles.actionSub}>{a.sub}</Text>
               </View>
               {a.badge != null && (
-                <View style={[styles.actionBadge, { backgroundColor: a.color }]}>
+                <View style={[styles.actionBadge, { backgroundColor: ACCENT[a.accent].solid }]}>
                   <Text style={styles.actionBadgeText}>{safe(a.badge, "")}</Text>
                 </View>
               )}
-              <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
             </TouchableOpacity>
           ))}
         </View>
@@ -613,18 +621,22 @@ export default function ExamsDashboardScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.examListItem}>
-            <View style={styles.empty}>
-              <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>{t("examsDash.noneFound")}</Text>
-              <Text style={styles.emptySub}>{t("examsDash.noneFoundHint")}</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => router.push("/admin/exams/create")}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.emptyBtnText}>{t("examsDash.qaCreate")}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon="document-text"
+              accent="amber"
+              title={t("examsDash.noneFound")}
+              message={t("examsDash.noneFoundHint")}
+              style={styles.empty}
+              action={
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={() => router.push("/admin/exams/create")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptyBtnText}>{t("examsDash.qaCreate")}</Text>
+                </TouchableOpacity>
+              }
+            />
           </View>
         }
         ListFooterComponent={<View style={{ height: 40 }} />}
@@ -649,21 +661,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:    { marginLeft: 12, marginRight: 0 },
   headerCenter:  { flex: 1, marginLeft: 12 },
-  headerTitle:   { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:   { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   createBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -706,7 +719,7 @@ const styles = StyleSheet.create({
   pillVal: { fontSize: 14, fontWeight: "800" },
   pillLbl: {
     fontSize:      9,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
@@ -714,12 +727,12 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             8,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.box,
     borderRadius:    8,
     padding:         10,
     marginTop:       12,
   },
-  pendingAlertText: { fontSize: 12, color: "#D97706", fontWeight: "500", flex: 1 },
+  pendingAlertText: { fontSize: 12, color: SEMANTIC.warning.text, fontWeight: "500", flex: 1 },
   quickActions: {
     backgroundColor: "#FFF",
     borderRadius:    16,
@@ -746,41 +759,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionInfo:      { flex: 1 },
-  actionLabel:     { fontSize: 14, fontWeight: "600", color: "#111827" },
-  actionSub:       { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  actionLabel:     { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  actionSub:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   actionBadge: {
     borderRadius:      10,
     paddingHorizontal: 8,
     paddingVertical:   2,
     marginRight:       4,
   },
-  actionBadgeText: { fontSize: 11, fontWeight: "700", color: "#FFF" },
+  actionBadgeText: { fontSize: 11, fontWeight: "700", color: COLORS.onPrimary },
   tabsRow:         { marginBottom: 12 },
   tab: {
     paddingHorizontal: 14,
     paddingVertical:   7,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     marginRight:       8,
   },
-  tabActive:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  tabText:       { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  tabTextActive: { color: "#FFF" },
+  tabActive:     { backgroundColor: ACCENT.amber.wash, borderColor: ACCENT.amber.base },
+  tabText:       { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary },
+  tabTextActive: { color: ACCENT.amber.deep },
   examList:      { gap: 0 },
   // Each card in the list, spaced as the list's own children were.
   examListItem:  { marginBottom: 0 },
   sectionTitle: {
     fontSize:     15,
     fontWeight:   "700",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 12,
   },
-  count: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  empty: { alignItems: "center", paddingVertical: 60, gap: 10 },
-  emptyTitle: { fontSize: 16, fontWeight: "600", color: "#374151" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF" },
+  count: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  empty: { paddingVertical: 60 },
   emptyBtn: {
     backgroundColor:   "#4F46E5",
     borderRadius:      10,

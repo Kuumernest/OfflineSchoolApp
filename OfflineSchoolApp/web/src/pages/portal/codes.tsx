@@ -224,7 +224,7 @@ export default function GuardianCodesPage() {
                     ) : a.revokedAt ? (
                       <Badge variant="danger">{t("codes.revoked")}</Badge>
                     ) : (
-                      <Badge variant="default">{t("codes.noAccess")}</Badge>
+                      <Badge variant="warning">{t("codes.noAccess")}</Badge>
                     )}
                   </Td>
                   <Td className="text-xs text-ink-muted">

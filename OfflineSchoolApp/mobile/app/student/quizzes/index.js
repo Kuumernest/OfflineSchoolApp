@@ -30,6 +30,18 @@ import {
   resolveStudentClassId,
 } from "../../../src/services/student.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+
+// A status pill's colours: a status tone or an entity accent, never grey.
+const toneOf = (tone) => {
+  const b = statusBadge(tone);
+  return { color: b.text, bg: b.bg, border: b.border };
+};
+const accentOf = (accent) => {
+  const b = accentBadge(accent);
+  return { color: b.text, bg: b.bg, border: b.border };
+};
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -82,8 +94,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
     const passed = submitted.some((a) => a.is_passed);
     return {
       label:    `Completed · ${best.toFixed(1)}%`,
-      color:    passed ? "#059669" : "#DC2626",
-      bg:       passed ? "#ECFDF5" : "#FEE2E2",
+      ...toneOf(passed ? "success" : "error"),
       canStart: false,
       best,
       attempts: submitted.length,
@@ -93,8 +104,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
   if (!quiz.is_published) {
     return {
       label:    t("studentHome.quizUnavailable"),
-      color:    "#9CA3AF",
-      bg:       "#F3F4F6",
+      ...toneOf("info"),
       canStart: false,
       attempts: 0,
     };
@@ -103,8 +113,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
   if (quiz.available_from && now < new Date(quiz.available_from)) {
     return {
       label:    `Opens ${formatDate(quiz.available_from)}`,
-      color:    "#D97706",
-      bg:       "#FEF3C7",
+      ...toneOf("warning"),
       canStart: false,
       attempts: 0,
     };
@@ -117,8 +126,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
       const passed = submitted.some((a) => a.is_passed);
       return {
         label:    `Completed · ${best.toFixed(1)}%`,
-        color:    passed ? "#059669" : "#DC2626",
-        bg:       passed ? "#ECFDF5" : "#FEE2E2",
+        ...toneOf(passed ? "success" : "error"),
         canStart: false,
         best,
         attempts: submitted.length,
@@ -126,8 +134,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
     }
     return {
       label:    t("studentHome.quizClosed"),
-      color:    "#DC2626",
-      bg:       "#FEE2E2",
+      ...toneOf("error"),
       canStart: false,
       attempts: 0,
     };
@@ -141,8 +148,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
     const passed = submitted.some((a) => a.is_passed);
     return {
       label:    `Completed · ${best.toFixed(1)}%`,
-      color:    passed ? "#059669" : "#DC2626",
-      bg:       passed ? "#ECFDF5" : "#FEE2E2",
+      ...toneOf(passed ? "success" : "error"),
       canStart: false,
       best,
       attempts: submitted.length,
@@ -153,8 +159,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
   if (inProgress) {
     return {
       label:    t("studentHome.quizInProgress"),
-      color:    "#4F46E5",
-      bg:       "#EEF2FF",
+      ...toneOf("info"),
       canStart: true,
       resumeId: inProgress.id || inProgress._id,
       attempts: submitted.length,
@@ -170,8 +175,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
       label:    remaining != null
         ? t("studentQuiz.attemptsLeft", { count: remaining })
         : t("studentHome.quizRetake"),
-      color:    "#4F46E5",
-      bg:       "#EEF2FF",
+      ...accentOf("indigo"),
       canStart: true,
       best,
       attempts: submitted.length,
@@ -180,8 +184,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
 
   return {
     label:    t("studentHome.quizNotStarted"),
-    color:    "#059669",
-    bg:       "#ECFDF5",
+    ...toneOf("success"),
     canStart: true,
     attempts: 0,
   };
@@ -216,7 +219,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
         {/* Header */}
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-            <Ionicons name="close" size={22} color="#374151" />
+            <Ionicons name="close" size={22} color={COLORS.text} />
           </TouchableOpacity>
           <Text style={styles.modalHeaderTitle}>{t("studentQuiz.detailsTitle")}</Text>
           <View style={{ width: 36 }} />
@@ -239,37 +242,33 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                 icon:  "help-circle-outline",
                 label: t("studentQuiz.questions"),
                 value: quiz.question_count ?? (quiz.questions?.length ?? 0),
-                color: "#4F46E5",
-                bg:    "#EEF2FF",
+                accent: ACCENT.indigo,
               },
               {
                 icon:  "time-outline",
                 label: t("studentQuiz.timeLimit"),
                 value: formatTime(quiz.time_limit_minutes, t),
-                color: "#D97706",
-                bg:    "#FEF3C7",
+                accent: ACCENT.amber,
               },
               {
                 icon:  "refresh-outline",
                 label: t("studentQuiz.attempts"),
                 value: quiz.max_attempts ?? "∞",
-                color: "#059669",
-                bg:    "#ECFDF5",
+                accent: ACCENT.green,
               },
               {
                 icon:  "ribbon-outline",
                 label: t("studentQuiz.passMark"),
                 value: `${quiz.passing_score ?? 70}%`,
-                color: "#DB2777",
-                bg:    "#FDF2F8",
+                accent: ACCENT.violet,
               },
             ].map((item) => (
               <View
                 key={item.label}
-                style={[styles.infoCard, { backgroundColor: item.bg }]}
+                style={[styles.infoCard, { backgroundColor: item.accent.wash, borderTopColor: item.accent.base }]}
               >
-                <Ionicons name={item.icon} size={20} color={item.color} />
-                <Text style={[styles.infoCardValue, { color: item.color }]}>
+                <Ionicons name={item.icon} size={20} color={item.accent.solid} />
+                <Text style={[styles.infoCardValue, { color: item.accent.deep }]}>
                   {item.value}
                 </Text>
                 <Text style={styles.infoCardLabel}>{item.label}</Text>
@@ -284,7 +283,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                 <Ionicons
                   name="information-circle-outline"
                   size={18}
-                  color="#4F46E5"
+                  color={ACCENT.indigo.solid}
                 />
                 <Text style={styles.instructionsTitle}>{t("studentQuiz.instructions")}</Text>
               </View>
@@ -325,7 +324,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
               },
             ].map((item) => (
               <View key={item.label} style={styles.settingRow}>
-                <Ionicons name={item.icon} size={16} color="#6B7280" />
+                <Ionicons name={item.icon} size={16} color={ACCENT.indigo.solid} />
                 <Text style={styles.settingLabel}>{item.label}</Text>
                 <Text style={styles.settingValue}>{item.value}</Text>
               </View>
@@ -338,7 +337,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
               <Text style={styles.prevTitle}>{t("studentQuiz.prevAttempts")}</Text>
               {submitted.map((a, i) => {
                                return (
-                <View key={a.id || i} style={styles.prevCard}>
+                <View key={a.id || i} style={[styles.prevCard, { borderLeftColor: a.is_passed ? SEMANTIC.success.icon : SEMANTIC.error.icon }]}>
                   <View style={styles.prevCardLeft}>
                     <Text style={styles.prevAttemptNum}>
                       {t("studentQuiz.attemptN", { n: a.attempt_number || i + 1 })}
@@ -351,7 +350,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                     <Text
                       style={[
                         styles.prevScore,
-                        { color: a.is_passed ? "#059669" : "#DC2626" },
+                        { color: a.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text },
                       ]}
                     >
                       {a.percentage != null
@@ -362,8 +361,9 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                       style={[
                         styles.prevBadge,
                         {
-                          color:           a.is_passed ? "#059669" : "#DC2626",
-                          backgroundColor: a.is_passed ? "#ECFDF5" : "#FEE2E2",
+                          color:           statusBadge(a.is_passed ? "success" : "error").text,
+                          backgroundColor: statusBadge(a.is_passed ? "success" : "error").bg,
+                          borderColor:     statusBadge(a.is_passed ? "success" : "error").border,
                         },
                       ]}
                     >
@@ -378,7 +378,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
 
           {/* Current status */}
           <View
-            style={[styles.currentStatusBox, { backgroundColor: status.bg }]}
+            style={[styles.currentStatusBox, { backgroundColor: status.bg, borderColor: status.border }]}
           >
             <Ionicons
               name={
@@ -437,7 +437,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                     : "lock-closed-outline"
                 }
                 size={18}
-                color="#9CA3AF"
+                color={COLORS.textSecondary}
               />
               <Text style={styles.closedBtnText}>{status.label}</Text>
             </View>
@@ -596,7 +596,7 @@ export default function StudentQuizzesScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
         <Text style={styles.loadingText}>{t("studentQuiz.loading")}</Text>
       </View>
     );
@@ -614,8 +614,9 @@ export default function StudentQuizzesScreen() {
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("studentQuiz.listTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -659,18 +660,14 @@ export default function StudentQuizzesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.indigo.solid}
+            colors={[ACCENT.indigo.solid]}
           />
         }
       >
         {filteredQuizzes.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons
-              name="help-circle-outline"
-              size={56}
-              color="#D1D5DB"
-            />
+            <IconSquare icon="help-circle-outline" accent="indigo" size={56} radius={16} />
             <Text style={styles.emptyTitle}>
               {activeFilter === "completed"
                 ? t("studentQuiz.emptyDone")
@@ -705,13 +702,7 @@ export default function StudentQuizzesScreen() {
                         : "help-circle"
                     }
                     size={24}
-                    color={
-                      (status.attempts ?? 0) > 0
-                        ? status.canStart
-                          ? "#4F46E5"
-                          : "#059669"
-                        : "#4F46E5"
-                    }
+                    color={COLORS.onPrimary}
                   />
                 </View>
 
@@ -731,7 +722,7 @@ export default function StudentQuizzesScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: status.bg },
+                    { backgroundColor: status.bg, borderColor: status.border },
                   ]}
                 >
                   <Text
@@ -762,7 +753,7 @@ export default function StudentQuizzesScreen() {
                   },
                 ].map((item) => (
                   <View key={item.label} style={styles.quizInfoChip}>
-                    <Ionicons name={item.icon} size={13} color="#9CA3AF" />
+                    <Ionicons name={item.icon} size={13} color={ACCENT.indigo.solid} />
                     <Text style={styles.quizInfoChipText}>{item.label}</Text>
                   </View>
                 ))}
@@ -772,18 +763,18 @@ export default function StudentQuizzesScreen() {
                   <View
                     style={[
                       styles.quizInfoChip,
-                      { backgroundColor: "#EEF2FF" },
+                      { backgroundColor: accentBadge("indigo").bg, borderColor: accentBadge("indigo").border },
                     ]}
                   >
                     <Ionicons
                       name="refresh-outline"
                       size={13}
-                      color="#4F46E5"
+                      color={ACCENT.indigo.deep}
                     />
                     <Text
                       style={[
                         styles.quizInfoChipText,
-                        { color: "#4F46E5" },
+                        { color: ACCENT.indigo.deep },
                       ]}
                     >
                       {t("quizList.attemptCount", { count: status.attempts })}
@@ -799,8 +790,12 @@ export default function StudentQuizzesScreen() {
                       {
                         backgroundColor:
                           status.best >= (quiz.passing_score ?? 70)
-                            ? "#ECFDF5"
-                            : "#FEE2E2",
+                            ? SEMANTIC.success.bg
+                            : SEMANTIC.error.bg,
+                        borderColor:
+                          status.best >= (quiz.passing_score ?? 70)
+                            ? statusBadge("success").border
+                            : statusBadge("error").border,
                       },
                     ]}
                   >
@@ -809,8 +804,8 @@ export default function StudentQuizzesScreen() {
                       size={11}
                       color={
                         status.best >= (quiz.passing_score ?? 70)
-                          ? "#059669"
-                          : "#DC2626"
+                          ? SEMANTIC.success.text
+                          : SEMANTIC.error.text
                       }
                     />
                     <Text
@@ -819,8 +814,8 @@ export default function StudentQuizzesScreen() {
                         {
                           color:
                             status.best >= (quiz.passing_score ?? 70)
-                              ? "#059669"
-                              : "#DC2626",
+                              ? SEMANTIC.success.text
+                              : SEMANTIC.error.text,
                         },
                       ]}
                     >
@@ -869,45 +864,47 @@ export default function StudentQuizzesScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
+  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.page },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backButton: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 8,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 8,
   },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 20, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent",
+    borderRadius: 20, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  filterChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  filterChipText:       { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  filterChipTextActive: { color: "#4F46E5", fontWeight: "700" },
+  filterChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  filterChipText:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  filterChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   listContent: { padding: 16 },
 
   quizCard: {
-    backgroundColor: "#FFF", borderRadius: 16,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 16,
     padding: 14, marginBottom: 12,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.indigo.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   quizCardTop: {
     flexDirection: "row", alignItems: "flex-start",
@@ -915,14 +912,14 @@ const styles = StyleSheet.create({
   },
   quizIconWrap: {
     width: 40, height: 40, borderRadius: 10,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.solid,
     alignItems: "center", justifyContent: "center",
   },
-  quizTitle:  { fontSize: 15, fontWeight: "700", color: "#111827" },
-  quizMeta:   { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  quizTitle:  { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  quizMeta:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   statusBadge: {
     paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 20, alignSelf: "flex-start",
+    borderRadius: 20, alignSelf: "flex-start", borderWidth: 1,
   },
   statusBadgeText: { fontSize: 11, fontWeight: "700" },
 
@@ -930,115 +927,120 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     flexWrap: "wrap", gap: 6,
     paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   quizInfoChip: {
     flexDirection: "row", alignItems: "center", gap: 4,
     paddingHorizontal: 8, paddingVertical: 4,
-    backgroundColor: "#F3F4F6", borderRadius: 8,
+    backgroundColor: COLORS.surface, borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  quizInfoChipText: { fontSize: 11, color: "#6B7280", fontWeight: "500" },
+  quizInfoChipText: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
 
   bestScoreBadge: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
   },
   bestScoreText: { fontSize: 11, fontWeight: "700" },
 
   quizCardFooter: { marginTop: 8 },
-  tapHint:        { fontSize: 11, color: "#9CA3AF", fontStyle: "italic" },
+  tapHint:        { fontSize: 11, color: COLORS.textSecondary, fontStyle: "italic" },
 
   emptyState: {
     alignItems: "center", paddingVertical: 60,
     paddingHorizontal: 24, gap: 10,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 
   // ── Modal ─────────────────────────────────────────────────
-  modalContainer: { flex: 1, backgroundColor: "#F3F4F6" },
+  modalContainer: { flex: 1, backgroundColor: COLORS.page },
   modalHeader: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   modalClose: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems: "center", justifyContent: "center",
   },
-  modalHeaderTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+  modalHeaderTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text },
   modalScroll:      { padding: 16, paddingBottom: 32 },
-  modalQuizTitle:   { fontSize: 22, fontWeight: "800", color: "#111827", marginBottom: 6 },
-  modalQuizDesc:    { fontSize: 14, color: "#6B7280", lineHeight: 20, marginBottom: 16 },
+  modalQuizTitle:   { fontSize: 22, fontWeight: "800", color: COLORS.text, marginBottom: 6 },
+  modalQuizDesc:    { fontSize: 14, color: COLORS.textSecondary, lineHeight: 20, marginBottom: 16 },
 
   infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   infoCard: {
     width: "48%", borderRadius: 14,
     padding: 14, alignItems: "center", gap: 6,
+    borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3,
   },
   infoCardValue: { fontSize: 20, fontWeight: "800" },
-  infoCardLabel: { fontSize: 12, color: "#6B7280" },
+  infoCardLabel: { fontSize: 12, color: COLORS.textSecondary },
 
   instructionsBox: {
-    backgroundColor: "#EEF2FF", borderRadius: 12,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12,
     padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
   },
   instructionsHeader: {
     flexDirection: "row", alignItems: "center",
     gap: 6, marginBottom: 6,
   },
-  instructionsTitle: { fontSize: 14, fontWeight: "700", color: "#4F46E5" },
-  instructionsText:  { fontSize: 13, color: "#374151", lineHeight: 20 },
+  instructionsTitle: { fontSize: 14, fontWeight: "700", color: ACCENT.indigo.deep },
+  instructionsText:  { fontSize: 13, color: COLORS.text, lineHeight: 20 },
 
   settingsBox: {
-    backgroundColor: "#FFF", borderRadius: 12,
+    backgroundColor: COLORS.surface, borderRadius: 12,
     padding: 14, marginBottom: 16, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   settingRow:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  settingLabel: { fontSize: 13, color: "#6B7280", flex: 1 },
-  settingValue: { fontSize: 13, fontWeight: "600", color: "#111827" },
+  settingLabel: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
+  settingValue: { fontSize: 13, fontWeight: "600", color: COLORS.text },
 
   currentStatusBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 12, padding: 12, marginTop: 4,
+    borderRadius: 12, padding: 12, marginTop: 4, borderWidth: 1,
   },
   currentStatusText: { fontSize: 14, fontWeight: "600" },
 
   prevSection:     { marginBottom: 16 },
-  prevTitle:       { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 8 },
+  prevTitle:       { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
   prevCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 10,
+    backgroundColor: COLORS.surface, borderRadius: 10,
     padding: 12, marginBottom: 6,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
   },
   prevCardLeft:    { flex: 1 },
-  prevAttemptNum:  { fontSize: 13, fontWeight: "600", color: "#111827" },
-  prevAttemptDate: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  prevAttemptNum:  { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  prevAttemptDate: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   prevCardRight:   { alignItems: "flex-end", gap: 4 },
   prevScore:       { fontSize: 18, fontWeight: "800" },
   prevBadge: {
     fontSize: 10, fontWeight: "700",
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1,
   },
 
   modalFooter: {
-    padding: 16, backgroundColor: "#FFF",
-    borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    padding: 16, backgroundColor: COLORS.surface,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   startBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#4F46E5", borderRadius: 14,
+    backgroundColor: ACCENT.indigo.solid, borderRadius: 14,
     paddingVertical: 16, gap: 8,
   },
   startBtnDisabled: { opacity: 0.6 },
-  startBtnText:     { color: "#FFF", fontWeight: "800", fontSize: 16 },
+  startBtnText:     { color: COLORS.onPrimary, fontWeight: "800", fontSize: 16 },
   closedBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#F3F4F6", borderRadius: 14,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 14,
     paddingVertical: 16, gap: 8,
   },
-  closedBtnText: { color: "#9CA3AF", fontWeight: "600", fontSize: 15 },
+  closedBtnText: { color: COLORS.textSecondary, fontWeight: "600", fontSize: 15 },
 });

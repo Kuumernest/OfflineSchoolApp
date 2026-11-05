@@ -10,7 +10,7 @@
 import { useState }                  from "react";
 import { useQuery, useQueryClient }  from "@tanstack/react-query";
 import { useTranslation }            from "react-i18next";
-import { KeyRound, Power, PowerOff, Pencil, Save, UserPlus, ShieldCheck } from "lucide-react";
+import { KeyRound, Power, PowerOff, Pencil, Save, UserPlus, ShieldCheck, User } from "lucide-react";
 import { PageHeader }                from "@/components/ui/PageHeader";
 import { Card, CardHeader }          from "@/components/ui/Card";
 import { Button }                    from "@/components/ui/Button";
@@ -119,7 +119,7 @@ function ProfileSection({ s }: { s: S }) {
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Card>
-        <CardHeader title={s("profileTitle")} subtitle={s("profileSubtitle")} />
+        <CardHeader title={s("profileTitle")} icon={User} accent="slate" subtitle={s("profileSubtitle")} />
         <form onSubmit={saveProfile} className="mt-4 space-y-3">
           <FormField label={t("common.fullName")} required>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -152,7 +152,7 @@ function ProfileSection({ s }: { s: S }) {
       </Card>
 
       <Card>
-        <CardHeader title={s("securityTitle")} subtitle={s("securitySubtitle")} />
+        <CardHeader title={s("securityTitle")} icon={KeyRound} accent="slate" subtitle={s("securitySubtitle")} />
         <form onSubmit={savePassword} className="mt-4 space-y-3">
           <FormField label={s("currentPassword")} required>
             <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
@@ -223,6 +223,8 @@ function AdminsSection({ s }: { s: S }) {
       <Card padding={false}>
         <CardHeader
           title={s("adminsTitle")}
+          icon={ShieldCheck}
+          accent="indigo"
           subtitle={s("adminsSubtitle")}
           className="px-5 pt-4"
           action={<Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>{s("addAdmin")}</Button>}
@@ -250,7 +252,7 @@ function AdminsSection({ s }: { s: S }) {
                     <Td className="max-w-[18rem]">
                       <div className="flex items-center gap-2">
                         <span className="truncate font-medium" title={a.name}>{a.name}</span>
-                        {isMe ? <Badge variant="secondary" className="shrink-0">{s("you")}</Badge> : null}
+                        {isMe ? <Badge accent="indigo" className="shrink-0">{s("you")}</Badge> : null}
                       </div>
                       <div className="truncate text-xs text-ink-muted" title={a.email}>{a.email}</div>
                     </Td>

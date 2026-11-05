@@ -24,40 +24,44 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { loadOwnStaffNo } from "../../../src/services/staffNumber.service";
 import { staffNoText } from "../../../src/utils/staffNumber";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
-import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.violet.solid,
+  primaryBg: ACCENT.violet.wash,
+  success:   ACCENT.green.solid,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     THEME.danger,
+  errorBg:   SEMANTIC.error.bg,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   THEME.border,
+  gray300:   THEME.textMuted,
+  gray400:   THEME.textSubtle,
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
 // ─────────────────────────────────────────────────────────
 // SECTION
 // ─────────────────────────────────────────────────────────
 
-function Section({ title, children }) {
+function Section({ title, icon, children }) {
   return (
     <View style={sc.wrap}>
-      <Text style={sc.title}>{title}</Text>
+      <View style={sc.titleRow}>
+        {icon ? <IconSquare icon={icon} accent="slate" size={22} radius={6} /> : null}
+        <Text style={sc.title}>{title}</Text>
+      </View>
       <View style={sc.body}>{children}</View>
     </View>
   );
@@ -65,20 +69,21 @@ function Section({ title, children }) {
 
 const sc = StyleSheet.create({
   wrap: { marginBottom: 24 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, paddingHorizontal: 4 },
   title: {
     fontSize:          12,
     fontWeight:        "700",
-    color:             C.gray500,
+    color:             ACCENT.slate.deep,
     textTransform:     "uppercase",
     letterSpacing:     0.8,
-    marginBottom:      8,
-    paddingHorizontal: 4,
   },
   body: {
     backgroundColor: C.white,
     borderRadius:    16,
     overflow:        "hidden",
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    3,
     elevation:       1,
@@ -200,11 +205,11 @@ function Avatar({ name, size = 64 }) {
 
 const av = StyleSheet.create({
   wrap: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  text: { fontWeight: "800", color: "#4F46E5" },
+  text: { fontWeight: "800", color: THEME.onPrimary },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -271,7 +276,7 @@ const pp = StyleSheet.create({
   pct:   { fontSize: 12, fontWeight: "800" },
   track: {
     height:          6,
-    backgroundColor: C.gray100,
+    backgroundColor: THEME.border,
     borderRadius:    3,
     overflow:        "hidden",
   },
@@ -411,6 +416,7 @@ export default function TeacherSettingsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <Text style={styles.headerTitle}>{t("teacherSettings.title")}</Text>
         <TouchableOpacity
           onPress={loadProfile}
@@ -458,9 +464,7 @@ export default function TeacherSettingsScreen() {
             onPress={() => router.push("/teacher/profile/setup")}
             activeOpacity={0.8}
           >
-            <View style={styles.setupPromptIcon}>
-              <Ionicons name="person-add-outline" size={20} color={C.white} />
-            </View>
+            <IconSquare icon="person-add-outline" accent="amber" size={38} radius={10} />
             <View style={{ flex: 1 }}>
               <Text style={styles.setupPromptTitle}>
                 {t("teacherSettings.completeYourProfile")}
@@ -469,12 +473,12 @@ export default function TeacherSettingsScreen() {
                 {t("teacherSettings.schoolNeedsInfo")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={C.white} />
+            <Ionicons name="chevron-forward" size={18} color={SEMANTIC.warning.text} />
           </TouchableOpacity>
         )}
 
         {/* ── Account ── */}
-        <Section title={t("teacherSettings.accountSection")}>
+        <Section title={t("teacherSettings.accountSection")} icon="person">
           <SettingRow
             icon="person-outline"
             iconBg={ACCENT.indigo.solid}
@@ -498,7 +502,7 @@ export default function TeacherSettingsScreen() {
 
         {/* ── My Details (shown once profile has data) ── */}
         {profile && (
-          <Section title={t("teacherSettings.myDetails")}>
+          <Section title={t("teacherSettings.myDetails")} icon="id-card">
             <SettingRow
               icon="id-card-outline"
               iconBg={ACCENT.violet.solid}
@@ -557,7 +561,7 @@ export default function TeacherSettingsScreen() {
         )}
 
         {/* ── Preferences ── */}
-        <Section title={t("teacherSettings.preferences")}>
+        <Section title={t("teacherSettings.preferences")} icon="options">
           {/*
             Language first in Preferences. Somebody looking for this control is,
             by definition, reading an interface in a language they did not choose,
@@ -584,7 +588,7 @@ export default function TeacherSettingsScreen() {
         </Section>
 
         {/* ── Support ── */}
-        <Section title={t("teacherSettings.support")}>
+        <Section title={t("teacherSettings.support")} icon="help-buoy">
           <SettingRow
             icon="help-circle-outline"
             iconBg={ACCENT.indigo.solid}
@@ -613,7 +617,7 @@ export default function TeacherSettingsScreen() {
         </Section>
 
         {/* ── Session ── */}
-        <Section title={t("teacherSettings.session")}>
+        <Section title={t("teacherSettings.session")} icon="log-out">
           <SettingRow
             icon="log-out-outline"
             iconBg={ACCENT.red.solid}
@@ -648,7 +652,7 @@ const styles = StyleSheet.create({
     paddingBottom:     14,
     backgroundColor:   C.white,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: THEME.border,
   },
   backBtn: {
     width:          40,
@@ -658,6 +662,7 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerTitle: {
     flex:       1,
     textAlign:  "center",
@@ -674,15 +679,20 @@ const styles = StyleSheet.create({
 
   content: { padding: 16, paddingTop: 20 },
 
+  // The teacher's own card: violet, the teachers' colour.
   profileCard: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.violet.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
     gap:             14,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.violet.base,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    4,
     elevation:       2,
@@ -705,43 +715,39 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             3,
-    backgroundColor: C.successBg,
+    backgroundColor: SEMANTIC.success.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.success.icon + "4D",
     borderRadius:    8,
     paddingHorizontal: 7,
     paddingVertical:   2,
   },
-  verifiedText: { fontSize: 10, fontWeight: "700", color: C.success },
-  profileRole:  { fontSize: 12, color: C.gray500 },
-  profileEmail: { fontSize: 11, color: C.gray400, marginTop: 2 },
+  verifiedText: { fontSize: 10, fontWeight: "700", color: SEMANTIC.success.text },
+  profileRole:  { fontSize: 12, color: ACCENT.violet.deep },
+  profileEmail: { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
 
   setupPrompt: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             12,
-    backgroundColor: C.primary,
+    backgroundColor: SEMANTIC.warning.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.warning.box,
     borderRadius:    14,
     padding:         14,
     marginBottom:    20,
   },
-  setupPromptIcon: {
-    width:           38,
-    height:          38,
-    borderRadius:    10,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
-  setupPromptTitle: { fontSize: 14, fontWeight: "700", color: C.white },
+  setupPromptTitle: { fontSize: 14, fontWeight: "700", color: SEMANTIC.warning.text },
   setupPromptSub:   {
     fontSize:  12,
-    color:     "rgba(255,255,255,0.8)",
+    color:     SEMANTIC.warning.text,
     marginTop: 2,
   },
 
   version: {
     textAlign:  "center",
     fontSize:   12,
-    color:      C.gray400,
+    color:      THEME.textSecondary,
     fontWeight: "500",
     marginTop:  8,
   },

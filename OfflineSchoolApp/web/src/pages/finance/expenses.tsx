@@ -231,11 +231,11 @@ export default function ExpensesPage() {
                     </Td>
                     <Td numeric>
                       {void_ ? (
-                        <Badge variant="default">{t("expenses.voided")}</Badge>
+                        <Badge variant="danger">{t("expenses.voided")}</Badge>
                       ) : waiting ? (
                         <Badge variant="warning">{t("expenses.awaitingApproval")}</Badge>
                       ) : refused ? (
-                        <Badge variant="default">{t("expenses.rejected")}</Badge>
+                        <Badge variant="danger">{t("expenses.rejected")}</Badge>
                       ) : (
                         <button
                           type="button"

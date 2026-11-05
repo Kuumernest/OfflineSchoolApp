@@ -20,6 +20,8 @@ import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { loadTeacherSubjectsForContent } from "../../../src/services/content.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS, ACCENT, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -30,8 +32,9 @@ const CONTENT_TYPES = [
     id:    "syllabus",
     labelKey: "studentSubj.tabSyllabus",
     icon:  "list-outline",
-    color: "#7C3AED",
-    bg:    "#EDE9FE",
+    color: ACCENT.violet.solid,
+    bg:    ACCENT.violet.wash,
+    accent: ACCENT.violet,
     hint:  "PDF, DOC",
     maxMB: 20,
   },
@@ -39,8 +42,9 @@ const CONTENT_TYPES = [
     id:    "notes",
     labelKey: "studentSubj.tabNotes",
     icon:  "document-text-outline",
-    color: "#4F46E5",
-    bg:    "#EEF2FF",
+    color: ACCENT.indigo.solid,
+    bg:    ACCENT.indigo.wash,
+    accent: ACCENT.indigo,
     hint:  "PDF, DOC, DOCX",
     maxMB: 20,
   },
@@ -48,8 +52,9 @@ const CONTENT_TYPES = [
     id:    "image",
     labelKey: "teacherContent.kImage",
     icon:  "image-outline",
-    color: "#059669",
-    bg:    "#ECFDF5",
+    color: ACCENT.green.solid,
+    bg:    ACCENT.green.wash,
+    accent: ACCENT.green,
     hint:  "JPG, PNG, WEBP",
     maxMB: 20,
   },
@@ -57,8 +62,9 @@ const CONTENT_TYPES = [
     id:    "audio",
     labelKey: "studentSubj.tabAudio",
     icon:  "musical-notes-outline",
-    color: "#D97706",
-    bg:    "#FEF3C7",
+    color: ACCENT.amber.solid,
+    bg:    ACCENT.amber.wash,
+    accent: ACCENT.amber,
     hint:  "MP3, WAV, M4A",
     maxMB: 20,
   },
@@ -66,8 +72,9 @@ const CONTENT_TYPES = [
     id:    "video",
     labelKey: "studentSubj.tabVideo",
     icon:  "videocam-outline",
-    color: "#DC2626",
-    bg:    "#FEE2E2",
+    color: ACCENT.red.solid,
+    bg:    ACCENT.red.wash,
+    accent: ACCENT.red,
     hint:  "MP4, MOV, AVI",
     maxMB: 20,
   },
@@ -75,8 +82,9 @@ const CONTENT_TYPES = [
     id:    "document",
     labelKey: "teacherContent.kDocument",
     icon:  "attach-outline",
-    color: "#059669",
-    bg:    "#ECFDF5",
+    color: ACCENT.green.solid,
+    bg:    ACCENT.green.wash,
+    accent: ACCENT.green,
     hint:  "PDF, DOCX, XLSX",
     maxMB: 20,
   },
@@ -270,7 +278,7 @@ function SelectSubjectPage() {
   // ── Render ────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -279,8 +287,9 @@ function SelectSubjectPage() {
           onPress={handleBack}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{t("teacherContent.uploadTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -299,18 +308,18 @@ function SelectSubjectPage() {
             <View
               style={[
                 styles.selectionChip,
-                { backgroundColor: selectedType.bg },
+                { backgroundColor: selectedType.bg, borderColor: selectedType.accent.base + "4D" },
               ]}
             >
               <Ionicons
                 name={selectedType.icon}
                 size={12}
-                color={selectedType.color}
+                color={selectedType.accent.deep}
               />
               <Text
                 style={[
                   styles.selectionChipText,
-                  { color: selectedType.color },
+                  { color: selectedType.accent.deep },
                 ]}
               >
                 {t(selectedType.labelKey)}
@@ -320,11 +329,11 @@ function SelectSubjectPage() {
 
           {selectedSubject && (
             <>
-              <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
-              <View style={styles.selectionChip}>
-                <Ionicons name="book-outline" size={12} color="#4F46E5" />
+              <Ionicons name="chevron-forward" size={14} color={COLORS.textSecondary} />
+              <View style={[styles.selectionChip, { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base + "4D" }]}>
+                <Ionicons name="book-outline" size={12} color={ACCENT.slate.deep} />
                 <Text
-                  style={[styles.selectionChipText, { color: "#4F46E5" }]}
+                  style={[styles.selectionChipText, { color: ACCENT.slate.deep }]}
                   numberOfLines={1}
                 >
                   {selectedSubject.subjectName}
@@ -335,16 +344,16 @@ function SelectSubjectPage() {
 
           {selectedClasses.length > 0 && (
             <>
-              <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+              <Ionicons name="chevron-forward" size={14} color={COLORS.textSecondary} />
               <View
                 style={[
                   styles.selectionChip,
-                  { backgroundColor: "#ECFDF5" },
+                  { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base + "4D" },
                 ]}
               >
-                <Ionicons name="school-outline" size={12} color="#059669" />
+                <Ionicons name="school-outline" size={12} color={ACCENT.indigo.deep} />
                 <Text
-                  style={[styles.selectionChipText, { color: "#059669" }]}
+                  style={[styles.selectionChipText, { color: ACCENT.indigo.deep }]}
                 >
                   {t("academic.classCount", { count: selectedClasses.length })}
                 </Text>
@@ -371,23 +380,23 @@ function SelectSubjectPage() {
             {CONTENT_TYPES.map((type) => (
               <TouchableOpacity
                 key={type.id}
-                style={styles.typeCard}
+                style={[styles.typeCard, { backgroundColor: type.accent.wash, borderTopColor: type.accent.base }]}
                 onPress={() => handleSelectType(type)}
                 activeOpacity={0.75}
               >
                 <View
                   style={[
                     styles.typeIconBox,
-                    { backgroundColor: type.bg },
+                    { backgroundColor: type.color },
                   ]}
                 >
-                  <Ionicons name={type.icon} size={26} color={type.color} />
+                  <Ionicons name={type.icon} size={26} color={COLORS.onPrimary} />
                 </View>
                 <Text style={styles.typeLabel}>{t(type.labelKey)}</Text>
                 <Text style={styles.typeHint}>{type.hint}</Text>
                 <Text style={styles.typeSize}>{t("teacherContent.maxMb", { size: type.maxMB })}</Text>
                 <View
-                  style={[styles.typeArrow, { backgroundColor: type.bg }]}
+                  style={[styles.typeArrow, { backgroundColor: COLORS.surface }]}
                 >
                   <Ionicons
                     name="arrow-forward"
@@ -447,10 +456,11 @@ function SelectSubjectPage() {
             </View>
           ) : filteredSubjects.length === 0 ? (
             <View style={styles.centered}>
-              <Ionicons
-                name={!subjectSearch && neverLoaded ? "cloud-offline-outline" : "book-outline"}
-                size={40}
-                color="#9CA3AF"
+              <IconSquare
+                icon={!subjectSearch && neverLoaded ? "cloud-offline-outline" : "book-outline"}
+                accent="slate"
+                size={56}
+                radius={16}
               />
               <Text style={styles.emptyTitle}>
                 {subjectSearch
@@ -494,7 +504,7 @@ function SelectSubjectPage() {
                   activeOpacity={0.75}
                 >
                   <View style={styles.subjectIcon}>
-                    <Ionicons name="book" size={20} color="#4F46E5" />
+                    <Ionicons name="book" size={20} color={COLORS.onPrimary} />
                   </View>
                   <View style={styles.subjectInfo}>
                     <Text style={styles.subjectName}>
@@ -517,7 +527,7 @@ function SelectSubjectPage() {
                   <Ionicons
                     name="chevron-forward"
                     size={18}
-                    color="#D1D5DB"
+                    color={COLORS.textSecondary}
                   />
                 </TouchableOpacity>
               ))}
@@ -538,7 +548,7 @@ function SelectSubjectPage() {
             {/* Subject recap */}
             <View style={styles.subjectRecap}>
               <View style={styles.subjectRecapIcon}>
-                <Ionicons name="book" size={16} color="#4F46E5" />
+                <Ionicons name="book" size={16} color={COLORS.onPrimary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.subjectRecapLabel}>{t("teacherContent.subject")}</Text>
@@ -563,7 +573,7 @@ function SelectSubjectPage() {
 
             {availableClasses.length === 0 ? (
               <View style={styles.emptyClasses}>
-                <Ionicons name="school-outline" size={36} color="#9CA3AF" />
+                <IconSquare icon="school-outline" accent="indigo" size={56} radius={16} />
                 <Text style={styles.emptyTitle}>{t("teacherContent.noClasses")}</Text>
                 <Text style={styles.emptySubtitle}>
                   {t("teacherContent.noLinkedClasses")}
@@ -597,12 +607,15 @@ function SelectSubjectPage() {
                   const isSelected = !!selectedClasses.find(
                     (c) => c.classId === cls.classId
                   );
+                  const lvl = ACCENT[levelAccent(cls.level ?? cls.className)];
                   return (
                     <TouchableOpacity
                       key={cls.classId}
                       style={[
                         styles.classCard,
+                        { backgroundColor: lvl.wash, borderLeftColor: lvl.base },
                         isSelected && styles.classCardSelected,
+                        isSelected && { borderColor: lvl.base, borderLeftColor: lvl.base },
                       ]}
                       onPress={() => toggleClass(cls)}
                       activeOpacity={0.75}
@@ -621,13 +634,13 @@ function SelectSubjectPage() {
                       <View
                         style={[
                           styles.classIconBox,
-                          isSelected && { backgroundColor: "#EEF2FF" },
+                          { backgroundColor: lvl.solid },
                         ]}
                       >
                         <Ionicons
                           name="school"
                           size={18}
-                          color={isSelected ? "#4F46E5" : "#9CA3AF"}
+                          color={COLORS.onPrimary}
                         />
                       </View>
 
@@ -635,6 +648,7 @@ function SelectSubjectPage() {
                         style={[
                           styles.className,
                           isSelected && styles.classNameSelected,
+                          isSelected && { color: lvl.deep },
                         ]}
                       >
                         {cls.className}
@@ -688,7 +702,7 @@ export default SelectSubjectPage;
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
 
   header: {
     flexDirection:     "row",
@@ -696,9 +710,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               12,
   },
   backBtn: {
@@ -709,9 +723,10 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:  { marginRight: 0 },
   headerInfo:  { flex: 1 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   selectionBar: {
     flexDirection:     "row",
@@ -731,7 +746,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      20,
-    backgroundColor:   "#EEF2FF",
+    borderWidth:       1,
+    borderColor:       ACCENT.indigo.base + "4D",
+    backgroundColor:   ACCENT.indigo.wash,
     maxWidth:          140,
   },
   selectionChipText: { fontSize: 11, fontWeight: "600" },
@@ -740,24 +757,27 @@ const styles = StyleSheet.create({
   stepHeading: {
     fontSize:     20,
     fontWeight:   "700",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 4,
   },
   stepSubHeading: {
     fontSize:     14,
-    color:        "#9CA3AF",
+    color:        COLORS.textSecondary,
     marginBottom: 20,
   },
 
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   typeCard: {
     width:           "47%",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     alignItems:      "flex-start",
     gap:             6,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    4,
     elevation:       2,
@@ -771,9 +791,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom:   4,
   },
-  typeLabel: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  typeHint:  { fontSize: 11, color: "#9CA3AF" },
-  typeSize:  { fontSize: 10, color: "#D1D5DB" },
+  typeLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  typeHint:  { fontSize: 11, color: COLORS.textSecondary },
+  typeSize:  { fontSize: 10, color: COLORS.textSecondary },
   typeArrow: {
     position:       "absolute",
     top:            12,
@@ -804,7 +824,7 @@ const styles = StyleSheet.create({
   subjectListContent: { paddingHorizontal: 16, paddingTop: 12 },
   listHeading: {
     fontSize:      12,
-    color:         "#9CA3AF",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     marginBottom:  10,
     textTransform: "uppercase",
@@ -813,12 +833,16 @@ const styles = StyleSheet.create({
   subjectCard: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    8,
     gap:             12,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.slate.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    3,
     elevation:       2,
@@ -827,19 +851,21 @@ const styles = StyleSheet.create({
     width:           42,
     height:          42,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
   subjectInfo: { flex: 1 },
-  subjectName: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  subjectMeta: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  subjectName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  subjectMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   classListContent: { paddingHorizontal: 16, paddingTop: 16 },
   subjectRecap: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.slate.wash,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     borderRadius:    12,
     padding:         12,
     marginBottom:    20,
@@ -849,13 +875,13 @@ const styles = StyleSheet.create({
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  subjectRecapLabel: { fontSize: 11, color: "#6B7280", fontWeight: "500" },
-  subjectRecapName:  { fontSize: 14, fontWeight: "700", color: "#111827" },
-  changeBtn:         { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+  subjectRecapLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
+  subjectRecapName:  { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  changeBtn:         { fontSize: 13, color: ACCENT.indigo.deep, fontWeight: "600" },
 
   selectAllRow: {
     flexDirection:   "row",
@@ -864,7 +890,7 @@ const styles = StyleSheet.create({
     marginBottom:    12,
     paddingVertical: 4,
   },
-  selectAllText: { fontSize: 14, color: "#4F46E5", fontWeight: "600" },
+  selectAllText: { fontSize: 14, color: ACCENT.indigo.deep, fontWeight: "600" },
 
   checkbox: {
     width:           22,
@@ -887,23 +913,24 @@ const styles = StyleSheet.create({
     marginBottom:    8,
     gap:             12,
     borderWidth:     1.5,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    2,
     elevation:       1,
   },
-  classCardSelected: { borderColor: "#4F46E5", backgroundColor: "#FAFBFF" },
+  classCardSelected: { borderColor: ACCENT.indigo.base },
   classIconBox: {
     width:           38,
     height:          38,
     borderRadius:    10,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.indigo.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  className:         { flex: 1, fontSize: 15, fontWeight: "600", color: "#374151" },
-  classNameSelected: { color: "#4F46E5" },
+  className:         { flex: 1, fontSize: 15, fontWeight: "600", color: COLORS.text },
+  classNameSelected: { color: ACCENT.indigo.deep },
   selectedBadge: {
     width:           22,
     height:          22,
@@ -934,8 +961,8 @@ const styles = StyleSheet.create({
     elevation:         8,
   },
   continueInfo:      { flex: 1 },
-  continueInfoTitle: { fontSize: 13, fontWeight: "700", color: "#111827" },
-  continueInfoSub:   { fontSize: 11, color: "#9CA3AF", marginTop: 2, lineHeight: 16 },
+  continueInfoTitle: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+  continueInfoSub:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 16 },
   continueBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -964,8 +991,8 @@ const styles = StyleSheet.create({
     marginTop:         6,
   },
   retryBtnText:  { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  emptyTitle:    { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 });
 
 const stepStyles = StyleSheet.create({
@@ -988,11 +1015,11 @@ const stepStyles = StyleSheet.create({
     justifyContent:  "center",
   },
   circleDone:       { backgroundColor: "#059669" },
-  circleActive:     { backgroundColor: "#4F46E5" },
-  circleText:       { fontSize: 11, fontWeight: "700", color: "#9CA3AF" },
+  circleActive:     { backgroundColor: ACCENT.indigo.solid },
+  circleText:       { fontSize: 11, fontWeight: "700", color: COLORS.textSecondary },
   circleTextActive: { color: "#FFF" },
-  label:            { fontSize: 10, color: "#9CA3AF", fontWeight: "500" },
-  labelActive:      { color: "#4F46E5", fontWeight: "700" },
+  label:            { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
+  labelActive:      { color: ACCENT.indigo.deep, fontWeight: "700" },
   labelDone:        { color: "#059669" },
   line: {
     flex:             1,

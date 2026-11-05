@@ -40,6 +40,8 @@ import {
   fetchTeacherScope,
   allTeacherSubjects,
 } from "../../../src/services/teacherScope.service";
+import { COLORS, ACCENT, SEMANTIC, statusBadge, accentBadge, categoryAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -52,9 +54,9 @@ const TABS = [
 ];
 
 const DIFFICULTY_COLORS = {
-  easy:   { bg: "#ECFDF5", text: "#059669" },
-  medium: { bg: "#FEF3C7", text: "#D97706" },
-  hard:   { bg: "#FEE2E2", text: "#DC2626" },
+  easy:   statusBadge("success"),
+  medium: statusBadge("warning"),
+  hard:   statusBadge("error"),
 };
 
 /** Question type → translation key under `quizList.questionType`. */
@@ -110,7 +112,7 @@ const TabBar = memo(({ active, onChange }) => {
           <Ionicons
             name={tab.icon}
             size={16}
-            color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
+            color={active === tab.id ? ACCENT.indigo.solid : COLORS.textSecondary}
           />
           <Text
             style={[
@@ -146,7 +148,7 @@ const SearchBar = memo(({ value, onChange, placeholder }) => (
 
 const EmptyState = memo(({ icon, title, subtitle, action, actionLabel }) => (
   <View style={styles.emptyState}>
-    <Ionicons name={icon} size={48} color="#D1D5DB" />
+    <IconSquare icon={icon} accent="indigo" size={56} radius={16} />
     <Text style={styles.emptyTitle}>{title}</Text>
     {subtitle && <Text style={styles.emptySubtitle}>{subtitle}</Text>}
     {action && (
@@ -174,6 +176,7 @@ const QuizCard = memo(({
   return (
   <View style={styles.quizCard}>
     <View style={styles.quizCardHeader}>
+      <IconSquare icon="help-circle" accent="indigo" size={36} />
       <View style={{ flex: 1 }}>
         <Text style={styles.quizTitle} numberOfLines={1}>
           {quiz.title}
@@ -200,13 +203,13 @@ const QuizCard = memo(({
         <View
           style={[
             styles.publishDot,
-            { backgroundColor: quiz.is_published ? "#059669" : "#9CA3AF" },
+            { backgroundColor: quiz.is_published ? SEMANTIC.success.icon : SEMANTIC.warning.icon },
           ]}
         />
         <Text
           style={[
             styles.publishBadgeText,
-            { color: quiz.is_published ? "#059669" : "#6B7280" },
+            { color: quiz.is_published ? SEMANTIC.success.text : SEMANTIC.warning.text },
           ]}
         >
           {quiz.is_published
@@ -246,7 +249,7 @@ const QuizCard = memo(({
         },
       ].map((stat) => (
         <View key={stat.id} style={styles.quizStat}>
-          <Ionicons name={stat.icon} size={13} color="#9CA3AF" />
+          <Ionicons name={stat.icon} size={13} color={ACCENT.indigo.solid} />
           <Text style={styles.quizStatValue}>{stat.value}</Text>
           <Text style={styles.quizStatLabel}>{stat.label}</Text>
         </View>
@@ -259,18 +262,18 @@ const QuizCard = memo(({
           style={styles.quizActionBtn}
           onPress={() => onEdit(quiz)}
         >
-          <Ionicons name="create-outline" size={15} color="#4F46E5" />
-          <Text style={[styles.quizActionText, { color: "#4F46E5" }]}>
+          <Ionicons name="create-outline" size={15} color={ACCENT.indigo.deep} />
+          <Text style={[styles.quizActionText, { color: ACCENT.indigo.deep }]}>
             {t("common.edit")}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.quizActionBtn, { backgroundColor: "#F5F3FF" }]}
+          style={[styles.quizActionBtn, { backgroundColor: ACCENT.violet.wash }]}
           onPress={() => onResponses(quiz)}
         >
-          <Ionicons name="people-outline" size={15} color="#7C3AED" />
-          <Text style={[styles.quizActionText, { color: "#7C3AED" }]}>
+          <Ionicons name="people-outline" size={15} color={ACCENT.violet.deep} />
+          <Text style={[styles.quizActionText, { color: ACCENT.violet.deep }]}>
             {(quiz.total_attempts ?? 0) > 0
               ? t("quizList.card.responsesCount", {
                   count: quiz.total_attempts,
@@ -285,8 +288,8 @@ const QuizCard = memo(({
           style={styles.quizActionBtn}
           onPress={() => onAnalytics(quiz)}
         >
-          <Ionicons name="bar-chart-outline" size={15} color="#059669" />
-          <Text style={[styles.quizActionText, { color: "#059669" }]}>
+          <Ionicons name="bar-chart-outline" size={15} color={ACCENT.green.deep} />
+          <Text style={[styles.quizActionText, { color: ACCENT.green.deep }]}>
             {t("quizList.card.analytics")}
           </Text>
         </TouchableOpacity>
@@ -295,8 +298,8 @@ const QuizCard = memo(({
           style={styles.quizActionBtn}
           onPress={() => onDelete(quiz)}
         >
-          <Ionicons name="trash-outline" size={15} color="#DC2626" />
-          <Text style={[styles.quizActionText, { color: "#DC2626" }]}>
+          <Ionicons name="trash-outline" size={15} color={ACCENT.red.deep} />
+          <Text style={[styles.quizActionText, { color: ACCENT.red.deep }]}>
             {t("common.delete")}
           </Text>
         </TouchableOpacity>
@@ -324,19 +327,19 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
   return (
     <View style={styles.questionCard}>
       <View style={styles.questionBadges}>
-        <View style={[styles.typeBadge, { backgroundColor: "#EEF2FF" }]}>
-          <Text style={[styles.typeBadgeText, { color: "#4F46E5" }]}>
+        <View style={[styles.typeBadge, { backgroundColor: accentBadge(categoryAccent(q.question_type)).bg, borderColor: accentBadge(categoryAccent(q.question_type)).border }]}>
+          <Text style={[styles.typeBadgeText, { color: accentBadge(categoryAccent(q.question_type)).text }]}>
             {tLabel}
           </Text>
         </View>
-        <View style={[styles.typeBadge, { backgroundColor: diff.bg }]}>
+        <View style={[styles.typeBadge, { backgroundColor: diff.bg, borderColor: diff.border }]}>
           <Text style={[styles.typeBadgeText, { color: diff.text }]}>
             {diffLabel}
           </Text>
         </View>
         {q.category_name && (
-          <View style={[styles.typeBadge, { backgroundColor: "#F3F4F6" }]}>
-            <Text style={[styles.typeBadgeText, { color: "#6B7280" }]}>
+          <View style={[styles.typeBadge, { backgroundColor: accentBadge(categoryAccent(q.category_name)).bg, borderColor: accentBadge(categoryAccent(q.category_name)).border }]}>
+            <Text style={[styles.typeBadgeText, { color: accentBadge(categoryAccent(q.category_name)).text }]}>
               {q.category_name}
             </Text>
           </View>
@@ -352,12 +355,12 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
           <Ionicons
             name={opt.is_correct ? "checkmark-circle" : "ellipse-outline"}
             size={14}
-            color={opt.is_correct ? "#059669" : "#D1D5DB"}
+            color={opt.is_correct ? SEMANTIC.success.icon : COLORS.textSecondary}
           />
           <Text
             style={[
               styles.optionPreviewText,
-              opt.is_correct && { color: "#059669", fontWeight: "600" },
+              opt.is_correct && { color: SEMANTIC.success.text, fontWeight: "600" },
             ]}
             numberOfLines={1}
           >
@@ -373,7 +376,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
 
       <View style={styles.questionActions}>
         <View style={styles.questionPoints}>
-          <Ionicons name="star-outline" size={13} color="#D97706" />
+          <Ionicons name="star-outline" size={13} color={ACCENT.amber.solid} />
           <Text style={styles.questionPointsText}>
             {t("quizList.card.points", { count: q.points ?? 1 })}
           </Text>
@@ -383,8 +386,8 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
           style={styles.questionActionBtn}
           onPress={() => onEdit(q)}
         >
-          <Ionicons name="create-outline" size={15} color="#4F46E5" />
-          <Text style={[styles.questionActionText, { color: "#4F46E5" }]}>
+          <Ionicons name="create-outline" size={15} color={ACCENT.indigo.deep} />
+          <Text style={[styles.questionActionText, { color: ACCENT.indigo.deep }]}>
             {t("common.edit")}
           </Text>
         </TouchableOpacity>
@@ -393,8 +396,8 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
           style={styles.questionActionBtn}
           onPress={() => onDelete(q)}
         >
-          <Ionicons name="trash-outline" size={15} color="#DC2626" />
-          <Text style={[styles.questionActionText, { color: "#DC2626" }]}>
+          <Ionicons name="trash-outline" size={15} color={ACCENT.red.deep} />
+          <Text style={[styles.questionActionText, { color: ACCENT.red.deep }]}>
             {t("common.delete")}
           </Text>
         </TouchableOpacity>
@@ -462,7 +465,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
             <Text style={styles.modalTitle} numberOfLines={1}>
               {quiz?.title}
             </Text>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 2 }}>
               {t("quizList.responses.count", { count: attempts.length })}
               {avgScore != null
                 ? `  ·  ${t("quizList.avgScoreInline", { score: avgScore })}`
@@ -475,7 +478,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-            <Ionicons name="close" size={22} color="#374151" />
+            <Ionicons name="close" size={22} color={COLORS.text} />
           </TouchableOpacity>
         </View>
 
@@ -538,8 +541,11 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       responsesStyles.scoreBadge,
                       {
                         backgroundColor: attempt.is_passed
-                          ? "#ECFDF5"
-                          : "#FEF2F2",
+                          ? SEMANTIC.success.bg
+                          : SEMANTIC.error.bg,
+                        borderColor: attempt.is_passed
+                          ? SEMANTIC.success.box
+                          : SEMANTIC.error.box,
                       },
                     ]}
                   >
@@ -547,7 +553,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       style={[
                         responsesStyles.scoreText,
                         {
-                          color: attempt.is_passed ? "#059669" : "#DC2626",
+                          color: attempt.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text,
                         },
                       ]}
                     >
@@ -561,7 +567,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                     <Ionicons
                       name="checkmark-circle-outline"
                       size={12}
-                      color="#6B7280"
+                      color={ACCENT.blue.solid}
                     />
                     <Text style={responsesStyles.detailText}>
                       {attempt.raw_score ?? 0}/{attempt.max_score ?? 0}
@@ -569,7 +575,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                   </View>
 
                   <View style={responsesStyles.detailChip}>
-                    <Ionicons name="time-outline" size={12} color="#6B7280" />
+                    <Ionicons name="time-outline" size={12} color={ACCENT.blue.solid} />
                     <Text style={responsesStyles.detailText}>
                       {formatDuration(attempt.time_taken_secs)}
                     </Text>
@@ -579,7 +585,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                     <Ionicons
                       name="calendar-outline"
                       size={12}
-                      color="#6B7280"
+                      color={ACCENT.blue.solid}
                     />
                     <Text style={responsesStyles.detailText}>
                       {formatDate(attempt.submitted_at)}
@@ -591,8 +597,11 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       responsesStyles.statusChip,
                       {
                         backgroundColor: attempt.is_passed
-                          ? "#ECFDF5"
-                          : "#FEF2F2",
+                          ? SEMANTIC.success.bg
+                          : SEMANTIC.error.bg,
+                        borderColor: attempt.is_passed
+                          ? SEMANTIC.success.box
+                          : SEMANTIC.error.box,
                       },
                     ]}
                   >
@@ -600,7 +609,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       style={{
                         fontSize:   10,
                         fontWeight: "700",
-                        color:      attempt.is_passed ? "#059669" : "#DC2626",
+                        color:      attempt.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text,
                       }}
                     >
                       {attempt.is_passed
@@ -655,7 +664,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
             {quiz?.title}
           </Text>
           <TouchableOpacity onPress={onClose} style={styles.modalClose}>
-            <Ionicons name="close" size={22} color="#374151" />
+            <Ionicons name="close" size={22} color={COLORS.text} />
           </TouchableOpacity>
         </View>
 
@@ -681,8 +690,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                   label: t("quizList.analytics.totalAttempts"),
                   value: data.summary?.total_attempts ?? 0,
                   icon:  "people-outline",
-                  color: "#4F46E5",
-                  bg:    "#EEF2FF",
+                  color: ACCENT.indigo.deep,
+                  bg:    ACCENT.indigo.wash,
+                  base:  ACCENT.indigo.base,
                 },
                 {
                   id:    "passRate",
@@ -696,8 +706,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                         )}%`
                       : "—",
                   icon:  "checkmark-circle-outline",
-                  color: "#059669",
-                  bg:    "#ECFDF5",
+                  color: ACCENT.green.deep,
+                  bg:    ACCENT.green.wash,
+                  base:  ACCENT.green.base,
                 },
                 {
                   id:    "avgScore",
@@ -706,8 +717,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                     ? `${data.summary.avg_score}%`
                     : "—",
                   icon:  "stats-chart-outline",
-                  color: "#D97706",
-                  bg:    "#FEF3C7",
+                  color: ACCENT.amber.deep,
+                  bg:    ACCENT.amber.wash,
+                  base:  ACCENT.amber.base,
                 },
                 {
                   id:    "avgTime",
@@ -716,15 +728,16 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                     ? `${Math.round(data.summary.avg_time_secs / 60)}m`
                     : "—",
                   icon:  "time-outline",
-                  color: "#DB2777",
-                  bg:    "#FDF2F8",
+                  color: ACCENT.teal.deep,
+                  bg:    ACCENT.teal.wash,
+                  base:  ACCENT.teal.base,
                 },
               ].map((card) => (
                 <View
                   key={card.id}
-                  style={[styles.analyticsCard, { backgroundColor: card.bg }]}
+                  style={[styles.analyticsCard, { backgroundColor: card.bg, borderTopColor: card.base }]}
                 >
-                  <Ionicons name={card.icon} size={20} color={card.color} />
+                  <Ionicons name={card.icon} size={20} color={card.base} />
                   <Text
                     style={[styles.analyticsValue, { color: card.color }]}
                   >
@@ -742,7 +755,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                     {t("quizList.analytics.highest")}
                   </Text>
                   <Text
-                    style={[styles.scoreRangeValue, { color: "#059669" }]}
+                    style={[styles.scoreRangeValue, { color: SEMANTIC.success.text }]}
                   >
                     {data.summary.highest_score}%
                   </Text>
@@ -753,7 +766,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                     {t("quizList.analytics.lowest")}
                   </Text>
                   <Text
-                    style={[styles.scoreRangeValue, { color: "#DC2626" }]}
+                    style={[styles.scoreRangeValue, { color: SEMANTIC.error.text }]}
                   >
                     {data.summary.lowest_score}%
                   </Text>
@@ -764,7 +777,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                     {t("quizList.analytics.passing")}
                   </Text>
                   <Text
-                    style={[styles.scoreRangeValue, { color: "#4F46E5" }]}
+                    style={[styles.scoreRangeValue, { color: ACCENT.indigo.deep }]}
                   >
                     {data.summary.passing_score}%
                   </Text>
@@ -801,7 +814,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                           })}
                         </Text>
                         <Text
-                          style={[styles.hardestStat, { color: "#DC2626" }]}
+                          style={[styles.hardestStat, { color: SEMANTIC.error.text }]}
                         >
                           {t("quizList.analytics.missRate", {
                             rate: Math.round(
@@ -1141,9 +1154,9 @@ export default function TeacherQuizzesScreen() {
           style={styles.analyticsResponsesBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="people-outline" size={16} color="#7C3AED" />
+          <Ionicons name="people-outline" size={16} color={ACCENT.violet.deep} />
         </TouchableOpacity>
-        <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
       </TouchableOpacity>
     ),
     [t]
@@ -1168,7 +1181,7 @@ export default function TeacherQuizzesScreen() {
           }
           activeOpacity={0.8}
         >
-          <Ionicons name="warning-outline" size={16} color="#D97706" />
+          <Ionicons name="warning-outline" size={16} color={SEMANTIC.warning.icon} />
           <Text style={styles.warningText}>
             {brokenQuizzes.length === 1
               ? t("quizList.warnOne", { title: brokenQuizzes[0].title })
@@ -1280,7 +1293,7 @@ export default function TeacherQuizzesScreen() {
               styles.chip,
               filterDiff === diff && {
                 backgroundColor: DIFFICULTY_COLORS[diff].bg,
-                borderColor:     DIFFICULTY_COLORS[diff].text,
+                borderColor:     DIFFICULTY_COLORS[diff].border,
               },
             ]}
             onPress={() =>
@@ -1371,15 +1384,16 @@ export default function TeacherQuizzesScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("quizList.title")}</Text>
           <Text style={styles.headerSub}>
@@ -1425,11 +1439,15 @@ export default function TeacherQuizzesScreen() {
 
 const responsesStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.blue.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.blue.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    4,
     elevation:       2,
@@ -1444,25 +1462,25 @@ const responsesStyles = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: COLORS.surface,
     alignItems:      "center",
     justifyContent:  "center",
     borderWidth:     2,
-    borderColor:     "#C7D2FE",
+    borderColor:     ACCENT.blue.base + "4D",
   },
   avatarText: {
     fontSize:   18,
     fontWeight: "800",
-    color:      "#4F46E5",
+    color:      ACCENT.blue.deep,
   },
   studentName: {
     fontSize:   15,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   studentMeta: {
     fontSize:  11,
-    color:     "#9CA3AF",
+    color:     COLORS.textSecondary,
     marginTop: 2,
   },
   scoreBadge: {
@@ -1471,6 +1489,7 @@ const responsesStyles = StyleSheet.create({
     borderRadius:   16,
     alignItems:     "center",
     justifyContent: "center",
+    borderWidth:    1,
   },
   scoreText: {
     fontSize:   17,
@@ -1481,24 +1500,25 @@ const responsesStyles = StyleSheet.create({
     flexWrap:       "wrap",
     gap:            6,
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
   },
   detailChip: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderRadius:      8,
     paddingHorizontal: 8,
     paddingVertical:   4,
   },
   detailText: {
     fontSize:   11,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "500",
   },
   statusChip: {
+    borderWidth:       1,
     borderRadius:      8,
     paddingHorizontal: 8,
     paddingVertical:   4,
@@ -1510,17 +1530,17 @@ const responsesStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
   },
   loadingText: {
     marginTop:  12,
     fontSize:   14,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "500",
   },
 
@@ -1530,9 +1550,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backButton: {
@@ -1543,8 +1563,9 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   createBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -1558,9 +1579,9 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flexDirection:     "row",
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   tab: {
     flex:              1,
@@ -1572,24 +1593,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  tabActive:      { borderBottomColor: "#4F46E5" },
-  tabLabel:       { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  tabLabelActive: { color: "#4F46E5", fontWeight: "700" },
+  tabActive:      { borderBottomColor: ACCENT.indigo.base },
+  tabLabel:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  tabLabelActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   warningBanner: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               8,
-    backgroundColor:   "#FEF3C7",
+    backgroundColor:   SEMANTIC.warning.bg,
     borderRadius:      10,
     paddingHorizontal: 14,
     paddingVertical:   10,
     marginHorizontal:  16,
     marginBottom:      8,
     borderWidth:       1,
-    borderColor:       "#FDE68A",
+    borderColor:       SEMANTIC.warning.box,
   },
-  warningText: { flex: 1, fontSize: 13, color: "#92400E" },
+  warningText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text },
 
   searchBar: {
     flexDirection:     "row",
@@ -1619,13 +1640,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "transparent",
+    borderColor:       COLORS.border,
   },
-  chipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  chipText:       { fontSize: 12, color: "#6B7280", fontWeight: "500" },
-  chipTextActive: { color: "#4F46E5", fontWeight: "700" },
+  chipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  chipText:       { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  chipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
   chipDivider: {
     width:            1,
     height:           20,
@@ -1636,11 +1657,15 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
 
   quizCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.indigo.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    4,
     elevation:       2,
@@ -1651,11 +1676,11 @@ const styles = StyleSheet.create({
     marginBottom:  10,
     gap:           10,
   },
-  quizTitle:        { fontSize: 15, fontWeight: "700", color: "#111827" },
-  quizMeta:         { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  quizTitle:        { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  quizMeta:         { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   quizMissingClass: {
     fontSize:   11,
-    color:      "#D97706",
+    color:      SEMANTIC.warning.text,
     marginTop:  3,
     fontWeight: "600",
   },
@@ -1668,25 +1693,25 @@ const styles = StyleSheet.create({
     gap:               5,
     borderWidth:       1,
   },
-  publishBadgeOn:   { backgroundColor: "#ECFDF5", borderColor: "#059669" },
-  publishBadgeOff:  { backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" },
+  publishBadgeOn:   { backgroundColor: statusBadge("success").bg, borderColor: statusBadge("success").border },
+  publishBadgeOff:  { backgroundColor: statusBadge("warning").bg, borderColor: statusBadge("warning").border },
   publishDot:       { width: 6, height: 6, borderRadius: 3 },
   publishBadgeText: { fontSize: 12, fontWeight: "600" },
 
   quizStats: {
     flexDirection:  "row",
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
     marginBottom:   10,
   },
   quizStat:      { flex: 1, alignItems: "center", gap: 2 },
-  quizStatValue: { fontSize: 13, fontWeight: "700", color: "#111827" },
-  quizStatLabel: { fontSize: 10, color: "#9CA3AF" },
+  quizStatValue: { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep },
+  quizStatLabel: { fontSize: 10, color: COLORS.textSecondary },
 
   quizActionsGrid: {
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
     gap:            6,
   },
@@ -1698,17 +1723,21 @@ const styles = StyleSheet.create({
     justifyContent:  "center",
     paddingVertical: 7,
     borderRadius:    8,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.surface,
     gap:             4,
   },
   quizActionText: { fontSize: 12, fontWeight: "600" },
 
   questionCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.indigo.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    4,
     elevation:       2,
@@ -1719,13 +1748,13 @@ const styles = StyleSheet.create({
     marginBottom:  8,
     flexWrap:      "wrap",
   },
-  typeBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  typeBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   typeBadgeText: { fontSize: 11, fontWeight: "700" },
 
   questionText: {
     fontSize:     14,
     fontWeight:   "600",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 8,
     lineHeight:   20,
   },
@@ -1735,14 +1764,14 @@ const styles = StyleSheet.create({
     gap:             6,
     paddingVertical: 2,
   },
-  optionPreviewText: { fontSize: 13, color: "#6B7280", flex: 1 },
-  moreOptions:       { fontSize: 11, color: "#9CA3AF", marginTop: 4 },
+  optionPreviewText: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
+  moreOptions:       { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
 
   questionActions: {
     flexDirection:  "row",
     alignItems:     "center",
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
     marginTop:      8,
     gap:            8,
@@ -1753,14 +1782,14 @@ const styles = StyleSheet.create({
     gap:           3,
     flex:          1,
   },
-  questionPointsText: { fontSize: 12, color: "#D97706", fontWeight: "600" },
+  questionPointsText: { fontSize: 12, color: ACCENT.amber.deep, fontWeight: "600" },
   questionActionBtn: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      8,
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.surface,
     gap:               4,
   },
   questionActionText: { fontSize: 12, fontWeight: "600" },
@@ -1768,37 +1797,41 @@ const styles = StyleSheet.create({
   analyticsListCard: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    12,
     padding:         14,
     marginBottom:    8,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.indigo.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    2,
     elevation:       1,
     gap:             8,
   },
-  analyticsListTitle: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  analyticsListMeta:  { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  analyticsListTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  analyticsListMeta:  { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   analyticsResponsesBtn: {
     padding:         4,
     borderRadius:    8,
-    backgroundColor: "#F5F3FF",
+    backgroundColor: COLORS.surface,
   },
 
-  modalContainer: { flex: 1, backgroundColor: "#F3F4F6" },
+  modalContainer: { flex: 1, backgroundColor: COLORS.page },
   modalHeader: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
-  modalTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: "#111827" },
+  modalTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: COLORS.text },
   modalClose: {
     width:           36,
     height:          36,
@@ -1823,33 +1856,42 @@ const styles = StyleSheet.create({
     padding:      16,
     alignItems:   "center",
     gap:          6,
+    borderWidth:  1,
+    borderColor:  COLORS.border,
+    borderTopWidth: 3,
   },
   analyticsValue: { fontSize: 22, fontWeight: "800" },
-  analyticsLabel: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  analyticsLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
 
   scoreRange: {
     flexDirection:   "row",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     borderRadius:    14,
     padding:         16,
     marginBottom:    12,
   },
   scoreRangeItem:    { flex: 1, alignItems: "center" },
-  scoreRangeLabel:   { fontSize: 12, color: "#9CA3AF" },
+  scoreRangeLabel:   { fontSize: 12, color: COLORS.textSecondary },
   scoreRangeValue:   { fontSize: 20, fontWeight: "800", marginTop: 4 },
-  scoreRangeDivider: { width: 1, backgroundColor: "#F3F4F6" },
+  scoreRangeDivider: { width: 1, backgroundColor: COLORS.border },
 
   hardestSection: { marginTop: 4 },
   hardestTitle: {
     fontSize:     16,
     fontWeight:   "700",
-    color:        "#111827",
+    color:        COLORS.text,
     marginBottom: 10,
   },
   hardestCard: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.red.base,
     borderRadius:    12,
     padding:         12,
     marginBottom:    8,
@@ -1859,19 +1901,19 @@ const styles = StyleSheet.create({
     width:           28,
     height:          28,
     borderRadius:    14,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  hardestRankText: { fontSize: 13, fontWeight: "700", color: "#DC2626" },
+  hardestRankText: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
   hardestQuestion: {
     fontSize:   13,
     fontWeight: "600",
-    color:      "#111827",
+    color:      COLORS.text,
     lineHeight: 18,
   },
   hardestMeta: { flexDirection: "row", gap: 10, marginTop: 4 },
-  hardestStat: { fontSize: 11, color: "#9CA3AF" },
+  hardestStat: { fontSize: 11, color: COLORS.textSecondary },
 
   emptyState: {
     alignItems:        "center",
@@ -1880,8 +1922,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap:               8,
   },
-  emptyTitle:     { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle:  { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:     { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle:  { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
   emptyAction: {
     marginTop:         8,
     backgroundColor:   "#4F46E5",

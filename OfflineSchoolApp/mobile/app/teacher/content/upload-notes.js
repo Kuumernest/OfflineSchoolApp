@@ -24,6 +24,8 @@ import { useAuthStore }    from "../../../src/store/auth.store";
 import { uploadContent }   from "../../../src/services/content.service";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -34,8 +36,9 @@ const CONTENT_TYPES = [
     id:     "syllabus",
     labelKey: "uploadNotes.typeSyllabus",
     icon:   "list-outline",
-    color:  "#7C3AED",
-    bg:     "#EDE9FE",
+    color:  ACCENT.violet.solid,
+    bg:     ACCENT.violet.wash,
+    accent: "violet",
     accept: [
       "application/pdf",
       "application/msword",
@@ -48,8 +51,9 @@ const CONTENT_TYPES = [
     id:     "notes",
     labelKey: "uploadNotes.typeNotes",
     icon:   "document-text-outline",
-    color:  "#4F46E5",
-    bg:     "#EEF2FF",
+    color:  ACCENT.indigo.solid,
+    bg:     ACCENT.indigo.wash,
+    accent: "indigo",
     accept: [
       "application/pdf",
       "application/msword",
@@ -62,8 +66,9 @@ const CONTENT_TYPES = [
     id:     "image",
     labelKey: "uploadNotes.typeImage",
     icon:   "image-outline",
-    color:  "#059669",
-    bg:     "#ECFDF5",
+    color:  ACCENT.green.solid,
+    bg:     ACCENT.green.wash,
+    accent: "green",
     accept: ["image/jpeg", "image/png", "image/jpg", "image/webp"],
     hint:   "JPG, PNG, WEBP",
     maxMB:  20,
@@ -72,8 +77,9 @@ const CONTENT_TYPES = [
     id:     "audio",
     labelKey: "uploadNotes.typeAudio",
     icon:   "musical-notes-outline",
-    color:  "#D97706",
-    bg:     "#FEF3C7",
+    color:  ACCENT.amber.solid,
+    bg:     ACCENT.amber.wash,
+    accent: "amber",
     accept: ["audio/mpeg", "audio/mp3", "audio/wav", "audio/mp4"],
     hint:   "MP3, WAV, M4A",
     maxMB:  20,
@@ -82,8 +88,9 @@ const CONTENT_TYPES = [
     id:     "video",
     labelKey: "uploadNotes.typeVideo",
     icon:   "videocam-outline",
-    color:  "#DC2626",
-    bg:     "#FEE2E2",
+    color:  ACCENT.red.solid,
+    bg:     ACCENT.red.wash,
+    accent: "red",
     accept: ["video/mp4", "video/quicktime", "video/x-msvideo"],
     hint:   "MP4, MOV, AVI",
     maxMB:  20,
@@ -92,8 +99,9 @@ const CONTENT_TYPES = [
     id:     "document",
     labelKey: "uploadNotes.typeDocument",
     icon:   "attach-outline",
-    color:  "#059669",
-    bg:     "#ECFDF5",
+    color:  ACCENT.green.solid,
+    bg:     ACCENT.green.wash,
+    accent: "green",
     accept: [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -120,12 +128,12 @@ const formatBytes = (bytes) => {
 };
 
 const getFileIcon = (mimeType = "") => {
-  if (mimeType.includes("pdf"))   return { icon: "document-text", color: "#DC2626" };
-  if (mimeType.includes("image")) return { icon: "image",         color: "#059669" };
-  if (mimeType.includes("audio")) return { icon: "musical-notes", color: "#D97706" };
-  if (mimeType.includes("video")) return { icon: "videocam",      color: "#7C3AED" };
-  if (mimeType.includes("word"))  return { icon: "document",      color: "#2563EB" };
-  return { icon: "attach", color: "#6B7280" };
+  if (mimeType.includes("pdf"))   return { icon: "document-text", color: ACCENT.red.solid };
+  if (mimeType.includes("image")) return { icon: "image",         color: ACCENT.green.solid };
+  if (mimeType.includes("audio")) return { icon: "musical-notes", color: ACCENT.amber.solid };
+  if (mimeType.includes("video")) return { icon: "videocam",      color: ACCENT.violet.solid };
+  if (mimeType.includes("word"))  return { icon: "document",      color: ACCENT.blue.solid };
+  return { icon: "attach", color: ACCENT.indigo.solid };
 };
 
 const safeParseJSON = (str, fallback) => {
@@ -213,11 +221,11 @@ function UploadProgressBar({ progress }) {
   );
 }
 
-function SectionCard({ title, icon, iconColor, children }) {
+function SectionCard({ title, icon, accent, children }) {
   return (
     <View style={sectionStyles.card}>
       <View style={sectionStyles.titleRow}>
-        <Ionicons name={icon} size={16} color={iconColor} />
+        <IconSquare icon={icon} accent={accent} size={28} />
         <Text style={sectionStyles.title}>{title}</Text>
       </View>
       {children}
@@ -228,7 +236,7 @@ function SectionCard({ title, icon, iconColor, children }) {
 function ErrorMsg({ msg }) {
   return (
     <View style={errStyles.row}>
-      <Ionicons name="alert-circle-outline" size={13} color="#DC2626" />
+      <Ionicons name="alert-circle-outline" size={13} color={SEMANTIC.error.icon} />
       <Text style={errStyles.text}>{msg}</Text>
     </View>
   );
@@ -238,7 +246,7 @@ function ReviewRow({ label, value, icon }) {
   return (
     <View style={reviewStyles.row}>
       <View style={reviewStyles.iconBox}>
-        <Ionicons name={icon} size={14} color="#6B7280" />
+        <Ionicons name={icon} size={14} color={ACCENT.indigo.solid} />
       </View>
       <Text style={reviewStyles.label}>{label}</Text>
       <Text style={reviewStyles.value} numberOfLines={2}>
@@ -251,7 +259,7 @@ function ReviewRow({ label, value, icon }) {
 function SuccessDetail({ icon, label, value }) {
   return (
     <View style={successDetailStyles.row}>
-      <Ionicons name={icon} size={16} color="#6B7280" />
+      <Ionicons name={icon} size={16} color={ACCENT.green.solid} />
       <Text style={successDetailStyles.label}>{label}:</Text>
       <Text style={successDetailStyles.value} numberOfLines={1}>
         {value || "—"}
@@ -467,7 +475,7 @@ function UploadNotesPage() {
   if (!hasPresets) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#4F46E5" />
         </View>
@@ -479,10 +487,10 @@ function UploadNotesPage() {
   if (uploadDone) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
         <ScrollView contentContainerStyle={styles.successScreen}>
           <View style={styles.successIcon}>
-            <Ionicons name="checkmark-circle" size={72} color="#059669" />
+            <Ionicons name="checkmark-circle" size={72} color={ACCENT.green.solid} />
           </View>
           <Text style={styles.successTitle}>
             {t("uploadNotes.successTitle")}
@@ -550,7 +558,7 @@ function UploadNotesPage() {
   // ── Main form ─────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -559,8 +567,9 @@ function UploadNotesPage() {
           onPress={handleBack}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerTitle}>
           <Text style={styles.headerText}>
             {t("uploadNotes.headerTitle", {
@@ -585,41 +594,41 @@ function UploadNotesPage() {
         <View
           style={[
             styles.recapChip,
-            { backgroundColor: currentType?.bg || "#EEF2FF" },
+            { backgroundColor: ACCENT[currentType?.accent || "indigo"].wash, borderColor: ACCENT[currentType?.accent || "indigo"].base + "4D" },
           ]}
         >
           <Ionicons
             name={currentType?.icon || "document-outline"}
             size={12}
-            color={currentType?.color || "#4F46E5"}
+            color={ACCENT[currentType?.accent || "indigo"].deep}
           />
           <Text
             style={[
               styles.recapChipText,
-              { color: currentType?.color || "#4F46E5" },
+              { color: ACCENT[currentType?.accent || "indigo"].deep },
             ]}
           >
             {currentType ? t(currentType.labelKey) : ""}
           </Text>
         </View>
 
-        <Ionicons name="chevron-forward" size={12} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={12} color={COLORS.textSecondary} />
 
-        <View style={styles.recapChip}>
-          <Ionicons name="book-outline" size={12} color="#4F46E5" />
+        <View style={[styles.recapChip, { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base + "4D" }]}>
+          <Ionicons name="book-outline" size={12} color={ACCENT.slate.deep} />
           <Text
-            style={[styles.recapChipText, { color: "#4F46E5" }]}
+            style={[styles.recapChipText, { color: ACCENT.slate.deep }]}
             numberOfLines={1}
           >
             {presetSubject?.subjectName}
           </Text>
         </View>
 
-        <Ionicons name="chevron-forward" size={12} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={12} color={COLORS.textSecondary} />
 
-        <View style={[styles.recapChip, { backgroundColor: "#ECFDF5" }]}>
-          <Ionicons name="school-outline" size={12} color="#059669" />
-          <Text style={[styles.recapChipText, { color: "#059669" }]}>
+        <View style={styles.recapChip}>
+          <Ionicons name="school-outline" size={12} color={ACCENT.indigo.deep} />
+          <Text style={[styles.recapChipText, { color: ACCENT.indigo.deep }]}>
             {t("uploadNotes.classCount", { count: presetClasses.length })}
           </Text>
         </View>
@@ -642,24 +651,24 @@ function UploadNotesPage() {
               <SectionCard
                 title={t("uploadNotes.selectFile")}
                 icon={currentType?.icon || "attach-outline"}
-                iconColor={currentType?.color || "#4F46E5"}
+                accent={currentType?.accent || "indigo"}
               >
                 <View style={styles.fileInfoRow}>
                   <View
                     style={[
                       styles.fileInfoBadge,
-                      { backgroundColor: currentType?.bg || "#EEF2FF" },
+                      { backgroundColor: ACCENT[currentType?.accent || "indigo"].wash, borderColor: ACCENT[currentType?.accent || "indigo"].base + "4D" },
                     ]}
                   >
                     <Ionicons
                       name={currentType?.icon || "attach-outline"}
                       size={14}
-                      color={currentType?.color || "#4F46E5"}
+                      color={ACCENT[currentType?.accent || "indigo"].deep}
                     />
                     <Text
                       style={[
                         styles.fileInfoText,
-                        { color: currentType?.color || "#4F46E5" },
+                        { color: ACCENT[currentType?.accent || "indigo"].deep },
                       ]}
                     >
                       {currentType?.hint}
@@ -693,7 +702,7 @@ function UploadNotesPage() {
                         onPress={handlePickFile}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="refresh" size={14} color="#4F46E5" />
+                        <Ionicons name="refresh" size={14} color={ACCENT.indigo.deep} />
                         <Text style={styles.fileChangeBtnText}>
                           {t("uploadNotes.change")}
                         </Text>
@@ -706,7 +715,7 @@ function UploadNotesPage() {
                         <Ionicons
                           name="trash-outline"
                           size={14}
-                          color="#DC2626"
+                          color={SEMANTIC.error.icon}
                         />
                       </TouchableOpacity>
                     </View>
@@ -723,13 +732,13 @@ function UploadNotesPage() {
                     <View
                       style={[
                         styles.dropZoneIcon,
-                        { backgroundColor: currentType?.bg || "#EEF2FF" },
+                        { backgroundColor: ACCENT[currentType?.accent || "indigo"].solid },
                       ]}
                     >
                       <Ionicons
                         name="cloud-upload-outline"
                         size={32}
-                        color={currentType?.color || "#4F46E5"}
+                        color={COLORS.onPrimary}
                       />
                     </View>
                     <Text style={styles.dropZoneTitle}>
@@ -751,7 +760,7 @@ function UploadNotesPage() {
               <SectionCard
                 title={t("uploadNotes.titleFieldLabel")}
                 icon="pencil-outline"
-                iconColor="#4F46E5"
+                accent="indigo"
               >
                 <TextInput
                   style={[styles.input, errors.title && styles.inputError]}
@@ -776,7 +785,7 @@ function UploadNotesPage() {
               <SectionCard
                 title={t("uploadNotes.descriptionFieldLabel")}
                 icon="text-outline"
-                iconColor="#6B7280"
+                accent="slate"
               >
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -818,7 +827,7 @@ function UploadNotesPage() {
                 <SectionCard
                   title={t("uploadNotes.reviewConfirm")}
                   icon="eye-outline"
-                  iconColor="#4F46E5"
+                  accent="indigo"
                 >
                   <ReviewRow
                     label={t("uploadNotes.labelType")}
@@ -857,10 +866,11 @@ function UploadNotesPage() {
 
               {uploading && (
                 <View style={styles.uploadingCard}>
-                  <Ionicons
-                    name="cloud-upload-outline"
-                    size={40}
-                    color="#4F46E5"
+                  <IconSquare
+                    icon="cloud-upload-outline"
+                    accent="indigo"
+                    size={56}
+                    radius={16}
                   />
                   <Text style={styles.uploadingTitle}>
                     {t("uploadNotes.uploading")}
@@ -877,7 +887,7 @@ function UploadNotesPage() {
 
               {uploadError && !uploading && (
                 <View style={styles.errorCard}>
-                  <Ionicons name="alert-circle" size={36} color="#DC2626" />
+                  <Ionicons name="alert-circle" size={36} color={SEMANTIC.error.icon} />
                   <Text style={styles.errorTitle}>
                     {t("uploadNotes.uploadFailedTitle")}
                   </Text>
@@ -905,7 +915,7 @@ function UploadNotesPage() {
                 onPress={handleBack}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={18} color="#4F46E5" />
+                <Ionicons name="arrow-back" size={18} color={ACCENT.indigo.solid} />
                 <Text style={styles.navBackText}>
                   {t("uploadNotes.back")}
                 </Text>
@@ -957,7 +967,7 @@ export default UploadNotesPage;
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: "#F3F4F6" },
+  container:     { flex: 1, backgroundColor: COLORS.page },
   centered:      { flex: 1, alignItems: "center", justifyContent: "center" },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -967,9 +977,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               12,
   },
   backBtn: {
@@ -980,9 +990,10 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:  { marginRight: 0 },
   headerTitle: { flex: 1 },
-  headerText:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerText:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   recapBar: {
     flexDirection:     "row",
@@ -1002,24 +1013,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   4,
     borderRadius:      16,
-    backgroundColor:   "#EEF2FF",
+    borderWidth:       1,
+    borderColor:       ACCENT.indigo.base + "4D",
+    backgroundColor:   ACCENT.indigo.wash,
     flexShrink:        1,
   },
   recapChipText: { fontSize: 11, fontWeight: "600" },
 
   input: {
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     borderRadius:      10,
     paddingHorizontal: 14,
     paddingVertical:   12,
     fontSize:          14,
-    color:             "#111827",
-    backgroundColor:   "#FAFAFA",
+    color:             COLORS.text,
+    backgroundColor:   COLORS.surface,
   },
-  inputError: { borderColor: "#DC2626" },
+  inputError: { borderColor: SEMANTIC.error.icon },
   textArea:   { height: 100, paddingTop: 12 },
-  charCount:  { fontSize: 11, color: "#9CA3AF", textAlign: "right", marginTop: 4 },
+  charCount:  { fontSize: 11, color: COLORS.textSecondary, textAlign: "right", marginTop: 4 },
 
   fileInfoRow: {
     flexDirection:  "row",
@@ -1034,21 +1047,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      20,
+    borderWidth:       1,
   },
   fileInfoText: { fontSize: 12, fontWeight: "600" },
-  fileMaxSize:  { fontSize: 12, color: "#9CA3AF" },
+  fileMaxSize:  { fontSize: 12, color: COLORS.textSecondary },
 
   dropZone: {
     borderWidth:     2,
-    borderColor:     "#E5E7EB",
+    borderColor:     ACCENT.indigo.base + "4D",
     borderStyle:     "dashed",
     borderRadius:    14,
     paddingVertical: 36,
     alignItems:      "center",
     gap:             10,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: ACCENT.indigo.wash,
   },
-  dropZoneError: { borderColor: "#DC2626" },
+  dropZoneError: { borderColor: SEMANTIC.error.icon },
   dropZoneIcon: {
     width:          64,
     height:         64,
@@ -1056,32 +1070,32 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  dropZoneTitle: { fontSize: 15, fontWeight: "600", color: "#374151" },
-  dropZoneSub:   { fontSize: 12, color: "#9CA3AF" },
+  dropZoneTitle: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  dropZoneSub:   { fontSize: 12, color: COLORS.textSecondary },
 
   filePreview: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    12,
     padding:         14,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     gap:             12,
   },
   filePreviewIcon: {
     width:           52,
     height:          52,
     borderRadius:    12,
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     alignItems:      "center",
     justifyContent:  "center",
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
   },
   filePreviewInfo:    { flex: 1 },
-  filePreviewName:    { fontSize: 13, fontWeight: "600", color: "#111827" },
-  filePreviewSize:    { fontSize: 11, color: "#9CA3AF", marginTop: 3 },
+  filePreviewName:    { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  filePreviewSize:    { fontSize: 11, color: COLORS.textSecondary, marginTop: 3 },
   filePreviewActions: { gap: 6, alignItems: "center" },
   fileChangeBtn: {
     flexDirection:     "row",
@@ -1090,39 +1104,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   4,
     borderRadius:      6,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   COLORS.surface,
   },
-  fileChangeBtnText: { fontSize: 11, color: "#4F46E5", fontWeight: "600" },
+  fileChangeBtnText: { fontSize: 11, color: ACCENT.indigo.deep, fontWeight: "600" },
   fileRemoveBtn: {
     width:           28,
     height:          28,
     borderRadius:    8,
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
   },
 
   tipsCard: {
-    backgroundColor: "#FFFBEB",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    12,
     padding:         14,
     marginTop:       4,
     borderWidth:     1,
-    borderColor:     "#FDE68A",
+    borderColor:     SEMANTIC.warning.box,
   },
-  tipsTitle: { fontSize: 13, fontWeight: "700", color: "#92400E", marginBottom: 10 },
+  tipsTitle: { fontSize: 13, fontWeight: "700", color: SEMANTIC.warning.text, marginBottom: 10 },
   tipRow:    { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
   tipDot: {
     width:           5,
     height:          5,
     borderRadius:    3,
-    backgroundColor: "#D97706",
+    backgroundColor: SEMANTIC.warning.icon,
     marginTop:       5,
   },
-  tipText: { fontSize: 12, color: "#78350F", flex: 1, lineHeight: 18 },
+  tipText: { fontSize: 12, color: SEMANTIC.warning.text, flex: 1, lineHeight: 18 },
 
   uploadingCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.indigo.wash,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.indigo.base,
     borderRadius:    16,
     padding:         28,
     alignItems:      "center",
@@ -1132,21 +1150,21 @@ const styles = StyleSheet.create({
     shadowRadius:    8,
     elevation:       3,
   },
-  uploadingTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  uploadingFile:  { fontSize: 12, color: "#6B7280", maxWidth: "80%" },
-  uploadingHint:  { fontSize: 11, color: "#9CA3AF", marginTop: 4 },
+  uploadingTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  uploadingFile:  { fontSize: 12, color: COLORS.textSecondary, maxWidth: "80%" },
+  uploadingHint:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
 
   errorCard: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    16,
     padding:         24,
     alignItems:      "center",
     gap:             10,
     borderWidth:     1,
-    borderColor:     "#FECACA",
+    borderColor:     SEMANTIC.error.box,
   },
-  errorTitle: { fontSize: 16, fontWeight: "700", color: "#DC2626" },
-  errorMsg:   { fontSize: 13, color: "#991B1B", textAlign: "center" },
+  errorTitle: { fontSize: 16, fontWeight: "700", color: SEMANTIC.error.text },
+  errorMsg:   { fontSize: 13, color: SEMANTIC.error.text, textAlign: "center" },
   retryBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -1206,20 +1224,22 @@ const styles = StyleSheet.create({
     justifyContent:    "center",
     paddingHorizontal: 28,
     paddingVertical:   40,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.page,
   },
   successIcon:  { marginBottom: 16 },
-  successTitle: { fontSize: 26, fontWeight: "800", color: "#111827", marginBottom: 8 },
+  successTitle: { fontSize: 26, fontWeight: "800", color: COLORS.text, marginBottom: 8 },
   successMsg: {
     fontSize:     14,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     textAlign:    "center",
     lineHeight:   22,
     marginBottom: 24,
   },
   successDetails: {
     width:           "100%",
-    backgroundColor: "#FFF",
+    backgroundColor: SEMANTIC.success.bg,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     borderRadius:    14,
     padding:         16,
     gap:             12,
@@ -1241,7 +1261,7 @@ const styles = StyleSheet.create({
   successSecondaryBtn:  { paddingVertical: 12, marginBottom: 6 },
   successSecondaryText: { color: "#4F46E5", fontWeight: "600", fontSize: 14 },
   successBackBtn:       { paddingVertical: 8 },
-  successBackText:      { color: "#9CA3AF", fontSize: 13 },
+  successBackText:      { color: COLORS.textSecondary, fontSize: 13 },
 });
 
 const stepStyles = StyleSheet.create({
@@ -1264,11 +1284,11 @@ const stepStyles = StyleSheet.create({
     justifyContent:  "center",
   },
   circleDone:       { backgroundColor: "#059669" },
-  circleActive:     { backgroundColor: "#4F46E5" },
-  circleText:       { fontSize: 11, fontWeight: "700", color: "#9CA3AF" },
-  circleTextActive: { color: "#FFF" },
-  label:            { fontSize: 10, color: "#9CA3AF", fontWeight: "500" },
-  labelActive:      { color: "#4F46E5", fontWeight: "700" },
+  circleActive:     { backgroundColor: ACCENT.indigo.solid },
+  circleText:       { fontSize: 11, fontWeight: "700", color: COLORS.textSecondary },
+  circleTextActive: { color: COLORS.onPrimary },
+  label:            { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
+  labelActive:      { color: ACCENT.indigo.deep, fontWeight: "700" },
   labelDone:        { color: "#059669" },
   line: {
     flex:             1,
@@ -1285,21 +1305,25 @@ const progressStyles = StyleSheet.create({
   track: {
     width:           "100%",
     height:          8,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     ACCENT.indigo.base + "4D",
     borderRadius:    4,
     overflow:        "hidden",
   },
-  fill:  { height: "100%", backgroundColor: "#4F46E5", borderRadius: 4 },
-  label: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
+  fill:  { height: "100%", backgroundColor: ACCENT.indigo.solid, borderRadius: 4 },
+  label: { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep },
 });
 
 const sectionStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     marginBottom:    12,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    3,
     elevation:       2,
@@ -1307,15 +1331,15 @@ const sectionStyles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems:    "center",
-    gap:           6,
+    gap:           8,
     marginBottom:  12,
   },
-  title: { fontSize: 14, fontWeight: "700", color: "#374151" },
+  title: { fontSize: 14, fontWeight: "700", color: COLORS.text },
 });
 
 const errStyles = StyleSheet.create({
   row:  { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
-  text: { fontSize: 12, color: "#DC2626", flex: 1 },
+  text: { fontSize: 12, color: SEMANTIC.error.text, flex: 1 },
 });
 
 const reviewStyles = StyleSheet.create({
@@ -1324,16 +1348,16 @@ const reviewStyles = StyleSheet.create({
     alignItems:        "flex-start",
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               8,
   },
   iconBox: { width: 22, marginTop: 1 },
-  label:   { width: 90, fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  value:   { flex: 1, fontSize: 13, color: "#111827", fontWeight: "600" },
+  label:   { width: 90, fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  value:   { flex: 1, fontSize: 13, color: COLORS.text, fontWeight: "600" },
 });
 
 const successDetailStyles = StyleSheet.create({
   row:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  label: { fontSize: 13, color: "#6B7280", width: 70 },
-  value: { flex: 1, fontSize: 13, fontWeight: "600", color: "#111827" },
+  label: { fontSize: 13, color: COLORS.textSecondary, width: 70 },
+  value: { flex: 1, fontSize: 13, fontWeight: "600", color: COLORS.text },
 });

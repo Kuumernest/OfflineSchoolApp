@@ -46,18 +46,24 @@ import {
 // Settings writes are online-only (owner decision): a failure for want of a
 // connection says so rather than a generic "could not save".
 import { needsInternetFailureText, orNeedsInternet } from "../../../src/hooks/useNeedsInternet";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+import {
+  COLORS, ACCENT, SEMANTIC, roleAccent, accentBadge,
+} from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
+// Each section's colour: school identity indigo, the admin's own profile and
+// the admins by role, grading amber, ID cards blue (students), analytics slate.
 const SECTIONS = [
-  { id: "school",    labelKey: "adminSettings.secSchool",    icon: "business-outline"      },
-  { id: "profile",   labelKey: "adminSettings.secProfile",   icon: "person-circle-outline" },
-  { id: "grading",   labelKey: "adminSettings.secGrading",   icon: "school-outline"        },
-  { id: "admins",    labelKey: "adminSettings.secAdmins",    icon: "shield-outline"        },
-  { id: "idcards",   labelKey: "adminSettings.secIdCards",   icon: "card-outline"          },
-  { id: "analytics", labelKey: "adminSettings.secAnalytics", icon: "bar-chart-outline"     },
+  { id: "school",    labelKey: "adminSettings.secSchool",    icon: "business-outline",      accent: "indigo" },
+  { id: "profile",   labelKey: "adminSettings.secProfile",   icon: "person-circle-outline", accent: roleAccent("school_admin") },
+  { id: "grading",   labelKey: "adminSettings.secGrading",   icon: "school-outline",        accent: "amber"  },
+  { id: "admins",    labelKey: "adminSettings.secAdmins",    icon: "shield-outline",        accent: roleAccent("admin") },
+  { id: "idcards",   labelKey: "adminSettings.secIdCards",   icon: "card-outline",          accent: "blue"   },
+  { id: "analytics", labelKey: "adminSettings.secAnalytics", icon: "bar-chart-outline",     accent: "slate"  },
 ];
 
 const ROLE_LABEL_KEYS = {
@@ -67,12 +73,8 @@ const ROLE_LABEL_KEYS = {
   teacher:      "adminSettings.roleTeacher",
 };
 
-const ROLE_COLORS = {
-  super_admin:  "#DC2626",
-  school_admin: "#7C3AED",
-  admin:        "#4F46E5",
-  teacher:      "#059669",
-};
+/** A role pill: the role's accent badge (never grey). */
+const roleBadge = (role) => accentBadge(roleAccent(role));
 
 const SCHOOL_TYPES = [
   { value: "primary",    labelKey: "adminSettings.typePrimary"    },
@@ -121,18 +123,19 @@ const normaliseLogo = (raw) => toDisplayUri(raw);
 
 const SectionTab = React.memo(({ section, active, onPress }) => {
   const { t } = useTranslation();
+  const a = ACCENT[section.accent] ?? ACCENT.slate;
   return (
     <TouchableOpacity
-      style={[styles.tab, active && styles.tabActive]}
+      style={[styles.tab, active && [styles.tabActive, { backgroundColor: a.wash }]]}
       onPress={onPress}
       activeOpacity={0.75}
     >
       <Ionicons
         name={section.icon}
         size={18}
-        color={active ? "#4F46E5" : "#9CA3AF"}
+        color={active ? a.solid : COLORS.textSecondary}
       />
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+      <Text style={[styles.tabLabel, active && [styles.tabLabelActive, { color: a.deep }]]}>
         {t(section.labelKey)}
       </Text>
     </TouchableOpacity>
@@ -149,6 +152,14 @@ const SettingRow = React.memo(({ label, children, hint }) => (
 
 const Card = React.memo(({ children, style }) => (
   <View style={[styles.card, style]}>{children}</View>
+));
+
+/** A card's title: a small solid square in the section's colour, then the words. */
+const CardTitle = React.memo(({ icon, accent = "slate", children, style }) => (
+  <View style={[styles.cardTitleIconRow, style]}>
+    <IconSquare icon={icon} accent={accent} size={28} />
+    <Text style={[styles.cardTitle, styles.cardTitleInRow]}>{children}</Text>
+  </View>
 ));
 
 // ─────────────────────────────────────────────────────────
@@ -350,7 +361,7 @@ const SchoolSection = ({ schoolId }) => {
     if (logoStatus === "loading") {
       return (
         <View style={sc.logoPlaceholder}>
-          <ActivityIndicator size="small" color="#9CA3AF" />
+          <ActivityIndicator size="small" color={COLORS.textSecondary} />
         </View>
       );
     }
@@ -370,7 +381,7 @@ const SchoolSection = ({ schoolId }) => {
         <Ionicons
           name={logoStatus === "error" ? "alert-circle-outline" : "business-outline"}
           size={34}
-          color={logoStatus === "error" ? "#FCA5A5" : "#9CA3AF"}
+          color={logoStatus === "error" ? COLORS.danger : ACCENT.indigo.solid}
         />
         <Text style={sc.logoPlaceholderText}>
           {logoStatus === "error"
@@ -384,7 +395,7 @@ const SchoolSection = ({ schoolId }) => {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color="#4F46E5" />
+        <ActivityIndicator color={ACCENT.indigo.solid} />
       </View>
     );
   }
@@ -393,14 +404,14 @@ const SchoolSection = ({ schoolId }) => {
     <View>
       {/* ── Logo ── */}
       <Card>
-        <Text style={styles.cardTitle}>{t("adminSettings.schoolLogo")}</Text>
+        <CardTitle icon="image" accent="indigo">{t("adminSettings.schoolLogo")}</CardTitle>
         <View style={sc.logoRow}>
           <TouchableOpacity style={sc.logoBox} onPress={pickLogo} activeOpacity={0.8}>
             {renderLogo()}
           </TouchableOpacity>
           <View style={sc.logoActions}>
             <TouchableOpacity style={sc.logoBtn} onPress={pickLogo} activeOpacity={0.8}>
-              <Ionicons name="cloud-upload-outline" size={16} color="#4F46E5" />
+              <Ionicons name="cloud-upload-outline" size={16} color={ACCENT.indigo.solid} />
               <Text style={sc.logoBtnText}>
                 {logoStatus === "ready"
                   ? t("adminSettings.changeLogo")
@@ -413,8 +424,8 @@ const SchoolSection = ({ schoolId }) => {
                 onPress={removeLogo}
                 activeOpacity={0.8}
               >
-                <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                <Text style={[sc.logoBtnText, { color: "#DC2626" }]}>
+                <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
+                <Text style={[sc.logoBtnText, { color: SEMANTIC.error.text }]}>
                   {t("adminSettings.remove")}
                 </Text>
               </TouchableOpacity>
@@ -426,7 +437,7 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Basic Info ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>{t("adminSettings.basicInfo")}</Text>
+        <CardTitle icon="business" accent="indigo">{t("adminSettings.basicInfo")}</CardTitle>
         <SettingRow label={t("adminSettings.schoolName")}>
           <TextInput
             style={styles.input}
@@ -516,7 +527,7 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Contact ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>{t("adminSettings.contactDetails")}</Text>
+        <CardTitle icon="call" accent="sky">{t("adminSettings.contactDetails")}</CardTitle>
         <SettingRow label={t("adminSettings.schoolEmail")}>
           <TextInput
             style={styles.input}
@@ -550,7 +561,7 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Location ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>{t("adminSettings.location")}</Text>
+        <CardTitle icon="location" accent="indigo">{t("adminSettings.location")}</CardTitle>
         <SettingRow label={t("adminSettings.address")}>
           <TextInput
             style={[styles.input, sc.textarea]}
@@ -591,7 +602,7 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Academic Calendar ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>{t("adminSettings.academicCalendar")}</Text>
+        <CardTitle icon="calendar" accent="teal">{t("adminSettings.academicCalendar")}</CardTitle>
         <SettingRow label={t("adminSettings.system")}>
           <View style={styles.segmented}>
             {TERM_SYSTEMS.map((opt) => (
@@ -662,10 +673,10 @@ const SchoolSection = ({ schoolId }) => {
         activeOpacity={0.8}
       >
         {saving ? (
-          <ActivityIndicator color="#fff" size="small" />
+          <ActivityIndicator color={COLORS.onPrimary} size="small" />
         ) : (
           <>
-            <Ionicons name="save-outline" size={18} color="#fff" />
+            <Ionicons name="save-outline" size={18} color={COLORS.onPrimary} />
             <Text style={styles.btnText}>{t("adminSettings.saveSchool")}</Text>
           </>
         )}
@@ -676,25 +687,25 @@ const SchoolSection = ({ schoolId }) => {
 
 const sc = StyleSheet.create({
   logoRow:             { flexDirection: "row", alignItems: "flex-start", gap: 16 },
-  logoBox:             { width: 90, height: 90, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
+  logoBox:             { width: 90, height: 90, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: ACCENT.indigo.wash },
   logoImage:           { width: "100%", height: "100%", resizeMode: "cover" },
   logoPlaceholder:     { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, padding: 4 },
-  logoPlaceholderText: { fontSize: 10, color: "#9CA3AF", fontWeight: "500", textAlign: "center" },
+  logoPlaceholderText: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500", textAlign: "center" },
   logoActions:         { flex: 1, gap: 8 },
-  logoBtn:             { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
-  logoBtnDanger:       { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
-  logoBtnText:         { fontSize: 13, fontWeight: "600", color: "#4F46E5" },
-  logoHint:            { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  logoBtn:             { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  logoBtnDanger:       { borderColor: SEMANTIC.error.box, backgroundColor: SEMANTIC.error.bg },
+  logoBtnText:         { fontSize: 13, fontWeight: "600", color: ACCENT.indigo.deep },
+  logoHint:            { fontSize: 11, color: COLORS.textSubtle, marginTop: 2 },
   chipRow:             { gap: 8, paddingVertical: 2 },
-  chip:                { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
-  chipActive:          { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  chipText:            { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  chipTextActive:      { color: "#4F46E5", fontWeight: "700" },
+  chip:                { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  chipActive:          { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  chipText:            { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  chipTextActive:      { color: ACCENT.indigo.deep, fontWeight: "700" },
   dayRow:              { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  dayChip:             { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
-  dayChipActive:       { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  dayChipText:         { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-  dayChipTextActive:   { color: "#4F46E5", fontWeight: "700" },
+  dayChip:             { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  dayChipActive:       { backgroundColor: ACCENT.teal.wash, borderColor: ACCENT.teal.base },
+  dayChipText:         { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  dayChipTextActive:   { color: ACCENT.teal.deep, fontWeight: "700" },
   row2:                { flexDirection: "row" },
   textarea:            { height: 72, textAlignVertical: "top", paddingTop: 10 },
 });
@@ -771,15 +782,15 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
         for it cannot read the tabs above it.
       */}
       <Card>
-        <Text style={styles.cardTitle}>{t("adminSettings.preferences")}</Text>
+        <CardTitle icon="options" accent="slate">{t("adminSettings.preferences")}</CardTitle>
         <LanguageSwitcher />
-        <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 6 }}>
+        <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 6 }}>
           {t("common.languageHint")}
         </Text>
       </Card>
 
       <Card>
-        <Text style={styles.cardTitle}>{t("adminSettings.personalInfo")}</Text>
+        <CardTitle icon="person" accent={roleAccent(user?.role)}>{t("adminSettings.personalInfo")}</CardTitle>
         <SettingRow label={t("adminSettings.fullName")}>
           <TextInput
             style={styles.input}
@@ -801,10 +812,10 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
           <View
             style={[
               styles.roleBadge,
-              { backgroundColor: (ROLE_COLORS[user?.role] || "#6B7280") + "20" },
+              { backgroundColor: roleBadge(user?.role).bg, borderColor: roleBadge(user?.role).border },
             ]}
           >
-            <Text style={[styles.roleText, { color: ROLE_COLORS[user?.role] || "#6B7280" }]}>
+            <Text style={[styles.roleText, { color: roleBadge(user?.role).text }]}>
               {ROLE_LABEL_KEYS[user?.role]
                 ? t(ROLE_LABEL_KEYS[user?.role])
                 : user?.role}
@@ -822,7 +833,9 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
 
       <Card style={{ marginTop: 12 }}>
         <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>{t("adminSettings.password")}</Text>
+          <CardTitle icon="lock-closed" accent="slate" style={styles.cardTitleRowItem}>
+            {t("adminSettings.password")}
+          </CardTitle>
           <TouchableOpacity onPress={() => setShowPwForm(!showPwForm)}>
             <Text style={styles.linkText}>
               {showPwForm ? t("adminSettings.cancel") : t("adminSettings.changePw")}
@@ -846,7 +859,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
                 <Ionicons
                   name={showCurrentPw ? "eye-off-outline" : "eye-outline"}
                   size={20}
-                  color="#9CA3AF"
+                  color={COLORS.textSecondary}
                 />
               </TouchableOpacity>
             </View>
@@ -865,7 +878,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
                 <Ionicons
                   name={showNewPw ? "eye-off-outline" : "eye-outline"}
                   size={20}
-                  color="#9CA3AF"
+                  color={COLORS.textSecondary}
                 />
               </TouchableOpacity>
             </View>
@@ -954,7 +967,7 @@ const IdCardSection = ({ schoolId }) => {
   if (loading) {
     return (
       <View style={{ paddingVertical: 40, alignItems: "center" }}>
-        <ActivityIndicator color="#3B4996" />
+        <ActivityIndicator color={ACCENT.blue.solid} />
       </View>
     );
   }
@@ -962,7 +975,7 @@ const IdCardSection = ({ schoolId }) => {
   if (!settings?.idCard) {
     return (
       <View style={styles.card}>
-        <Text style={{ fontSize: 13, color: "#96570B" }}>
+        <Text style={{ fontSize: 13, color: SEMANTIC.warning.text }}>
           {t("adminSettings.idCardOfflineNote")}
         </Text>
       </View>
@@ -985,7 +998,9 @@ const IdCardSection = ({ schoolId }) => {
     <View style={{ gap: 14 }}>
 
       <View style={styles.card}>
-        <Text style={idCardStyles.title}>{t("adminSettings.cardExpiryTitle")}</Text>
+        <CardTitle icon="card" accent="blue" style={idCardStyles.titleRow}>
+          {t("adminSettings.cardExpiryTitle")}
+        </CardTitle>
         <Text style={idCardStyles.blurb}>{t("adminSettings.cardExpiryBlurb")}</Text>
 
         <Text style={idCardStyles.label}>{t("adminSettings.validUntil")}</Text>
@@ -994,7 +1009,7 @@ const IdCardSection = ({ schoolId }) => {
           value={idCard.validUntil}
           onChangeText={(v) => patchIdCard({ validUntil: v.trim() })}
           placeholder={t("adminSettings.datePh")}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={COLORS.textMuted}
           autoCapitalize="none"
           keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
         />
@@ -1015,7 +1030,9 @@ const IdCardSection = ({ schoolId }) => {
       </View>
 
       <View style={styles.card}>
-        <Text style={idCardStyles.title}>{t("adminSettings.gateTitle")}</Text>
+        <CardTitle icon="qr-code" accent="green" style={idCardStyles.titleRow}>
+          {t("adminSettings.gateTitle")}
+        </CardTitle>
         <Text style={idCardStyles.blurb}>{t("adminSettings.gateBlurb")}</Text>
 
         {CHOICES.map((choice) => {
@@ -1030,7 +1047,7 @@ const IdCardSection = ({ schoolId }) => {
               <Ionicons
                 name={active ? "radio-button-on" : "radio-button-off"}
                 size={18}
-                color={active ? "#3B4996" : "#9CA3AF"}
+                color={active ? ACCENT.green.solid : COLORS.textSecondary}
               />
               <View style={{ flex: 1 }}>
                 <Text style={idCardStyles.choiceLabel}>{choice.label}</Text>
@@ -1051,7 +1068,7 @@ const IdCardSection = ({ schoolId }) => {
                 value={gate.lateAfter}
                 onChangeText={(v) => patchGate({ lateAfter: v.trim() })}
                 placeholder="07:45"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textMuted}
               />
             </View>
             <View>
@@ -1061,7 +1078,7 @@ const IdCardSection = ({ schoolId }) => {
                 value={gate.earlyBefore}
                 onChangeText={(v) => patchGate({ earlyBefore: v.trim() })}
                 placeholder="14:00"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textMuted}
               />
             </View>
           </View>
@@ -1075,8 +1092,8 @@ const IdCardSection = ({ schoolId }) => {
         style={[idCardStyles.saveBtn, saving && { opacity: 0.6 }]}
       >
         {saving
-          ? <ActivityIndicator color="#fff" size="small" />
-          : <Ionicons name="save-outline" size={17} color="#fff" />}
+          ? <ActivityIndicator color={COLORS.onPrimary} size="small" />
+          : <Ionicons name="save-outline" size={17} color={COLORS.onPrimary} />}
         <Text style={idCardStyles.saveTxt}>{t("adminSettings.save")}</Text>
       </TouchableOpacity>
     </View>
@@ -1084,26 +1101,27 @@ const IdCardSection = ({ schoolId }) => {
 };
 
 const idCardStyles = StyleSheet.create({
-  title:  { fontSize: 15, fontWeight: "700", color: "#0D1220", marginBottom: 6 },
-  blurb:  { fontSize: 12, lineHeight: 18, color: "#4F5A70", marginBottom: 14 },
-  label:  { fontSize: 12, fontWeight: "600", color: "#343D4F", marginBottom: 6 },
-  hint:   { marginTop: 8, fontSize: 12, color: "#4F5A70", lineHeight: 17 },
-  link:   { marginTop: 10, fontSize: 12, fontWeight: "600", color: "#3B4996" },
+  title:    { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 6 },
+  titleRow: { marginBottom: 6 },
+  blurb:  { fontSize: 12, lineHeight: 18, color: COLORS.textSecondary, marginBottom: 14 },
+  label:  { fontSize: 12, fontWeight: "600", color: COLORS.text, marginBottom: 6 },
+  hint:   { marginTop: 8, fontSize: 12, color: COLORS.textSecondary, lineHeight: 17 },
+  link:   { marginTop: 10, fontSize: 12, fontWeight: "600", color: COLORS.primary },
 
   choice: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,
-    borderWidth: 1, borderColor: "#F3F4F6", backgroundColor: "#F9FAFB",
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
     borderRadius: 12, padding: 12, marginBottom: 8,
   },
-  choiceOn:    { borderColor: "#C7CEEA", backgroundColor: "#EEF0FA" },
-  choiceLabel: { fontSize: 13, fontWeight: "600", color: "#0D1220" },
-  choiceHint:  { marginTop: 2, fontSize: 11, color: "#4F5A70", lineHeight: 16 },
+  choiceOn:    { borderColor: ACCENT.green.base, backgroundColor: ACCENT.green.wash },
+  choiceLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  choiceHint:  { marginTop: 2, fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
 
   saveBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#3B4996", borderRadius: 12, paddingVertical: 13,
+    backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 13,
   },
-  saveTxt: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  saveTxt: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "600" },
 });
 
 const GradingSection = ({ schoolId }) => {
@@ -1167,7 +1185,7 @@ const GradingSection = ({ schoolId }) => {
   };
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#4F46E5" /></View>;
+    return <View style={styles.centered}><ActivityIndicator color={ACCENT.amber.solid} /></View>;
   }
   if (!config) return null;
 
@@ -1184,7 +1202,7 @@ const GradingSection = ({ schoolId }) => {
   return (
     <View>
       <Card>
-        <Text style={styles.cardTitle}>{t("adminSettings.gradingSettings")}</Text>
+        <CardTitle icon="school" accent="amber">{t("adminSettings.gradingSettings")}</CardTitle>
         {/* Out of the scale's own top mark, not a percentage.
 
             The label was "Pass Mark %" and the value it showed was 10 — a
@@ -1207,7 +1225,7 @@ const GradingSection = ({ schoolId }) => {
           <Switch
             value={config.showGrades !== false}
             onValueChange={(v) => setConfig({ ...config, showGrades: v })}
-            trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
+            trackColor={{ false: COLORS.border, true: ACCENT.amber.solid }}
           />
         </SettingRow>
         {/* ── Continuous assessment ─────────────────────────────────────
@@ -1220,7 +1238,7 @@ const GradingSection = ({ schoolId }) => {
           <Switch
             value={config.caEnabled !== false}
             onValueChange={(v) => setConfig({ ...config, caEnabled: v })}
-            trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
+            trackColor={{ false: COLORS.border, true: ACCENT.amber.solid }}
           />
         </SettingRow>
         {config.caEnabled !== false && (
@@ -1250,7 +1268,7 @@ const GradingSection = ({ schoolId }) => {
           <Switch
             value={config.useGpa}
             onValueChange={(v) => setConfig({ ...config, useGpa: v })}
-            trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
+            trackColor={{ false: COLORS.border, true: ACCENT.amber.solid }}
           />
         </SettingRow>
         {/* Only when GPA is on; a scale for a system nobody uses is noise. */}
@@ -1283,7 +1301,7 @@ const GradingSection = ({ schoolId }) => {
 
           The remark follows the language, because these carry both. */}
       <Card style={{ marginTop: 16 }}>
-        <Text style={styles.cardTitle}>{t("adminSettings.gradeScale")}</Text>
+        <CardTitle icon="stats-chart" accent="amber">{t("adminSettings.gradeScale")}</CardTitle>
         <Text style={styles.gradeHint}>{t("adminSettings.gradeScaleHint")}</Text>
 
         {bands.length === 0 ? (
@@ -1386,23 +1404,23 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
   };
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#4F46E5" /></View>;
+    return <View style={styles.centered}><ActivityIndicator color={ACCENT.indigo.solid} /></View>;
   }
 
   return (
     <View>
       <Card>
         <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>
+          <CardTitle icon="shield" accent={roleAccent("admin")} style={styles.cardTitleRowItem}>
             {t("adminSettings.adminsCount", { count: admins.length })}
-          </Text>
+          </CardTitle>
           <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
-            <Ionicons name="add" size={18} color="#4F46E5" />
+            <Ionicons name="add" size={18} color={ACCENT.indigo.deep} />
             <Text style={styles.addBtnText}>{t("adminSettings.addAdmin")}</Text>
           </TouchableOpacity>
         </View>
         {admins.map((a) => (
-          <View key={a._id} style={styles.adminRow}>
+          <View key={a._id} style={[styles.adminRow, { borderLeftColor: ACCENT[roleAccent(a.role || "admin")].base }]}>
             <View style={styles.adminInfo}>
               <Text style={styles.adminName}>
                 {a.name} {a._id === currentUserId && t("adminSettings.youSuffix")}
@@ -1440,8 +1458,8 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
                 disabled={creating}
               >
                 {creating
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={{ color: "#fff" }}>{t("adminSettings.create")}</Text>
+                  ? <ActivityIndicator color={COLORS.onPrimary} size="small" />
+                  : <Text style={{ color: COLORS.onPrimary }}>{t("adminSettings.create")}</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -1476,22 +1494,22 @@ const AnalyticsSection = ({ schoolId }) => {
   };
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator color="#4F46E5" /></View>;
+    return <View style={styles.centered}><ActivityIndicator color={ACCENT.slate.solid} /></View>;
   }
   if (!analytics) return null;
 
   return (
     <View>
       <Card>
-        <Text style={styles.cardTitle}>{t("adminSettings.schoolSummary")}</Text>
+        <CardTitle icon="bar-chart" accent="slate">{t("adminSettings.schoolSummary")}</CardTitle>
         <View style={styles.analyticsGrid}>
-          <View style={[styles.analyticsCard, { backgroundColor: "#EEF2FF" }]}>
-            <Text style={styles.analyticsNumber}>{analytics.summary?.totalTeachers ?? 0}</Text>
-            <Text>{t("adminSettings.teachers")}</Text>
+          <View style={[styles.analyticsCard, { backgroundColor: ACCENT.violet.wash, borderTopColor: ACCENT.violet.base }]}>
+            <Text style={[styles.analyticsNumber, { color: ACCENT.violet.deep }]}>{analytics.summary?.totalTeachers ?? 0}</Text>
+            <Text style={styles.analyticsLabel}>{t("adminSettings.teachers")}</Text>
           </View>
-          <View style={[styles.analyticsCard, { backgroundColor: "#F5F3FF" }]}>
-            <Text style={styles.analyticsNumber}>{analytics.summary?.totalClasses ?? 0}</Text>
-            <Text>{t("adminSettings.classes")}</Text>
+          <View style={[styles.analyticsCard, { backgroundColor: ACCENT.indigo.wash, borderTopColor: ACCENT.indigo.base }]}>
+            <Text style={[styles.analyticsNumber, { color: ACCENT.indigo.deep }]}>{analytics.summary?.totalClasses ?? 0}</Text>
+            <Text style={styles.analyticsLabel}>{t("adminSettings.classes")}</Text>
           </View>
         </View>
       </Card>
@@ -1533,20 +1551,21 @@ export default function AdminSettings() {
   if (loading) {
     return (
       <View style={styles.fullCentered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.slate.solid} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("adminSettings.title")}</Text>
           <Text style={styles.headerSub}>
@@ -1613,13 +1632,14 @@ export default function AdminSettings() {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: "#F3F4F6" },
+  container:       { flex: 1, backgroundColor: COLORS.page },
   fullCentered:    { flex: 1, justifyContent: "center", alignItems: "center" },
   centered:        { paddingVertical: 32, alignItems: "center" },
-  header:          { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#E5E7EB", gap: 12 },
-  backBtn:         { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  headerTitle:     { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:       { fontSize: 13, color: "#6B7280" },
+  header:          { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 12 },
+  backBtn:         { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.border, alignItems: "center", justifyContent: "center" },
+  headerIcon:      { marginRight: 0 },
+  headerTitle:     { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:       { fontSize: 13, color: COLORS.textSecondary },
   /*
    * No fixed height on the tab strip.
    *
@@ -1628,27 +1648,27 @@ const styles = StyleSheet.create({
    * its descenders cut. A cap tuned to fit English clips a longer translation
    * for free — the French is "Système de notation".
    */
-  tabsScroll:      { backgroundColor: "#FFFFFF" },
+  tabsScroll:      { backgroundColor: COLORS.surface },
 
-  gradeHint:  { fontSize: 12, color: "#6B7280", marginBottom: 10, marginTop: -4 },
+  gradeHint:  { fontSize: 12, color: COLORS.textSecondary, marginBottom: 10, marginTop: -4 },
   gradeRow: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingVertical:   9,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               8,
   },
   gradeRowLast: { borderBottomWidth: 0 },
-  gradeHead:    { borderBottomColor: "#E5E7EB" },
+  gradeHead:    { borderBottomColor: ACCENT.amber.base },
   gradeHeadText: {
     fontSize:      10,
     fontWeight:    "700",
-    color:         "#6B7280",
+    color:         ACCENT.amber.deep,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  gradeCell:        { fontSize: 13, color: "#374151" },
+  gradeCell:        { fontSize: 13, color: COLORS.textSecondary },
   // Flex rather than fixed widths: a remark is "Above Average" in English and
   // "Au-dessus de la moyenne" in French, and a fixed column truncates one of
   // the two whatever number is chosen.
@@ -1656,49 +1676,55 @@ const styles = StyleSheet.create({
   gradeCellRange:   { width: 62, fontVariant: ["tabular-nums"] },
   gradeCellRemark:  { flex: 1 },
   gradeCellPoints:  { width: 40, textAlign: "right", fontVariant: ["tabular-nums"] },
-  gradeGrade:       { color: "#111827" },
+  gradeGrade:       { color: ACCENT.amber.deep },
   tabsContent:     { paddingHorizontal: 12, gap: 4, alignItems: "center" },
   tab:             { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, gap: 6 },
-  tabActive:       { backgroundColor: "#EEF2FF" },
-  tabLabel:        { fontSize: 13, color: "#9CA3AF" },
-  tabLabelActive:  { color: "#4F46E5", fontWeight: "600" },
+  tabActive:       { backgroundColor: ACCENT.slate.wash },
+  tabLabel:        { fontSize: 13, color: COLORS.textSecondary },
+  tabLabelActive:  { color: ACCENT.slate.deep, fontWeight: "600" },
   content:         { padding: 16 },
-  card:            { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#F3F4F6" },
-  cardTitle:       { fontSize: 15, fontWeight: "700", marginBottom: 14 },
+  // A settings panel: white, with a slate top edge.
+  card:            { backgroundColor: COLORS.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.slate.base },
+  cardTitle:       { fontSize: 15, fontWeight: "700", marginBottom: 14, color: COLORS.text },
   cardTitleRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  cardTitleIconRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
+  cardTitleInRow:  { marginBottom: 0, flexShrink: 1 },
+  cardTitleRowItem: { marginBottom: 0, flexShrink: 1 },
   settingRow:      { marginBottom: 14 },
-  settingLabel:    { fontSize: 13, color: "#6B7280", marginBottom: 6 },
-  settingHint:     { fontSize: 11, color: "#9CA3AF" },
+  settingLabel:    { fontSize: 13, color: COLORS.textSecondary, marginBottom: 6 },
+  settingHint:     { fontSize: 11, color: COLORS.textSubtle },
   // The CA/Test split: a hint under the two fields, red when the two do
   // not add up, because that is a save the server will refuse.
-  caHint:          { fontSize: 11, color: "#9CA3AF", marginBottom: 14 },
-  caError:         { fontSize: 11, color: "#DC2626", marginBottom: 14 },
-  input:           { backgroundColor: "#F9FAFB", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, fontSize: 14 },
+  caHint:          { fontSize: 11, color: COLORS.textSubtle, marginBottom: 14 },
+  caError:         { fontSize: 11, color: SEMANTIC.error.text, marginBottom: 14 },
+  input:           { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 10, fontSize: 14 },
   inputSmall:      { width: 100 },
   btn:             { paddingVertical: 13, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },
-  btnPrimary:      { backgroundColor: "#4F46E5" },
-  btnText:         { color: "#fff", fontWeight: "700" },
+  btnPrimary:      { backgroundColor: COLORS.primary },
+  btnText:         { color: COLORS.onPrimary, fontWeight: "700" },
   btnDisabled:     { opacity: 0.6 },
-  linkText:        { color: "#4F46E5", fontSize: 13 },
-  roleBadge:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: "flex-start" },
+  linkText:        { color: COLORS.primary, fontSize: 13 },
+  roleBadge:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: "flex-start", borderWidth: 1 },
   roleText:        { fontSize: 12, fontWeight: "600" },
-  segmented:       { flexDirection: "row", backgroundColor: "#F3F4F6", borderRadius: 10, padding: 3 },
+  segmented:       { flexDirection: "row", backgroundColor: ACCENT.slate.wash, borderRadius: 10, padding: 3 },
   segment:         { flex: 1, paddingVertical: 7, alignItems: "center", borderRadius: 8 },
-  segmentActive:   { backgroundColor: "#FFFFFF" },
-  segmentText:     { fontSize: 13, color: "#9CA3AF" },
-  segmentTextActive: { color: "#111827", fontWeight: "600" },
-  adminRow:        { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F9FAFB" },
+  segmentActive:   { backgroundColor: ACCENT.teal.wash },
+  segmentText:     { fontSize: 13, color: COLORS.textSecondary },
+  segmentTextActive: { color: ACCENT.teal.deep, fontWeight: "600" },
+  // A person row: a 3px edge in the person's role colour (set inline).
+  adminRow:        { paddingVertical: 10, paddingLeft: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border, borderLeftWidth: 3 },
   adminInfo:       { flex: 1 },
-  adminName:       { fontSize: 14, fontWeight: "600" },
-  adminEmail:      { fontSize: 12, color: "#6B7280" },
+  adminName:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  adminEmail:      { fontSize: 12, color: COLORS.textSecondary },
   modalOverlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent:    { backgroundColor: "#FFFFFF", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  modalContent:    { backgroundColor: COLORS.surface, padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   modalActions:    { flexDirection: "row", gap: 10, marginTop: 10 },
   analyticsGrid:   { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  analyticsCard:   { flex: 1, minWidth: "45%", padding: 16, borderRadius: 12, alignItems: "center" },
+  analyticsCard:   { flex: 1, minWidth: "45%", padding: 16, borderRadius: 12, alignItems: "center", borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3 },
   analyticsNumber: { fontSize: 22, fontWeight: "700" },
-  addBtn:          { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#EEF2FF", padding: 6, borderRadius: 8 },
-  addBtnText:      { color: "#4F46E5", fontSize: 13 },
+  analyticsLabel:  { color: COLORS.textSecondary },
+  addBtn:          { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: ACCENT.indigo.wash, padding: 6, borderRadius: 8 },
+  addBtnText:      { color: ACCENT.indigo.deep, fontSize: 13 },
   pwField:         { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   eyeBtn:          { padding: 5 },
 });

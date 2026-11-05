@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Printer, Wallet, CheckCircle2, AlertCircle, CalendarClock, Receipt } from "lucide-react";
+import { Printer, Wallet, CheckCircle2, AlertCircle, CalendarClock, Receipt, ListChecks, CalendarRange } from "lucide-react";
 
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
@@ -21,7 +21,8 @@ import { DASH_TINT } from "@/config/dashboardTint";
 import { printHtml } from "@/print/document";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { fetchFees, fetchFeeReminders, fetchHome, fetchReceiptHtml } from "@/services/portal.service";
-import { PortalCard, Skeleton, EmptyState } from "./ui";
+import { PortalCard, Skeleton, EmptyState, SectionIcon } from "./ui";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 export function FeesScreen({ studentId, childName }: { studentId: string | null; childName: string | null }) {
   const { t, i18n } = useTranslation();
@@ -62,7 +63,10 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-ink">{t("portal.feesScreen.title")}</h1>
+      <div className="flex items-center gap-3">
+        <PageIcon icon={Wallet} accent="teal" />
+        <h1 className="text-xl font-semibold text-ink">{t("portal.feesScreen.title")}</h1>
+      </div>
 
       {/* The balance, said first and once. */}
       <PortalCard className={cn("p-5", overdue ? DASH_TINT.teal.errorCard : DASH_TINT.teal.card)}>
@@ -79,7 +83,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
             <p className={cn("mt-1 text-3xl font-semibold tabular-nums", overdue ? "text-danger-text" : "text-accent-teal-deep")}>{fmt.money(fees.totals.balance)}</p>
             {status?.dueDate && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-body">
-                <CalendarClock className="h-4 w-4 text-ink-muted" aria-hidden="true" />
+                <CalendarClock className={cn("h-4 w-4", DASH_TINT.teal.glyph)} aria-hidden="true" />
                 {overdue ? t("portal.feesScreen.overdueSince", { date: fmt.date(status.dueDate) }) : t("portal.feesScreen.dueOn", { date: fmt.date(status.dueDate) })}
               </p>
             )}
@@ -106,7 +110,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
 
       {/* Charges, each with its due date. */}
       <PortalCard className="overflow-hidden">
-        <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("portal.feesScreen.charges")}</h2>
+        <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink"><SectionIcon icon={ListChecks} accent="teal" />{t("portal.feesScreen.charges")}</h2>
         <ul>
           {fees.charges.map((c) => (
             <li key={c._id} className="flex min-h-14 items-center justify-between gap-3 border-t border-line px-4 py-3 first:border-t-0">
@@ -125,7 +129,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
 
       {plan && (
         <PortalCard className="overflow-hidden">
-          <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("portal.feesScreen.plan")}</h2>
+          <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink"><SectionIcon icon={CalendarRange} accent="teal" />{t("portal.feesScreen.plan")}</h2>
           <ul>
             {plan.instalments.map((i) => (
               <li key={i.seq} className="flex min-h-12 items-center justify-between border-t border-line px-4 py-2.5 text-sm first:border-t-0">
@@ -139,7 +143,7 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
 
       {/* Payments, each with its receipt. */}
       <PortalCard className="overflow-hidden">
-        <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t("portal.feesScreen.payments")}</h2>
+        <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-ink"><SectionIcon icon={Receipt} accent="green" />{t("portal.feesScreen.payments")}</h2>
         {fees.payments.length === 0 ? (
           <EmptyState icon={<Receipt className="h-6 w-6" />} title={t("portal.feesScreen.noPayments")} />
         ) : (

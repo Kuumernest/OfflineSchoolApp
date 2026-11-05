@@ -25,14 +25,16 @@ import { useTranslation } from "../../src/i18n/useTranslation";
 import { getDatabase } from "../../src/db/database";
 import { countHeldChanges } from "../../src/db/heldChanges";
 import { reviewCounts } from "../../src/services/perUserData.service";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE } from "../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../src/components/Tinted";
 
 const C = {
-  bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB",
-  text: "#111827", muted: "#6B7280",
-  conflict: "#B45309", conflictBg: "#FEF3C7",
-  failed: "#B91C1C", failedBg: "#FEE2E2",
-  primary: "#2563EB", success: "#059669",
-  heldBg: "#EFF6FF", held: "#1E40AF",
+  bg: COLORS.page, card: COLORS.surface, border: COLORS.border,
+  text: COLORS.text, muted: COLORS.textSecondary,
+  conflict: SEMANTIC.warning.text, conflictBg: SEMANTIC.warning.bg,
+  failed: SEMANTIC.error.text, failedBg: SEMANTIC.error.bg,
+  primary: ACCENT.amber.solid, success: ACCENT.green.solid,
+  heldBg: SEMANTIC.info.bg, held: SEMANTIC.info.text,
 };
 
 /**
@@ -105,17 +107,11 @@ const StatusChip = ({ status }) => {
   const { t } = useTranslation();
   const isConflict = status === "conflict";
   return (
-    <View style={[
-      styles.chip,
-      { backgroundColor: isConflict ? C.conflictBg : C.failedBg },
-    ]}>
-      <Text style={[
-        styles.chipText,
-        { color: isConflict ? C.conflict : C.failed },
-      ]}>
-        {isConflict ? t("syncScreens.chipConflict") : t("syncScreens.chipFailed")}
-      </Text>
-    </View>
+    <Badge
+      tone={isConflict ? "warning" : "error"}
+      label={isConflict ? t("syncScreens.chipConflict") : t("syncScreens.chipFailed")}
+      textStyle={styles.chipText}
+    />
   );
 };
 
@@ -204,9 +200,15 @@ export default function PendingChangesScreen() {
     const { labelKey, rawKind, detail } = describe(item);
     const label = labelKey ? t(labelKey) : (rawKind || t("syncScreens.kChange"));
     const attempts = item.retry_count || 0;
+    const tone = item.status === "conflict" ? "warning" : "error";
 
     return (
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: SEMANTIC[tone].bg, borderLeftColor: TONE_EDGE[tone] },
+        ]}
+      >
         <View style={styles.cardHead}>
           <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
           <StatusChip status={item.status} />
@@ -237,7 +239,7 @@ export default function PendingChangesScreen() {
             onPress={() => retryOne(item)}
             disabled={busy}
           >
-            <Ionicons name="refresh" size={14} color="#FFF" />
+            <Ionicons name="refresh" size={14} color={COLORS.onPrimary} />
             <Text style={styles.btnPrimaryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
 
@@ -268,6 +270,7 @@ export default function PendingChangesScreen() {
       />
 
       <View style={styles.summary}>
+        <HeaderIcon size={28} style={styles.headerIcon} />
         <Text style={styles.summaryText}>
           {t("syncScreens.waitingCount", { count: stats.pending + stats.retrying })}
           {stats.uploads > 0 ? `  ·  ${t("syncScreens.fileCount", { count: stats.uploads })}` : ""}
@@ -294,19 +297,21 @@ export default function PendingChangesScreen() {
           renderItem={renderItem}
           contentContainerStyle={rows.length ? styles.list : styles.listEmpty}
           refreshControl={
-            <RefreshControl refreshing={false} onRefresh={load} />
+            <RefreshControl refreshing={false} onRefresh={load} tintColor={C.primary} />
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="checkmark-circle-outline" size={44} color={C.success} />
-              <Text style={styles.emptyTitle}>{t("syncScreens.nothingStuck")}</Text>
-              <Text style={styles.emptyText}>
-                {t("syncScreens.nothingStuckSub")}
-              </Text>
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>{t("common.goBack")}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon="checkmark-circle-outline"
+              accent="green"
+              title={t("syncScreens.nothingStuck")}
+              message={t("syncScreens.nothingStuckSub")}
+              style={styles.empty}
+              action={
+                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>{t("common.goBack")}</Text>
+                </TouchableOpacity>
+              }
+            />
           }
           ListFooterComponent={
             rows.length > 1 ? (
@@ -335,12 +340,14 @@ const styles = StyleSheet.create({
   },
   summaryText: { flex: 1, fontSize: 12.5, color: C.muted, fontWeight: "600" },
   syncBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 12 },
-  syncBtnText: { color: C.primary, fontWeight: "700", fontSize: 13 },
+  syncBtnText: { color: ACCENT.amber.deep, fontWeight: "700", fontSize: 13 },
+  headerIcon: { marginRight: 10 },
 
   held: {
     flexDirection: "row", gap: 8, alignItems: "flex-start",
     marginHorizontal: 14, marginTop: 12, padding: 12, borderRadius: 10,
     backgroundColor: C.heldBg,
+    borderWidth: 1, borderColor: SEMANTIC.info.box,
   },
   heldText: { fontSize: 12.5, color: C.held, lineHeight: 18 },
 
@@ -350,10 +357,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: C.card, borderRadius: 12, padding: 14,
     borderWidth: 1, borderColor: C.border, gap: 6,
+    borderLeftWidth: 3,
   },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { flex: 1, fontSize: 15, fontWeight: "700", color: C.text },
-  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   chipText: { fontSize: 11, fontWeight: "700" },
   detail: { fontSize: 12, color: C.muted },
   meta: { fontSize: 11, color: C.muted, fontFamily: "monospace" },
@@ -366,19 +373,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
   btnPrimary: { backgroundColor: C.primary },
-  btnPrimaryText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
-  btnGhost: { borderWidth: 1, borderColor: C.border },
+  btnPrimaryText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 13 },
+  btnGhost: { borderWidth: 1, borderColor: C.border, backgroundColor: COLORS.surface },
   btnGhostText: { color: C.failed, fontWeight: "600", fontSize: 13 },
 
   retryAll: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, paddingVertical: 14,
   },
-  retryAllText: { color: C.primary, fontWeight: "700" },
+  retryAllText: { color: ACCENT.amber.deep, fontWeight: "700" },
 
-  empty: { alignItems: "center", padding: 32, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: "700", color: C.text },
-  emptyText: { fontSize: 13.5, color: C.muted, textAlign: "center", lineHeight: 20 },
+  empty: { padding: 32 },
   backBtn: { marginTop: 10, paddingHorizontal: 20, paddingVertical: 10 },
-  backBtnText: { color: C.primary, fontWeight: "700" },
+  backBtnText: { color: ACCENT.amber.deep, fontWeight: "700" },
 });

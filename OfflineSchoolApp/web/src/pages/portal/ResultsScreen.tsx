@@ -16,7 +16,9 @@ import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
 import { printHtml } from "@/print/document";
 import { fetchResults, fetchReportCard, type PortalResult } from "@/services/portal.service";
-import { PortalCard, Skeleton, EmptyState } from "./ui";
+import { PortalCard, Skeleton, EmptyState, SectionIcon } from "./ui";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT, termAccent } from "@/config/dashboardTint";
 import { ordinal, on20, mark } from "./format";
 import { TrendChart } from "./TrendChart";
 
@@ -56,12 +58,15 @@ export function ResultsScreen({ studentId }: { studentId: string | null }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-ink">{t("portal.resultsScreen.title")}</h1>
+      <div className="flex items-center gap-3">
+        <PageIcon icon={GraduationCap} accent="slate" />
+        <h1 className="text-xl font-semibold text-ink">{t("portal.resultsScreen.title")}</h1>
+      </div>
 
       {trend.length >= 2 && (
         <PortalCard className="p-4">
           <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
-            <TrendingUp className="h-4 w-4 text-primary-600" aria-hidden="true" />{t("portal.resultsScreen.trend")}
+            <SectionIcon icon={TrendingUp} accent="slate" />{t("portal.resultsScreen.trend")}
           </h2>
           <TrendChart points={trend} />
         </PortalCard>
@@ -106,14 +111,17 @@ function ResultCard({ result: r, studentId }: { result: PortalResult; studentId:
   };
 
   return (
-    <PortalCard as="article" className="overflow-hidden" aria-labelledby={`res-${r._id}`}>
+    <PortalCard as="article" className={cn("overflow-hidden", DASH_TINT[termAccent(r.term)].edge)} aria-labelledby={`res-${r._id}`}>
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
+          <SectionIcon icon={GraduationCap} accent={termAccent(r.term)} className="mt-0.5" />
+          <div className="min-w-0">
           <h2 id={`res-${r._id}`} className="font-semibold text-ink">{r.examName ?? t("portal.resultsScreen.term", { term: r.term, year: r.academicYear })}</h2>
           <p className="text-xs text-ink-muted">
             {t("portal.resultsScreen.term", { term: r.term, year: r.academicYear })}
             {r.issuedAt ? ` · ${t("portal.resultsScreen.published", { date: fmt.date(r.issuedAt) })}` : ""}
           </p>
+          </div>
         </div>
         <div className="w-full sm:w-auto sm:text-right">
           <p className="text-2xl font-semibold tabular-nums text-accent-slate-deep">{on20(r.average, i18n.resolvedLanguage)}<span className="text-sm font-medium text-ink-faint">/20</span></p>

@@ -15,6 +15,8 @@ import DateField        from "../../../../src/components/DateField";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../src/utils/appError";
 import { useAcademicTerms } from "../../../../src/hooks/useAcademicTerms";
+import { COLORS, ACCENT, SEMANTIC } from "../../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -77,8 +79,11 @@ function isValidDate(str) {
 // UI HELPERS
 // ─────────────────────────────────────────────────────────
 
-const SectionTitle = ({ children, noMargin }) => (
-  <Text style={[s.sectionTitle, noMargin && { marginBottom: 0 }]}>{children}</Text>
+const SectionTitle = ({ children, noMargin, icon, accent = "amber" }) => (
+  <View style={[s.sectionTitleRow, noMargin && { marginBottom: 0 }]}>
+    <IconSquare icon={icon} accent={accent} size={28} />
+    <Text style={s.sectionTitle}>{children}</Text>
+  </View>
 );
 
 const Field = ({ label, required, children, hint }) => (
@@ -173,7 +178,7 @@ const ClassPickerModal = ({
           </View>
         ) : availableClasses.length === 0 ? (
           <View style={cm.empty}>
-            <Ionicons name="school-outline" size={36} color={C.gray300} />
+            <IconSquare icon="school" accent="indigo" size={56} radius={16} />
             <Text style={cm.emptyText}>{t("examEdit.noClassesFound")}</Text>
             <Text style={cm.emptySubText}>{t("examEdit.noClassesSub")}</Text>
           </View>
@@ -193,15 +198,15 @@ const ClassPickerModal = ({
                   onPress={() => onToggle(cid, name)}
                   activeOpacity={0.7}
                 >
-                  <View style={[cm.classIcon, selected && { backgroundColor: C.primaryBg }]}>
+                  <View style={cm.classIcon}>
                     <Ionicons
                       name="school-outline"
                       size={18}
-                      color={selected ? C.primary : C.gray500}
+                      color={COLORS.onPrimary}
                     />
                   </View>
                   <View style={cm.classInfo}>
-                    <Text style={[cm.className, selected && { color: C.primary }]}>{name}</Text>
+                    <Text style={[cm.className, selected && { color: ACCENT.indigo.deep }]}>{name}</Text>
                     {(item.level || item.section) && (
                       <Text style={cm.classGrade}>
                         {[item.level, item.section].filter(Boolean).join(" · ")}
@@ -219,7 +224,7 @@ const ClassPickerModal = ({
                   </View>
                   <View style={[
                     cm.checkbox,
-                    selected && { backgroundColor: C.primary, borderColor: C.primary },
+                    selected && { backgroundColor: ACCENT.indigo.solid, borderColor: ACCENT.indigo.solid },
                   ]}>
                     {selected && <Ionicons name="checkmark" size={14} color={C.white} />}
                   </View>
@@ -267,31 +272,31 @@ const cm = StyleSheet.create({
   loadingBox:   { alignItems: "center", paddingVertical: 48, gap: 12 },
   loadingText:  { fontSize: 14, color: C.gray500 },
   empty:        { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyText:    { fontSize: 14, fontWeight: "600", color: C.gray400 },
-  emptySubText: { fontSize: 12, color: C.gray400, textAlign: "center" },
+  emptyText:    { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  emptySubText: { fontSize: 12, color: COLORS.textSecondary, textAlign: "center" },
   classRow: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             12,
-    backgroundColor: C.gray50,
+    backgroundColor: COLORS.surface,
     borderRadius:    12,
     padding:         14,
     borderWidth:     1,
-    borderColor:     C.gray200,
+    borderColor:     COLORS.border,
   },
-  classRowSelected: { borderColor: C.primary, backgroundColor: "#F5F3FF" },
+  classRowSelected: { borderColor: ACCENT.indigo.base, backgroundColor: ACCENT.indigo.wash },
   classIcon: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: C.gray100,
+    backgroundColor: ACCENT.indigo.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
   classInfo:     { flex: 1 },
   className:     { fontSize: 14, fontWeight: "600", color: C.gray900 },
-  classGrade:    { fontSize: 11, color: C.gray500, marginTop: 2 },
-  classStudents: { fontSize: 11, color: C.gray400, marginTop: 1 },
+  classGrade:    { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  classStudents: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   checkbox: {
     width:          22,
     height:         22,
@@ -574,8 +579,9 @@ export default function EditExamScreen() {
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={C.gray900} />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={s.headerIcon} />
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={1}>
             {t("examEdit.title")}
@@ -604,7 +610,7 @@ export default function EditExamScreen() {
       >
         {/* Basic Info */}
         <View style={s.card}>
-          <SectionTitle>{t("examEdit.basicInfo")}</SectionTitle>
+          <SectionTitle icon="document-text">{t("examEdit.basicInfo")}</SectionTitle>
           <Field label={t("examEdit.labelName")} required>
             <StyledInput value={name} onChangeText={setName} placeholder={t("examEdit.namePlaceholder")} maxLength={120} />
           </Field>
@@ -630,7 +636,7 @@ export default function EditExamScreen() {
         {/* Classes */}
         <View style={s.card}>
           <View style={s.classSectionHeader}>
-            <SectionTitle noMargin>{t("examEdit.classesTitle")}</SectionTitle>
+            <SectionTitle noMargin icon="school" accent="indigo">{t("examEdit.classesTitle")}</SectionTitle>
             <TouchableOpacity style={s.addClassBtn} onPress={handleOpenClassPicker} activeOpacity={0.7}>
               <Ionicons name="add" size={18} color={C.primary} />
               <Text style={s.addClassBtnText}>{t("examEdit.addEdit")}</Text>
@@ -639,7 +645,7 @@ export default function EditExamScreen() {
 
           {selectedClasses.length === 0 ? (
             <TouchableOpacity style={s.noClassBox} onPress={handleOpenClassPicker} activeOpacity={0.7}>
-              <Ionicons name="school-outline" size={28} color={C.gray300} />
+              <IconSquare icon="school" accent="indigo" size={40} />
               <Text style={s.noClassText}>{t("examEdit.noClassesSelected")}</Text>
               <Text style={s.noClassSub}>{t("examEdit.noClassesHint")}</Text>
             </TouchableOpacity>
@@ -647,18 +653,18 @@ export default function EditExamScreen() {
             <View style={s.classChipWrap}>
               {selectedClasses.map((c) => (
                 <View key={c.classId} style={s.classChip}>
-                  <Ionicons name="school-outline" size={12} color={C.primary} />
+                  <Ionicons name="school-outline" size={12} color={ACCENT.indigo.deep} />
                   <Text style={s.classChipText} numberOfLines={1}>{c.className}</Text>
                   <TouchableOpacity
                     onPress={() => toggleClass(c.classId, c.className)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Ionicons name="close" size={14} color={C.primary} />
+                    <Ionicons name="close" size={14} color={ACCENT.indigo.deep} />
                   </TouchableOpacity>
                 </View>
               ))}
               <TouchableOpacity style={s.editClassChip} onPress={handleOpenClassPicker} activeOpacity={0.7}>
-                <Ionicons name="pencil-outline" size={12} color={C.gray500} />
+                <Ionicons name="pencil-outline" size={12} color={COLORS.textSecondary} />
                 <Text style={s.editClassChipText}>{t("examEdit.edit")}</Text>
               </TouchableOpacity>
             </View>
@@ -676,7 +682,7 @@ export default function EditExamScreen() {
 
         {/* Dates */}
         <View style={s.card}>
-          <SectionTitle>{t("examEdit.datesTitle")}</SectionTitle>
+          <SectionTitle icon="calendar">{t("examEdit.datesTitle")}</SectionTitle>
           <View style={s.dateRow}>
             <View style={s.dateField}>
               <DateInput label={t("examEdit.labelStartDate")} value={startDate} onChange={setStartDate} />
@@ -689,7 +695,7 @@ export default function EditExamScreen() {
 
         {/* Marks */}
         <View style={s.card}>
-          <SectionTitle>{t("examEdit.marksTitle")}</SectionTitle>
+          <SectionTitle icon="stats-chart">{t("examEdit.marksTitle")}</SectionTitle>
           <View style={s.dateRow}>
             <View style={s.dateField}>
               <Field label={t("examEdit.labelTotalMarks")} required>
@@ -704,7 +710,7 @@ export default function EditExamScreen() {
           </View>
           {passRatePct !== null && (
             <View style={s.passPreview}>
-              <Ionicons name="information-circle-outline" size={14} color={C.primary} />
+              <Ionicons name="information-circle-outline" size={14} color={SEMANTIC.info.icon} />
               <Text style={s.passPreviewText}>
                 {t("examEdit.passRate", { value: passRatePct })}
               </Text>
@@ -714,7 +720,7 @@ export default function EditExamScreen() {
 
         {/* Additional */}
         <View style={s.card}>
-          <SectionTitle>{t("examEdit.additionalInfo")}</SectionTitle>
+          <SectionTitle icon="information-circle">{t("examEdit.additionalInfo")}</SectionTitle>
           <Field
             label={t("examEdit.labelDescription")}
             hint={t("examEdit.descriptionHint")}
@@ -777,22 +783,23 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     14,
-    backgroundColor:   C.white,
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray200,
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: C.gray100,
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:        { marginRight: 0 },
   headerCenter:      { flex: 1 },
-  headerTitle:       { fontSize: 16, fontWeight: "700", color: C.gray900 },
-  headerSub:         { fontSize: 11, color: C.gray500, marginTop: 2 },
+  headerTitle:       { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  headerSub:         { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   saveHeaderBtn: {
     backgroundColor:   C.primary,
     borderRadius:      10,
@@ -810,31 +817,32 @@ const s = StyleSheet.create({
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
-  sectionTitle: { fontSize: 14, fontWeight: "700", color: C.gray900, marginBottom: 14 },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14, flexShrink: 1 },
+  sectionTitle: { fontSize: 14, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
   field:        { marginBottom: 16 },
   fieldLabel: {
     fontSize:      12,
     fontWeight:    "600",
-    color:         C.gray700,
+    color:         COLORS.text,
     marginBottom:  6,
     textTransform: "uppercase",
   },
   required:  { color: C.error },
-  fieldHint: { fontSize: 11, color: C.gray400, marginTop: 4 },
+  fieldHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
   input: {
-    backgroundColor:   C.gray50,
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       C.gray200,
+    borderColor:       COLORS.border,
     borderRadius:      10,
     paddingHorizontal: 14,
     paddingVertical:   12,
     fontSize:          14,
-    color:             C.gray900,
+    color:             COLORS.text,
     minHeight:         46,
   },
   optionGrid:         { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -843,12 +851,12 @@ const s = StyleSheet.create({
     paddingVertical:   8,
     borderRadius:      8,
     borderWidth:       1,
-    borderColor:       C.gray200,
-    backgroundColor:   C.gray50,
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
-  optionBtnSelected:  { borderColor: C.primary, backgroundColor: C.primaryBg },
-  optionText:         { fontSize: 13, fontWeight: "500", color: C.gray600 },
-  optionTextSelected: { color: C.primary, fontWeight: "700" },
+  optionBtnSelected:  { borderColor: ACCENT.amber.base, backgroundColor: ACCENT.amber.wash },
+  optionText:         { fontSize: 13, fontWeight: "500", color: COLORS.textSecondary },
+  optionTextSelected: { color: ACCENT.amber.deep, fontWeight: "700" },
   classSectionHeader: {
     flexDirection:  "row",
     alignItems:     "center",
@@ -870,52 +878,52 @@ const s = StyleSheet.create({
     paddingVertical:   28,
     gap:               6,
     borderWidth:       1,
-    borderColor:       C.gray200,
+    borderColor:       ACCENT.indigo.base,
     borderRadius:      12,
     borderStyle:       "dashed",
-    backgroundColor:   C.gray50,
+    backgroundColor:   ACCENT.indigo.wash,
   },
-  noClassText:   { fontSize: 14, fontWeight: "600", color: C.gray400 },
-  noClassSub:    { fontSize: 12, color: C.gray400, textAlign: "center", paddingHorizontal: 20 },
+  noClassText:   { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  noClassSub:    { fontSize: 12, color: COLORS.textSecondary, textAlign: "center", paddingHorizontal: 20 },
   classChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   classChip: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               5,
-    backgroundColor:   C.primaryBg,
+    backgroundColor:   ACCENT.indigo.wash,
     borderRadius:      8,
     paddingHorizontal: 10,
     paddingVertical:   6,
     borderWidth:       1,
-    borderColor:       C.primary + "30",
+    borderColor:       ACCENT.indigo.base + "4D",
     maxWidth:          160,
   },
-  classChipText: { fontSize: 13, fontWeight: "600", color: C.primary, flexShrink: 1 },
+  classChipText: { fontSize: 13, fontWeight: "600", color: ACCENT.indigo.deep, flexShrink: 1 },
   editClassChip: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               4,
-    backgroundColor:   C.gray100,
+    backgroundColor:   COLORS.surface,
     borderRadius:      8,
     paddingHorizontal: 10,
     paddingVertical:   6,
     borderWidth:       1,
-    borderColor:       C.gray200,
+    borderColor:       COLORS.border,
   },
-  editClassChipText: { fontSize: 13, fontWeight: "500", color: C.gray500 },
-  classCount:        { fontSize: 12, color: C.gray500, marginTop: 10 },
+  editClassChipText: { fontSize: 13, fontWeight: "500", color: COLORS.textSecondary },
+  classCount:        { fontSize: 12, color: COLORS.textSecondary, marginTop: 10 },
   dateRow:           { flexDirection: "row", gap: 12 },
   dateField:         { flex: 1 },
   passPreview: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             6,
-    backgroundColor: C.primaryBg,
+    backgroundColor: SEMANTIC.info.bg,
     borderRadius:    8,
     padding:         10,
     marginTop:       4,
   },
-  passPreviewText: { fontSize: 13, color: C.primary, fontWeight: "600" },
+  passPreviewText: { fontSize: 13, color: SEMANTIC.info.text, fontWeight: "600" },
   saveBtn: {
     flexDirection:   "row",
     alignItems:      "center",
@@ -932,15 +940,15 @@ const s = StyleSheet.create({
   },
   saveBtnText: { color: C.white, fontWeight: "700", fontSize: 16 },
   dangerCard: {
-    backgroundColor: "#FFF5F5",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#FEE2E2",
+    borderColor:     SEMANTIC.error.box,
   },
-  dangerTitle: { fontSize: 14, fontWeight: "700", color: C.error, marginBottom: 6 },
-  dangerSub:   { fontSize: 13, color: C.gray600, lineHeight: 20, marginBottom: 14 },
+  dangerTitle: { fontSize: 14, fontWeight: "700", color: SEMANTIC.error.text, marginBottom: 6 },
+  dangerSub:   { fontSize: 13, color: COLORS.textSecondary, lineHeight: 20, marginBottom: 14 },
   deleteBtn: {
     flexDirection:     "row",
     alignItems:        "center",

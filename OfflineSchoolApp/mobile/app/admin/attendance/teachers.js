@@ -22,12 +22,14 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
 
 const STATUS_OPTIONS = [
-  { value: "present",  labelKey: "attStatus.present",  color: "#059669", icon: "checkmark-circle" },
-  { value: "absent",   labelKey: "attStatus.absent",   color: "#DC2626", icon: "close-circle"     },
-  { value: "late",     labelKey: "attStatus.late",     color: "#D97706", icon: "time"             },
-  { value: "on_leave", labelKey: "attAdmin.onLeave", color: "#6B7280", icon: "calendar"         },
+  { value: "present",  labelKey: "attStatus.present",  color: ACCENT.green.solid,  tone: "success", icon: "checkmark-circle" },
+  { value: "absent",   labelKey: "attStatus.absent",   color: ACCENT.red.solid,    tone: "error",   icon: "close-circle"     },
+  { value: "late",     labelKey: "attStatus.late",     color: ACCENT.amber.solid,  tone: "warning", icon: "time"             },
+  { value: "on_leave", labelKey: "attAdmin.onLeave",   color: ACCENT.indigo.solid, tone: "info",    icon: "calendar"         },
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -136,7 +138,7 @@ export default function MarkTeacherAttendanceScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={styles.loadingText}>{t("attAdmin.loadingTeacherRoster")}</Text>
       </View>
     );
@@ -152,8 +154,9 @@ export default function MarkTeacherAttendanceScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("attAdmin.teacherAttendanceTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -167,7 +170,7 @@ export default function MarkTeacherAttendanceScreen() {
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <ActivityIndicator size="small" color={COLORS.onPrimary} />
           ) : (
             <Text style={styles.saveBtnText}>{t("common.save")}</Text>
           )}
@@ -206,12 +209,12 @@ export default function MarkTeacherAttendanceScreen() {
             key={opt.value}
             style={[
               styles.markAllBtn,
-              { backgroundColor: opt.color + "15", borderColor: opt.color },
+              { backgroundColor: SEMANTIC[opt.tone].bg, borderColor: SEMANTIC[opt.tone].icon },
             ]}
             onPress={() => markAll(opt.value)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.markAllBtnText, { color: opt.color }]}>
+            <Text style={[styles.markAllBtnText, { color: SEMANTIC[opt.tone].text }]}>
               {t(opt.labelKey)}
             </Text>
           </TouchableOpacity>
@@ -227,18 +230,28 @@ export default function MarkTeacherAttendanceScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadRoster(true)}
-            tintColor="#059669"
-            colors={["#059669"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
         renderItem={({ item }) => {
           const teacherId     = String(item.teacher._id);
           const currentStatus = attendance[teacherId];
+          const statusColor   =
+            STATUS_OPTIONS.find((o) => o.value === currentStatus)?.color;
 
           return (
-            <View style={styles.teacherRow}>
+            <View
+              style={[
+                styles.teacherRow,
+                currentStatus && {
+                  borderLeftWidth: 3,
+                  borderLeftColor: statusColor,
+                },
+              ]}
+            >
               <View style={styles.teacherAvatar}>
-                <Ionicons name="person" size={20} color="#6B7280" />
+                <Ionicons name="person" size={20} color={COLORS.onPrimary} />
               </View>
 
               <View style={styles.teacherInfo}>
@@ -265,7 +278,7 @@ export default function MarkTeacherAttendanceScreen() {
                         },
                         !isActive && {
                           backgroundColor: "transparent",
-                          borderColor:     "#E5E7EB",
+                          borderColor:     COLORS.border,
                         },
                       ]}
                       onPress={() => toggleStatus(teacherId, opt.value)}
@@ -274,7 +287,7 @@ export default function MarkTeacherAttendanceScreen() {
                       <Ionicons
                         name={opt.icon}
                         size={16}
-                        color={isActive ? "#FFF" : "#9CA3AF"}
+                        color={isActive ? COLORS.onPrimary : COLORS.textSubtle}
                       />
                     </TouchableOpacity>
                   );
@@ -284,16 +297,16 @@ export default function MarkTeacherAttendanceScreen() {
           );
         }}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={40} color="#D1D5DB" />
-            <Text style={styles.emptyText}>
-              {!available
-                ? t("attAdmin.timetableUnavailableOffline")
-                : periodId
-                  ? t("attAdmin.noTeachersScheduled")
-                  : t("attAdmin.noTeachersScheduledToday")}
-            </Text>
-          </View>
+          <EmptyState
+            icon="people-outline"
+            kind="teachers"
+            message={!available
+              ? t("attAdmin.timetableUnavailableOffline")
+              : periodId
+                ? t("attAdmin.noTeachersScheduled")
+                : t("attAdmin.noTeachersScheduledToday")}
+            style={styles.empty}
+          />
         }
       />
     </View>
@@ -301,14 +314,14 @@ export default function MarkTeacherAttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
-  loadingText: { color: "#6B7280", marginTop: 12 },
+  loadingText: { color: COLORS.textSecondary, marginTop: 12 },
 
   header: {
     flexDirection:     "row",
@@ -316,46 +329,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon:   { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   saveBtn: {
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.green.solid,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 18,
   },
-  saveBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  saveBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
-  periodRow:        { flexGrow: 0, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  periodRow:        { flexGrow: 0, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   periodRowContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   periodChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-    borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#FFF",
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
   },
-  periodChipActive:     { backgroundColor: "#059669", borderColor: "#059669" },
-  periodChipText:       { fontSize: 13, fontWeight: "500", color: "#374151" },
-  periodChipTextActive: { color: "#FFF" },
+  periodChipActive:     { backgroundColor: ACCENT.teal.wash, borderColor: ACCENT.teal.base },
+  periodChipText:       { fontSize: 13, fontWeight: "500", color: COLORS.textSecondary },
+  periodChipTextActive: { color: ACCENT.teal.deep },
   markAllRow: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingHorizontal: 16,
     paddingVertical:   12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               8,
   },
-  markAllLabel:   { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  markAllLabel:   { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
   markAllBtn: {
     borderWidth:       1,
     borderRadius:      8,
@@ -369,24 +383,24 @@ const styles = StyleSheet.create({
   teacherRow: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         14,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     gap:             12,
   },
   teacherAvatar: {
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
   teacherInfo:  { flex: 1 },
-  teacherName:  { fontSize: 14, fontWeight: "700", color: "#111827" },
-  teacherEmail: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  teacherName:  { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  teacherEmail: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   statusButtons: { flexDirection: "row", gap: 6 },
   statusBtn: {
@@ -404,7 +418,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     gap: 12,
   },
-  emptyText: { fontSize: 14, color: "#9CA3AF" },
+  emptyText: { fontSize: 14, color: COLORS.textSecondary },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";

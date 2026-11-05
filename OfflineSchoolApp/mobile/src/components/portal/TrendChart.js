@@ -12,6 +12,7 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTranslation } from "../../i18n/useTranslation";
+import { ACCENT } from "../../theme/colors";
 import { C, TAP, on20 } from "./theme";
 
 const H = 168;
@@ -110,12 +111,12 @@ export default function TrendChart({ points }) {
 const s = StyleSheet.create({
   gridLine:  { position: "absolute", height: 1, backgroundColor: C.line },
   gridLabel: { position: "absolute", top: -7, fontSize: 11, color: C.inkFaint, textAlign: "right" },
-  segment:   { position: "absolute", height: 2, borderRadius: 1, backgroundColor: C.primary },
+  segment:   { position: "absolute", height: 2, borderRadius: 1, backgroundColor: ACCENT.slate.solid },
   dot: {
     position: "absolute", width: 12, height: 12, borderRadius: 6,
-    backgroundColor: C.primary, borderWidth: 2, borderColor: C.surface,
+    backgroundColor: ACCENT.slate.solid, borderWidth: 2, borderColor: C.surface,
   },
-  lastValue: { position: "absolute", fontSize: 12, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  lastValue: { position: "absolute", fontSize: 12, fontWeight: "700", color: ACCENT.slate.deep, fontVariant: ["tabular-nums"] },
   axisLabel: { position: "absolute", maxWidth: "45%", fontSize: 11, color: C.inkMuted },
   axisRight: { textAlign: "right" },
 

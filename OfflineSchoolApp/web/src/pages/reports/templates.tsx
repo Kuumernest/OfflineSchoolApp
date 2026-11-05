@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
 import { ReadyMadeLayouts } from "@/components/reports/ReadyMadeLayouts";
+import { PageIcon }       from "@/components/ui/PageHeader";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
 import {
   Plus, Edit2, Eye, Star, Copy, Trash2,
   FileText, Info, Loader2, AlertCircle,
@@ -154,16 +156,19 @@ export default function TemplatesPage() {
   // ─────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-surface border-b border-line px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{t("templates.title")}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+          <div className="flex items-center gap-3">
+            <PageIcon />
+            <div>
+            <h1 className="text-xl font-bold text-ink">{t("templates.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
               {t("templates.blurb")}
             </p>
+            </div>
           </div>
         </div>
       </div>
@@ -173,10 +178,10 @@ export default function TemplatesPage() {
         {/* Ready-made layouts first (C12); HTML is the advanced path */}
         {schoolId && <ReadyMadeLayouts schoolId={schoolId} onChanged={load} />}
 
-        <div className="flex flex-wrap items-end justify-between gap-2 border-t border-gray-200 pt-6">
+        <div className="flex flex-wrap items-end justify-between gap-2 border-t border-line pt-6">
           <div>
-            <h2 className="text-base font-bold text-gray-900">{t("templates.advanced")}</h2>
-            <p className="mt-0.5 text-sm text-gray-500">{t("templates.advancedHint")}</p>
+            <h2 className="text-base font-bold text-ink">{t("templates.advanced")}</h2>
+            <p className="mt-0.5 text-sm text-ink-muted">{t("templates.advancedHint")}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -243,12 +248,12 @@ export default function TemplatesPage() {
         {/* Empty state */}
         {!loading && !error && templates.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center
-                            justify-center">
-              <FileText size={40} className="text-gray-300" />
+            <div className={`w-12 h-12 rounded-card flex items-center
+                            justify-center ${DASH_TINT.teal.box}`}>
+              <FileText size={24} />
             </div>
-            <h2 className="text-lg font-bold text-gray-700">{t("templates.none")}</h2>
-            <p className="text-sm text-gray-500 text-center max-w-sm">
+            <h2 className="text-lg font-bold text-ink">{t("templates.none")}</h2>
+            <p className="text-sm text-ink-muted text-center max-w-sm">
               {t("templates.firstOne")}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
@@ -326,9 +331,8 @@ function TemplateCard({
   const { t } = useTranslation();
   return (
     <div className={`
-      bg-white rounded-2xl border p-5 flex flex-col gap-4
-      shadow-sm hover:shadow-md transition-shadow
-      ${template.isDefault ? "border-blue-500 border-2" : "border-gray-200"}
+      p-5 flex flex-col gap-4 hover:shadow-lift transition-shadow
+      ${template.isDefault ? `${DASH_TINT.teal.card} ring-2 ring-accent-teal` : DASH_TINT.slate.card}
     `}>
 
       {/* Top */}
@@ -341,16 +345,16 @@ function TemplateCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-gray-900 truncate">{template.name}</h3>
+            <h3 className="font-bold text-ink truncate">{template.name}</h3>
             {template.isDefault && (
-              <span className="flex items-center gap-1 bg-blue-50 text-blue-600
-                               text-xs font-bold px-2 py-0.5 rounded-full">
+              <span className={`flex items-center gap-1 ${ACCENT_BADGE.teal} ring-1 ring-inset
+                               text-xs font-bold px-2 py-0.5 rounded-full`}>
                 <Star size={10} fill="currentColor" />
                 {t("common.default")}
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-ink-muted mt-0.5">
             {t("templates.version", { version: template.version || 1 })}
             {template.variables?.length
               ? ` · ${template.variables.length} placeholders`
@@ -365,14 +369,14 @@ function TemplateCard({
           {template.variables.slice(0, 5).map((v, i) => (
             <span
               key={i}
-              className="bg-gray-100 text-gray-600 text-xs font-mono
-                         px-2 py-0.5 rounded"
+              className={`${ACCENT_BADGE.slate} ring-1 ring-inset text-xs font-mono
+                         px-2 py-0.5 rounded`}
             >
               {v}
             </span>
           ))}
           {template.variables.length > 5 && (
-            <span className="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded">
+            <span className={`${ACCENT_BADGE.slate} ring-1 ring-inset text-xs px-2 py-0.5 rounded`}>
               +{template.variables.length - 5} more
             </span>
           )}

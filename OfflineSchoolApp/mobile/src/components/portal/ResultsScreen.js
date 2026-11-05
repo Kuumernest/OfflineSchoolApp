@@ -14,6 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDate } from "../../i18n/format";
+import { COLORS, ACCENT, termAccent, accentBadge } from "../../theme/colors";
+import { IconSquare } from "../Tinted";
 import { Card, CardTitle, Skeleton, EmptyState } from "./ui";
 import TrendChart from "./TrendChart";
 import { C, TAP, ordinal, on20, mark } from "./theme";
@@ -46,18 +48,21 @@ export default function ResultsScreen({ data, loading, childId, printing, onOpen
   if (!data?.length) {
     return (
       <Card>
-        <EmptyState icon="school-outline" title={t("portal.resultsScreen.empty")} hint={t("portal.resultsScreen.emptyHint")} />
+        <EmptyState icon="school-outline" accent="slate" title={t("portal.resultsScreen.empty")} hint={t("portal.resultsScreen.emptyHint")} />
       </Card>
     );
   }
 
   return (
     <View style={s.stack}>
-      <Text style={s.h1} accessibilityRole="header">{t("portal.resultsScreen.title")}</Text>
+      <View style={s.h1Row}>
+        <IconSquare icon="school" accent="slate" size={32} />
+        <Text style={s.h1} accessibilityRole="header">{t("portal.resultsScreen.title")}</Text>
+      </View>
 
       {trend.length >= 2 && (
         <Card style={s.pad}>
-          <CardTitle icon="trending-up-outline" style={{ marginBottom: 10 }}>{t("portal.resultsScreen.trend")}</CardTitle>
+          <CardTitle icon="trending-up-outline" accent="slate" style={{ marginBottom: 10 }}>{t("portal.resultsScreen.trend")}</CardTitle>
           <TrendChart points={trend} />
         </Card>
       )}
@@ -72,15 +77,16 @@ export default function ResultsScreen({ data, loading, childId, printing, onOpen
         >
           {terms.map((g) => {
             const on = g.key === current?.key;
+            const ta = ACCENT[termAccent(g.term)];
             return (
               <Pressable
                 key={g.key}
                 onPress={() => setPicked(g.key)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
-                style={[s.termChip, on && s.termChipOn]}
+                style={[s.termChip, on && { backgroundColor: ta.wash, borderColor: ta.base }]}
               >
-                <Text style={[s.termText, on && s.termTextOn]} numberOfLines={1}>
+                <Text style={[s.termText, on && { color: ta.deep }]} numberOfLines={1}>
                   {t("portal.resultsScreen.term", { term: g.term, year: g.year })}
                 </Text>
               </Pressable>
@@ -100,10 +106,14 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
   const { t, language } = useTranslation();
   const termLabel = t("portal.resultsScreen.term", { term: r.term, year: r.academicYear });
   const busy = printing === `card-${r._id}`;
+  const accent = termAccent(r.term);
+  const a = ACCENT[accent];
+  const remark = accentBadge(accent);
 
   return (
-    <Card>
-      <View style={s.head}>
+    <Card style={{ borderTopWidth: 3, borderTopColor: a.base }}>
+      <View style={[s.head, { backgroundColor: a.wash }]}>
+        <IconSquare icon="school" accent={accent} size={36} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.examName} accessibilityRole="header">{r.examName ?? termLabel}</Text>
           <Text style={s.meta}>
@@ -112,7 +122,7 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
           </Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={s.avg}>{on20(r.average, language)}<Text style={s.outOf}>/20</Text></Text>
+          <Text style={[s.avg, { color: a.deep }]}>{on20(r.average, language)}<Text style={s.outOf}>/20</Text></Text>
           {r.classPosition != null && r.totalInClass != null ? (
             <Text style={s.rank}>
               {t("portal.resultsScreen.rank", { position: ordinal(Number(r.classPosition), language), outOf: r.totalInClass })}
@@ -121,7 +131,11 @@ function ResultCard({ result: r, printing, onOpenReportCard }) {
         </View>
       </View>
       {r.overallRemark ? (
-        <View style={s.remarkWrap}><Text style={s.remarkPill}>{r.overallRemark}</Text></View>
+        <View style={[s.remarkWrap, { backgroundColor: a.wash }]}>
+          <Text style={[s.remarkPill, { color: remark.text, backgroundColor: COLORS.surface, borderColor: remark.border }]}>
+            {r.overallRemark}
+          </Text>
+        </View>
       ) : null}
 
       <View style={s.colHead}>
@@ -192,27 +206,26 @@ const s = StyleSheet.create({
   stack: { gap: 14 },
   pad:   { padding: 16 },
   h1:    { fontSize: 22, fontWeight: "700", color: C.ink },
+  h1Row: { flexDirection: "row", alignItems: "center", gap: 10 },
 
   terms:      { gap: 8, paddingRight: 4 },
   termChip:   {
     minHeight: TAP, paddingHorizontal: 16, borderRadius: 999, justifyContent: "center",
     borderWidth: 1, borderColor: C.lineStrong, backgroundColor: C.surface,
   },
-  termChipOn: { backgroundColor: C.primary, borderColor: C.primary },
   termText:   { fontSize: 14, fontWeight: "600", color: C.inkBody },
-  termTextOn: { color: "#FFFFFF" },
 
   head:     { flexDirection: "row", alignItems: "flex-end", gap: 12, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
   examName: { fontSize: 16, fontWeight: "700", color: C.ink },
   meta:     { marginTop: 2, fontSize: 12, color: C.inkMuted },
   avg:      { fontSize: 26, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  outOf:    { fontSize: 14, fontWeight: "600", color: C.inkFaint },
+  outOf:    { fontSize: 14, fontWeight: "600", color: C.inkMuted },
   rank:     { fontSize: 13, color: C.inkBody },
 
   remarkWrap: { paddingHorizontal: 16, paddingBottom: 12 },
   remarkPill: {
-    alignSelf: "flex-start", fontSize: 13, fontWeight: "600", color: "#2C3778", backgroundColor: C.primaryBg,
-    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: "hidden",
+    alignSelf: "flex-start", fontSize: 13, fontWeight: "600", 
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, borderWidth: 1, overflow: "hidden",
   },
 
   colHead: {
@@ -228,7 +241,7 @@ const s = StyleSheet.create({
   subjectName: { fontSize: 14, fontWeight: "600", color: C.ink },
   subjectMeta: { marginTop: 2, fontSize: 12, color: C.inkMuted },
   mark:        { fontSize: 16, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  absent:      { fontSize: 13, color: C.inkMuted },
+  absent:      { fontSize: 13, fontWeight: "600", color: C.danger },
 
   foot:    { padding: 12, borderTopWidth: 1, borderTopColor: C.line },
   cardBtn: {

@@ -18,6 +18,8 @@ import { fetchTeachers } from "@/services/teacher.service";
 import { createSubject } from "@/services/subject.service";
 import { createIds }     from "@/lib/clientId";
 import { cn }            from "@/utils/cn";
+import { PageIcon }      from "@/components/ui/PageHeader";
+import { DASH_TINT }     from "@/config/dashboardTint";
 import type { Class, Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
@@ -416,11 +418,12 @@ export default function AddSubjectPage() {
 
   if (results) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <div className="min-h-screen bg-canvas">
+        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
+          <PageIcon />
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.created")}</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-xl font-bold text-ink">{t("subjectsAdd.created")}</h1>
+            <p className="text-sm text-ink-muted">
               "{form.name.trim()}" — results below
             </p>
           </div>
@@ -442,9 +445,9 @@ export default function AddSubjectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
 
-      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
         <button
           type="button"
           onClick={handleDiscard}
@@ -454,9 +457,11 @@ export default function AddSubjectPage() {
           <ChevronLeft size={20} aria-hidden="true" />
         </button>
 
+        <PageIcon />
+
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.title")}</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-ink">{t("subjectsAdd.title")}</h1>
+          <p className="text-sm text-ink-muted">
             {t("subjectsAdd.blurb")}
           </p>
         </div>
@@ -465,7 +470,7 @@ export default function AddSubjectPage() {
       <main className="mx-auto max-w-xl px-6 py-8">
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col gap-5">
+          <div className={cn("rounded-2xl border border-line bg-surface p-6 shadow-card flex flex-col gap-5", DASH_TINT.slate.edge)}>
 
             <div className="flex items-start gap-3 rounded-xl bg-blue-50 px-4 py-3" role="note">
               <BookOpen size={16} className="mt-0.5 shrink-0 text-blue-600" aria-hidden="true" />

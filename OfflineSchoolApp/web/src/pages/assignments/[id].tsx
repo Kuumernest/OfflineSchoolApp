@@ -19,6 +19,8 @@ import {
   type Assignment,
 } from "@/services/assignment.service";
 import { cn }                   from "@/utils/cn";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon }             from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,8 +60,8 @@ const DeleteDialog = ({ assignment, onConfirm, onCancel, busy }: DeleteDialogPro
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
         <Trash2 size={22} className="text-red-600" />
       </div>
-      <h3 className="text-lg font-bold text-gray-900">{t("assignments.remove")}</h3>
-      <p className="mt-2 text-sm text-gray-500">
+      <h3 className="text-lg font-bold text-ink">{t("assignments.remove")}</h3>
+      <p className="mt-2 text-sm text-ink-muted">
         {t("assignments.removeBody", {
           subject: assignment.subject?.name ?? t("assignments.thisSubject"),
           class:   assignment.class?.name   ?? t("assignments.thisClass"),
@@ -186,11 +188,12 @@ export default function TeacherAssignmentDetailPage() {
         >
           <ChevronLeft size={20} />
         </button>
+        <PageIcon />
         <div className="flex-1 min-w-0">
-          <h1 className="truncate text-2xl font-bold text-gray-900">
+          <h1 className="truncate text-2xl font-bold text-ink">
             {teacher?.name ?? t("academic.teacher")}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-ink-muted">
             {t("assignments.assignmentCount", { count: assignments.length })}{" "}
             · {t("subjects.classCount", { count: classCount })}
           </p>
@@ -224,29 +227,29 @@ export default function TeacherAssignmentDetailPage() {
 
       {/* TEACHER PROFILE CARD */}
       {teacher && (
-        <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className={cn(DASH_TINT.violet.card, "flex items-center gap-4 rounded-2xl p-5")}>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-violet-solid text-xl font-bold text-white">
             {teacher.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-bold text-gray-900">
+            <p className="truncate text-lg font-bold text-ink">
               {teacher.name}
             </p>
-            <p className="truncate text-sm text-gray-400">{teacher.email}</p>
+            <p className="truncate text-sm text-ink-muted">{teacher.email}</p>
           </div>
           <div className="flex shrink-0 items-center gap-6">
             <div className="text-center">
               <p className="text-xl font-bold text-accent-slate-deep">
                 {assignments.length}
               </p>
-              <p className="text-xs text-gray-400">{t("academic.subject_other")}</p>
+              <p className="text-xs text-ink-muted">{t("academic.subject_other")}</p>
             </div>
-            <div className="h-8 w-px bg-gray-200" />
+            <div className="h-8 w-px bg-line" />
             <div className="text-center">
               <p className="text-xl font-bold text-accent-indigo-deep">
                 {classCount}
               </p>
-              <p className="text-xs text-gray-400">{t("academic.class_other")}</p>
+              <p className="text-xs text-ink-muted">{t("academic.class_other")}</p>
             </div>
           </div>
         </div>
@@ -258,8 +261,8 @@ export default function TeacherAssignmentDetailPage() {
           <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-violet-solid text-white">
             <BookOpen size={28} />
           </div>
-          <p className="text-base font-bold text-gray-900">{t("assignments.none")}</p>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="text-base font-bold text-ink">{t("assignments.none")}</p>
+          <p className="mt-1 text-sm text-ink-muted">
             {t("assignments.noneForTeacher")}
           </p>
           <button
@@ -276,7 +279,10 @@ export default function TeacherAssignmentDetailPage() {
       {assignments.length > 0 && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-700">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.indigo.box)} aria-hidden="true">
+                <School className="h-4 w-4" />
+              </span>
               {t("assignments.byClass")}
             </h2>
             <button
@@ -291,16 +297,16 @@ export default function TeacherAssignmentDetailPage() {
           {groupedByClass.map((group) => (
             <div
               key={group.classId}
-              className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+              className={cn("overflow-hidden rounded-2xl border border-line bg-surface shadow-sm", DASH_TINT.indigo.edge)}
             >
-              <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+              <div className="flex items-center gap-3 border-b border-line bg-accent-indigo-soft px-4 py-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-indigo-solid text-white">
                   <School size={16} />
                 </div>
-                <span className="flex-1 truncate text-sm font-bold text-gray-900">
+                <span className="flex-1 truncate text-sm font-bold text-ink">
                   {group.className}
                 </span>
-                <span className="rounded-lg bg-purple-100 px-2 py-0.5 text-xs font-bold text-purple-700">
+                <span className={cn("rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset", ACCENT_BADGE.indigo)}>
                   {group.items.length}
                 </span>
               </div>

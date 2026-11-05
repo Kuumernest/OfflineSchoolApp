@@ -13,6 +13,8 @@ import {
   createAssignment, createBulkAssignments, getTeacherAssignments,
 } from "../../../src/services/assignment.service";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, Badge } from "../../../src/components/Tinted";
 
 const normalizeId = (item) => {
   if (!item || typeof item !== "object") return null;
@@ -23,15 +25,15 @@ const normalizeId = (item) => {
 const normalizeList = (list) => (list || []).map(normalizeId).filter(Boolean);
 
 const STEPS = [
-  { id: 1, titleKey: "assignWork.step1", icon: "person-outline"           },
-  { id: 2, titleKey: "assignWork.step2", icon: "school-outline"           },
-  { id: 3, titleKey: "assignWork.step3", icon: "book-outline"             },
-  { id: 4, titleKey: "assignWork.step4", icon: "checkmark-circle-outline" },
+  { id: 1, titleKey: "assignWork.step1", icon: "person-outline",           accent: "violet" },
+  { id: 2, titleKey: "assignWork.step2", icon: "school-outline",           accent: "indigo" },
+  { id: 3, titleKey: "assignWork.step3", icon: "book-outline",             accent: "slate"  },
+  { id: 4, titleKey: "assignWork.step4", icon: "checkmark-circle-outline", accent: "green"  },
 ];
 
-const EmptyMini = React.memo(({ icon, text, subtext, children }) => (
+const EmptyMini = React.memo(({ icon, accent, text, subtext, children }) => (
   <View style={styles.emptyMini}>
-    {children || <Ionicons name={icon} size={32} color="#D1D5DB" />}
+    {children || <IconSquare icon={icon} accent={accent ?? "violet"} size={48} radius={14} />}
     <Text style={styles.emptyMiniText}>{text}</Text>
     {!!subtext && <Text style={styles.emptyMiniSubtext}>{subtext}</Text>}
   </View>
@@ -49,7 +51,7 @@ const StepDot = React.memo(({ step, isActive, isCompleted, onPress }) => (
     activeOpacity={isCompleted ? 0.7 : 1}
   >
     {isCompleted ? (
-      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+      <Ionicons name="checkmark" size={14} color={COLORS.onPrimary} />
     ) : (
       <Text style={[styles.stepDotText, isActive && styles.stepDotTextActive]}>
         {step.id}
@@ -86,14 +88,18 @@ const TeacherCard = React.memo(({ teacher, isSelected, onPress }) => {
 
 const ClassCard = React.memo(({ classItem, isSelected, existingCount, onPress }) => (
   <TouchableOpacity
-    style={[styles.selectionCard, isSelected && styles.selectionCardActive]}
+    style={[
+      styles.selectionCard,
+      isSelected && {
+        backgroundColor: ACCENT[levelAccent(classItem.level)].wash,
+        borderColor: ACCENT[levelAccent(classItem.level)].base,
+      },
+    ]}
     onPress={onPress}
     activeOpacity={0.7}
   >
     <View style={styles.selectionLeft}>
-      <View style={[styles.selectionIcon, { backgroundColor: isSelected ? "#4F46E5" : "#EDE9FE" }]}>
-        <Ionicons name="school" size={18} color={isSelected ? "#FFFFFF" : "#7C3AED"} />
-      </View>
+      <IconSquare icon="school" accent={levelAccent(classItem.level)} size={40} radius={10} style={styles.selectionIcon} />
       <View style={{ flex: 1 }}>
         <Text style={styles.selectionTitle} numberOfLines={1}>{classItem.name}</Text>
         <Text style={styles.selectionSubtitle}>
@@ -104,11 +110,9 @@ const ClassCard = React.memo(({ classItem, isSelected, existingCount, onPress })
     </View>
     <View style={styles.selectionRight}>
       {existingCount > 0 && (
-        <View style={styles.existingPill}>
-          <Text style={styles.existingPillText}>{existingCount} assigned</Text>
-        </View>
+        <Badge accent="violet" label={`${existingCount} assigned`} />
       )}
-      <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+      <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
     </View>
   </TouchableOpacity>
 ));
@@ -133,7 +137,7 @@ const SubjectCard = React.memo(({ subject, isSelected, alreadyAssigned, onToggle
         alreadyAssigned && styles.checkboxDisabled,
       ]}>
         {(isSelected || alreadyAssigned) && (
-          <Ionicons name="checkmark" size={14} color={alreadyAssigned ? "#9CA3AF" : "#FFFFFF"} />
+          <Ionicons name="checkmark" size={14} color={alreadyAssigned ? COLORS.textSecondary : COLORS.onPrimary} />
         )}
       </View>
       <View style={{ flex: 1 }}>
@@ -144,9 +148,7 @@ const SubjectCard = React.memo(({ subject, isSelected, alreadyAssigned, onToggle
       </View>
     </View>
     {alreadyAssigned && (
-      <View style={styles.assignedTag}>
-        <Text style={styles.assignedTagText}>{t("assignWork.alreadyAssigned")}</Text>
-      </View>
+      <Badge tone="success" icon="checkmark-circle" label={t("assignWork.alreadyAssigned")} style={styles.assignedTag} />
     )}
   </TouchableOpacity>
   );
@@ -157,7 +159,7 @@ const ReviewSubjectItem = React.memo(({ subject, onRemove }) => (
     <View style={styles.reviewSubjectDot} />
     <Text style={styles.reviewSubjectText} numberOfLines={1}>{subject.name}</Text>
     <TouchableOpacity onPress={() => onRemove(subject._id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-      <Ionicons name="close-circle" size={18} color="#EF4444" />
+      <Ionicons name="close-circle" size={18} color={ACCENT.red.solid} />
     </TouchableOpacity>
   </View>
 ));
@@ -448,10 +450,13 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
   const renderCurrentStepInfo = () => {
     const step = STEPS[currentStep - 1];
     return (
-      <View style={styles.stepInfo}>
-        <View style={styles.stepInfoIcon}>
-          <Ionicons name={step.icon} size={22} color="#4F46E5" />
-        </View>
+      <View
+        style={[
+          styles.stepInfo,
+          { backgroundColor: ACCENT[step.accent].wash, borderTopColor: ACCENT[step.accent].base },
+        ]}
+      >
+        <IconSquare icon={step.icon} accent={step.accent} size={44} radius={12} />
         <View>
           <Text style={styles.stepInfoLabel}>{t("assignWork.stepOf", { step: step.id, total: 4 })}</Text>
           <Text style={styles.stepInfoTitle}>{t(step.titleKey)}</Text>
@@ -484,6 +489,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       {filteredTeachers.length === 0 ? (
         <EmptyMini
           icon="people-outline"
+          accent="violet"
           text={teacherSearch ? t("assignWork.noTeacherMatch") : t("assignWork.noTeachers")}
           subtext={!teacherSearch ? t("assignWork.noTeachersHint") : undefined}
         />
@@ -503,7 +509,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
   const renderStep2 = () => (
     <View>
       <View style={styles.selectedSummary}>
-        <Ionicons name="person" size={16} color="#4F46E5" />
+        <Ionicons name="person" size={16} color={ACCENT.violet.solid} />
         <Text style={styles.selectedSummaryText} numberOfLines={1}>{selectedTeacher?.name}</Text>
         {!preselectedTeacherId && (
           <TouchableOpacity onPress={() => goToStep(1)}>
@@ -514,7 +520,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       {existingAssignments.length > 0 && (
         <View style={styles.existingBanner}>
-          <Ionicons name="information-circle" size={18} color="#2563EB" />
+          <Ionicons name="information-circle" size={18} color={SEMANTIC.info.icon} />
           <Text style={styles.existingBannerText}>
             {t("assignWork.currentlyAssigned", { count: existingAssignments.length })}
           </Text>
@@ -524,6 +530,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       {classes.length === 0 ? (
         <EmptyMini
           icon="school-outline"
+          accent="indigo"
           text={t("assignWork.noClasses")}
           subtext={t("assignWork.noClassesHint")}
         />
@@ -552,16 +559,25 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     <View>
       <View style={styles.breadcrumb}>
         <TouchableOpacity
-          style={styles.breadcrumbItem}
+          style={[styles.breadcrumbItem, styles.breadcrumbTeacher]}
           onPress={() => goToStep(preselectedTeacherId ? 2 : 1)}
         >
-          <Ionicons name="person" size={14} color="#4F46E5" />
-          <Text style={styles.breadcrumbText} numberOfLines={1}>{selectedTeacher?.name}</Text>
+          <Ionicons name="person" size={14} color={ACCENT.violet.solid} />
+          <Text style={[styles.breadcrumbText, { color: ACCENT.violet.deep }]} numberOfLines={1}>{selectedTeacher?.name}</Text>
         </TouchableOpacity>
-        <Ionicons name="chevron-forward" size={12} color="#D1D5DB" />
-        <TouchableOpacity style={styles.breadcrumbItem} onPress={() => goToStep(2)}>
-          <Ionicons name="school" size={14} color="#7C3AED" />
-          <Text style={styles.breadcrumbText} numberOfLines={1}>{selectedClass?.name}</Text>
+        <Ionicons name="chevron-forward" size={12} color={COLORS.textSecondary} />
+        <TouchableOpacity
+          style={[
+            styles.breadcrumbItem,
+            {
+              backgroundColor: ACCENT[levelAccent(selectedClass?.level)].wash,
+              borderColor: ACCENT[levelAccent(selectedClass?.level)].base,
+            },
+          ]}
+          onPress={() => goToStep(2)}
+        >
+          <Ionicons name="school" size={14} color={ACCENT[levelAccent(selectedClass?.level)].solid} />
+          <Text style={[styles.breadcrumbText, { color: ACCENT[levelAccent(selectedClass?.level)].deep }]} numberOfLines={1}>{selectedClass?.name}</Text>
         </TouchableOpacity>
       </View>
 
@@ -570,7 +586,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           <ActivityIndicator size="small" color="#4F46E5" />
         </EmptyMini>
       ) : subjects.length === 0 ? (
-        <EmptyMini icon="book-outline" text={t("assignWork.noSubjects")} subtext={t("assignWork.noSubjectsHint")} />
+        <EmptyMini icon="book-outline" accent="slate" text={t("assignWork.noSubjects")} subtext={t("assignWork.noSubjectsHint")} />
       ) : (
         <>
           <Text style={styles.selectHint}>{t("assignWork.pickSubjects")}</Text>
@@ -584,7 +600,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
               <Ionicons
                 name={allAvailableSelected ? "checkbox" : "square-outline"}
                 size={20}
-                color="#4F46E5"
+                color={ACCENT.slate.solid}
               />
               <Text style={styles.selectAllText}>
                 {allAvailableSelected
@@ -631,7 +647,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       <View style={styles.reviewSection}>
         <View style={styles.reviewLabel}>
-          <Ionicons name="person" size={16} color="#4F46E5" />
+          <IconSquare icon="person" accent="violet" size={28} />
           <Text style={styles.reviewLabelText}>{t("assignWork.teacher")}</Text>
         </View>
         <View style={styles.reviewValue}>
@@ -641,7 +657,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       <View style={styles.reviewSection}>
         <View style={styles.reviewLabel}>
-          <Ionicons name="school" size={16} color="#7C3AED" />
+          <IconSquare icon="school" accent={levelAccent(selectedClass?.level)} size={28} />
           <Text style={styles.reviewLabelText}>{t("assignWork.klass")}</Text>
         </View>
         <View style={styles.reviewValue}>
@@ -651,7 +667,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       <View style={styles.reviewSection}>
         <View style={styles.reviewLabel}>
-          <Ionicons name="book" size={16} color="#059669" />
+          <IconSquare icon="book" accent="slate" size={28} />
           <Text style={styles.reviewLabelText}>Subjects ({selectedSubjects.length})</Text>
         </View>
         <View style={styles.reviewSubjectsList}>
@@ -663,7 +679,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       {selectedSubjects.length === 0 && (
         <View style={styles.warningBanner}>
-          <Ionicons name="warning" size={18} color="#D97706" />
+          <Ionicons name="warning" size={18} color={SEMANTIC.warning.icon} />
           <Text style={styles.warningText}>{t("assignWork.noneSelected")}</Text>
         </View>
       )}
@@ -721,8 +737,9 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("assignWork.title")}</Text>
           <Text style={styles.headerSubtitle}>{t("assignWork.blurb")}</Text>
@@ -763,17 +780,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   errorBanner: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#FEE2E2",
@@ -788,29 +806,25 @@ const styles = StyleSheet.create({
   },
   stepDot: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: COLORS.border,
     alignItems: "center", justifyContent: "center",
   },
-  stepDotActive: { backgroundColor: "#4F46E5" },
-  stepDotCompleted: { backgroundColor: "#059669" },
-  stepDotText: { fontSize: 13, fontWeight: "700", color: "#9CA3AF" },
-  stepDotTextActive: { color: "#FFFFFF" },
-  stepLine: { flex: 1, height: 2, backgroundColor: "#E5E7EB", marginHorizontal: 4 },
-  stepLineActive: { backgroundColor: "#059669" },
+  stepDotActive: { backgroundColor: ACCENT.violet.solid },
+  stepDotCompleted: { backgroundColor: ACCENT.green.solid },
+  stepDotText: { fontSize: 13, fontWeight: "700", color: COLORS.textSecondary },
+  stepDotTextActive: { color: COLORS.onPrimary },
+  stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginHorizontal: 4 },
+  stepLineActive: { backgroundColor: ACCENT.green.base },
   stepInfo: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     marginHorizontal: 20, padding: 16,
     borderRadius: 14, gap: 14,
-    borderWidth: 1, borderColor: "#F3F4F6",
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3,
   },
-  stepInfoIcon: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center", justifyContent: "center",
-  },
-  stepInfoLabel: { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
-  stepInfoTitle: { fontSize: 17, fontWeight: "700", color: "#111827", marginTop: 2 },
+  stepInfoLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  stepInfoTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text, marginTop: 2 },
   stepContent: { paddingHorizontal: 20, marginTop: 20 },
   searchInputContainer: {
     flexDirection: "row", alignItems: "center",
@@ -822,125 +836,119 @@ const styles = StyleSheet.create({
   searchTextInput: { flex: 1, fontSize: 14, color: "#111827", paddingVertical: 0 },
   selectionCard: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1.5, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1.5, borderColor: COLORS.border,
   },
-  selectionCardActive: { borderColor: "#4F46E5", backgroundColor: "#FAFAFF" },
+  selectionCardActive: { borderColor: ACCENT.violet.base, backgroundColor: ACCENT.violet.wash },
   selectionLeft: { flexDirection: "row", alignItems: "center", flex: 1, marginRight: 8 },
   selectionAvatar: {
     width: 40, height: 40, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.violet.wash,
     alignItems: "center", justifyContent: "center",
     marginRight: 12,
   },
-  selectionAvatarActive: { backgroundColor: "#4F46E5" },
-  selectionAvatarText: { fontSize: 16, fontWeight: "700", color: "#6B7280" },
-  selectionAvatarTextActive: { color: "#FFFFFF" },
-  selectionIcon: {
-    width: 40, height: 40, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", marginRight: 12,
-  },
-  selectionTitle: { fontSize: 15, fontWeight: "600", color: "#111827" },
-  selectionSubtitle: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  selectionAvatarActive: { backgroundColor: ACCENT.violet.solid },
+  selectionAvatarText: { fontSize: 16, fontWeight: "700", color: ACCENT.violet.deep },
+  selectionAvatarTextActive: { color: COLORS.onPrimary },
+  selectionIcon: { marginRight: 12 },
+  selectionTitle: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  selectionSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   selectionRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   radioOuter: {
     width: 22, height: 22, borderRadius: 11,
-    borderWidth: 2, borderColor: "#D1D5DB",
+    borderWidth: 2, borderColor: COLORS.border,
     alignItems: "center", justifyContent: "center",
   },
-  radioOuterActive: { borderColor: "#4F46E5" },
-  radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: "#4F46E5" },
+  radioOuterActive: { borderColor: ACCENT.violet.base },
+  radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: ACCENT.violet.solid },
   selectedSummary: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF", padding: 12,
+    backgroundColor: ACCENT.violet.wash, padding: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.violet.base,
     borderRadius: 10, marginBottom: 16, gap: 8,
   },
-  selectedSummaryText: { flex: 1, fontSize: 14, fontWeight: "600", color: "#4F46E5" },
-  changeLink: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  selectedSummaryText: { flex: 1, fontSize: 14, fontWeight: "600", color: ACCENT.violet.deep },
+  changeLink: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
   existingBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#DBEAFE", padding: 12,
+    backgroundColor: SEMANTIC.info.bg, padding: 12,
+    borderWidth: 1, borderColor: SEMANTIC.info.box,
     borderRadius: 10, marginBottom: 16, gap: 8,
   },
-  existingBannerText: { flex: 1, fontSize: 13, color: "#1E40AF", fontWeight: "500" },
-  existingPill: {
-    backgroundColor: "#DBEAFE",
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
-  },
-  existingPillText: { fontSize: 11, fontWeight: "600", color: "#2563EB" },
+  existingBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.info.text, fontWeight: "500" },
   breadcrumb: {
     flexDirection: "row", alignItems: "center",
     marginBottom: 16, gap: 8, flexWrap: "wrap",
   },
   breadcrumbItem: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 8, gap: 4, maxWidth: "45%",
   },
-  breadcrumbText: { fontSize: 12, fontWeight: "600", color: "#374151" },
-  selectHint: { fontSize: 13, color: "#6B7280", marginBottom: 12, fontWeight: "500" },
+  breadcrumbTeacher: { backgroundColor: ACCENT.violet.wash, borderColor: ACCENT.violet.base },
+  breadcrumbText: { fontSize: 12, fontWeight: "600", color: COLORS.text },
+  selectHint: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 12, fontWeight: "500" },
   selectAllButton: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF", padding: 12,
+    backgroundColor: ACCENT.slate.wash, padding: 12,
+    borderWidth: 1, borderColor: COLORS.border,
     borderRadius: 10, marginBottom: 12, gap: 10,
   },
-  selectAllText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
+  selectAllText: { fontSize: 14, fontWeight: "600", color: ACCENT.slate.deep },
   subjectCard: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1.5, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1.5, borderColor: COLORS.border,
   },
-  subjectCardActive: { borderColor: "#059669", backgroundColor: "#F0FDF4" },
-  subjectCardDisabled: { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", opacity: 0.7 },
+  subjectCardActive: { borderColor: ACCENT.slate.base, backgroundColor: ACCENT.slate.wash },
+  subjectCardDisabled: { borderColor: COLORS.border, backgroundColor: COLORS.page, opacity: 0.7 },
   subjectLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6,
-    borderWidth: 2, borderColor: "#D1D5DB",
+    borderWidth: 2, borderColor: COLORS.border,
     alignItems: "center", justifyContent: "center", marginRight: 12,
   },
-  checkboxActive: { backgroundColor: "#059669", borderColor: "#059669" },
-  checkboxDisabled: { backgroundColor: "#E5E7EB", borderColor: "#D1D5DB" },
-  subjectName: { fontSize: 15, fontWeight: "600", color: "#111827" },
-  subjectNameDisabled: { color: "#9CA3AF" },
-  subjectCode: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
-  assignedTag: {
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 6, marginLeft: 8,
-  },
-  assignedTagText: { fontSize: 11, fontWeight: "600", color: "#9CA3AF" },
+  checkboxActive: { backgroundColor: ACCENT.slate.solid, borderColor: ACCENT.slate.solid },
+  checkboxDisabled: { backgroundColor: COLORS.border, borderColor: COLORS.border },
+  subjectName: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  subjectNameDisabled: { color: COLORS.textSecondary },
+  subjectCode: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  assignedTag: { alignSelf: "center", marginLeft: 8 },
   proceedButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     backgroundColor: "#4F46E5", borderRadius: 12,
     paddingVertical: 14, marginTop: 16, gap: 8,
   },
   proceedButtonText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
-  reviewTitle: { fontSize: 18, fontWeight: "700", color: "#111827", marginBottom: 20 },
+  reviewTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text, marginBottom: 20 },
   reviewSection: {
-    backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: "#F3F4F6",
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   reviewLabel: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   reviewLabelText: {
-    fontSize: 13, fontWeight: "600", color: "#6B7280",
+    fontSize: 13, fontWeight: "600", color: COLORS.textSecondary,
     textTransform: "uppercase", letterSpacing: 0.5,
   },
-  reviewValue: { backgroundColor: "#F9FAFB", padding: 12, borderRadius: 8 },
-  reviewValueText: { fontSize: 15, fontWeight: "600", color: "#111827" },
+  reviewValue: { backgroundColor: COLORS.page, padding: 12, borderRadius: 8 },
+  reviewValueText: { fontSize: 15, fontWeight: "600", color: COLORS.text },
   reviewSubjectsList: { gap: 6 },
   reviewSubjectItem: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#F0FDF4", padding: 10, borderRadius: 8, gap: 8,
+    backgroundColor: ACCENT.slate.wash, padding: 10, borderRadius: 8, gap: 8,
   },
-  reviewSubjectDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#059669" },
-  reviewSubjectText: { flex: 1, fontSize: 14, fontWeight: "500", color: "#111827" },
+  reviewSubjectDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT.slate.solid },
+  reviewSubjectText: { flex: 1, fontSize: 14, fontWeight: "500", color: COLORS.text },
   warningBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEF3C7", padding: 12,
+    backgroundColor: SEMANTIC.warning.bg, padding: 12,
+    borderWidth: 1, borderColor: SEMANTIC.warning.box,
     borderRadius: 10, marginBottom: 16, gap: 8,
   },
-  warningText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  warningText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   reviewActions: { flexDirection: "row", gap: 12, marginTop: 20 },
   backStepButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -957,11 +965,11 @@ const styles = StyleSheet.create({
   confirmButtonText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
   emptyMini: { alignItems: "center", paddingVertical: 30 },
   emptyMiniText: {
-    fontSize: 14, fontWeight: "600", color: "#6B7280",
+    fontSize: 14, fontWeight: "600", color: COLORS.text,
     marginTop: 8, textAlign: "center",
   },
   emptyMiniSubtext: {
-    fontSize: 12, color: "#9CA3AF", marginTop: 2,
+    fontSize: 12, color: COLORS.textSecondary, marginTop: 2,
     textAlign: "center", paddingHorizontal: 20,
   },
 });

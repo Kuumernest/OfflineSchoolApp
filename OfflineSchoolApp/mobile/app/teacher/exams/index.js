@@ -13,36 +13,41 @@ import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
-import { COLORS as THEME, ACCENT } from "../../../src/theme/colors";
+import { COLORS as THEME, ACCENT, SEMANTIC, TONE_EDGE } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
+// Exams are amber; a submission's status is its tone.
 const COLORS = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.amber.solid,
+  primaryBg: ACCENT.amber.wash,
+  primaryDeep: ACCENT.amber.deep,
+  primaryEdge: ACCENT.amber.base,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text,
+  errorBg:   SEMANTIC.error.bg,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   THEME.border,
+  gray400:   THEME.textSecondary,
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
+// Submission status: pending amber, submitted sky, approved green, rejected red.
 const STATUS_META = {
-  pending:   { color: COLORS.warning, bg: COLORS.warningBg, labelKey: "results.pending",   icon: "time-outline"             },
-  submitted: { color: COLORS.primary, bg: COLORS.primaryBg, labelKey: "results.submitted", icon: "cloud-upload-outline"     },
-  approved:  { color: COLORS.success, bg: COLORS.successBg, labelKey: "results.approved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: COLORS.error,   bg: COLORS.errorBg,   labelKey: "results.rejected",  icon: "close-circle-outline"     },
+  pending:   { color: ACCENT.amber.deep, bg: ACCENT.amber.wash, border: ACCENT.amber.base + "4D", labelKey: "results.pending",   icon: "time-outline"             },
+  submitted: { color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   border: ACCENT.sky.base + "4D",   labelKey: "results.submitted", icon: "cloud-upload-outline"     },
+  approved:  { color: ACCENT.green.deep, bg: ACCENT.green.wash, border: ACCENT.green.base + "4D", labelKey: "results.approved",  icon: "checkmark-circle-outline" },
+  rejected:  { color: ACCENT.red.deep,   bg: ACCENT.red.wash,   border: ACCENT.red.base + "4D",   labelKey: "results.rejected",  icon: "close-circle-outline"     },
 };
 
 const FILTERS = [
@@ -339,6 +344,7 @@ export default function TeacherExamsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("teacherExams.title")}</Text>
           <Text style={styles.headerSub}>
@@ -381,7 +387,7 @@ export default function TeacherExamsScreen() {
                 <Ionicons
                   name={f.icon}
                   size={13}
-                  color={isActive ? COLORS.white : COLORS.gray500}
+                  color={isActive ? COLORS.primaryDeep : COLORS.gray500}
                 />
                 <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
                   {t(f.labelKey)}
@@ -418,7 +424,7 @@ export default function TeacherExamsScreen() {
       {/* Error banner */}
       {!!error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
+          <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadData()}>
             <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -441,10 +447,11 @@ export default function TeacherExamsScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons
-              name={activeFilter === "all" ? "document-outline" : "funnel-outline"}
+            <IconSquare
+              icon={activeFilter === "all" ? "document-outline" : "funnel-outline"}
+              accent="amber"
               size={56}
-              color={COLORS.gray200}
+              radius={16}
             />
             <Text style={styles.emptyTitle}>
               {activeFilter === "all" ? t("teacherExams.emptyTitle") : t("teacherExams.noMatch")}
@@ -559,7 +566,7 @@ function ExamCard({ item, onPress }) {
 function StatusPill({ count, label, status }) {
   const meta = STATUS_META[status] || STATUS_META.pending;
   return (
-    <View style={[styles.pill, { backgroundColor: meta.bg }]}>
+    <View style={[styles.pill, { backgroundColor: meta.bg, borderColor: meta.border }]}>
       <Ionicons name={meta.icon} size={11} color={meta.color} />
       <Text style={[styles.pillText, { color: meta.color }]}>
         {count} {label}
@@ -585,7 +592,7 @@ const styles = StyleSheet.create({
     paddingBottom:     14,
     backgroundColor:   COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
     gap:               10,
   },
   backBtn: {
@@ -593,6 +600,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray100,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 20, fontWeight: "700", color: COLORS.gray900 },
   headerSub:    { fontSize: 12, color: COLORS.gray500, marginTop: 2 },
@@ -601,7 +609,7 @@ const styles = StyleSheet.create({
   filterBar: {
     backgroundColor:   COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
   },
   filterScrollContent: {
     paddingHorizontal: 12, paddingVertical: 10, gap: 8,
@@ -609,35 +617,36 @@ const styles = StyleSheet.create({
   filterChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: COLORS.white,
     borderWidth: 1, borderColor: COLORS.gray200,
   },
-  filterChipActive:          { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipActive:          { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primaryEdge },
   filterChipText:            { fontSize: 12, fontWeight: "600", color: COLORS.gray700 },
-  filterChipTextActive:      { color: COLORS.white },
+  filterChipTextActive:      { color: COLORS.primaryDeep },
   filterChipBadge: {
-    backgroundColor: COLORS.white, borderRadius: 10,
+    backgroundColor: COLORS.primaryBg, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.primaryEdge + "4D",
     minWidth: 20, paddingHorizontal: 6, paddingVertical: 1, alignItems: "center",
   },
-  filterChipBadgeActive:     { backgroundColor: "rgba(255,255,255,0.25)" },
-  filterChipBadgeText:       { fontSize: 10, fontWeight: "700", color: COLORS.gray700 },
-  filterChipBadgeTextActive: { color: COLORS.white },
+  filterChipBadgeActive:     { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipBadgeText:       { fontSize: 10, fontWeight: "700", color: COLORS.primaryDeep },
+  filterChipBadgeTextActive: { color: THEME.onPrimary },
 
   debugBanner: {
     margin: 12, padding: 12,
-    backgroundColor: "#FFF3CD", borderRadius: 8,
-    borderWidth: 1, borderColor: "#FFC107",
+    backgroundColor: SEMANTIC.warning.bg, borderRadius: 8,
+    borderWidth: 1, borderColor: SEMANTIC.warning.box,
   },
-  debugText: { fontSize: 11, color: "#856404", fontFamily: "monospace" },
+  debugText: { fontSize: 11, color: SEMANTIC.warning.text, fontFamily: "monospace" },
 
   errorBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     margin: 16, padding: 12,
     backgroundColor: COLORS.errorBg, borderRadius: 10,
-    borderWidth: 1, borderColor: "#FECACA",
+    borderWidth: 1, borderColor: SEMANTIC.error.box,
   },
   errorText: { flex: 1, fontSize: 13, color: COLORS.error },
-  retryText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
+  retryText: { fontSize: 13, fontWeight: "700", color: COLORS.primaryDeep },
 
   list:  { padding: 16, gap: 12 },
   empty: { alignItems: "center", paddingTop: 80, paddingHorizontal: 32, gap: 12 },
@@ -647,16 +656,19 @@ const styles = StyleSheet.create({
     marginTop: 8, backgroundColor: COLORS.primary,
     paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10,
   },
-  emptyBtnText: { color: COLORS.white, fontSize: 13, fontWeight: "700" },
+  emptyBtnText: { color: THEME.onPrimary, fontSize: 13, fontWeight: "700" },
 
   card: {
-    backgroundColor: COLORS.white, borderRadius: 16,
+    backgroundColor: COLORS.primaryBg, borderRadius: 16,
     padding: 16, gap: 12,
     borderWidth: 1, borderColor: COLORS.gray200,
-    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+    borderTopWidth: 3, borderTopColor: COLORS.primaryEdge,
+    shadowColor: THEME.shadow, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
   },
-  cardRejected: { borderColor: "#FECACA", borderWidth: 1.5 },
-  cardApproved: { borderColor: "#A7F3D0", borderWidth: 1.5 },
+  // A card that means something takes its tone on the border, as the
+  // dashboard's alert tiles do.
+  cardRejected: { borderColor: TONE_EDGE.error, borderTopColor: TONE_EDGE.error, borderWidth: 1.5, borderTopWidth: 3 },
+  cardApproved: { borderColor: TONE_EDGE.success, borderTopColor: TONE_EDGE.success, borderWidth: 1.5, borderTopWidth: 3 },
   cardHeader:   { flexDirection: "row", alignItems: "center", gap: 12 },
   cardIconBg: {
     width: 40, height: 40, borderRadius: 10,
@@ -670,13 +682,13 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   pill: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1,
   },
   pillText: { fontSize: 11, fontWeight: "700" },
 
   actionHint: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.gray100,
+    paddingTop: 8, borderTopWidth: 1, borderTopColor: THEME.border,
   },
   actionHintText: { fontSize: 12, color: COLORS.error, fontWeight: "500" },
 });

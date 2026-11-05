@@ -9,6 +9,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS as THEME, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { IconSquare, Badge, EmptyState } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -17,9 +19,10 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 const COLORS = {
   primary:   "#2563EB",
   primaryBg: "#EFF6FF",
-  gold:      "#F59E0B",
-  silver:    "#9CA3AF",
-  bronze:    "#CD7F32",
+  // The medals, in theme colours: gold amber, silver slate, bronze deep amber.
+  gold:      ACCENT.amber.base,
+  silver:    ACCENT.slate.solid,
+  bronze:    ACCENT.amber.deep,
   success:   "#059669",
   error:     "#DC2626",
   white:     "#FFFFFF",
@@ -41,7 +44,13 @@ function getMedalColor(position) {
   if (position === 1) return COLORS.gold;
   if (position === 2) return COLORS.silver;
   if (position === 3) return COLORS.bronze;
-  return COLORS.gray400;
+  return ACCENT.slate.deep;
+}
+
+/** A position square's fill: white for a medal (its row is amber), the rest slate. */
+function getMedalBg(position) {
+  if (position >= 1 && position <= 3) return THEME.surface;
+  return ACCENT.slate.wash;
 }
 
 function getPositionField(scope) {
@@ -137,7 +146,7 @@ export default function RankingsTable({
           {/* Position badge */}
           <View style={[
             styles.positionBadge,
-            { backgroundColor: medalColor + "20" },
+            { backgroundColor: getMedalBg(position) },
           ]}>
             {position <= 3 ? (
               <Ionicons name="medal" size={16} color={medalColor} />
@@ -159,7 +168,7 @@ export default function RankingsTable({
               <Text style={styles.subLabel}>#{item.admissionNo}</Text>
             ) : null}
             <View style={styles.classTag}>
-              <Ionicons name="school-outline" size={10} color={COLORS.primary} />
+              <Ionicons name="school-outline" size={10} color={accentBadge("indigo").text} />
               <Text style={styles.classTagText} numberOfLines={1}>
                 {resolvedClass ?? t("rankTable.noClass")}
               </Text>
@@ -175,7 +184,10 @@ export default function RankingsTable({
             </Text>
             <View style={[
               styles.gradeBadge,
-              { backgroundColor: (item.passes ?? item.isPassing) ? "#D1FAE5" : "#FEE2E2" },
+              {
+                backgroundColor: statusBadge((item.passes ?? item.isPassing) ? "success" : "error").bg,
+                borderColor:     statusBadge((item.passes ?? item.isPassing) ? "success" : "error").border,
+              },
             ]}>
               <Text style={[
                 styles.gradeText,
@@ -189,7 +201,7 @@ export default function RankingsTable({
           <Ionicons
             name={isExpanded ? "chevron-up" : "chevron-down"}
             size={18}
-            color={COLORS.gray400}
+            color={THEME.textSecondary}
           />
         </TouchableOpacity>
 
@@ -203,20 +215,25 @@ export default function RankingsTable({
   return (
     <View style={styles.container}>
       <View style={styles.tableHeader}>
-        <Text style={styles.tableTitle}>{tableTitle}</Text>
-        <Text style={styles.tableCount}>
-          {t("rankTable.studentCount", { count: rankings.length })}
-        </Text>
+        <View style={styles.tableTitleRow}>
+          <IconSquare icon="trophy" accent="slate" size={28} />
+          <Text style={styles.tableTitle}>{tableTitle}</Text>
+        </View>
+        <Badge
+          label={t("rankTable.studentCount", { count: rankings.length })}
+          accent="slate"
+          style={styles.tableCount}
+        />
       </View>
 
       {rankings.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="trophy-outline" size={48} color={COLORS.gray200} />
-          <Text style={styles.emptyText}>{t("results.noRankings")}</Text>
-          <Text style={styles.emptySubtext}>
-            {t("results.processFirst")}
-          </Text>
-        </View>
+        <EmptyState
+          icon="trophy-outline"
+          accent="slate"
+          title={t("results.noRankings")}
+          message={t("results.processFirst")}
+          style={styles.emptyState}
+        />
       ) : (
         <FlatList
           data={rankings}
@@ -254,7 +271,7 @@ function ExpandedDetail({ item, resolvedClass }) {
         <DetailStat
           label={t("rankTable.passFail")}
           value={`${item.subjectsPassed ?? 0}P / ${item.subjectsFailed ?? 0}F`}
-          valueColor={item.isPassing ? COLORS.success : COLORS.error}
+          valueColor={item.isPassing ? SEMANTIC.success.text : SEMANTIC.error.text}
         />
         <DetailStat
           label={t("examDetail.classFallback")}
@@ -267,19 +284,19 @@ function ExpandedDetail({ item, resolvedClass }) {
           label={t("examResults.tabs.class")}
           position={item.classPosition}
           total={item.totalInClass}
-          color="#4F46E5"
+          accent="indigo"
         />
         <RankBadge
           label={t("examResults.tabs.grade")}
           position={item.gradePosition}
           total={item.totalInGrade}
-          color="#059669"
+          accent="green"
         />
         <RankBadge
           label={t("examResults.tabs.school")}
           position={item.schoolPosition}
           total={item.totalInSchool}
-          color="#D97706"
+          accent="amber"
         />
       </View>
 
@@ -312,7 +329,7 @@ function ExpandedDetail({ item, resolvedClass }) {
                   key={si}
                   style={[
                     styles.breakdownRow,
-                    si % 2 === 0 && { backgroundColor: COLORS.gray50 },
+                    si % 2 === 0 && { backgroundColor: THEME.surface },
                   ]}
                 >
                   <Text
@@ -331,9 +348,9 @@ function ExpandedDetail({ item, resolvedClass }) {
                     styles.breakdownCell,
                     styles.colGrade,
                     { fontWeight: "700" },
-                    s.isAbsent  ? { color: COLORS.gray400 } :
-                    s.isPassing ? { color: COLORS.success  } :
-                                  { color: COLORS.error    },
+                    s.isAbsent  ? { color: THEME.textSecondary   } :
+                    s.isPassing ? { color: SEMANTIC.success.text } :
+                                  { color: SEMANTIC.error.text   },
                   ]}>
                     {s.isAbsent ? t("rankTable.abShort") : s.grade || "—"}
                   </Text>
@@ -345,16 +362,16 @@ function ExpandedDetail({ item, resolvedClass }) {
                       styles.statusPill,
                       {
                         backgroundColor:
-                          s.isAbsent  ? COLORS.gray100 :
-                          s.isPassing ? "#D1FAE5"      : "#FEE2E2",
+                          statusBadge(s.isPassing && !s.isAbsent ? "success" : "error").bg,
+                        borderColor:
+                          statusBadge(s.isPassing && !s.isAbsent ? "success" : "error").border,
                       },
                     ]}>
                       <Text style={[
                         styles.statusPillText,
                         {
                           color:
-                            s.isAbsent  ? COLORS.gray500 :
-                            s.isPassing ? COLORS.success  : COLORS.error,
+                            statusBadge(s.isPassing && !s.isAbsent ? "success" : "error").text,
                         },
                       ]}>
                         {s.isAbsent
@@ -374,7 +391,7 @@ function ExpandedDetail({ item, resolvedClass }) {
 
       {!!item.overallRemark && (
         <View style={styles.remarkBox}>
-          <Ionicons name="chatbubble-ellipses-outline" size={14} color={COLORS.gray400} />
+          <Ionicons name="chatbubble-ellipses-outline" size={14} color={ACCENT.slate.solid} />
           <Text style={styles.remarkText}>{item.overallRemark}</Text>
         </View>
       )}
@@ -401,15 +418,16 @@ function DetailStat({ label, value, valueColor }) {
   );
 }
 
-function RankBadge({ label, position, total, color }) {
+function RankBadge({ label, position, total, accent }) {
   const { t } = useTranslation();
   const hasData = position != null && total != null;
+  const a = ACCENT[accent] ?? ACCENT.slate;
   return (
     <View style={[
       styles.rankBadge,
-      { borderColor: color + "40", backgroundColor: color + "08" },
+      { borderColor: a.base + "40", backgroundColor: a.wash },
     ]}>
-      <Text style={[styles.rankBadgePosition, { color }]}>
+      <Text style={[styles.rankBadgePosition, { color: a.deep }]}>
         {hasData ? `#${position}` : "—"}
       </Text>
       <Text style={styles.rankBadgeLabel}>{label}</Text>
@@ -428,9 +446,13 @@ function RankBadge({ label, position, total, color }) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.white,
+    backgroundColor: THEME.surface,
     borderRadius:    16,
     padding:         16,
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
     shadowColor:     "#000",
     shadowOffset:    { width: 0, height: 1 },
     shadowOpacity:   0.05,
@@ -443,8 +465,9 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     marginBottom:   12,
   },
-  tableTitle: { fontSize: 16, fontWeight: "700", color: COLORS.gray900 },
-  tableCount: { fontSize: 13, color: COLORS.gray500 },
+  tableTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
+  tableTitle: { fontSize: 16, fontWeight: "700", color: THEME.text, flexShrink: 1 },
+  tableCount: { alignSelf: "center" },
   rowWrapper: { marginBottom: 4 },
   row: {
     flexDirection:     "row",
@@ -452,10 +475,10 @@ const styles = StyleSheet.create({
     paddingVertical:   12,
     paddingHorizontal: 8,
     borderRadius:      10,
-    backgroundColor:   COLORS.white,
+    backgroundColor:   THEME.surface,
   },
-  topRow:     { backgroundColor: COLORS.gray50 },
-  partialRow: { borderLeftWidth: 3, borderLeftColor: "#D97706" },
+  topRow:     { backgroundColor: ACCENT.amber.wash },
+  partialRow: { borderLeftWidth: 3, borderLeftColor: ACCENT.amber.base },
   positionBadge: {
     width:          32,
     height:         32,
@@ -466,14 +489,16 @@ const styles = StyleSheet.create({
   },
   positionText: { fontSize: 14, fontWeight: "800" },
   studentInfo:  { flex: 1, marginRight: 8 },
-  studentName:  { fontSize: 14, fontWeight: "600", color: COLORS.gray900 },
-  subLabel:     { fontSize: 11, color: COLORS.gray500, marginTop: 2 },
+  studentName:  { fontSize: 14, fontWeight: "600", color: THEME.text },
+  subLabel:     { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
   classTag: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
     marginTop:         4,
-    backgroundColor:   COLORS.primaryBg,
+    backgroundColor:   accentBadge("indigo").bg,
+    borderWidth:       1,
+    borderColor:       accentBadge("indigo").border,
     alignSelf:         "flex-start",
     borderRadius:      4,
     paddingHorizontal: 6,
@@ -482,25 +507,26 @@ const styles = StyleSheet.create({
   classTagText: {
     fontSize:   10,
     fontWeight: "600",
-    color:      COLORS.primary,
+    color:      accentBadge("indigo").text,
     maxWidth:   110,
   },
   scoreSection:  { alignItems: "center", marginRight: 12 },
-  averageScore:  { fontSize: 15, fontWeight: "700", color: COLORS.gray900 },
+  averageScore:  { fontSize: 15, fontWeight: "700", color: ACCENT.slate.deep },
   gradeBadge: {
+    borderWidth:       1,
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      4,
     marginTop:         2,
   },
   gradeText:    { fontSize: 11, fontWeight: "700" },
-  passingGrade: { color: COLORS.success },
-  failingGrade: { color: COLORS.error   },
+  passingGrade: { color: SEMANTIC.success.text },
+  failingGrade: { color: SEMANTIC.error.text   },
   gpaSection:   { alignItems: "center", marginRight: 10, minWidth: 36 },
   gpaValue:     { fontSize: 14, fontWeight: "700", color: COLORS.primary },
   gpaLabel:     { fontSize: 10, color: COLORS.gray400 },
   expandedDetail: {
-    backgroundColor:         COLORS.gray50,
+    backgroundColor:         ACCENT.slate.wash,
     borderBottomLeftRadius:  10,
     borderBottomRightRadius: 10,
     padding:                 12,
@@ -512,16 +538,16 @@ const styles = StyleSheet.create({
     marginBottom:      12,
     paddingBottom:     12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
+    borderBottomColor: THEME.border,
   },
   detailStat:      { alignItems: "center", flex: 1 },
   detailStatValue: {
     fontSize:   13,
     fontWeight: "700",
-    color:      COLORS.gray900,
+    color:      ACCENT.slate.deep,
     textAlign:  "center",
   },
-  detailStatLabel: { fontSize: 10, color: COLORS.gray500, marginTop: 2 },
+  detailStatLabel: { fontSize: 10, color: THEME.textSecondary, marginTop: 2 },
   rankingsRow: {
     flexDirection:  "row",
     justifyContent: "space-around",
@@ -537,22 +563,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   rankBadgePosition: { fontSize: 18, fontWeight: "800" },
-  rankBadgeLabel:    { fontSize: 10, color: COLORS.gray500, marginTop: 2 },
-  rankBadgeTotal:    { fontSize: 10, color: COLORS.gray400 },
+  rankBadgeLabel:    { fontSize: 10, color: THEME.textSecondary, marginTop: 2 },
+  rankBadgeTotal:    { fontSize: 10, color: THEME.textSecondary },
   subjectBreakdown:  { marginBottom: 8 },
   breakdownTitle: {
     fontSize:     13,
     fontWeight:   "600",
-    color:        COLORS.gray700,
+    color:        THEME.text,
     marginBottom: 8,
   },
   breakdownHeader: {
     flexDirection:     "row",
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
+    borderBottomColor: THEME.border,
     paddingBottom:     6,
     marginBottom:      2,
-    backgroundColor:   COLORS.gray100,
+    backgroundColor:   THEME.surface,
     borderRadius:      4,
     paddingHorizontal: 4,
   },
@@ -562,12 +588,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius:      4,
   },
-  breakdownCell: { fontSize: 12, color: COLORS.gray700, paddingHorizontal: 4 },
+  breakdownCell: { fontSize: 12, color: THEME.text, paddingHorizontal: 4 },
   colSubject:    { width: 120 },
   colScore:      { width: 50  },
   colGrade:      { width: 44  },
   colStatus:     { width: 64  },
   statusPill: {
+    borderWidth:       1,
     borderRadius:      4,
     paddingHorizontal: 6,
     paddingVertical:   2,
@@ -577,20 +604,18 @@ const styles = StyleSheet.create({
   remarkBox: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: COLORS.white,
+    backgroundColor: THEME.surface,
     borderRadius:    8,
     padding:         10,
     marginTop:       8,
   },
   remarkText: {
     fontSize:   12,
-    color:      COLORS.gray600,
+    color:      THEME.textSecondary,
     marginLeft: 8,
     flex:       1,
     lineHeight: 18,
     fontStyle:  "italic",
   },
   emptyState:   { alignItems: "center", paddingVertical: 40 },
-  emptyText:    { fontSize: 15, fontWeight: "600", color: COLORS.gray500, marginTop: 12 },
-  emptySubtext: { fontSize: 13, color: COLORS.gray400, marginTop: 4 },
 });

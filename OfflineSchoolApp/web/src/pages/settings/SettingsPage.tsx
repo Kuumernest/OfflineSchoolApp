@@ -5,6 +5,8 @@ import {
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
   ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
   KeyRound, Calendar, Calculator, LayoutTemplate,
+  Settings, Image as ImageIcon, Phone, MapPin, Lock, Users, IdCard, DoorOpen, Cake,
+  type LucideIcon,
 } from "lucide-react";
 
 import PermissionsSection from "@/pages/settings/PermissionsSection";
@@ -16,6 +18,8 @@ import NeedsInternet            from "@/components/offline/NeedsInternet";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
+import { PageIcon }              from "@/components/ui/PageHeader";
+import { DASH_TINT, ACCENT_BADGE, roleAccent, type DashAccent } from "@/config/dashboardTint";
 import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
@@ -178,13 +182,6 @@ const DAYS_OF_WEEK = [
 // role the API will store — see backend/src/config/roles.js — but a school
 // whose database predates the enum could still hold a row saying it, and a
 // badge reading "admin" is better than one reading nothing.
-const ROLE_COLORS: Record<string, string> = {
-  super_admin:  "bg-red-100 text-red-700",
-  school_admin: "bg-purple-100 text-purple-700",
-  bursar:       "bg-amber-100 text-amber-700",
-  admin:        "bg-primary-100 text-primary-700",
-  teacher:      "bg-emerald-100 text-emerald-700",
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -208,14 +205,18 @@ const extractMessage = (err: unknown, t: TFunction): string =>
 function Card({
   children,
   className,
+  accent = "slate",
 }: {
   children:  React.ReactNode;
   className?: string;
+  /** The panel's 3px top edge — the colour of what the panel is about. */
+  accent?:   DashAccent;
 }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm",
+        "rounded-2xl border border-line bg-surface p-6 shadow-card",
+        DASH_TINT[accent].edge,
         className
       )}
     >
@@ -224,9 +225,32 @@ function Card({
   );
 }
 
-function CardTitle({ children }: { children: React.ReactNode }) {
+/** A small solid icon square for a panel or section heading. */
+function HeadingSquare({ icon: Icon, accent }: { icon: LucideIcon; accent: DashAccent }) {
   return (
-    <h3 className="mb-5 text-base font-bold text-gray-900">{children}</h3>
+    <span
+      aria-hidden="true"
+      className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)}
+    >
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
+
+function CardTitle({
+  children,
+  icon = Settings,
+  accent = "slate",
+}: {
+  children: React.ReactNode;
+  icon?:    LucideIcon;
+  accent?:  DashAccent;
+}) {
+  return (
+    <h3 className="mb-5 flex items-center gap-2.5 text-base font-bold text-ink">
+      <HeadingSquare icon={icon} accent={accent} />
+      {children}
+    </h3>
   );
 }
 
@@ -504,8 +528,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     <div className="space-y-5">
 
       {/* ── Logo ── */}
-      <Card>
-        <CardTitle>{t("settings.schoolLogo")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={ImageIcon} accent="indigo">{t("settings.schoolLogo")}</CardTitle>
         <div className="flex items-start gap-6">
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
@@ -514,8 +538,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
                   onError={() => { setLogoPreview(null); setLogoBroken(true); }} />
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                  <Building2 className="h-8 w-8 text-gray-300" />
-                  <span className="text-[10px] text-gray-400">
+                  <Building2 className={cn("h-8 w-8", DASH_TINT.indigo.glyph)} />
+                  <span className="text-[10px] text-ink-muted">
                     {logoBroken ? t("settings.logoBroken") : t("settings.noLogo")}
                   </span>
                 </div>
@@ -562,8 +586,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Basic info ── */}
-      <Card>
-        <CardTitle>{t("settings.basicInfo")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={Building2} accent="indigo">{t("settings.basicInfo")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FieldLabel>{t("settings.schoolName")} *</FieldLabel>
@@ -631,8 +655,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Contact ── */}
-      <Card>
-        <CardTitle>{t("settings.contactDetails")}</CardTitle>
+      <Card accent="sky">
+        <CardTitle icon={Phone} accent="sky">{t("settings.contactDetails")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>{t("settings.schoolEmail")}</FieldLabel>
@@ -650,8 +674,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Location ── */}
-      <Card>
-        <CardTitle>{t("common.location")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={MapPin} accent="indigo">{t("common.location")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FieldLabel>{t("common.streetAddress")}</FieldLabel>
@@ -677,8 +701,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Academic calendar ── */}
-      <Card>
-        <CardTitle>{t("settings.academicCalendar")}</CardTitle>
+      <Card accent="teal">
+        <CardTitle icon={Calendar} accent="teal">{t("settings.academicCalendar")}</CardTitle>
         <div className="space-y-4">
 
           {/* Term system */}
@@ -833,8 +857,8 @@ function StudentAgeRangesCard({ schoolId }: { schoolId: string }) {
   };
 
   return (
-    <Card>
-      <CardTitle>{t("ageRanges.title")}</CardTitle>
+    <Card accent="blue">
+      <CardTitle icon={Cake} accent="blue">{t("ageRanges.title")}</CardTitle>
       <p className="-mt-3 mb-4 text-sm text-gray-500">{t("ageRanges.hint")}</p>
       <div className="grid gap-2">
         {LEVEL_NAMES.map((name, i) => {
@@ -933,8 +957,8 @@ function ProfileSection() {
     <div className="space-y-5">
 
       {/* ── Personal info ── */}
-      <Card>
-        <CardTitle>{t("settings.personalInfo")}</CardTitle>
+      <Card accent={roleAccent(user?.role)}>
+        <CardTitle icon={User} accent={roleAccent(user?.role)}>{t("settings.personalInfo")}</CardTitle>
         <div className="space-y-4">
           <div>
             <FieldLabel>{t("common.fullName")}</FieldLabel>
@@ -949,7 +973,7 @@ function ProfileSection() {
             <span
               className={cn(
                 "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                ROLE_COLORS[user?.role ?? ""] || "bg-gray-100 text-gray-600"
+                "ring-1 ring-inset", ACCENT_BADGE[roleAccent(user?.role)]
               )}
             >
               {roleLabel(user?.role, t) || "—"}
@@ -960,9 +984,12 @@ function ProfileSection() {
       </Card>
 
       {/* ── Password ── */}
-      <Card>
+      <Card accent="slate">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-bold text-gray-900">{t("common.password")}</h3>
+          <h3 className="flex items-center gap-2.5 text-base font-bold text-ink">
+            <HeadingSquare icon={Lock} accent="slate" />
+            {t("common.password")}
+          </h3>
           <button
             onClick={() => setShowPwForm((v) => !v)}
             className="text-sm font-medium text-primary-600 hover:underline"
@@ -1137,8 +1164,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
   );
 
   if (!config) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.noGradingConfig")}</p>
       </div>
@@ -1147,8 +1174,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardTitle>{t("settings.gradingSettings")}</CardTitle>
+      <Card accent="amber">
+        <CardTitle icon={GraduationCap} accent="amber">{t("settings.gradingSettings")}</CardTitle>
 
         {/* Explanation */}
         <p className="text-xs text-gray-500 mb-4">{t("settings.gradingBlurb")}</p>
@@ -1580,9 +1607,10 @@ function AdminsSection({
 
   return (
     <div className="space-y-5">
-      <Card>
+      <Card accent="indigo">
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900">
+          <h3 className="flex items-center gap-2.5 text-base font-bold text-ink">
+            <HeadingSquare icon={Users} accent="indigo" />
             {t("settings.adminUsers", { count: admins.length })}
           </h3>
           <button
@@ -1609,7 +1637,7 @@ function AdminsSection({
             <div key={a._id} className={cn("flex items-center gap-3 py-3", removed && "opacity-60")}>
               <div className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                removed ? "bg-gray-100 text-gray-400" : "bg-primary-50 text-primary-600"
+                removed ? "bg-accent-slate-soft text-accent-slate-deep" : "bg-primary-50 text-primary-600"
               )}>
                 {(a.name || "?").charAt(0).toUpperCase()}
               </div>
@@ -1617,23 +1645,22 @@ function AdminsSection({
                 <p className="text-sm font-semibold text-gray-900">
                   {a.name}
                   {a._id === currentUserId && (
-                    <span className="ml-2 text-xs text-gray-400">{t("settings.you")}</span>
+                    <span className="ml-2 text-xs text-ink-muted">{t("settings.you")}</span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">{a.email}</p>
               </div>
 
               {removed && (
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
+                <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.slate)}>
                   {t("settings.removed")}
                 </span>
               )}
 
               <span className={cn(
                 "rounded-full px-2.5 py-1 text-xs font-semibold",
-                removed
-                  ? "bg-gray-100 text-gray-500"
-                  : ROLE_COLORS[a.role] || "bg-gray-100 text-gray-600"
+                "ring-1 ring-inset",
+                ACCENT_BADGE[removed ? "slate" : roleAccent(a.role)]
               )}>
                 {roleLabel(a.role, t)}
               </span>
@@ -1686,7 +1713,7 @@ function AdminsSection({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-bold text-ink">
                 {created
                   ? (created.restored ? t("settings.accountRestored") : t("settings.credentials"))
                   : t("settings.addAdmin")}
@@ -1904,8 +1931,8 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
   );
 
   if (!analytics) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.analyticsUnavailable")}</p>
       </div>
@@ -1915,21 +1942,21 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
   // `id` is the React key — a translated label would remount every tile on a
   // language switch.
   const stats = [
-    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-primary-50",   text: "text-primary-700"  },
-    { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-emerald-50",  text: "text-emerald-700" },
-    { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-purple-50",   text: "text-purple-700"  },
-    { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-amber-50",    text: "text-amber-700"   },
+    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-accent-violet-soft", text: DASH_TINT.violet.number },
+    { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-accent-blue-soft", text: DASH_TINT.blue.number },
+    { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-accent-indigo-soft", text: DASH_TINT.indigo.number },
+    { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-accent-slate-soft", text: DASH_TINT.slate.number },
   ];
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardTitle>{t("settings.schoolSummary")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={BarChart3} accent="indigo">{t("settings.schoolSummary")}</CardTitle>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((s) => (
             <div key={s.id} className={cn("rounded-2xl p-5 text-center", s.bg)}>
               <p className={cn("text-3xl font-extrabold", s.text)}>{s.value ?? "—"}</p>
-              <p className="mt-1 text-sm font-medium text-gray-600">{s.label}</p>
+              <p className="mt-1 text-sm font-medium text-ink-muted">{s.label}</p>
             </div>
           ))}
         </div>
@@ -2010,8 +2037,8 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
   );
 
   if (!settings) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.loadFailed")}</p>
       </div>
@@ -2030,8 +2057,8 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
   return (
     <div className="space-y-5">
 
-      <Card>
-        <CardTitle>{t("settings.idCardExpiry")}</CardTitle>
+      <Card accent="blue">
+        <CardTitle icon={IdCard} accent="blue">{t("settings.idCardExpiry")}</CardTitle>
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-gray-500">
             {t("settings.idCardExpiryBlurb")}
@@ -2072,8 +2099,8 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         </div>
       </Card>
 
-      <Card>
-        <CardTitle>{t("settings.gateMessages")}</CardTitle>
+      <Card accent="green">
+        <CardTitle icon={DoorOpen} accent="green">{t("settings.gateMessages")}</CardTitle>
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-gray-500">
             {t("settings.gateMessagesBlurb")}
@@ -2173,11 +2200,16 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-0 min-h-screen bg-gray-50">
 
       {/* ── Page header ── */}
-      <div className="border-b border-gray-200 bg-white px-6 py-5">
-        <h1 className="text-2xl font-bold text-gray-900">{t("settings.title")}</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          {t("settings.blurb")}
-        </p>
+      <div className="border-b border-line bg-surface px-6 py-5">
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">{t("settings.title")}</h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              {t("settings.blurb")}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">

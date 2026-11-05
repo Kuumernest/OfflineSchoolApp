@@ -32,6 +32,7 @@ import {
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 const QK = {
@@ -88,10 +89,10 @@ export default function AssignmentsPage() {
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">
+            <h3 className="text-sm font-semibold text-ink">
               {t("assignments.loadFailed")}
             </h3>
-            <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(error)}</p>
+            <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(error)}</p>
           </div>
         </div>
       </Card>
@@ -103,13 +104,16 @@ export default function AssignmentsPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">
-            {t("assignments.title")}
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("assignments.blurb")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">
+              {t("assignments.title")}
+            </h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("assignments.blurb")}
+            </p>
+          </div>
         </div>
 
         <Button
@@ -148,8 +152,10 @@ export default function AssignmentsPage() {
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-line">
           <CardHeader
+            icon={Users}
+            accent="violet"
             title={t("assignments.byTeacher")}
             subtitle={`${filtered.length} of ${summaries.length} shown`}
             action={
@@ -165,13 +171,15 @@ export default function AssignmentsPage() {
 
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <ClipboardList className="w-8 h-8 text-gray-300 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700">
+            <span className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.violet.box)} aria-hidden="true">
+              <ClipboardList className="w-6 h-6" />
+            </span>
+            <p className="mt-3 text-sm font-medium text-ink">
               {summaries.length === 0
                 ? t("assignments.none")
                 : t("assignments.noTeacherHit")}
             </p>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {summaries.length === 0
                 ? t("assignments.firstOne")
                 : t("common.tryDifferent")}

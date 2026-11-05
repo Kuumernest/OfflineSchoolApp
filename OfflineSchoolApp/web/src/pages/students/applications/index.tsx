@@ -16,6 +16,7 @@ import { ErrorBanner }                   from "@/components/applications/ErrorBa
 import { Toast }                         from "@/components/applications/Toast";
 import { Spinner }                       from "@/components/applications/Spinner";
 import { useTranslation } from "react-i18next";
+import { PageIcon }       from "@/components/ui/PageHeader";
 
 import type {
   NormalisedApplication,
@@ -96,11 +97,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <SvgIcon d={PATHS.back} color="#111827" size={22} />
     </button>
 
+    <PageIcon />
+
     <div className="flex-1 min-w-0">
-      <h1 className="text-xl font-bold text-gray-900 leading-tight">
+      <h1 className="text-xl font-bold text-ink leading-tight">
         {t("admissions.applications")}
       </h1>
-      <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
+      <p className="text-sm text-ink-muted mt-0.5">{subtitle}</p>
     </div>
 
     <button

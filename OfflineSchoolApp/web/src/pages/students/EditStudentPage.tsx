@@ -22,7 +22,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { genderLabel, GENDER_VALUES } from "@/utils/genderLabel";
-import { ArrowLeft, Save, History, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, History, Loader2, AlertCircle, User, Phone, Users, HeartPulse, FileText, type LucideIcon } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 import { Card, CardHeader }        from "@/components/ui/Card";
 import { Button }                  from "@/components/ui/Button";
@@ -304,9 +305,9 @@ export default function EditStudentPage() {
     );
   };
 
-  const section = (titleKey: string, fields: FieldName[], hintKey?: string) => (
+  const section = (titleKey: string, icon: LucideIcon, fields: FieldName[], hintKey?: string) => (
     <Card>
-      <CardHeader title={t(titleKey)} />
+      <CardHeader title={t(titleKey)} icon={icon} accent="blue" />
       {hintKey && <p className="px-4 pb-2 text-xs text-ink-faint">{t(hintKey)}</p>}
       <div className="grid gap-4 p-4 sm:grid-cols-2">{fields.map(renderField)}</div>
     </Card>
@@ -324,6 +325,7 @@ export default function EditStudentPage() {
           >
             <ArrowLeft className="h-5 w-5 text-ink-muted" aria-hidden="true" />
           </Link>
+          <PageIcon />
           {/*
             The pupil's name leads, not the screen's own title. You are
             correcting one child's record, and the first question when a
@@ -357,13 +359,13 @@ export default function EditStudentPage() {
         </div>
       </div>
 
-      {section("studentEdit.identity", IDENTITY, "studentEdit.identityHint")}
-      {section("studentEdit.contact",  CONTACT)}
-      {section("studentEdit.guardian", GUARDIAN)}
-      {section("studentEdit.welfare",  WELFARE)}
+      {section("studentEdit.identity", User, IDENTITY, "studentEdit.identityHint")}
+      {section("studentEdit.contact",  Phone, CONTACT)}
+      {section("studentEdit.guardian", Users, GUARDIAN)}
+      {section("studentEdit.welfare",  HeartPulse, WELFARE)}
 
       <Card>
-        <CardHeader title={t("studentEdit.reason")} />
+        <CardHeader title={t("studentEdit.reason")} icon={FileText} accent="blue" />
         <div className="p-4">
           <FormField label={t("studentEdit.reason")} hint={t("studentEdit.reasonHint")}>
             <Input
@@ -378,7 +380,7 @@ export default function EditStudentPage() {
 
       {showHistory && (
         <Card>
-          <CardHeader title={t("studentEdit.history")} />
+          <CardHeader title={t("studentEdit.history")} icon={History} accent="blue" />
           <div className="p-4">
             {historyQuery.isLoading ? (
               <div className="flex justify-center py-6"><Spinner /></div>

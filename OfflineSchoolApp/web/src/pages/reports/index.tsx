@@ -147,6 +147,8 @@ export default function ReportsOverviewPage() {
       {/* ── Tools ───────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
+          icon={FileText}
+          accent="slate"
           title={t("reports.produce")}
           subtitle={t("reports.builtFromTemplate")}
         />
@@ -222,7 +224,7 @@ function StatCard({
         </div>
         {/* A failed card says so rather than showing a confident zero — "0
             students" and "we couldn't ask" are very different facts. */}
-        {failed && <Badge label={t("common.unavailable")} variant="default" />}
+        {failed && <Badge label={t("common.unavailable")} variant="warning" />}
       </div>
 
       <div className="mt-4">

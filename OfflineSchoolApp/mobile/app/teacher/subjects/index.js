@@ -17,7 +17,8 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
-import { COLORS, TILE } from "../../../src/theme/colors";
+import { COLORS, TILE, ACCENT, SEMANTIC, levelAccent, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 import { tileShell } from "../../../src/components/Tiles";
 
 // ─────────────────────────────────────────────────────────
@@ -25,36 +26,35 @@ import { tileShell } from "../../../src/components/Tiles";
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray600:   "#4B5563",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   COLORS.primary,
+  primaryBg: COLORS.primaryLight,
+  success:   ACCENT.green.solid,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text,
+  errorBg:   SEMANTIC.error.bg,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textMuted,
+  gray500:   COLORS.textSecondary,
+  gray600:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
-const CLASS_COLORS = [
-  { bg: "#EEF2FF", color: "#4F46E5", icon: "school-outline"  },
-  { bg: "#ECFDF5", color: "#059669", icon: "book-outline"    },
-  { bg: "#FEF3C7", color: "#D97706", icon: "library-outline" },
-  { bg: "#FEF2F2", color: "#DC2626", icon: "reader-outline"  },
-  { bg: "#F0F9FF", color: "#0284C7", icon: "school-outline"  },
-  { bg: "#FDF4FF", color: "#A855F7", icon: "book-outline"    },
-  { bg: "#FFF7ED", color: "#EA580C", icon: "library-outline" },
-  { bg: "#F0FDF4", color: "#16A34A", icon: "reader-outline"  },
-];
+// A class card takes its level's accent (the class name carries the level);
+// a subject card is slate; the chips take the entity they open.
+const classAccent = (section) => levelAccent(section?.title);
+const SUBJECT = ACCENT.slate;
+const CHIP = {
+  exams:    accentBadge("amber"),
+  students: accentBadge("blue"),
+  results:  accentBadge("slate"),
+};
 
 // ─────────────────────────────────────────────────────────
 // DB HELPERS
@@ -663,6 +663,7 @@ export default function TeacherSubjectsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={s.headerIcon} />
         <View style={s.headerCenter}>
           <Text style={s.headerTitle}>{t("teacherSubjects.title")}</Text>
           <Text style={s.headerSub}>
@@ -731,9 +732,7 @@ export default function TeacherSubjectsScreen() {
       {/* ── EMPTY STATE ── */}
       {sections.length === 0 ? (
         <View style={s.empty}>
-          <View style={s.emptyIconBg}>
-            <Ionicons name="school-outline" size={48} color={C.gray300} />
-          </View>
+          <IconSquare icon="school-outline" accent="slate" size={88} radius={24} />
           <Text style={s.emptyTitle}>{t("teacherSubjects.emptyTitle")}</Text>
           <Text style={s.emptyText}>
             {t("teacherSubjects.emptySub")}
@@ -764,16 +763,13 @@ export default function TeacherSubjectsScreen() {
 
           // ── SECTION HEADER ── (class card)
           renderSectionHeader={({ section }) => {
-            const idx = sections.findIndex(
-              (sec) => sec.classId === section.classId
-            ) % CLASS_COLORS.length;
-            const cls = CLASS_COLORS[Math.max(0, idx)];
+            const accent = classAccent(section);
+            const cls    = ACCENT[accent];
+            const pill   = accentBadge(accent);
 
             return (
-              <View style={s.sectionHeader}>
-                <View style={[s.sectionIconBg, { backgroundColor: cls.bg }]}>
-                  <Ionicons name={cls.icon} size={18} color={cls.color} />
-                </View>
+              <View style={[s.sectionHeader, { backgroundColor: cls.wash, borderTopColor: cls.base }]}>
+                <IconSquare icon="school-outline" accent={accent} size={36} radius={10} />
                 <View style={s.sectionHeaderText}>
                   <Text style={s.sectionTitle}>{section.title}</Text>
                   <Text style={s.sectionMeta}>
@@ -784,8 +780,8 @@ export default function TeacherSubjectsScreen() {
                   </Text>
                 </View>
                 {/* Student count badge */}
-                <View style={[s.sectionBadge, { backgroundColor: cls.bg }]}>
-                  <Text style={[s.sectionBadgeText, { color: cls.color }]}>
+                <View style={[s.sectionBadge, { backgroundColor: COLORS.surface, borderColor: pill.border }]}>
+                  <Text style={[s.sectionBadgeText, { color: pill.text }]}>
                     {section.data.length}
                   </Text>
                 </View>
@@ -796,23 +792,16 @@ export default function TeacherSubjectsScreen() {
           // ── SUBJECT ROW ──
           renderItem={({ item, index, section }) => {
             const isLast     = index === section.data.length - 1;
-            const colorIdx   = sections.findIndex(
-              (sec) => sec.classId === section.classId
-            ) % CLASS_COLORS.length;
-            const cls        = CLASS_COLORS[Math.max(0, colorIdx)];
-            const accentColor = cls.color;
 
             return (
               <View style={[s.subjectCard, isLast && s.subjectCardLast]}>
                 {/* Colour accent bar */}
-                <View style={[s.subjectAccent, { backgroundColor: accentColor }]} />
+                <View style={[s.subjectAccent, { backgroundColor: SUBJECT.base }]} />
 
                 <View style={s.subjectContent}>
                   {/* Subject name & meta */}
                   <View style={s.subjectHeader}>
-                    <View style={[s.subjectIconBg, { backgroundColor: cls.bg }]}>
-                      <Ionicons name="book-outline" size={16} color={accentColor} />
-                    </View>
+                    <IconSquare icon="book-outline" accent="slate" size={32} radius={8} />
                     <View style={s.subjectInfo}>
                       <Text style={s.subjectName} numberOfLines={1}>
                         {item.subjectName}
@@ -823,7 +812,7 @@ export default function TeacherSubjectsScreen() {
                         )}
                         {section.studentCount > 0 && (
                           <View style={s.studentRow}>
-                            <Ionicons name="people-outline" size={11} color={C.gray400} />
+                            <Ionicons name="people-outline" size={11} color={ACCENT.blue.solid} />
                             <Text style={s.studentText}>
                               {t("academic.studentCount", { count: section.studentCount })}
                             </Text>
@@ -838,8 +827,8 @@ export default function TeacherSubjectsScreen() {
                     {/* Exams */}
                     <TouchableOpacity
                       style={[s.actionChip, {
-                        borderColor:     accentColor,
-                        backgroundColor: cls.bg,
+                        borderColor:     CHIP.exams.border,
+                        backgroundColor: CHIP.exams.bg,
                       }]}
                       onPress={() => router.push("/teacher/exams")}
                       activeOpacity={0.7}
@@ -847,9 +836,9 @@ export default function TeacherSubjectsScreen() {
                       <Ionicons
                         name="document-text-outline"
                         size={13}
-                        color={accentColor}
+                        color={CHIP.exams.text}
                       />
-                      <Text style={[s.actionChipText, { color: accentColor }]}>
+                      <Text style={[s.actionChipText, { color: CHIP.exams.text }]}>
                         {t("teacherSubjects.exams")}
                       </Text>
                     </TouchableOpacity>
@@ -857,8 +846,8 @@ export default function TeacherSubjectsScreen() {
                     {/* Students */}
                     <TouchableOpacity
                       style={[s.actionChip, {
-                        borderColor:     C.success,
-                        backgroundColor: C.successBg,
+                        borderColor:     CHIP.students.border,
+                        backgroundColor: CHIP.students.bg,
                       }]}
                       onPress={() => router.push({
                         pathname: "/teacher/students",
@@ -874,9 +863,9 @@ export default function TeacherSubjectsScreen() {
                       <Ionicons
                         name="people-outline"
                         size={13}
-                        color={C.success}
+                        color={CHIP.students.text}
                       />
-                      <Text style={[s.actionChipText, { color: C.success }]}>
+                      <Text style={[s.actionChipText, { color: CHIP.students.text }]}>
                         {t("teacherSubjects.students")}
                       </Text>
                     </TouchableOpacity>
@@ -884,8 +873,8 @@ export default function TeacherSubjectsScreen() {
                     {/* Results */}
                     <TouchableOpacity
                       style={[s.actionChip, {
-                        borderColor:     C.primary,
-                        backgroundColor: C.primaryBg,
+                        borderColor:     CHIP.results.border,
+                        backgroundColor: COLORS.surface,
                       }]}
                       onPress={() => router.push({
                         pathname: "/teacher/results",
@@ -900,9 +889,9 @@ export default function TeacherSubjectsScreen() {
                       <Ionicons
                         name="bar-chart-outline"
                         size={13}
-                        color={C.primary}
+                        color={CHIP.results.text}
                       />
-                      <Text style={[s.actionChipText, { color: C.primary }]}>
+                      <Text style={[s.actionChipText, { color: CHIP.results.text }]}>
                         {t("teacherSubjects.results")}
                       </Text>
                     </TouchableOpacity>
@@ -937,7 +926,7 @@ const s = StyleSheet.create({
     paddingBottom:     14,
     backgroundColor:   C.white,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backBtn: {
@@ -948,6 +937,7 @@ const s = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 20, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -973,7 +963,7 @@ const s = StyleSheet.create({
     backgroundColor:  C.errorBg,
     borderRadius:     10,
     borderWidth:      1,
-    borderColor:      "#FECACA",
+    borderColor:      SEMANTIC.error.box,
   },
   errorText: { flex: 1, fontSize: 13, color: C.error },
   retryText: { fontSize: 13, fontWeight: "700", color: C.primary },
@@ -983,10 +973,10 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom:     8,
     padding:          10,
-    backgroundColor:  "#FFFBEB",
+    backgroundColor:  SEMANTIC.warning.bg,
     borderRadius:     8,
     borderWidth:      1,
-    borderColor:      "#FDE68A",
+    borderColor:      SEMANTIC.warning.box,
   },
   debugText: {
     fontSize:    11,
@@ -1002,14 +992,6 @@ const s = StyleSheet.create({
     justifyContent:    "center",
     paddingHorizontal: 40,
     gap:               16,
-  },
-  emptyIconBg: {
-    width:           88,
-    height:          88,
-    borderRadius:    24,
-    backgroundColor: C.gray100,
-    alignItems:      "center",
-    justifyContent:  "center",
   },
   emptyTitle:     { fontSize: 18, fontWeight: "700", color: C.gray700 },
   emptyText:      {
@@ -1045,18 +1027,12 @@ const s = StyleSheet.create({
     padding:                14,
     borderWidth:            1,
     borderBottomWidth:      0,
+    borderTopWidth:         3,
     borderColor:            C.gray200,
-    shadowColor:            "#000",
+    shadowColor:            COLORS.shadow,
     shadowOpacity:          0.03,
     shadowRadius:           4,
     elevation:              1,
-  },
-  sectionIconBg: {
-    width:          36,
-    height:         36,
-    borderRadius:   10,
-    alignItems:     "center",
-    justifyContent: "center",
   },
   sectionHeaderText: { flex: 1 },
   sectionTitle:      { fontSize: 16, fontWeight: "700", color: C.gray900 },
@@ -1065,6 +1041,7 @@ const s = StyleSheet.create({
     width:          28,
     height:         28,
     borderRadius:   8,
+    borderWidth:    1,
     alignItems:     "center",
     justifyContent: "center",
   },
@@ -1074,7 +1051,7 @@ const s = StyleSheet.create({
   // ── Subject card ─────────────────────────────────────────
   subjectCard: {
     flexDirection:    "row",
-    backgroundColor:  C.white,
+    backgroundColor:  SUBJECT.wash,
     borderLeftWidth:  1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -1084,7 +1061,7 @@ const s = StyleSheet.create({
   subjectCardLast: {
     borderBottomLeftRadius:  14,
     borderBottomRightRadius: 14,
-    shadowColor:             "#000",
+    shadowColor:             COLORS.shadow,
     shadowOpacity:           0.03,
     shadowRadius:            4,
     elevation:               1,
@@ -1092,13 +1069,6 @@ const s = StyleSheet.create({
   subjectAccent:  { width: 4 },
   subjectContent: { flex: 1, padding: 14, gap: 10 },
   subjectHeader:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  subjectIconBg: {
-    width:          32,
-    height:         32,
-    borderRadius:   8,
-    alignItems:     "center",
-    justifyContent: "center",
-  },
   subjectInfo:    { flex: 1 },
   subjectName:    { fontSize: 14, fontWeight: "600", color: C.gray900 },
   subjectMetaRow: {
@@ -1110,14 +1080,16 @@ const s = StyleSheet.create({
   subjectCode: {
     fontSize:          10,
     fontWeight:        "700",
-    color:             C.gray400,
-    backgroundColor:   C.gray100,
+    color:             SUBJECT.deep,
+    backgroundColor:   COLORS.surface,
+    borderWidth:       1,
+    borderColor:       accentBadge("slate").border,
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      4,
   },
   studentRow:  { flexDirection: "row", alignItems: "center", gap: 4 },
-  studentText: { fontSize: 11, color: C.gray400 },
+  studentText: { fontSize: 11, color: COLORS.textSecondary },
 
   // ── Action chips ──────────────────────────────────────────
   subjectActions: { flexDirection: "row", gap: 8, paddingLeft: 42 },

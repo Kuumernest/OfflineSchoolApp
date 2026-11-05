@@ -38,6 +38,18 @@ import {
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { StatTile } from "../../../src/components/Tiles";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+
+// A pill's colours: a status tone or the homework's indigo, never grey.
+const toneOf = (tone) => {
+  const b = statusBadge(tone);
+  return { color: b.text, bg: b.bg, border: b.border };
+};
+const INDIGO_PILL = (() => {
+  const b = accentBadge("indigo");
+  return { color: b.text, bg: b.bg, border: b.border };
+})();
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -75,7 +87,7 @@ const formatDateTime = (dateStr) => {
 
 const getDueStatus = (dueDateStr, submittedAt = null, t) => {
   if (!dueDateStr) {
-    return { label: t("studentHome.dueNoDeadline"), color: "#6B7280", bg: "#F3F4F6", urgent: false };
+    return { label: t("studentHome.dueNoDeadline"), ...INDIGO_PILL, urgent: false };
   }
 
   const due  = new Date(dueDateStr);
@@ -85,8 +97,8 @@ const getDueStatus = (dueDateStr, submittedAt = null, t) => {
   if (submittedAt) {
     const wasLate = new Date(submittedAt) > due;
     return wasLate
-      ? { label: t("studentHome.dueSubmittedLate"),    color: "#D97706", bg: "#FEF3C7", urgent: false }
-      : { label: t("studentHome.dueSubmittedOnTime"), color: "#059669", bg: "#ECFDF5", urgent: false };
+      ? { label: t("studentHome.dueSubmittedLate"),    ...toneOf("warning"), urgent: false }
+      : { label: t("studentHome.dueSubmittedOnTime"), ...toneOf("success"), urgent: false };
   }
 
   if (diff < 0) {
@@ -94,8 +106,7 @@ const getDueStatus = (dueDateStr, submittedAt = null, t) => {
     const daysAgo  = Math.floor(Math.abs(diff) / 86400000);
     return {
       label:  daysAgo > 0 ? `${daysAgo}d overdue` : `${hoursAgo}h overdue`,
-      color:  "#DC2626",
-      bg:     "#FEE2E2",
+      ...toneOf("error"),
       urgent: true,
       isPast: true,
     };
@@ -104,13 +115,13 @@ const getDueStatus = (dueDateStr, submittedAt = null, t) => {
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
 
-  if (hours < 6)  return { label: `${hours}h left`,  color: "#DC2626", bg: "#FEE2E2", urgent: true  };
-  if (hours < 24) return { label: t("studentHome.dueToday"),        color: "#D97706", bg: "#FEF3C7", urgent: true  };
-  if (days === 1) return { label: t("studentHome.dueTomorrow"),     color: "#D97706", bg: "#FEF3C7", urgent: false };
-  if (days < 7)   return { label: `${days}d left`,   color: "#059669", bg: "#ECFDF5", urgent: false };
+  if (hours < 6)  return { label: `${hours}h left`,  ...toneOf("warning"), urgent: true  };
+  if (hours < 24) return { label: t("studentHome.dueToday"),        ...toneOf("warning"), urgent: true  };
+  if (days === 1) return { label: t("studentHome.dueTomorrow"),     ...toneOf("warning"), urgent: false };
+  if (days < 7)   return { label: `${days}d left`,   ...INDIGO_PILL, urgent: false };
 
   const weeks = Math.floor(days / 7);
-  return { label: `${weeks}w left`, color: "#059669", bg: "#ECFDF5", urgent: false };
+  return { label: `${weeks}w left`, ...INDIGO_PILL, urgent: false };
 };
 
 const getSubmissionStatus = (hw, t) => {
@@ -124,8 +135,7 @@ const getSubmissionStatus = (hw, t) => {
     return {
       type:  "graded",
       label: `Graded: ${hw.submission_score}/${hw.max_score} (${pct}%)`,
-      color: pct >= 70 ? "#059669" : "#DC2626",
-      bg:    pct >= 70 ? "#ECFDF5" : "#FEE2E2",
+      ...toneOf(pct >= 70 ? "success" : "error"),
       icon:  "ribbon-outline",
     };
   }
@@ -134,8 +144,7 @@ const getSubmissionStatus = (hw, t) => {
     return {
       type:  "submitted",
       label: t("studentHw.awaitingGrade"),
-      color: "#4F46E5",
-      bg:    "#EEF2FF",
+      ...toneOf("success"),
       icon:  "checkmark-circle-outline",
     };
   }
@@ -148,8 +157,7 @@ const getSubmissionStatus = (hw, t) => {
     return {
       type:  "closed",
       label: t("studentHw.deadlinePassed"),
-      color: "#DC2626",
-      bg:    "#FEE2E2",
+      ...toneOf("error"),
       icon:  "lock-closed-outline",
     };
   }
@@ -157,8 +165,7 @@ const getSubmissionStatus = (hw, t) => {
   return {
     type:  "pending",
     label: isPast ? t("studentHw.notSubmittedLate") : t("studentHw.notSubmitted"),
-    color: isPast ? "#D97706" : "#6B7280",
-    bg:    isPast ? "#FEF3C7" : "#F3F4F6",
+    ...(isPast ? toneOf("warning") : INDIGO_PILL),
     icon:  "document-outline",
   };
 };
@@ -243,7 +250,7 @@ const SubmitModal = memo(({
           {/* Header */}
           <View style={modalStyles.header}>
             <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn}>
-              <Ionicons name="close" size={22} color="#374151" />
+              <Ionicons name="close" size={22} color={COLORS.text} />
             </TouchableOpacity>
             <Text style={modalStyles.headerTitle} numberOfLines={1}>
               {homework.title}
@@ -263,13 +270,13 @@ const SubmitModal = memo(({
                   icon:  "school-outline",
                   label: t("studentHw.subject"),
                   value: homework.subject_name || "—",
-                  color: "#4F46E5", bg: "#EEF2FF",
+                  color: ACCENT.indigo.deep, bg: ACCENT.indigo.wash,
                 },
                 {
                   icon:  "star-outline",
                   label: t("studentHw.maxScore"),
                   value: homework.max_score ?? 100,
-                  color: "#D97706", bg: "#FEF3C7",
+                  color: ACCENT.amber.deep, bg: ACCENT.amber.wash,
                 },
                 {
                   icon:  "calendar-outline",
@@ -312,7 +319,7 @@ const SubmitModal = memo(({
             {homework.instructions ? (
               <View style={modalStyles.instructBox}>
                 <View style={modalStyles.instructHeader}>
-                  <Ionicons name="information-circle-outline" size={16} color="#4F46E5" />
+                  <Ionicons name="information-circle-outline" size={16} color={ACCENT.indigo.solid} />
                   <Text style={modalStyles.instructTitle}>{t("studentHw.instructions")}</Text>
                 </View>
                 <Text style={modalStyles.instructText}>{homework.instructions}</Text>
@@ -320,7 +327,7 @@ const SubmitModal = memo(({
             ) : null}
 
             {/* Submission status */}
-            <View style={[modalStyles.statusBox, { backgroundColor: subStatus.bg }]}>
+            <View style={[modalStyles.statusBox, { backgroundColor: subStatus.bg, borderWidth: 1, borderColor: subStatus.border }]}>
               <Ionicons name={subStatus.icon} size={18} color={subStatus.color} />
               <Text style={[modalStyles.statusText, { color: subStatus.color }]}>
                 {subStatus.label}
@@ -331,7 +338,7 @@ const SubmitModal = memo(({
             {isGraded && (
               <View style={modalStyles.gradeBox}>
                 <View style={modalStyles.gradeRow}>
-                  <Ionicons name="ribbon" size={22} color="#059669" />
+                  <Ionicons name="ribbon" size={22} color={SEMANTIC.success.icon} />
                   <Text style={modalStyles.gradeScore}>
                     {homework.submission_score} / {homework.max_score ?? 100}
                   </Text>
@@ -342,7 +349,7 @@ const SubmitModal = memo(({
                 {homework.submission_feedback ? (
                   <View style={modalStyles.feedbackBox}>
                     <View style={modalStyles.feedbackHeader}>
-                      <Ionicons name="chatbubble-outline" size={14} color="#059669" />
+                      <Ionicons name="chatbubble-outline" size={14} color={SEMANTIC.success.icon} />
                       <Text style={modalStyles.feedbackTitle}>{t("studentHw.feedback")}</Text>
                     </View>
                     <Text style={modalStyles.feedbackText}>
@@ -376,20 +383,20 @@ const SubmitModal = memo(({
               <View style={modalStyles.responseSection}>
                 <Text style={modalStyles.responseLabel}>
                   {isResubmit ? t("studentHw.updatePh") : t("studentHw.yourResponse")}
-                  <Text style={{ color: "#DC2626" }}> *</Text>
+                  <Text style={{ color: SEMANTIC.error.text }}> *</Text>
                 </Text>
 
                 {due.urgent && !due.isPast && (
                   <View style={modalStyles.warnBanner}>
-                    <Ionicons name="warning-outline" size={14} color="#DC2626" />
+                    <Ionicons name="warning-outline" size={14} color={SEMANTIC.error.icon} />
                     <Text style={modalStyles.warnText}>{t("studentHw.soonWarn")}</Text>
                   </View>
                 )}
 
                 {due.isPast && homework.allow_late && (
-                  <View style={[modalStyles.warnBanner, { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" }]}>
-                    <Ionicons name="warning-outline" size={14} color="#D97706" />
-                    <Text style={[modalStyles.warnText, { color: "#92400E" }]}>
+                  <View style={[modalStyles.warnBanner, { backgroundColor: SEMANTIC.warning.bg, borderColor: SEMANTIC.warning.box }]}>
+                    <Ionicons name="warning-outline" size={14} color={SEMANTIC.warning.icon} />
+                    <Text style={[modalStyles.warnText, { color: SEMANTIC.warning.text }]}>
                       {t("studentHw.lateWarn")}
                     </Text>
                   </View>
@@ -400,7 +407,7 @@ const SubmitModal = memo(({
                   value={text}
                   onChangeText={setText}
                   placeholder={t("studentHw.answerPh")}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.textMuted}
                   multiline
                   numberOfLines={8}
                   textAlignVertical="top"
@@ -425,13 +432,13 @@ const SubmitModal = memo(({
                 activeOpacity={0.8}
               >
                 {submitting ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ActivityIndicator size="small" color={COLORS.onPrimary} />
                 ) : (
                   <>
                     <Ionicons
                       name={isResubmit ? "refresh-outline" : "send-outline"}
                       size={20}
-                      color="#FFF"
+                      color={COLORS.onPrimary}
                     />
                     <Text style={modalStyles.submitBtnText}>
                       {isResubmit ? t("studentHw.updateCta") : t("studentHw.submitTitle")}
@@ -445,7 +452,7 @@ const SubmitModal = memo(({
           {isGraded && (
             <View style={modalStyles.footer}>
               <View style={modalStyles.gradedFooter}>
-                <Ionicons name="ribbon" size={20} color="#059669" />
+                <Ionicons name="ribbon" size={20} color={SEMANTIC.success.icon} />
                 <Text style={modalStyles.gradedFooterText}>
                   {t("studentHw.gradedNote")}
                 </Text>
@@ -455,9 +462,9 @@ const SubmitModal = memo(({
 
           {isClosed && (
             <View style={modalStyles.footer}>
-              <View style={[modalStyles.gradedFooter, { backgroundColor: "#FEE2E2" }]}>
-                <Ionicons name="lock-closed-outline" size={20} color="#DC2626" />
-                <Text style={[modalStyles.gradedFooterText, { color: "#DC2626" }]}>
+              <View style={[modalStyles.gradedFooter, { backgroundColor: SEMANTIC.error.bg }]}>
+                <Ionicons name="lock-closed-outline" size={20} color={SEMANTIC.error.icon} />
+                <Text style={[modalStyles.gradedFooterText, { color: SEMANTIC.error.text }]}>
                   {t("studentHw.closedNote")}
                 </Text>
               </View>
@@ -490,8 +497,8 @@ const HomeworkCard = memo(
       >
         {/* Top row */}
         <View style={styles.cardTop}>
-          <View style={[styles.subjectIcon, { backgroundColor: subStatus.bg }]}>
-            <Ionicons name={subStatus.icon} size={20} color={subStatus.color} />
+          <View style={styles.subjectIcon}>
+            <Ionicons name={subStatus.icon} size={20} color={COLORS.onPrimary} />
           </View>
 
           <View style={{ flex: 1 }}>
@@ -501,7 +508,7 @@ const HomeworkCard = memo(
             </Text>
           </View>
 
-          <View style={[styles.dueBadge, { backgroundColor: due.bg }]}>
+          <View style={[styles.dueBadge, { backgroundColor: due.bg, borderColor: due.border }]}>
             <Text style={[styles.dueBadgeText, { color: due.color }]}>
               {due.label}
             </Text>
@@ -516,30 +523,30 @@ const HomeworkCard = memo(
         {/* Bottom chips */}
         <View style={styles.cardBottom}>
           <View style={styles.bottomChip}>
-            <Ionicons name="star-outline" size={12} color="#6B7280" />
+            <Ionicons name="star-outline" size={12} color={ACCENT.indigo.solid} />
             <Text style={styles.bottomChipText}>{item.max_score ?? 100} pts</Text>
           </View>
 
           {item.due_date && (
             <View style={styles.bottomChip}>
-              <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+              <Ionicons name="calendar-outline" size={12} color={ACCENT.indigo.solid} />
               <Text style={styles.bottomChipText}>{formatDate(item.due_date)}</Text>
             </View>
           )}
 
           {item.allow_late ? (
-            <View style={[styles.bottomChip, { backgroundColor: "#F0FDF4" }]}>
-              <Ionicons name="checkmark-outline" size={12} color="#059669" />
-              <Text style={[styles.bottomChipText, { color: "#059669" }]}>{t("studentHw.lateOk")}</Text>
+            <View style={[styles.bottomChip, { backgroundColor: statusBadge("success").bg, borderColor: statusBadge("success").border }]}>
+              <Ionicons name="checkmark-outline" size={12} color={SEMANTIC.success.text} />
+              <Text style={[styles.bottomChipText, { color: SEMANTIC.success.text }]}>{t("studentHw.lateOk")}</Text>
             </View>
           ) : (
-            <View style={[styles.bottomChip, { backgroundColor: "#FEF2F2" }]}>
-              <Ionicons name="close-outline" size={12} color="#DC2626" />
-              <Text style={[styles.bottomChipText, { color: "#DC2626" }]}>{t("studentHw.noLate")}</Text>
+            <View style={[styles.bottomChip, { backgroundColor: statusBadge("error").bg, borderColor: statusBadge("error").border }]}>
+              <Ionicons name="close-outline" size={12} color={SEMANTIC.error.text} />
+              <Text style={[styles.bottomChipText, { color: SEMANTIC.error.text }]}>{t("studentHw.noLate")}</Text>
             </View>
           )}
 
-          <View style={[styles.bottomChip, { backgroundColor: subStatus.bg }]}>
+          <View style={[styles.bottomChip, { backgroundColor: subStatus.bg, borderColor: subStatus.border }]}>
             <Ionicons name={subStatus.icon} size={12} color={subStatus.color} />
             <Text style={[styles.bottomChipText, { color: subStatus.color }]}>
               {subStatus.type === "graded"
@@ -728,7 +735,7 @@ export default function StudentHomeworkScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
         <Text style={styles.loadingText}>{t("studentHw.loading")}</Text>
       </View>
     );
@@ -741,8 +748,9 @@ export default function StudentHomeworkScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("studentHw.listTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -760,7 +768,7 @@ export default function StudentHomeworkScreen() {
           onPress={() => setActiveFilter("urgent")}
           activeOpacity={0.8}
         >
-          <Ionicons name="warning" size={18} color="#DC2626" />
+          <Ionicons name="warning" size={18} color={SEMANTIC.error.icon} />
           <Text style={styles.urgentBannerText}>
             {t("studentHome.urgentHomework", { count: stats.urgent })}
           </Text>
@@ -782,18 +790,18 @@ export default function StudentHomeworkScreen() {
 
       {/* Search */}
       <View style={styles.searchBar}>
-        <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+        <Ionicons name="search-outline" size={18} color={COLORS.textSubtle} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
           placeholder={t("studentHw.searchPh")}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={COLORS.textMuted}
           returnKeyType="search"
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch("")}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            <Ionicons name="close-circle" size={18} color={COLORS.textSubtle} />
           </TouchableOpacity>
         )}
       </View>
@@ -846,8 +854,8 @@ export default function StudentHomeworkScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.indigo.solid}
+            colors={[ACCENT.indigo.solid]}
           />
         }
         renderItem={({ item }) => (
@@ -855,7 +863,7 @@ export default function StudentHomeworkScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
+            <IconSquare icon="document-text-outline" accent="indigo" size={56} radius={16} />
             <Text style={styles.emptyTitle}>
               {activeFilter === "all"
                 ? t("studentHw.emptyNone")
@@ -886,19 +894,19 @@ export default function StudentHomeworkScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const modalStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   closeBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.slate.wash, alignItems: "center", justifyContent: "center",
   },
   headerTitle: {
-    flex: 1, fontSize: 17, fontWeight: "700", color: "#111827",
+    flex: 1, fontSize: 17, fontWeight: "700", color: COLORS.text,
     textAlign: "center", marginHorizontal: 8,
   },
   content: { padding: 16, paddingBottom: 32 },
@@ -908,81 +916,81 @@ const modalStyles = StyleSheet.create({
     padding: 12, alignItems: "center", gap: 4,
   },
   infoValue: { fontSize: 13, fontWeight: "700", textAlign: "center" },
-  infoLabel: { fontSize: 10, color: "#6B7280" },
+  infoLabel: { fontSize: 10, color: COLORS.textSecondary },
   descBox: {
-    backgroundColor: "#FFF", borderRadius: 12,
+    backgroundColor: COLORS.surface, borderRadius: 12,
     padding: 14, marginBottom: 10,
   },
-  descLabel: { fontSize: 11, fontWeight: "600", color: "#9CA3AF", marginBottom: 4 },
-  descText:  { fontSize: 14, color: "#374151", lineHeight: 20 },
+  descLabel: { fontSize: 11, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 4 },
+  descText:  { fontSize: 14, color: COLORS.text, lineHeight: 20 },
   instructBox: {
-    backgroundColor: "#EEF2FF", borderRadius: 12,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12,
     padding: 14, marginBottom: 10,
   },
   instructHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  instructTitle:  { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
-  instructText:   { fontSize: 13, color: "#374151", lineHeight: 20 },
+  instructTitle:  { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep },
+  instructText:   { fontSize: 13, color: COLORS.text, lineHeight: 20 },
   statusBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
     borderRadius: 12, padding: 12, marginBottom: 10,
   },
   statusText: { fontSize: 14, fontWeight: "600" },
   gradeBox: {
-    backgroundColor: "#ECFDF5", borderRadius: 12,
+    backgroundColor: SEMANTIC.success.bg, borderRadius: 12,
     padding: 14, marginBottom: 10,
   },
   gradeRow: {
     flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8,
   },
-  gradeScore: { fontSize: 22, fontWeight: "800", color: "#059669" },
-  gradePct:   { fontSize: 14, color: "#059669", fontWeight: "500" },
+  gradeScore: { fontSize: 22, fontWeight: "800", color: SEMANTIC.success.text },
+  gradePct:   { fontSize: 14, color: SEMANTIC.success.text, fontWeight: "500" },
   feedbackBox: {
-    backgroundColor: "#F0FDF4", borderRadius: 10, padding: 12,
+    backgroundColor: COLORS.surface, borderRadius: 10, padding: 12,
   },
   feedbackHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
-  feedbackTitle:  { fontSize: 12, fontWeight: "700", color: "#059669" },
-  feedbackText:   { fontSize: 13, color: "#374151", lineHeight: 20 },
+  feedbackTitle:  { fontSize: 12, fontWeight: "700", color: SEMANTIC.success.text },
+  feedbackText:   { fontSize: 13, color: COLORS.text, lineHeight: 20 },
   prevSubmission: {
-    backgroundColor: "#F9FAFB", borderRadius: 12,
+    backgroundColor: COLORS.page, borderRadius: 12,
     padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  prevSubmissionLabel: { fontSize: 11, fontWeight: "600", color: "#9CA3AF", marginBottom: 6 },
-  prevSubmissionText:  { fontSize: 13, color: "#374151", lineHeight: 20 },
-  prevSubmissionDate:  { fontSize: 11, color: "#9CA3AF", marginTop: 6, fontStyle: "italic" },
+  prevSubmissionLabel: { fontSize: 11, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 6 },
+  prevSubmissionText:  { fontSize: 13, color: COLORS.text, lineHeight: 20 },
+  prevSubmissionDate:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 6, fontStyle: "italic" },
   responseSection: { marginBottom: 8 },
-  responseLabel:   { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
+  responseLabel:   { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 6 },
   warnBanner: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#FEE2E2", borderRadius: 8,
+    backgroundColor: SEMANTIC.error.bg, borderRadius: 8,
     padding: 8, marginBottom: 8,
-    borderWidth: 1, borderColor: "#FECACA",
+    borderWidth: 1, borderColor: SEMANTIC.error.box,
   },
-  warnText: { flex: 1, fontSize: 12, color: "#DC2626", fontWeight: "500" },
+  warnText: { flex: 1, fontSize: 12, color: SEMANTIC.error.text, fontWeight: "500" },
   responseInput: {
-    backgroundColor: "#FFF", borderRadius: 12,
-    padding: 14, fontSize: 14, color: "#111827",
-    borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 12,
+    padding: 14, fontSize: 14, color: COLORS.text,
+    borderWidth: 1, borderColor: COLORS.border,
     height: 160, textAlignVertical: "top",
   },
-  charCount: { fontSize: 11, color: "#9CA3AF", textAlign: "right", marginTop: 4 },
+  charCount: { fontSize: 11, color: COLORS.textSecondary, textAlign: "right", marginTop: 4 },
   footer: {
-    padding: 16, backgroundColor: "#FFF",
-    borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    padding: 16, backgroundColor: COLORS.surface,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   submitBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#4F46E5", borderRadius: 14,
+    backgroundColor: ACCENT.indigo.solid, borderRadius: 14,
     paddingVertical: 16, gap: 8,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText:     { color: "#FFF", fontWeight: "800", fontSize: 16 },
+  submitBtnText:     { color: COLORS.onPrimary, fontWeight: "800", fontSize: 16 },
   gradedFooter: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#ECFDF5", borderRadius: 14,
+    backgroundColor: SEMANTIC.success.bg, borderRadius: 14,
     paddingVertical: 16, gap: 8,
   },
-  gradedFooterText: { fontSize: 15, fontWeight: "600", color: "#059669" },
+  gradedFooterText: { fontSize: 15, fontWeight: "600", color: SEMANTIC.success.text },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -990,93 +998,97 @@ const modalStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
+  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.page },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.slate.wash, alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   urgentBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FEE2E2", paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: "#FECACA",
+    backgroundColor: SEMANTIC.error.bg, paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: SEMANTIC.error.box,
   },
-  urgentBannerText: { flex: 1, fontSize: 13, color: "#DC2626", fontWeight: "600" },
-  urgentBannerLink: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  urgentBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "600" },
+  urgentBannerLink: { fontSize: 13, color: SEMANTIC.error.text, fontWeight: "700" },
   statsRow: {
     flexDirection: "row", gap: 8,
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   searchBar: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     marginHorizontal: 16, marginTop: 12,
     paddingHorizontal: 12, paddingVertical: 10,
     borderRadius: 12, gap: 8,
-    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 2,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 2,
   },
-  searchInput: { flex: 1, fontSize: 14, color: "#111827", padding: 0 },
+  searchInput: { flex: 1, fontSize: 14, color: COLORS.text, padding: 0 },
   filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent",
+    borderRadius: 20, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  filterChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  filterChipUrgent:     { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
-  filterChipText:       { fontSize: 12, color: "#6B7280", fontWeight: "500" },
-  filterChipTextActive: { color: "#4F46E5", fontWeight: "700" },
-  filterChipTextUrgent: { color: "#DC2626", fontWeight: "700" },
+  filterChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  filterChipUrgent:     { backgroundColor: SEMANTIC.error.bg, borderColor: SEMANTIC.error.box },
+  filterChipText:       { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  filterChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
+  filterChipTextUrgent: { color: SEMANTIC.error.text, fontWeight: "700" },
   listContent: { padding: 16, paddingBottom: 32 },
   card: {
-    backgroundColor: "#FFF", borderRadius: 16,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 16,
     padding: 14, marginBottom: 12,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.indigo.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  cardUrgent: { borderWidth: 1, borderColor: "#FECACA", backgroundColor: "#FFFAFA" },
+  cardUrgent: { borderColor: SEMANTIC.error.box, borderTopColor: ACCENT.red.base, backgroundColor: ACCENT.red.wash },
   cardTop: {
     flexDirection: "row", alignItems: "flex-start",
     gap: 10, marginBottom: 8,
   },
   subjectIcon: {
     width: 40, height: 40, borderRadius: 10,
+    backgroundColor: ACCENT.indigo.solid,
     alignItems: "center", justifyContent: "center",
   },
-  cardTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  cardMeta:  { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
-  cardDesc:  { fontSize: 12, color: "#6B7280", marginBottom: 8 },
+  cardTitle: { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  cardMeta:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  cardDesc:  { fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 },
   dueBadge: {
     paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 8, alignSelf: "flex-start",
+    borderRadius: 8, alignSelf: "flex-start", borderWidth: 1,
   },
   dueBadgeText: { fontSize: 11, fontWeight: "700" },
   cardBottom: {
     flexDirection: "row", flexWrap: "wrap", gap: 6,
-    paddingTop: 8, borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border,
     marginBottom: 6,
   },
   bottomChip: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#F3F4F6", borderRadius: 8,
+    backgroundColor: COLORS.surface, borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 8, paddingVertical: 4,
   },
-  bottomChipText: { fontSize: 11, color: "#6B7280", fontWeight: "500" },
-  tapHint: { fontSize: 11, color: "#9CA3AF", fontStyle: "italic" },
+  bottomChipText: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
+  tapHint: { fontSize: 11, color: COLORS.textSecondary, fontStyle: "italic" },
   emptyState: {
     alignItems: "center", paddingVertical: 60,
     paddingHorizontal: 24, gap: 8,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 });

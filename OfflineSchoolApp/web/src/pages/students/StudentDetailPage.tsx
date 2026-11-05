@@ -21,6 +21,7 @@ import { Pencil,
   KeyRound,
   ShieldAlert,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 
 import { useUser }              from "@/store/auth.store";
@@ -35,11 +36,12 @@ import {
   resetStudentPassword,
 }                               from "@/services/student.service";
 import { cn }                   from "@/utils/cn";
-import { DASH_TINT }            from "@/config/dashboardTint";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Button }               from "@/components/ui/Button";
+import { PageIcon }             from "@/components/ui/PageHeader";
 import { getErrorMessage }      from "@/lib/axios";
 import {
   uploadStudentPhoto, deleteStudentPhoto,
@@ -157,7 +159,7 @@ function InfoRow({
   icon: Icon,
   label,
   value,
-  iconColor = "text-gray-400",
+  iconColor = DASH_TINT.blue.glyph,
   mono = false,
 }: {
   icon:       React.ElementType;
@@ -173,11 +175,11 @@ function InfoRow({
         <Icon className={cn("h-4 w-4", iconColor)} />
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
           {label}
         </p>
         <p className={cn(
-          "mt-0.5 text-sm font-medium text-gray-900 wrap-break-word",
+          "mt-0.5 text-sm font-medium text-ink wrap-break-word",
           mono && "font-mono tracking-widest"
         )}>
           {value}
@@ -189,14 +191,23 @@ function InfoRow({
 
 function Section({
   title,
+  icon: Icon,
+  accent = "blue",
   children,
 }: {
   title:    string;
+  icon:     React.ElementType;
+  accent?:  DashAccent;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-sm font-bold text-gray-900">{title}</h2>
+    <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.blue.edge)}>
+      <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+        <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)} aria-hidden="true">
+          <Icon className="h-4 w-4" />
+        </span>
+        {title}
+      </h2>
       <div className="flex flex-col gap-4">{children}</div>
     </div>
   );
@@ -461,7 +472,7 @@ function MoveClassPicker({
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
           <ArrowRightLeft className="h-5 w-5 text-primary-600" />
-          <h3 className="text-lg font-bold text-gray-900">{t("studentDetail.moveToClass")}</h3>
+          <h3 className="text-lg font-bold text-ink">{t("studentDetail.moveToClass")}</h3>
         </div>
 
         {others.length === 0 ? (
@@ -578,7 +589,7 @@ function PhotoCard({
   };
 
   return (
-    <div className="flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={cn("flex items-start gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.blue.edge)}>
       <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-primary-500 bg-primary-50">
         {src
           ? <img src={src} alt="" className="h-full w-full object-cover" />
@@ -586,8 +597,8 @@ function PhotoCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-bold text-gray-700">{t("photo.title")}</h2>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("photo.hint")}</p>
+        <h2 className="text-sm font-bold text-ink">{t("photo.title")}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t("photo.hint")}</p>
 
         <div className="mt-3 flex flex-wrap gap-2">
           <input
@@ -679,16 +690,21 @@ function VerificationsCard({ studentId, schoolId }: {
       : [t("verif.reportCard"), r.examName].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-bold text-gray-700">{t("verif.title")}</h2>
-      <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("verif.hint")}</p>
+    <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.slate.edge)}>
+      <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+        <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+          <ShieldCheck className="h-4 w-4" />
+        </span>
+        {t("verif.title")}
+      </h2>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t("verif.hint")}</p>
 
       {rows.length === 0 ? (
-        <p className="mt-3 text-xs text-gray-400">
+        <p className="mt-3 text-xs text-ink-muted">
           {query.isLoading ? "…" : t("verif.none")}
         </p>
       ) : (
-        <ul className="mt-3 divide-y divide-gray-100">
+        <ul className="mt-3 divide-y divide-line">
           {rows.map((r) => {
             const revoked = Boolean(r.revokedAt);
             return (
@@ -1022,11 +1038,13 @@ export default function StudentDetailPage() {
           <ChevronLeft className="h-5 w-5" />
         </button>
 
+        <PageIcon />
+
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold text-gray-900">
+          <h1 className="truncate text-2xl font-bold text-ink">
             {student.name}
           </h1>
-          <p className="text-sm text-gray-500">{t("studentDetail.title")}</p>
+          <p className="text-sm text-ink-muted">{t("studentDetail.title")}</p>
         </div>
 
         <button
@@ -1042,7 +1060,7 @@ export default function StudentDetailPage() {
       </div>
 
       {/* ── Profile card ── */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className={cn(DASH_TINT.blue.card, "rounded-2xl p-6")}>
         <div className="flex items-center gap-4">
           {/* Avatar */}
           <div
@@ -1058,7 +1076,7 @@ export default function StudentDetailPage() {
 
           {/* Name + badges */}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xl font-bold text-gray-900">
+            <p className="truncate text-xl font-bold text-ink">
               {student.name}
             </p>
 
@@ -1071,7 +1089,7 @@ export default function StudentDetailPage() {
 
             {/* Fall back to admission number */}
             {!enrollmentNo && student.admissionNumber && (
-              <p className="mt-0.5 text-sm text-gray-400">
+              <p className="mt-0.5 text-sm text-ink-muted">
                 #{student.admissionNumber}
               </p>
             )}
@@ -1113,7 +1131,7 @@ export default function StudentDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
 
         {/* ── Personal info ── */}
-        <Section title={t("studentDetail.personal")}>
+        <Section title={t("studentDetail.personal")} icon={User} accent="blue">
           <InfoRow
             icon={User}
             label={t("common.fullName")}
@@ -1149,7 +1167,7 @@ export default function StudentDetailPage() {
             icon={Hash}
             label={t("studentDetail.admissionNumber")}
             value={student.admissionNumber}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={User}
@@ -1161,12 +1179,12 @@ export default function StudentDetailPage() {
             icon={MapPin}
             label={t("common.address")}
             value={student.address}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
         </Section>
 
         {/* ── School info ── */}
-        <Section title={t("studentDetail.school")}>
+        <Section title={t("studentDetail.school")} icon={School} accent="indigo">
           <InfoRow
             icon={School}
             label={t("studentDetail.schoolName")}
@@ -1219,19 +1237,19 @@ export default function StudentDetailPage() {
             icon={School}
             label={t("settings.schoolCode")}
             value={school?.code ?? null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={School}
             label={t("settings.regNumber")}
             value={school?.registrationNumber ?? null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={Calendar}
             label={t("settings.yearFounded")}
             value={school?.foundedYear ? String(school.foundedYear) : null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={User}
@@ -1279,13 +1297,13 @@ export default function StudentDetailPage() {
             icon={Calendar}
             label={t("common.created")}
             value={formatDate(student.createdAt)}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={Calendar}
             label={t("common.lastUpdated")}
             value={formatDate(student.updatedAt)}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
         </Section>
 
@@ -1323,7 +1341,7 @@ export default function StudentDetailPage() {
 
         {/* ── Actions ── */}
         <div className="flex flex-col gap-3 lg:col-span-2">
-          <h2 className="text-sm font-bold text-gray-700">{t("common.actions")}</h2>
+          <h2 className="text-sm font-bold text-ink">{t("common.actions")}</h2>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {/*

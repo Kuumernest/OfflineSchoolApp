@@ -4,6 +4,8 @@ import { useTranslation }           from "react-i18next";
 import { Compass, ArrowLeft }       from "lucide-react";
 import { Button }                   from "@/components/ui/Button";
 import { Card }                     from "@/components/ui/Card";
+import { DASH_TINT }                from "@/config/dashboardTint";
+import { cn }                       from "@/utils/cn";
 
 export default function NotFoundPage() {
   const { t }        = useTranslation();
@@ -12,8 +14,8 @@ export default function NotFoundPage() {
 
   return (
     <Card className="mx-auto mt-10 max-w-xl text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-50">
-        <Compass className="h-6 w-6 text-primary-600" aria-hidden="true" />
+      <div className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.blue.box)}>
+        <Compass className="h-6 w-6" aria-hidden="true" />
       </div>
 
       <h2 className="mt-4 text-lg font-semibold text-ink">

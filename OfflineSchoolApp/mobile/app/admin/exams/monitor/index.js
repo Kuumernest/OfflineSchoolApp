@@ -12,6 +12,8 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import api              from "../../../../src/services/api";
 import { ExamService }  from "../../../../src/services/exam.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -38,19 +40,19 @@ const C = {
 
 const STATUS_META = {
   pending: {
-    color: C.warning, bg: C.warningBg,
+    tone: "warning", accent: "amber",
     labelKey: "results.pending",   icon: "time-outline",
   },
   submitted: {
-    color: C.primary, bg: C.primaryBg,
+    tone: "info", accent: "blue",
     labelKey: "results.submitted", icon: "cloud-upload-outline",
   },
   approved: {
-    color: C.success, bg: C.successBg,
+    tone: "success", accent: "green",
     labelKey: "results.approved",  icon: "checkmark-circle-outline",
   },
   rejected: {
-    color: C.error, bg: C.errorBg,
+    tone: "error", accent: "red",
     labelKey: "results.rejected",  icon: "close-circle-outline",
   },
 };
@@ -183,7 +185,7 @@ const rm = StyleSheet.create({
 // META CHIP
 // ─────────────────────────────────────────────────────────
 
-function MetaChip({ icon, label, color = C.gray500 }) {
+function MetaChip({ icon, label, color = COLORS.textSecondary }) {
   return (
     <View style={mc.chip}>
       <Ionicons name={icon} size={11} color={color} />
@@ -197,7 +199,7 @@ const mc = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   C.gray50,
+    backgroundColor:   COLORS.surface,
     borderRadius:      6,
     paddingHorizontal: 7,
     paddingVertical:   3,
@@ -367,8 +369,9 @@ export default function SubmissionMonitorScreen() {
       <View style={s.screen}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={C.gray900} />
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
+          <HeaderIcon style={s.headerIcon} />
           <Text style={s.headerTitle}>{t("examMonitor.title")}</Text>
         </View>
 
@@ -388,11 +391,13 @@ export default function SubmissionMonitorScreen() {
               </Text>
             }
             ListEmptyComponent={
-              <View style={s.empty}>
-                <Ionicons name="document-outline" size={48} color={C.gray200} />
-                <Text style={s.emptyTitle}>{t("examMonitor.noExams")}</Text>
-                <Text style={s.emptyText}>{t("examMonitor.createFirst")}</Text>
-              </View>
+              <EmptyState
+                icon="document-text"
+                accent="amber"
+                title={t("examMonitor.noExams")}
+                message={t("examMonitor.createFirst")}
+                style={s.empty}
+              />
             }
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -404,7 +409,7 @@ export default function SubmissionMonitorScreen() {
                 activeOpacity={0.7}
               >
                 <View style={s.examCardIcon}>
-                  <Ionicons name="document-text-outline" size={20} color={C.primary} />
+                  <Ionicons name="document-text-outline" size={20} color={COLORS.onPrimary} />
                 </View>
                 <View style={s.examCardInfo}>
                   <Text style={s.examCardName} numberOfLines={1}>{item.name}</Text>
@@ -413,7 +418,7 @@ export default function SubmissionMonitorScreen() {
                       .filter(Boolean).join("  ·  ")}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={C.gray400} />
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
               </TouchableOpacity>
             )}
           />
@@ -442,8 +447,9 @@ export default function SubmissionMonitorScreen() {
           onPress={() => setSelectedExam(null)}
           style={s.backBtn}
         >
-          <Ionicons name="arrow-back" size={24} color={C.gray900} />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={s.headerIcon} />
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={1}>{t("examMonitor.title")}</Text>
           <Text style={s.headerSub} numberOfLines={1}>{selectedExam.name}</Text>
@@ -459,17 +465,17 @@ export default function SubmissionMonitorScreen() {
       {/* Summary row */}
       <View style={s.summaryRow}>
         {[
-          { labelKey: "common.total",     count: counts.total,     color: C.primary },
-          { labelKey: "results.pending",   count: counts.pending,   color: C.warning },
-          { labelKey: "results.submitted", count: counts.submitted, color: C.primary },
-          { labelKey: "results.approved",  count: counts.approved,  color: C.success },
-          { labelKey: "results.rejected",  count: counts.rejected,  color: C.error   },
+          { labelKey: "common.total",     count: counts.total,     accent: "amber" },
+          { labelKey: "results.pending",   count: counts.pending,   accent: "amber" },
+          { labelKey: "results.submitted", count: counts.submitted, accent: "blue"  },
+          { labelKey: "results.approved",  count: counts.approved,  accent: "green" },
+          { labelKey: "results.rejected",  count: counts.rejected,  accent: "red"   },
         ].map((item) => (
           <View
             key={item.labelKey}
-            style={[s.summaryChip, { borderColor: item.color + "30" }]}
+            style={[s.summaryChip, { backgroundColor: ACCENT[item.accent].wash, borderColor: ACCENT[item.accent].base + "4D" }]}
           >
-            <Text style={[s.summaryCount, { color: item.color }]}>
+            <Text style={[s.summaryCount, { color: ACCENT[item.accent].deep }]}>
               {item.count}
             </Text>
             <Text style={s.summaryLabel}>{t(item.labelKey)}</Text>
@@ -528,17 +534,15 @@ export default function SubmissionMonitorScreen() {
               />
             }
             ListEmptyComponent={
-              <View style={s.empty}>
-                <Ionicons name="cloud-upload-outline" size={48} color={C.gray200} />
-                <Text style={s.emptyTitle}>
-                  {filter === "all" ? t("examMonitor.noneYet") : t("examMonitor.noneForFilter")}
-                </Text>
-                <Text style={s.emptyText}>
-                  {filter === "all"
-                    ? t("examMonitor.noneYetHint")
-                    : t("examMonitor.tryFilter")}
-                </Text>
-              </View>
+              <EmptyState
+                icon="cloud-upload"
+                accent="amber"
+                title={filter === "all" ? t("examMonitor.noneYet") : t("examMonitor.noneForFilter")}
+                message={filter === "all"
+                  ? t("examMonitor.noneYetHint")
+                  : t("examMonitor.tryFilter")}
+                style={s.empty}
+              />
             }
             renderItem={({ item }) => {
               const meta        = STATUS_META[item.submissionStatus] || STATUS_META.pending;
@@ -548,13 +552,14 @@ export default function SubmissionMonitorScreen() {
               return (
                 <View style={[
                   s.card,
+                  { backgroundColor: ACCENT[meta.accent].wash, borderLeftColor: ACCENT[meta.accent].base },
                   isSubmitted                          && s.cardHighlight,
                   item.submissionStatus === "rejected" && s.cardRejected,
                   item.submissionStatus === "approved" && s.cardApproved,
                 ]}>
                   <View style={s.cardHeader}>
-                    <View style={[s.cardIconBg, { backgroundColor: meta.bg }]}>
-                      <Ionicons name={meta.icon} size={20} color={meta.color} />
+                    <View style={[s.cardIconBg, { backgroundColor: ACCENT[meta.accent].solid }]}>
+                      <Ionicons name={meta.icon} size={20} color={COLORS.onPrimary} />
                     </View>
                     <View style={s.cardHeaderText}>
                       <Text style={s.subjectName} numberOfLines={1}>
@@ -564,11 +569,12 @@ export default function SubmissionMonitorScreen() {
                         {item.teacherName || t("examMonitor.noTeacher")}
                       </Text>
                     </View>
-                    <View style={[s.statusBadge, { backgroundColor: meta.bg }]}>
-                      <Text style={[s.statusText, { color: meta.color }]}>
-                        {t(meta.labelKey)}
-                      </Text>
-                    </View>
+                    <Badge
+                      label={t(meta.labelKey)}
+                      tone={meta.tone}
+                      style={s.statusBadge}
+                      textStyle={s.statusText}
+                    />
                   </View>
 
                   <View style={s.metaRow}>
@@ -577,13 +583,13 @@ export default function SubmissionMonitorScreen() {
                     <MetaChip
                       icon="create-outline"
                       label={`${item.totalScoresEntered ?? 0} entered`}
-                      color={(item.totalScoresEntered ?? 0) > 0 ? C.success : C.gray400}
+                      color={(item.totalScoresEntered ?? 0) > 0 ? ACCENT.green.deep : COLORS.textSecondary}
                     />
                   </View>
 
                   {item.submissionStatus === "rejected" && item.rejectReason && (
                     <View style={s.rejectBox}>
-                      <Ionicons name="alert-circle-outline" size={14} color={C.error} />
+                      <Ionicons name="alert-circle-outline" size={14} color={SEMANTIC.error.icon} />
                       <Text style={s.rejectBoxText}>
                         {t("examMonitor.reasonLabel", { reason: item.rejectReason })}
                       </Text>
@@ -659,22 +665,23 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   C.white,
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: C.gray100,
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
-  headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   refreshBtn:   { padding: 8 },
   summaryRow: {
     flexDirection:     "row",
@@ -694,7 +701,7 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   summaryCount: { fontSize: 18, fontWeight: "800" },
-  summaryLabel: { fontSize: 9, color: C.gray500, marginTop: 2, fontWeight: "600" },
+  summaryLabel: { fontSize: 9, color: COLORS.textSecondary, marginTop: 2, fontWeight: "600" },
   bodyContainer: { flex: 1 },
   filterBarWrapper: {
     height:            46,
@@ -709,33 +716,31 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   6,
     borderRadius:      20,
-    backgroundColor:   C.gray100,
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       C.gray200,
+    borderColor:       COLORS.border,
   },
-  filterChipActive:     { backgroundColor: C.primary, borderColor: C.primary },
-  filterChipText:       { fontSize: 12, fontWeight: "600", color: C.gray500 },
-  filterChipTextActive: { color: C.white },
+  filterChipActive:     { backgroundColor: ACCENT.amber.wash, borderColor: ACCENT.amber.base },
+  filterChipText:       { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary },
+  filterChipTextActive: { color: ACCENT.amber.deep },
   list:     { padding: 16, gap: 12 },
-  listHint: { fontSize: 13, color: C.gray500, marginBottom: 8 },
+  listHint: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 8 },
   empty: {
-    alignItems:        "center",
     paddingTop:        60,
     paddingHorizontal: 32,
-    gap:               10,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: C.gray700 },
-  emptyText:  { fontSize: 13, color: C.gray500, textAlign: "center" },
   examCard: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    14,
     padding:         16,
     gap:             12,
     borderWidth:     1,
-    borderColor:     C.gray200,
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.amber.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -744,28 +749,30 @@ const s = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    12,
-    backgroundColor: C.primaryBg,
+    backgroundColor: ACCENT.amber.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
   examCardInfo: { flex: 1 },
-  examCardName: { fontSize: 15, fontWeight: "700", color: C.gray900 },
-  examCardMeta: { fontSize: 12, color: C.gray500, marginTop: 2 },
+  examCardName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  examCardMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   card: {
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    16,
     padding:         16,
     gap:             10,
     borderWidth:     1,
-    borderColor:     C.gray200,
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.amber.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
-  cardHighlight: { borderColor: C.primary, borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: C.primary },
-  cardRejected:  { borderLeftWidth: 4, borderLeftColor: C.error, borderColor: "#FECACA" },
-  cardApproved:  { borderLeftWidth: 4, borderLeftColor: C.success, borderColor: "#A7F3D0" },
+  cardHighlight: { borderColor: ACCENT.blue.base, borderWidth: 1.5, borderLeftWidth: 4, borderLeftColor: ACCENT.blue.base },
+  cardRejected:  { borderLeftWidth: 4, borderLeftColor: ACCENT.red.base, borderColor: SEMANTIC.error.box },
+  cardApproved:  { borderLeftWidth: 4, borderLeftColor: ACCENT.green.base, borderColor: SEMANTIC.success.box },
   cardHeader:    { flexDirection: "row", alignItems: "center", gap: 10 },
   cardIconBg: {
     width:          40,
@@ -775,21 +782,21 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   cardHeaderText: { flex: 1 },
-  subjectName:    { fontSize: 15, fontWeight: "700", color: C.gray900 },
-  teacherName:    { fontSize: 12, color: C.gray500, marginTop: 2 },
-  statusBadge:    { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  subjectName:    { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  teacherName:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  statusBadge:    { alignSelf: "auto", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   statusText:     { fontSize: 11, fontWeight: "700" },
   metaRow:        { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   rejectBox: {
     flexDirection:   "row",
     alignItems:      "flex-start",
     gap:             6,
-    backgroundColor: C.errorBg,
+    backgroundColor: SEMANTIC.error.box,
     borderRadius:    8,
     padding:         10,
   },
-  rejectBoxText: { flex: 1, fontSize: 12, color: C.error, lineHeight: 18 },
-  timestamp:     { fontSize: 11, color: C.gray400, fontStyle: "italic" },
+  rejectBoxText: { flex: 1, fontSize: 12, color: SEMANTIC.error.text, lineHeight: 18 },
+  timestamp:     { fontSize: 11, color: COLORS.textSecondary, fontStyle: "italic" },
   actionRow:     { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   viewBtn: {
     flexDirection:     "row",

@@ -28,11 +28,13 @@ import { useAuthStore }         from "../../../src/store/auth.store";
 import { useAnnouncementStore } from "../../../src/store/announcement.store";
 import { getDatabase }          from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const PRIORITIES = [
-  { key: "low",    icon: "remove-circle-outline", color: "#059669", bg: "#ECFDF5" },
-  { key: "normal", icon: "alert-circle-outline",  color: "#D97706", bg: "#FEF3C7" },
-  { key: "urgent", icon: "warning-outline",       color: "#DC2626", bg: "#FEE2E2" },
+  { key: "low",    icon: "remove-circle-outline", color: ACCENT.slate.solid, bg: ACCENT.slate.wash, deep: ACCENT.slate.deep, base: ACCENT.slate.base },
+  { key: "normal", icon: "alert-circle-outline",  color: ACCENT.sky.solid,   bg: ACCENT.sky.wash,   deep: ACCENT.sky.deep,   base: ACCENT.sky.base   },
+  { key: "urgent", icon: "warning-outline",       color: ACCENT.red.solid,   bg: ACCENT.red.wash,   deep: ACCENT.red.deep,   base: ACCENT.red.base   },
 ];
 
 const MAX_TITLE = 120;
@@ -117,7 +119,7 @@ const ClassChip = React.memo(({ cls, selected, onToggle, single = false }) => {
           <Ionicons
             name={single ? "radio-button-on" : "checkmark-circle"}
             size={14}
-            color="#4F46E5"
+            color={ACCENT.indigo.deep}
           />
         )}
         <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
@@ -136,7 +138,7 @@ const SubjectChip = React.memo(({ subject, selected, onSelect }) => (
     activeOpacity={0.7}
   >
     {selected && (
-      <Ionicons name="checkmark-circle" size={14} color="#059669" />
+      <Ionicons name="checkmark-circle" size={14} color={ACCENT.slate.deep} />
     )}
     <Text style={[styles.chipText, selected && styles.subjectChipText]}>
       {subject.name}
@@ -153,8 +155,8 @@ const PriorityPill = React.memo(({ item, selected, onSelect }) => {
       style={[
         styles.priorityPill,
         {
-          borderColor:     selected ? item.color : "transparent",
-          backgroundColor: selected ? item.bg    : "#F9FAFB",
+          borderColor:     selected ? item.base : COLORS.border,
+          backgroundColor: selected ? item.bg   : COLORS.surface,
         },
       ]}
       onPress={() => onSelect(item.key)}
@@ -163,11 +165,11 @@ const PriorityPill = React.memo(({ item, selected, onSelect }) => {
       <Ionicons
         name={item.icon}
         size={15}
-        color={selected ? item.color : "#9CA3AF"}
+        color={selected ? item.deep : COLORS.textSecondary}
       />
       <Text style={[
         styles.priorityText,
-        { color: selected ? item.color : "#6B7280", fontWeight: selected ? "700" : "500" },
+        { color: selected ? item.deep : COLORS.textSecondary, fontWeight: selected ? "700" : "500" },
       ]}>
         {t(`announceCreate.priority.${item.key}`)}
       </Text>
@@ -178,19 +180,22 @@ const PriorityPill = React.memo(({ item, selected, onSelect }) => {
 const CharCount = ({ current, max }) => {
   const ratio = current / max;
   const color =
-    ratio > 0.9  ? "#DC2626" :
-    ratio > 0.75 ? "#D97706" : "#9CA3AF";
+    ratio > 0.9  ? SEMANTIC.error.text :
+    ratio > 0.75 ? SEMANTIC.warning.text : COLORS.textSecondary;
   return (
     <Text style={[styles.charCount, { color }]}>{current}/{max}</Text>
   );
 };
 
-const FieldLabel = ({ label, required, right }) => (
+const FieldLabel = ({ label, required, right, icon, accent = "sky" }) => (
   <View style={styles.fieldLabelRow}>
-    <Text style={styles.fieldLabel}>
-      {label}
-      {required && <Text style={{ color: "#DC2626" }}> *</Text>}
-    </Text>
+    <View style={styles.fieldLabelLead}>
+      {icon ? <IconSquare icon={icon} accent={accent} size={28} /> : null}
+      <Text style={styles.fieldLabel}>
+        {label}
+        {required && <Text style={{ color: SEMANTIC.error.text }}> *</Text>}
+      </Text>
+    </View>
     {right}
   </View>
 );
@@ -382,7 +387,7 @@ export default function CreateAnnouncementScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
         <View style={styles.header}>
           <TouchableOpacity
@@ -390,9 +395,10 @@ export default function CreateAnnouncementScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="close" size={22} color="#111827" />
+            <Ionicons name="close" size={22} color={COLORS.text} />
           </TouchableOpacity>
 
+          <HeaderIcon style={styles.headerIcon} />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{t("announceCreate.title")}</Text>
             <Text style={styles.headerSub}>
@@ -426,23 +432,23 @@ export default function CreateAnnouncementScreen() {
         >
           {/* NOTICE TYPE */}
           <View style={styles.card}>
-            <FieldLabel label={t("announceCreate.labelNoticeType")} />
+            <FieldLabel label={t("announceCreate.labelNoticeType")} icon="megaphone" />
             <View style={styles.typeToggleRow}>
               <TouchableOpacity
                 style={[styles.typeToggleBtn, !isSubject && styles.typeToggleBtnActive]}
                 onPress={() => handleNoticeTypeChange("general")}
                 activeOpacity={0.7}
               >
-                <Ionicons name="megaphone-outline" size={18} color={!isSubject ? "#4F46E5" : "#9CA3AF"} />
+                <Ionicons name="megaphone-outline" size={18} color={!isSubject ? ACCENT.sky.deep : COLORS.textSecondary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.typeToggleLabel, !isSubject && { color: "#4F46E5", fontWeight: "700" }]}>
+                  <Text style={[styles.typeToggleLabel, !isSubject && { color: ACCENT.sky.deep, fontWeight: "700" }]}>
                     {t("announceCreate.typeGeneral")}
                   </Text>
                   <Text style={styles.typeToggleSub}>
                     {t("announceCreate.typeGeneralSub")}
                   </Text>
                 </View>
-                {!isSubject && <Ionicons name="checkmark-circle" size={16} color="#4F46E5" />}
+                {!isSubject && <Ionicons name="checkmark-circle" size={16} color={ACCENT.sky.deep} />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -450,16 +456,16 @@ export default function CreateAnnouncementScreen() {
                 onPress={() => handleNoticeTypeChange("subject")}
                 activeOpacity={0.7}
               >
-                <Ionicons name="book-outline" size={18} color={isSubject ? "#059669" : "#9CA3AF"} />
+                <Ionicons name="book-outline" size={18} color={isSubject ? ACCENT.slate.deep : COLORS.textSecondary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.typeToggleLabel, isSubject && { color: "#059669", fontWeight: "700" }]}>
+                  <Text style={[styles.typeToggleLabel, isSubject && { color: ACCENT.slate.deep, fontWeight: "700" }]}>
                     {t("announceCreate.typeSubject")}
                   </Text>
                   <Text style={styles.typeToggleSub}>
                     {t("announceCreate.typeSubjectSub")}
                   </Text>
                 </View>
-                {isSubject && <Ionicons name="checkmark-circle" size={16} color="#059669" />}
+                {isSubject && <Ionicons name="checkmark-circle" size={16} color={ACCENT.slate.deep} />}
               </TouchableOpacity>
             </View>
           </View>
@@ -469,6 +475,8 @@ export default function CreateAnnouncementScreen() {
             <View style={styles.card}>
               <FieldLabel
                 label={t("announceCreate.labelSendTo")}
+                icon="school"
+                accent="indigo"
                 required
                 right={
                   assignedClasses.length > 0 ? (
@@ -491,7 +499,7 @@ export default function CreateAnnouncementScreen() {
                 </View>
               ) : assignedClasses.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Ionicons name="school-outline" size={28} color="#D1D5DB" />
+                  <Ionicons name="school-outline" size={28} color={ACCENT.indigo.solid} />
                   <Text style={styles.emptyTitle}>
                     {t("announceCreate.noClassesTitle")}
                   </Text>
@@ -514,7 +522,7 @@ export default function CreateAnnouncementScreen() {
               {errors.classes && <Text style={styles.errText}>{errors.classes}</Text>}
               {selectedClassIds.length > 0 && (
                 <View style={styles.selectedNote}>
-                  <Ionicons name="checkmark-circle" size={14} color="#4F46E5" />
+                  <Ionicons name="checkmark-circle" size={14} color={ACCENT.indigo.deep} />
                   <Text style={styles.selectedNoteText}>
                     {t("announceCreate.classesSelected", {
                       count: selectedClassIds.length,
@@ -543,7 +551,7 @@ export default function CreateAnnouncementScreen() {
                 </View>
               ) : assignedClasses.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Ionicons name="school-outline" size={28} color="#D1D5DB" />
+                  <Ionicons name="school-outline" size={28} color={ACCENT.indigo.solid} />
                   <Text style={styles.emptyTitle}>
                     {t("announceCreate.noClassesTitle")}
                   </Text>
@@ -567,8 +575,8 @@ export default function CreateAnnouncementScreen() {
               {errors.classes && <Text style={styles.errText}>{errors.classes}</Text>}
               {subjectClassId && (
                 <View style={styles.selectedNote}>
-                  <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                  <Text style={[styles.selectedNoteText, { color: "#059669" }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={ACCENT.indigo.deep} />
+                  <Text style={[styles.selectedNoteText, { color: ACCENT.indigo.deep }]}>
                     {t("announceCreate.classSelected", {
                       name:
                         assignedClasses.find((c) => c.id === subjectClassId)?.name ||
@@ -584,7 +592,7 @@ export default function CreateAnnouncementScreen() {
           {isSubject && subjectClassId && (
             <View style={styles.card}>
               <View style={styles.stepRow}>
-                <View style={[styles.stepBadge, { backgroundColor: "#059669" }]}>
+                <View style={[styles.stepBadge, { backgroundColor: ACCENT.slate.solid }]}>
                   <Text style={styles.stepBadgeText}>2</Text>
                 </View>
                 <FieldLabel label={t("announceCreate.labelPickSubject")} required />
@@ -598,7 +606,7 @@ export default function CreateAnnouncementScreen() {
                 </View>
               ) : availableSubjects.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Ionicons name="book-outline" size={28} color="#D1D5DB" />
+                  <Ionicons name="book-outline" size={28} color={ACCENT.slate.solid} />
                   <Text style={styles.emptyTitle}>
                     {t("announceCreate.noSubjectsTitle")}
                   </Text>
@@ -621,8 +629,8 @@ export default function CreateAnnouncementScreen() {
               {errors.subject && <Text style={styles.errText}>{errors.subject}</Text>}
               {selectedSubject && (
                 <View style={styles.selectedNote}>
-                  <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                  <Text style={[styles.selectedNoteText, { color: "#059669" }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={ACCENT.slate.deep} />
+                  <Text style={[styles.selectedNoteText, { color: ACCENT.slate.deep }]}>
                     {t("announceCreate.subjectTabNote", { name: selectedSubject.name })}
                   </Text>
                 </View>
@@ -632,7 +640,7 @@ export default function CreateAnnouncementScreen() {
 
           {/* PRIORITY */}
           <View style={styles.card}>
-            <FieldLabel label={t("announceCreate.labelPriority")} />
+            <FieldLabel label={t("announceCreate.labelPriority")} icon="flag" accent="amber" />
             <View style={styles.priorityRow}>
               {PRIORITIES.map((p) => (
                 <PriorityPill key={p.key} item={p} selected={priority === p.key} onSelect={setPriority} />
@@ -644,6 +652,7 @@ export default function CreateAnnouncementScreen() {
           <View style={styles.card}>
             <FieldLabel
               label={t("announceCreate.labelTitle")}
+              icon="text"
               required
               right={<CharCount current={title.length} max={MAX_TITLE} />}
             />
@@ -669,6 +678,7 @@ export default function CreateAnnouncementScreen() {
           <View style={styles.card}>
             <FieldLabel
               label={t("announceCreate.labelMessage")}
+              icon="document-text"
               required
               right={<CharCount current={body.length} max={MAX_BODY} />}
             />
@@ -690,6 +700,7 @@ export default function CreateAnnouncementScreen() {
           <View style={styles.card}>
             <FieldLabel
               label={t("announceCreate.labelExpiry")}
+              icon="time"
               right={
                 <Text style={styles.optionalLabel}>{t("announceCreate.optional")}</Text>
               }
@@ -714,12 +725,12 @@ export default function CreateAnnouncementScreen() {
               <View style={styles.previewBox}>
                 <View style={styles.previewTop}>
                   <View style={[styles.previewIcon, {
-                    backgroundColor: isSubject ? "#ECFDF5" : selPriority.bg,
+                    backgroundColor: isSubject ? ACCENT.slate.solid : selPriority.color,
                   }]}>
                     <Ionicons
                       name={isSubject ? "book" : selPriority.icon}
                       size={16}
-                      color={isSubject ? "#059669" : selPriority.color}
+                      color={COLORS.onPrimary}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
@@ -733,8 +744,8 @@ export default function CreateAnnouncementScreen() {
                     </Text>
                   </View>
                   {isSubject && (
-                    <View style={[styles.previewBadge, { backgroundColor: "#ECFDF5" }]}>
-                      <Text style={[styles.previewBadgeText, { color: "#059669" }]}>
+                    <View style={[styles.previewBadge, { backgroundColor: ACCENT.slate.wash, borderWidth: 1, borderColor: ACCENT.slate.base + "4D" }]}>
+                      <Text style={[styles.previewBadgeText, { color: ACCENT.slate.deep }]}>
                         {t("announceCreate.previewSubjectBadge")}
                       </Text>
                     </View>
@@ -752,7 +763,7 @@ export default function CreateAnnouncementScreen() {
             <TouchableOpacity
               style={[
                 styles.submitBtn,
-                { backgroundColor: isSubject ? "#059669" : selPriority.color },
+                { backgroundColor: isSubject ? ACCENT.slate.solid : selPriority.color },
                 submitting && { opacity: 0.6 },
               ]}
               onPress={handleSubmit}
@@ -791,20 +802,21 @@ export default function CreateAnnouncementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   scroll:    { paddingBottom: 40 },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 12,
+    backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 12,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 11, color: "#6B7280", marginTop: 1 },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   sendBtn: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "#4F46E5", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
@@ -812,15 +824,15 @@ const styles = StyleSheet.create({
   sendBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 
   card: {
-    backgroundColor: "#FFF", marginHorizontal: 14, marginTop: 12,
-    borderRadius: 14, padding: 16,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: COLORS.surface, marginHorizontal: 14, marginTop: 12,
+    borderRadius: 14, padding: 16, borderWidth: 1, borderColor: COLORS.border,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
 
   stepRow:       { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   stepBadge: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: "#4F46E5", alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.indigo.solid, alignItems: "center", justifyContent: "center",
   },
   stepBadgeText: { fontSize: 12, fontWeight: "800", color: "#FFF" },
 
@@ -828,8 +840,9 @@ const styles = StyleSheet.create({
     flexDirection: "row", justifyContent: "space-between",
     alignItems: "center", marginBottom: 10,
   },
-  fieldLabel:    { fontSize: 14, fontWeight: "700", color: "#374151" },
-  optionalLabel: { fontSize: 12, color: "#9CA3AF" },
+  fieldLabelLead: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
+  fieldLabel:    { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  optionalLabel: { fontSize: 12, color: COLORS.textSecondary },
   charCount:     { fontSize: 11, fontWeight: "500" },
 
   typeToggleRow: { flexDirection: "row", gap: 10 },
@@ -837,12 +850,12 @@ const styles = StyleSheet.create({
     flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 10, borderWidth: 1.5,
-    borderColor: "#E5E7EB", backgroundColor: "#F9FAFB",
+    borderColor: COLORS.border, backgroundColor: COLORS.surface,
   },
-  typeToggleBtnActive:        { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
-  typeToggleBtnSubjectActive: { borderColor: "#059669", backgroundColor: "#ECFDF5" },
-  typeToggleLabel: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  typeToggleSub:   { fontSize: 10, color: "#9CA3AF", marginTop: 1 },
+  typeToggleBtnActive:        { borderColor: ACCENT.sky.base, backgroundColor: ACCENT.sky.wash },
+  typeToggleBtnSubjectActive: { borderColor: ACCENT.slate.base, backgroundColor: ACCENT.slate.wash },
+  typeToggleLabel: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  typeToggleSub:   { fontSize: 10, color: COLORS.textSecondary, marginTop: 1 },
 
   priorityRow: { flexDirection: "row", gap: 8 },
   priorityPill: {
@@ -852,56 +865,57 @@ const styles = StyleSheet.create({
   priorityText: { fontSize: 13 },
 
   input: {
-    backgroundColor: "#F9FAFB", borderWidth: 1.5, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border,
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 14, color: "#111827",
+    fontSize: 14, color: COLORS.text,
   },
-  inputErr:  { borderColor: "#DC2626", backgroundColor: "#FFF5F5" },
+  inputErr:  { borderColor: SEMANTIC.error.icon, backgroundColor: SEMANTIC.error.bg },
   bodyInput: { height: 130, paddingTop: 12 },
-  errText:   { fontSize: 12, color: "#DC2626", marginTop: 5, fontWeight: "500" },
-  hint:      { fontSize: 11, color: "#9CA3AF", marginTop: 5 },
+  errText:   { fontSize: 12, color: SEMANTIC.error.text, marginTop: 5, fontWeight: "500" },
+  hint:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 5 },
 
-  selectAllBtn: { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+  selectAllBtn: { fontSize: 13, color: ACCENT.indigo.deep, fontWeight: "600" },
   chipsWrap:    { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: "#F3F4F6", borderWidth: 1.5, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border,
   },
-  chipSelected:        { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  chipSingleSelected:  { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  subjectChipSelected: { backgroundColor: "#ECFDF5", borderColor: "#059669" },
-  chipText:            { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  chipTextSelected:    { color: "#4F46E5" },
-  subjectChipText:     { color: "#059669" },
+  chipSelected:        { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  chipSingleSelected:  { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  subjectChipSelected: { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base },
+  chipText:            { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  chipTextSelected:    { color: ACCENT.indigo.deep },
+  subjectChipText:     { color: ACCENT.slate.deep },
 
   loaderRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12 },
-  loaderText: { fontSize: 13, color: "#9CA3AF" },
+  loaderText: { fontSize: 13, color: COLORS.textSecondary },
   emptyBox: { alignItems: "center", paddingVertical: 20, gap: 6 },
-  emptyTitle: { fontSize: 14, fontWeight: "600", color: "#6B7280" },
-  emptySub:   { fontSize: 12, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  emptySub:   { fontSize: 12, color: COLORS.textSecondary, textAlign: "center" },
 
   selectedNote: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 10 },
-  selectedNoteText: { fontSize: 12, color: "#4F46E5", fontWeight: "600" },
+  selectedNoteText: { fontSize: 12, color: ACCENT.indigo.deep, fontWeight: "600" },
 
   previewLabel: {
-    fontSize: 11, fontWeight: "700", color: "#9CA3AF",
+    fontSize: 11, fontWeight: "700", color: COLORS.textSecondary,
     letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 10,
   },
   previewBox: {
-    backgroundColor: "#F9FAFB", borderRadius: 10,
-    padding: 14, borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: ACCENT.sky.wash, borderRadius: 10,
+    padding: 14, borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.sky.base,
   },
   previewTop: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   previewIcon: {
     width: 34, height: 34, borderRadius: 8,
     alignItems: "center", justifyContent: "center",
   },
-  previewTitle:     { fontSize: 14, fontWeight: "700", color: "#111827" },
-  previewMeta:      { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  previewTitle:     { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  previewMeta:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   previewBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   previewBadgeText: { fontSize: 11, fontWeight: "700" },
-  previewBody:      { fontSize: 13, color: "#6B7280", lineHeight: 20 },
+  previewBody:      { fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },
 
   submitWrap: { marginHorizontal: 14, marginTop: 16 },
   submitBtn: {

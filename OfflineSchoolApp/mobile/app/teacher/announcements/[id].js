@@ -18,15 +18,17 @@ import { Ionicons }                        from "@expo/vector-icons";
 import { useAuthStore }                    from "../../../src/store/auth.store";
 import { useAnnouncementStore }            from "../../../src/store/announcement.store";
 import { getAnnouncementById }             from "../../../src/services/announcement.service";
+import { COLORS, ACCENT, SEMANTIC, roleAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-  urgent: { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioUrgent", icon: "warning"       },
-  high:   { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioHigh",   icon: "warning"       },
-  normal: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
-  medium: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
-  low:    { color: "#059669", bg: "#ECFDF5", labelKey: "annTeacher.prioLow",    icon: "remove-circle" },
+  urgent: { accent: ACCENT.red,   color: ACCENT.red.deep,   bg: ACCENT.red.wash,   labelKey: "annTeacher.prioUrgent", icon: "warning"       },
+  high:   { accent: ACCENT.amber, color: ACCENT.amber.deep, bg: ACCENT.amber.wash, labelKey: "annTeacher.prioHigh",   icon: "warning"       },
+  normal: { accent: ACCENT.sky,   color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
+  medium: { accent: ACCENT.sky,   color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
+  low:    { accent: ACCENT.slate, color: ACCENT.slate.deep, bg: ACCENT.slate.wash, labelKey: "annTeacher.prioLow",    icon: "remove-circle" },
 };
 
 const formatFull = (d) => {
@@ -44,11 +46,9 @@ const isExpired = (d) => d && new Date(d) < new Date();
 
 // ─── Info row ─────────────────────────────────────────────────────────────────
 
-const InfoRow = ({ icon, label, value, color = "#4F46E5" }) => (
+const InfoRow = ({ icon, label, value, accent = "sky" }) => (
   <View style={styles.infoRow}>
-    <View style={[styles.infoIcon, { backgroundColor: color + "18" }]}>
-      <Ionicons name={icon} size={16} color={color} />
-    </View>
+    <IconSquare icon={icon} accent={accent} size={34} radius={8} />
     <View style={{ flex: 1 }}>
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
@@ -176,7 +176,7 @@ export default function AnnouncementDetailScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.sky.solid} />
       </View>
     );
   }
@@ -184,7 +184,7 @@ export default function AnnouncementDetailScreen() {
   if (error || !item) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={44} color="#DC2626" />
+        <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} />
         <Text style={styles.errorMsg}>{error || t("annTeacher.notFound")}</Text>
         <TouchableOpacity style={styles.backBtnLarge} onPress={() => router.back()}>
           <Text style={styles.backBtnLargeText}>{t("common.goBack")}</Text>
@@ -195,7 +195,7 @@ export default function AnnouncementDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
@@ -204,8 +204,9 @@ export default function AnnouncementDetailScreen() {
           onPress={() => router.back()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
 
         <Text style={styles.headerTitle} numberOfLines={1}>{t("annTeacher.announcement")}</Text>
 
@@ -215,19 +216,19 @@ export default function AnnouncementDetailScreen() {
             onPress={handleShare}
             activeOpacity={0.7}
           >
-            <Ionicons name="share-outline" size={20} color="#4F46E5" />
+            <Ionicons name="share-outline" size={20} color={ACCENT.sky.deep} />
           </TouchableOpacity>
 
           {isMine && (
             <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: "#FEE2E2" }]}
+              style={[styles.iconBtn, { backgroundColor: SEMANTIC.error.box }]}
               onPress={handleDelete}
               disabled={deleting}
               activeOpacity={0.7}
             >
               {deleting
-                ? <ActivityIndicator size="small" color="#DC2626" />
-                : <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                ? <ActivityIndicator size="small" color={SEMANTIC.error.icon} />
+                : <Ionicons name="trash-outline" size={18} color={SEMANTIC.error.text} />
               }
             </TouchableOpacity>
           )}
@@ -241,29 +242,32 @@ export default function AnnouncementDetailScreen() {
         {/* ── PRIORITY BANNER ── */}
         <View style={[
           styles.priorityBanner,
-          { backgroundColor: expired ? "#F3F4F6" : priority.bg },
+          {
+            backgroundColor: expired ? SEMANTIC.error.bg : priority.bg,
+            borderLeftColor: expired ? SEMANTIC.error.icon : priority.accent.base,
+          },
         ]}>
           <Ionicons
             name={expired ? "time-outline" : priority.icon}
             size={18}
-            color={expired ? "#9CA3AF" : priority.color}
+            color={expired ? SEMANTIC.error.text : priority.accent.solid}
           />
           <Text style={[
             styles.priorityLabel,
-            { color: expired ? "#9CA3AF" : priority.color },
+            { color: expired ? SEMANTIC.error.text : priority.color },
           ]}>
             {expired ? t("annTeacher.expired") : t("annTeacher.priorityBanner", { label: t(priority.labelKey) })}
           </Text>
           {item.isPinned && (
             <View style={styles.pinnedChip}>
-              <Ionicons name="pin" size={11} color="#7C3AED" />
+              <Ionicons name="pin" size={11} color={ACCENT.violet.deep} />
               <Text style={styles.pinnedChipText}>{t("annTeacher.pinned")}</Text>
             </View>
           )}
         </View>
 
         {/* ── TITLE CARD ── */}
-        <View style={styles.card}>
+        <View style={[styles.card, styles.titleCard]}>
           <Text style={styles.announcementTitle}>{item.title}</Text>
         </View>
 
@@ -274,7 +278,7 @@ export default function AnnouncementDetailScreen() {
             icon="person-outline"
             label={t("annTeacher.from")}
             value={item.authorName || t("annTeacher.adminFallback")}
-            color="#4F46E5"
+            accent={roleAccent(item.authorRole || "admin")}
           />
           <InfoRow
             icon="shield-half-outline"
@@ -285,20 +289,20 @@ export default function AnnouncementDetailScreen() {
               item.authorRole === "teacher"      ? t("annTeacher.roleTeacher")      :
                                                    item.authorRole || "—"
             }
-            color="#7C3AED"
+            accent={roleAccent(item.authorRole || "admin")}
           />
           <InfoRow
             icon="calendar-outline"
             label={t("annTeacher.sent")}
             value={formatFull(item.createdAt)}
-            color="#2563EB"
+            accent="sky"
           />
           {item.expiresAt && (
             <InfoRow
               icon="timer-outline"
               label={t("annTeacher.expires")}
               value={formatFull(item.expiresAt)}
-              color={expired ? "#9CA3AF" : "#D97706"}
+              accent={expired ? "red" : "amber"}
             />
           )}
           <InfoRow
@@ -311,14 +315,14 @@ export default function AnnouncementDetailScreen() {
               item.audience === "class"    ? t("annTeacher.audClasses") :
                                              item.audience || "—"
             }
-            color="#059669"
+            accent="sky"
           />
           {item.targetClasses?.length > 0 && (
             <InfoRow
               icon="school-outline"
               label={t("annTeacher.classesLabel")}
               value={item.targetClasses.map((c) => c?.name || c).join(", ")}
-              color="#D97706"
+              accent="indigo"
             />
           )}
         </View>
@@ -336,16 +340,19 @@ export default function AnnouncementDetailScreen() {
             <View style={styles.statusRow}>
               <View style={[
                 styles.statusChip,
-                { backgroundColor: item.isRead ? "#ECFDF5" : "#F3F4F6" },
+                {
+                  backgroundColor: item.isRead ? SEMANTIC.success.bg : SEMANTIC.info.bg,
+                  borderColor:     item.isRead ? SEMANTIC.success.box : SEMANTIC.info.box,
+                },
               ]}>
                 <Ionicons
                   name={item.isRead ? "checkmark-circle" : "ellipse-outline"}
                   size={16}
-                  color={item.isRead ? "#059669" : "#9CA3AF"}
+                  color={item.isRead ? SEMANTIC.success.text : SEMANTIC.info.text}
                 />
                 <Text style={[
                   styles.statusText,
-                  { color: item.isRead ? "#059669" : "#9CA3AF" },
+                  { color: item.isRead ? SEMANTIC.success.text : SEMANTIC.info.text },
                 ]}>
                   {item.isRead ? t("annTeacher.read") : t("annTeacher.unread")}
                 </Text>
@@ -353,16 +360,19 @@ export default function AnnouncementDetailScreen() {
 
               <View style={[
                 styles.statusChip,
-                { backgroundColor: item.isAcknowledged ? "#ECFDF5" : "#FEF3C7" },
+                {
+                  backgroundColor: item.isAcknowledged ? SEMANTIC.success.bg : SEMANTIC.warning.bg,
+                  borderColor:     item.isAcknowledged ? SEMANTIC.success.box : SEMANTIC.warning.box,
+                },
               ]}>
                 <Ionicons
                   name={item.isAcknowledged ? "checkmark-done-circle" : "hand-left-outline"}
                   size={16}
-                  color={item.isAcknowledged ? "#059669" : "#D97706"}
+                  color={item.isAcknowledged ? SEMANTIC.success.text : SEMANTIC.warning.text}
                 />
                 <Text style={[
                   styles.statusText,
-                  { color: item.isAcknowledged ? "#059669" : "#D97706" },
+                  { color: item.isAcknowledged ? SEMANTIC.success.text : SEMANTIC.warning.text },
                 ]}>
                   {item.isAcknowledged ? t("annTeacher.acknowledged") : t("annTeacher.notAcknowledged")}
                 </Text>
@@ -392,7 +402,7 @@ export default function AnnouncementDetailScreen() {
             disabled={deleting}
             activeOpacity={0.8}
           >
-            <Ionicons name="trash-outline" size={18} color="#DC2626" />
+            <Ionicons name="trash-outline" size={18} color={SEMANTIC.error.text} />
             <Text style={styles.deleteBtnText}>{t("annTeacher.deleteTitle")}</Text>
           </TouchableOpacity>
         )}
@@ -406,14 +416,14 @@ export default function AnnouncementDetailScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     alignItems:      "center",
     justifyContent:  "center",
     gap:             14,
     padding:         32,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
   },
   scroll: { padding: 14, paddingBottom: 40 },
 
@@ -423,9 +433,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               12,
   },
   backBtn: {
@@ -436,13 +446,14 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: "#111827" },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: COLORS.text },
   headerRight: { flexDirection: "row", gap: 8 },
   iconBtn: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.sky.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -455,33 +466,45 @@ const styles = StyleSheet.create({
     paddingVertical:   9,
     borderRadius:      10,
     marginBottom:      10,
+    borderWidth:       1,
+    borderColor:       COLORS.border,
+    borderLeftWidth:   3,
   },
   priorityLabel: { fontSize: 14, fontWeight: "700", flex: 1 },
   pinnedChip: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   "#EDE9FE",
+    backgroundColor:   ACCENT.violet.wash,
+    borderWidth:       1,
+    borderColor:       ACCENT.violet.base + "4D",
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
   },
-  pinnedChipText: { fontSize: 11, fontWeight: "700", color: "#7C3AED" },
+  pinnedChipText: { fontSize: 11, fontWeight: "700", color: ACCENT.violet.deep },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     marginBottom:    10,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    3,
     elevation:       1,
   },
+  titleCard: {
+    backgroundColor: ACCENT.sky.wash,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
+  },
   sectionTitle: {
     fontSize:      11,
     fontWeight:    "700",
-    color:         "#9CA3AF",
+    color:         COLORS.textSecondary,
     letterSpacing: 0.8,
     textTransform: "uppercase",
     marginBottom:  12,
@@ -490,7 +513,7 @@ const styles = StyleSheet.create({
   announcementTitle: {
     fontSize:   20,
     fontWeight: "800",
-    color:      "#111827",
+    color:      COLORS.text,
     lineHeight: 28,
   },
 
@@ -507,10 +530,10 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  infoLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "600", marginBottom: 2 },
-  infoValue: { fontSize: 14, color: "#111827", fontWeight: "500" },
+  infoLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "600", marginBottom: 2 },
+  infoValue: { fontSize: 14, color: COLORS.text, fontWeight: "500" },
 
-  bodyText: { fontSize: 15, color: "#374151", lineHeight: 24 },
+  bodyText: { fontSize: 15, color: COLORS.text, lineHeight: 24 },
 
   statusRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 14 },
   statusChip: {
@@ -520,6 +543,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   7,
     borderRadius:      10,
+    borderWidth:       1,
   },
   statusText: { fontSize: 13, fontWeight: "600" },
 
@@ -528,7 +552,7 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
     gap:             8,
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.green.solid,
     paddingVertical: 13,
     borderRadius:    12,
   },
@@ -539,14 +563,14 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
     gap:             8,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     paddingVertical: 14,
     borderRadius:    12,
     marginTop:       4,
   },
-  deleteBtnText: { color: "#DC2626", fontWeight: "700", fontSize: 15 },
+  deleteBtnText: { color: SEMANTIC.error.text, fontWeight: "700", fontSize: 15 },
 
-  errorMsg: { fontSize: 15, color: "#374151", textAlign: "center", fontWeight: "500" },
+  errorMsg: { fontSize: 15, color: COLORS.text, textAlign: "center", fontWeight: "500" },
   backBtnLarge: {
     backgroundColor:   "#4F46E5",
     paddingHorizontal: 20,

@@ -3,12 +3,14 @@ import { useSchoolYear, yearOptionsAround } from "@/hooks/useSchoolYear";
 import { useState, useEffect, useCallback } from "react";
 import {
   Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp, Plus, Trash2,
+  Settings, SlidersHorizontal, type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useToast } from "@/components/ui/Toast";
 import api from "@/services/api";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, termAccent, type DashAccent } from "@/config/dashboardTint";
 import type {
   AcademicStructure,
   TermConfig,
@@ -21,16 +23,50 @@ import type {
 // INLINE UI PRIMITIVES (same as SettingsPage)
 // ─────────────────────────────────────────────────────────
 
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+function Card({
+  children,
+  className,
+  accent = "slate",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  /** The panel's 3px top edge. */
+  accent?: DashAccent;
+}) {
   return (
-    <div className={cn("rounded-2xl border border-gray-200 bg-white p-6 shadow-sm", className)}>
+    <div className={cn("rounded-2xl border border-line bg-surface p-6 shadow-card", DASH_TINT[accent].edge, className)}>
       {children}
     </div>
   );
 }
 
-function CardTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-base font-semibold text-gray-900 mb-4">{children}</h3>;
+/** A small solid icon square before a heading. */
+function HeadingSquare({ icon: Icon, accent }: { icon: LucideIcon; accent: DashAccent }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)}
+    >
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
+
+function CardTitle({
+  children,
+  icon = Settings,
+  accent = "slate",
+}: {
+  children: React.ReactNode;
+  icon?: LucideIcon;
+  accent?: DashAccent;
+}) {
+  return (
+    <h3 className="mb-4 flex items-center gap-2.5 text-base font-semibold text-ink">
+      <HeadingSquare icon={icon} accent={accent} />
+      {children}
+    </h3>
+  );
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -270,8 +306,8 @@ export default function AcademicStructureSection({ schoolId }: Props) {
 
   if (!structure) {
     return (
-      <Card>
-        <div className="flex items-center gap-2 text-amber-600">
+      <Card accent="amber">
+        <div className="flex items-center gap-2 text-warning-text">
           <AlertCircle className="h-5 w-5" />
           <p className="text-sm">{t("academicStructure.loadFailed")}</p>
         </div>
@@ -283,9 +319,9 @@ export default function AcademicStructureSection({ schoolId }: Props) {
     <div className="space-y-5">
 
       {/* ── Academic Year Selector ── */}
-      <Card>
-        <CardTitle>{t("academicStructure.title")}</CardTitle>
-        <p className="text-xs text-gray-500 mb-4">
+      <Card accent="teal">
+        <CardTitle icon={Calendar} accent="teal">{t("academicStructure.title")}</CardTitle>
+        <p className="text-xs text-ink-muted mb-4">
           {t("academicStructure.description")}
         </p>
 
@@ -306,24 +342,25 @@ export default function AcademicStructureSection({ schoolId }: Props) {
       {/* ── Terms & Sequences ── */}
       {structure.terms.map((term, termIdx) => {
         const expanded = expandedTerm === term.number;
+        const accent = termAccent(String(term.number));
         return (
-          <Card key={term.number}>
+          <div key={term.number} className={cn("p-6", DASH_TINT[accent].card)}>
             <button
               type="button"
               onClick={() => setExpandedTerm(expanded ? null : term.number)}
               className="flex w-full items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <Calendar className="h-5 w-5 text-primary-500" />
-                <span className="text-base font-semibold text-gray-900">
+                <HeadingSquare icon={Calendar} accent={accent} />
+                <span className="text-base font-semibold text-ink">
                   {t("academicStructure.term")} {term.number}: {term.name}
                 </span>
               </div>
-              {expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              {expanded ? <ChevronUp className="h-4 w-4 text-ink-muted" /> : <ChevronDown className="h-4 w-4 text-ink-muted" />}
             </button>
 
             {expanded && (
-              <div className="mt-4 space-y-4 border-t border-gray-100 pt-4">
+              <div className="mt-4 space-y-4 border-t border-line pt-4">
 
                 {/* Term name & weight */}
                 <div className="grid grid-cols-2 gap-3">
@@ -358,7 +395,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
                   {term.sequences.map((seq, seqIdx) => {
                     const isPromo = structure.promotionExams?.includes(seq.number);
                     return (
-                      <div key={seq.number} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      <div key={seq.number} className="rounded-xl border border-line bg-surface p-3">
                         <div className="grid grid-cols-12 gap-3 items-end">
 
                           {/* Seq name */}
@@ -471,7 +508,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
 
               </div>
             )}
-          </Card>
+          </div>
         );
       })}
 
@@ -492,7 +529,7 @@ export default function AcademicStructureSection({ schoolId }: Props) {
 
       {/* ── Global Settings ── */}
       <Card>
-        <CardTitle>{t("academicStructure.globalSettings")}</CardTitle>
+        <CardTitle icon={SlidersHorizontal} accent="slate">{t("academicStructure.globalSettings")}</CardTitle>
         <div className="space-y-4">
 
           {/* The annual average method and a structure-level promotion

@@ -10,6 +10,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { SUPPORTED_LANGUAGES } from "../../i18n";
 import { useTranslation } from "../../i18n/useTranslation";
+import { COLORS, ACCENT } from "../../theme/colors";
+import { IconSquare } from "../Tinted";
 import { C, TAP } from "./theme";
 
 /** A screen reader's label from its parts, in order, skipping the empty ones. */
@@ -20,11 +22,11 @@ export function Card({ style, children, ...rest }) {
   return <View style={[s.card, style]} {...rest}>{children}</View>;
 }
 
-/** A card's heading row: a line icon and a title. */
-export function CardTitle({ icon, children, style }) {
+/** A card's heading row: a solid icon square in the section's accent and a title. */
+export function CardTitle({ icon, accent = "sky", children, style }) {
   return (
     <View style={[s.cardTitleRow, style]}>
-      {icon ? <Ionicons name={icon} size={16} color={C.primary} /> : null}
+      {icon ? <IconSquare icon={icon} accent={accent} size={28} /> : null}
       <Text style={s.cardTitle} accessibilityRole="header">{children}</Text>
     </View>
   );
@@ -50,12 +52,12 @@ export function Skeleton({ width = "100%", height = 14, radius = 6, style }) {
   );
 }
 
-/** Nothing to show yet, said kindly, with an icon rather than an empty box. */
-export function EmptyState({ icon, title, hint }) {
+/** Nothing to show yet, said kindly, with a solid icon square rather than an empty box. */
+export function EmptyState({ icon, title, hint, accent = "sky" }) {
   return (
     <View style={s.empty}>
-      <View style={s.emptyIcon}>
-        <Ionicons name={icon} size={24} color={C.primary} />
+      <View style={[s.emptyIcon, { backgroundColor: (ACCENT[accent] ?? ACCENT.sky).solid }]}>
+        <Ionicons name={icon} size={24} color={COLORS.onPrimary} />
       </View>
       <Text style={s.emptyTitle}>{title}</Text>
       {hint ? <Text style={s.emptyHint}>{hint}</Text> : null}
@@ -64,9 +66,9 @@ export function EmptyState({ icon, title, hint }) {
 }
 
 const AVATAR_TONES = [
-  { bg: "#E0E6FA", fg: "#2C3778" },
-  { bg: C.successBg, fg: C.success },
-  { bg: C.warningBg, fg: C.warning },
+  { bg: ACCENT.indigo.wash, fg: ACCENT.indigo.deep },
+  { bg: ACCENT.green.wash,  fg: ACCENT.green.deep },
+  { bg: ACCENT.amber.wash,  fg: ACCENT.amber.deep },
 ];
 
 /** Initials in a circle; the same child keeps the same colour everywhere. */
@@ -126,7 +128,7 @@ const s = StyleSheet.create({
 
   empty:     { alignItems: "center", paddingHorizontal: 24, paddingVertical: 36 },
   emptyIcon: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: C.primaryBg,
+    width: 56, height: 56, borderRadius: 16, backgroundColor: ACCENT.sky.solid,
     alignItems: "center", justifyContent: "center", marginBottom: 12,
   },
   emptyTitle: { fontSize: 14, fontWeight: "600", color: C.ink, textAlign: "center" },
@@ -139,5 +141,5 @@ const s = StyleSheet.create({
   langBtn:    { minWidth: 40, height: TAP - 4, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   langBtnOn:  { backgroundColor: C.primary },
   langText:   { fontSize: 12, fontWeight: "700", color: C.inkMuted, letterSpacing: 0.5 },
-  langTextOn: { color: "#FFFFFF" },
+  langTextOn: { color: COLORS.onPrimary },
 });

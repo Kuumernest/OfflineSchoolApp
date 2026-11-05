@@ -10,7 +10,11 @@ import {
   Key, Lock, AlertCircle, CheckCircle,
   Copy, Check,
   KeyRound,
+  ListChecks,
 } from "lucide-react";
+import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -193,8 +197,7 @@ export default function AddTeacherPage() {
         <Header onBack={() => navigate("/teachers")} />
 
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm
-                          p-8 w-full max-w-md text-center">
+          <div className={cn("bg-surface rounded-2xl border border-line shadow-sm p-8 w-full max-w-md text-center", DASH_TINT.violet.edge)}>
 
             {/* Icon */}
             <div className={`
@@ -305,8 +308,7 @@ export default function AddTeacherPage() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="bg-white rounded-2xl border border-gray-200 shadow-sm
-                     p-6 space-y-5"
+          className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6 space-y-5", DASH_TINT.violet.edge)}
         >
           {/* Name field */}
           <div className="space-y-1.5">
@@ -441,8 +443,11 @@ export default function AddTeacherPage() {
         </form>
 
         {/* What happens next */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">
+        <div className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6", DASH_TINT.violet.edge)}>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-ink mb-4">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)} aria-hidden="true">
+              <ListChecks className="h-4 w-4" />
+            </span>
             {t("teachersAdd.whatNext")}
           </h3>
           <div className="space-y-3">
@@ -453,7 +458,7 @@ export default function AddTeacherPage() {
                 `}>
                   <Icon size={16} />
                 </div>
-                <p className="text-sm text-gray-600">{t(labelKey)}</p>
+                <p className="text-sm text-ink-body">{t(labelKey)}</p>
               </div>
             ))}
           </div>
@@ -480,9 +485,10 @@ function Header({ onBack }: { onBack: () => void }) {
       >
         <ArrowLeft size={20} className="text-gray-700" />
       </button>
+      <PageIcon />
       <div>
-        <h1 className="text-lg font-bold text-gray-900">{t("teachersAdd.title")}</h1>
-        <p className="text-xs text-gray-500 mt-0.5">{t("teachersAdd.blurb")}</p>
+        <h1 className="text-lg font-bold text-ink">{t("teachersAdd.title")}</h1>
+        <p className="text-xs text-ink-muted mt-0.5">{t("teachersAdd.blurb")}</p>
       </div>
     </div>
   );

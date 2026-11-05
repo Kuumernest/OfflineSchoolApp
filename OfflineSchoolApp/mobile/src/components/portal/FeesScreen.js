@@ -17,6 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatMoney, formatDate } from "../../i18n/format";
+import { ACCENT, TONE_EDGE } from "../../theme/colors";
+import { IconSquare } from "../Tinted";
 import { Card, CardTitle, Skeleton, EmptyState, said } from "./ui";
 import { C, TAP } from "./theme";
 
@@ -38,7 +40,7 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
   if (!data || ((data.charges?.length ?? 0) === 0 && (data.payments?.length ?? 0) === 0)) {
     return (
       <Card>
-        <EmptyState icon="wallet-outline" title={t("portal.feesScreen.empty")} hint={t("portal.feesScreen.emptyHint")} />
+        <EmptyState icon="wallet-outline" accent="teal" title={t("portal.feesScreen.empty")} hint={t("portal.feesScreen.emptyHint")} />
       </Card>
     );
   }
@@ -50,10 +52,13 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
 
   return (
     <View style={s.stack}>
-      <Text style={s.h1} accessibilityRole="header">{t("portal.feesScreen.title")}</Text>
+      <View style={s.h1Row}>
+        <IconSquare icon="wallet" accent="teal" size={32} />
+        <Text style={s.h1} accessibilityRole="header">{t("portal.feesScreen.title")}</Text>
+      </View>
 
       {/* The balance, said first and once. */}
-      <Card style={[s.pad, overdue && { borderColor: C.dangerLine }]}>
+      <Card style={[s.pad, s.balanceCard, overdue && { borderColor: TONE_EDGE.error, borderTopColor: TONE_EDGE.error }]}>
         {owes ? (
           <>
             <View style={s.balanceHead}>
@@ -97,7 +102,7 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
 
       {/* Charges, each with its due date. */}
       <Card>
-        <View style={s.listHead}><CardTitle icon="document-text-outline">{t("portal.feesScreen.charges")}</CardTitle></View>
+        <View style={s.listHead}><CardTitle icon="document-text-outline" accent="teal">{t("portal.feesScreen.charges")}</CardTitle></View>
         {(data.charges ?? []).map((c) => (
           <View key={c._id} style={s.row}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -114,7 +119,7 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
 
       {plan ? (
         <Card>
-          <View style={s.listHead}><CardTitle icon="calendar-outline">{t("portal.feesScreen.plan")}</CardTitle></View>
+          <View style={s.listHead}><CardTitle icon="calendar-outline" accent="teal">{t("portal.feesScreen.plan")}</CardTitle></View>
           {plan.reason ? <Text style={[s.muted, { paddingHorizontal: 16, paddingTop: 10 }]}>{plan.reason}</Text> : null}
           {(plan.instalments ?? []).map((i) => (
             <View key={i.seq} style={s.row}>
@@ -130,9 +135,9 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
 
       {/* Payments, each with its receipt. */}
       <Card>
-        <View style={s.listHead}><CardTitle icon="receipt-outline">{t("portal.feesScreen.payments")}</CardTitle></View>
+        <View style={s.listHead}><CardTitle icon="receipt-outline" accent="teal">{t("portal.feesScreen.payments")}</CardTitle></View>
         {payments.length === 0 ? (
-          <EmptyState icon="receipt-outline" title={t("portal.feesScreen.noPayments")} />
+          <EmptyState icon="receipt-outline" accent="teal" title={t("portal.feesScreen.noPayments")} />
         ) : payments.map((p) => (
           <View key={p._id} style={s.row}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -181,12 +186,14 @@ function Line({ label, value, color }) {
 const s = StyleSheet.create({
   stack: { gap: 14 },
   pad:   { padding: 18 },
+  balanceCard: { backgroundColor: ACCENT.teal.wash, borderTopWidth: 3, borderTopColor: ACCENT.teal.base },
   h1:    { fontSize: 22, fontWeight: "700", color: C.ink },
+  h1Row: { flexDirection: "row", alignItems: "center", gap: 10 },
   kicker: { fontSize: 13, fontWeight: "600", color: C.inkMuted },
   muted:  { fontSize: 13, color: C.inkMuted, lineHeight: 19 },
 
   balanceHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  balance:     { marginTop: 4, fontSize: 32, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  balance:     { marginTop: 4, fontSize: 32, fontWeight: "700", color: ACCENT.teal.deep, fontVariant: ["tabular-nums"] },
   dueRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   due:         { fontSize: 14, color: C.inkBody },
   pill: {
@@ -211,8 +218,8 @@ const s = StyleSheet.create({
   },
   rowTitle:  { fontSize: 14, fontWeight: "600", color: C.ink },
   rowMeta:   { marginTop: 2, fontSize: 12, fontWeight: "400", color: C.inkMuted },
-  amount:    { fontSize: 14, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
-  payAmount: { fontSize: 15, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  amount:    { fontSize: 14, fontWeight: "700", color: ACCENT.teal.deep, fontVariant: ["tabular-nums"] },
+  payAmount: { fontSize: 15, fontWeight: "700", color: ACCENT.teal.deep, fontVariant: ["tabular-nums"] },
   receiptBtn: {
     flexDirection: "row", alignItems: "center", gap: 6, minHeight: TAP, paddingHorizontal: 12,
     borderRadius: 10, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: C.surface,
