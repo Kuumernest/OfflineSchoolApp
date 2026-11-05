@@ -8,6 +8,7 @@ const fs      = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
 const User              = require("../db/models/User");
+const { buildProfileUpdate, profileResponse } = require("../services/teacherProfile.service");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
@@ -826,6 +827,9 @@ router.get("/profile", asyncHandler(async (req, res) => {
 
   return res.json({
     success:     true,
+    // The teacher's own profile, flattened, as the phone's profile screens
+    // read it (res.data.data). `teacher` stays for older builds.
+    data:        profileResponse(teacher),
     teacher,
     assignments: enrichedAssignments,
     summary: {
@@ -2060,13 +2064,32 @@ router.get("/results", asyncHandler(async (req, res) => {
 // PROFILE — update
 // ═════════════════════════════════════════════════════════════════════════════
 
+/*
+ * Saves the teacher's name, email and their own profile (teacherProfile).
+ *
+ * The profile fields used to be dropped here — only name and email were kept,
+ * and the reply was still 200 — so a teacher's profile lived in one phone's
+ * SQLite only. Now each field in services/teacherProfile.service.js is stored,
+ * one by one: a field sent blank never clears a stored value (older builds
+ * post the whole form, often half-empty), only `clearFields` does.
+ */
 router.put("/profile", asyncHandler(async (req, res) => {
   const teacherId       = resolveTeacherId(req);
   const { name, email } = req.body;
 
-  if (!name?.trim()) return res.status(400).json({ message: "name is required" });
+  // A name, when sent, may not be blank. A save of profile fields alone (a
+  // phone uploading a profile it held offline) leaves the name as it is.
+  if (name !== undefined && !String(name ?? "").trim()) {
+    return res.status(400).json({ message: "name is required" });
+  }
+  const profile = buildProfileUpdate(req.body);
+  if (name === undefined && !email && !profile.touched) {
+    return res.status(400).json({ message: "Nothing to update" });
+  }
 
-  const updates = { name: name.trim() };
+  const updates = {};
+  if (name !== undefined) updates.name = String(name).trim();
+  Object.assign(updates, profile.set);
 
   if (email) {
     const emailClean = email.toLowerCase().trim();
@@ -2079,12 +2102,15 @@ router.put("/profile", asyncHandler(async (req, res) => {
     updates.email = emailClean;
   }
 
-  const teacher = await User.findByIdAndUpdate(teacherId, updates, {
+  const update = Object.keys(profile.unset).length
+    ? { $set: updates, $unset: profile.unset }
+    : { $set: updates };
+  const teacher = await User.findByIdAndUpdate(teacherId, update, {
     returnDocument: 'after', runValidators: true, select: "-password -tempPassword",
   });
 
   if (!teacher) return res.status(404).json({ message: "Teacher not found" });
-  return res.json({ success: true, data: teacher.toObject() });
+  return res.json({ success: true, data: { ...teacher.toObject(), ...profileResponse(teacher) } });
 }));
 
 router.put("/profile/password", asyncHandler(async (req, res) => {

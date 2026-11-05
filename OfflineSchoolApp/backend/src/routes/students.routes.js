@@ -1178,6 +1178,8 @@ router.get(
         grade:             student.grade            || null,
         gender:            student.gender           || null,
         dateOfBirth:       student.dateOfBirth      || null,
+        placeOfBirth:      student.placeOfBirth     || null,
+        isRepeating:       student.isRepeating      === true,
         phone:             student.phone            || null,
         alternatePhone:    student.alternatePhone   || null,
         address:           student.address          || null,
@@ -1235,7 +1237,7 @@ router.put(
      * updating their own phone number.
      */
     const {
-      firstName, lastName, gender, dateOfBirth,
+      firstName, lastName, gender, dateOfBirth, placeOfBirth, isRepeating,
       nationalId,
       phone, alternatePhone, address, city, state,
       guardianName, guardianPhone, guardianRelation, guardianEmail,
@@ -1253,6 +1255,7 @@ router.put(
     if (medicalConditions !== undefined) allowedUpdate.medicalConditions = medicalConditions?.trim() || null;
     if (bio               !== undefined) allowedUpdate.bio               = bio?.trim()               || null;
     if (profileCompleted  !== undefined) allowedUpdate.profileCompleted  = !!profileCompleted;
+    if (isRepeating       !== undefined) allowedUpdate.isRepeating       = !!isRepeating;
 
     const current = await resolveStudentRecord(userId, schoolId);
 
@@ -1285,6 +1288,7 @@ router.put(
     fillIfEmpty("firstName",   firstName);
     fillIfEmpty("lastName",    lastName);
     fillIfEmpty("dateOfBirth", dateOfBirth);
+    fillIfEmpty("placeOfBirth", placeOfBirth);
 
     // Guardian contact follows the same fill-only rule as identity. Fee
     // reminders, absence notices and gate alerts are delivered to the guardian

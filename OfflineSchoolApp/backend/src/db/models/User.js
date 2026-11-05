@@ -74,6 +74,42 @@ const userSchema = new mongoose.Schema(
       maxlength: [32, "Staff number cannot exceed 32 characters"],
     },
 
+    // ── Teacher's own profile ─────────────────────────────────────────────────
+    // What a teacher fills in on the phone (contact, qualification, emergency
+    // contact…). Written only by PUT /teacher/profile, field by field — see
+    // services/teacherProfile.service.js. Absent until a teacher saves one.
+    teacherProfile: {
+      type: new mongoose.Schema(
+        {
+          firstName:         { type: String, trim: true, maxlength: 60 },
+          lastName:          { type: String, trim: true, maxlength: 60 },
+          gender:            { type: String, trim: true, maxlength: 20 },
+          dateOfBirth:       { type: String, trim: true, maxlength: 20 },
+          nationalId:        { type: String, trim: true, maxlength: 40 },
+          qualification:     { type: String, trim: true, maxlength: 80 },
+          employmentType:    { type: String, trim: true, maxlength: 30 },
+          joinDate:          { type: String, trim: true, maxlength: 20 },
+          yearsOfExperience: { type: String, trim: true, maxlength: 10 },
+          previousSchool:    { type: String, trim: true, maxlength: 120 },
+          phone:             { type: String, trim: true, maxlength: 30 },
+          alternatePhone:    { type: String, trim: true, maxlength: 30 },
+          address:           { type: String, trim: true, maxlength: 200 },
+          city:              { type: String, trim: true, maxlength: 80 },
+          state:             { type: String, trim: true, maxlength: 80 },
+          emergencyName:     { type: String, trim: true, maxlength: 100 },
+          emergencyPhone:    { type: String, trim: true, maxlength: 30 },
+          emergencyRelation: { type: String, trim: true, maxlength: 40 },
+          bloodGroup:        { type: String, trim: true, maxlength: 10 },
+          medicalConditions: { type: String, trim: true, maxlength: 1000 },
+          bio:               { type: String, trim: true, maxlength: 1000 },
+          completed:         { type: Boolean, default: false },
+          updatedAt:         { type: Date },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+
     // ── Authorization ─────────────────────────────────────────────────────────
     // The list lives in config/roles.js, which is also what every route guard
     // reads. A role added here and nowhere else would be storable and
