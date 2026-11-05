@@ -13,30 +13,31 @@ import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 // Templates are kept on the server (online-only): offline failures say so.
 import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";
-import { COLORS, ACCENT } from "../../../../src/theme/colors";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../../src/theme/colors";
+import { HeaderIcon, Badge } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#2563EB",
-  primaryBg: "#EFF6FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  error:     "#DC2626",
-  purple:    "#7C3AED",
-  purpleBg:  "#F5F3FF",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   COLORS.primary,
+  primaryBg: COLORS.primaryLight,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  error:     SEMANTIC.error.text,
+  purple:    ACCENT.violet.solid,
+  purpleBg:  ACCENT.violet.wash,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   COLORS.border,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textSubtle,
+  gray500:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -239,6 +240,7 @@ function Header() {
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
         <Ionicons name="arrow-back" size={24} color={C.gray900} />
       </TouchableOpacity>
+      <HeaderIcon style={s.headerIcon} />
       <View style={s.headerCenter}>
         <Text style={s.headerTitle}>{t("templates.title")}</Text>
         <Text style={s.headerSub}>{t("templates.blurb")}</Text>
@@ -259,7 +261,16 @@ function TemplateCard({
 }) {
   const { t } = useTranslation();
   return (
-    <View style={[s.card, item.isDefault && s.cardDefault]}>
+    <View
+      style={[
+        s.card,
+        {
+          backgroundColor: ACCENT[item.isDefault ? "teal" : "slate"].wash,
+          borderTopColor:  ACCENT[item.isDefault ? "teal" : "slate"].base,
+        },
+        item.isDefault && s.cardDefault,
+      ]}
+    >
       <View style={s.cardTop}>
         <View style={s.cardIcon}>
           <Ionicons
@@ -272,10 +283,13 @@ function TemplateCard({
           <View style={s.cardTitleRow}>
             <Text style={s.cardName} numberOfLines={1}>{item.name}</Text>
             {item.isDefault && (
-              <View style={s.defaultBadge}>
-                <Ionicons name="star" size={10} color={C.primary} />
-                <Text style={s.defaultBadgeText}>{t("common.default")}</Text>
-              </View>
+              <Badge
+                label={t("common.default")}
+                accent="teal"
+                icon="star"
+                style={s.defaultBadge}
+                textStyle={s.defaultBadgeText}
+              />
             )}
           </View>
           <Text style={s.cardMeta}>
@@ -306,7 +320,7 @@ function TemplateCard({
 
       <View style={s.cardActions}>
         <ActionBtn icon="eye-outline"    label={t("common.preview")} color={C.gray700} onPress={onPreview}    />
-        <ActionBtn icon="create-outline" label={t("common.edit")}    color={C.primary} onPress={onEdit}       />
+        <ActionBtn icon="create-outline" label={t("common.edit")}    color={ACCENT.blue.deep} onPress={onEdit}       />
         {!item.isDefault && (
           <ActionBtn icon="star-outline" label={t("common.default")} color={C.warning} onPress={onSetDefault} />
         )}
@@ -335,7 +349,7 @@ function EmptyState({ onSeed, seeding }) {
   return (
     <View style={s.empty}>
       <View style={s.emptyIcon}>
-        <Ionicons name="document-text-outline" size={48} color={C.gray300} />
+        <Ionicons name="document-text-outline" size={48} color={COLORS.onPrimary} />
       </View>
       <Text style={s.emptyTitle}>{t("templates.none")}</Text>
       <Text style={s.emptyBody}>
@@ -392,6 +406,7 @@ const s = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -416,7 +431,7 @@ const s = StyleSheet.create({
     borderWidth:       1,
     borderColor:       C.primary + "30",
   },
-  bannerText: { fontSize: 12, color: C.primary, flex: 1, lineHeight: 18 },
+  bannerText: { fontSize: 12, color: SEMANTIC.info.text, flex: 1, lineHeight: 18 },
   list:        { paddingHorizontal: 16, paddingBottom: 100 },
   card: {
     backgroundColor: C.white,
@@ -424,13 +439,14 @@ const s = StyleSheet.create({
     padding:         14,
     gap:             12,
     borderWidth:     1,
-    borderColor:     C.gray200,
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
-  cardDefault:  { borderColor: C.primary, borderWidth: 1.5 },
+  cardDefault:  { borderColor: ACCENT.teal.base, borderWidth: 1.5, borderTopWidth: 3 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardIcon: {
     width:           48,
@@ -451,21 +467,22 @@ const s = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   C.primaryBg,
     borderRadius:      6,
     paddingHorizontal: 7,
     paddingVertical:   3,
   },
-  defaultBadgeText: { fontSize: 10, fontWeight: "700", color: C.primary },
+  defaultBadgeText: { fontSize: 10, fontWeight: "700" },
   cardMeta:         { fontSize: 11, color: C.gray500, marginTop: 2 },
   varsRow:          { flexDirection: "row", flexWrap: "wrap", gap: 4 },
   varChip: {
-    backgroundColor:   C.gray100,
+    backgroundColor:   accentBadge("slate").bg,
+    borderWidth:       1,
+    borderColor:       accentBadge("slate").border,
     borderRadius:      4,
     paddingHorizontal: 6,
     paddingVertical:   2,
   },
-  varChipText:  { fontSize: 10, color: C.gray500, fontFamily: "monospace" },
+  varChipText:  { fontSize: 10, color: accentBadge("slate").text, fontFamily: "monospace" },
   cardActions:  { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   actionBtn: {
     flexDirection:     "row",
@@ -475,7 +492,7 @@ const s = StyleSheet.create({
     paddingVertical:   6,
     borderRadius:      8,
     borderWidth:       1,
-    backgroundColor:   C.gray50,
+    backgroundColor:   COLORS.surface,
   },
   actionBtnText: { fontSize: 11, fontWeight: "600" },
   empty: {
@@ -488,7 +505,7 @@ const s = StyleSheet.create({
     width:           90,
     height:          90,
     borderRadius:    45,
-    backgroundColor: C.gray100,
+    backgroundColor: ACCENT.teal.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginBottom:    4,

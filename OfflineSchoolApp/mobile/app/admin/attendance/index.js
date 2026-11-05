@@ -22,8 +22,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
-import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
 import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const STATUS_COLORS = {
   present:  { bg: "#ECFDF5", text: "#059669", icon: "checkmark-circle" },
@@ -69,8 +70,8 @@ const RateRing = ({ rate, color, size = 80 }) => {
   );
 };
 
-const StatPill = ({ label, value, color }) => (
-  <View style={[pillStyles.pill, { backgroundColor: color + "15" }]}>
+const StatPill = ({ label, value, color, bg }) => (
+  <View style={[pillStyles.pill, { backgroundColor: bg }]}>
     <Text style={[pillStyles.value, { color }]}>{value}</Text>
     <Text style={pillStyles.label}>{label}</Text>
   </View>
@@ -85,27 +86,28 @@ const pillStyles = StyleSheet.create({
     gap:            2,
   },
   value: { fontSize: 20, fontWeight: "800" },
-  label: { fontSize: 10, color: "#6B7280", fontWeight: "600", textTransform: "uppercase" },
+  label: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600", textTransform: "uppercase" },
 });
 
 const AttendanceSummaryCard = ({
   title,
-  emoji,
-  color,
+  icon,
+  accent,
   summary,
   onMarkAll,
   onViewDetail,
 }) => {
   const { t } = useTranslation();
+  const a = ACCENT[accent];
 
   const { total, marked, present, absent, late, unmarked, rate } =
     summary || {};
 
   return (
-    <View style={[cardStyles.card, { borderLeftColor: color, borderLeftWidth: 4 }]}>
+    <View style={[cardStyles.card, { backgroundColor: a.wash, borderTopColor: a.base }]}>
       <View style={cardStyles.header}>
         <View style={cardStyles.titleRow}>
-          <Text style={cardStyles.emoji}>{emoji}</Text>
+          <IconSquare icon={icon} accent={accent} size={40} />
           <View>
             <Text style={cardStyles.title}>{title}</Text>
             <Text style={cardStyles.sub}>
@@ -116,33 +118,33 @@ const AttendanceSummaryCard = ({
             </Text>
           </View>
         </View>
-        <RateRing rate={rate ?? 0} color={color} size={72} />
+        <RateRing rate={rate ?? 0} color={a.deep} size={72} />
       </View>
 
       <View style={cardStyles.pillRow}>
-        <StatPill label={t("academic.present")}     value={present ?? 0} color="#059669" />
-        <StatPill label={t("academic.absent")}      value={absent  ?? 0} color="#DC2626" />
-        <StatPill label={t("academic.late")}        value={late    ?? 0} color="#D97706" />
-        <StatPill label={t("attendance.unmarked")}  value={unmarked?? 0} color="#9CA3AF" />
+        <StatPill label={t("academic.present")} value={present ?? 0} color={SEMANTIC.success.text} bg={SEMANTIC.success.box} />
+        <StatPill label={t("academic.absent")}  value={absent  ?? 0} color={SEMANTIC.error.text} bg={SEMANTIC.error.box} />
+        <StatPill label={t("academic.late")}    value={late    ?? 0} color={SEMANTIC.warning.text} bg={SEMANTIC.warning.box} />
+        <StatPill label={t("attendance.unmarked")} value={unmarked?? 0} color={ACCENT.slate.deep} bg={COLORS.surface} />
       </View>
 
       <View style={cardStyles.actions}>
         <TouchableOpacity
-          style={[cardStyles.btn, { backgroundColor: color }]}
+          style={[cardStyles.btn, { backgroundColor: a.solid }]}
           onPress={onMarkAll}
           activeOpacity={0.8}
         >
-          <Ionicons name="create-outline" size={16} color="#FFF" />
+          <Ionicons name="create-outline" size={16} color={COLORS.onPrimary} />
           <Text style={cardStyles.btnText}>{t("attAdmin.markAttendance")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[cardStyles.btn, cardStyles.btnOutline, { borderColor: color }]}
+          style={[cardStyles.btn, cardStyles.btnOutline, { borderColor: a.solid }]}
           onPress={onViewDetail}
           activeOpacity={0.8}
         >
-          <Ionicons name="bar-chart-outline" size={16} color={color} />
-          <Text style={[cardStyles.btnText, { color }]}>{t("attAdmin.viewReport")}</Text>
+          <Ionicons name="bar-chart-outline" size={16} color={a.solid} />
+          <Text style={[cardStyles.btnText, { color: a.deep }]}>{t("attAdmin.viewReport")}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -151,11 +153,14 @@ const AttendanceSummaryCard = ({
 
 const cardStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
-    borderRadius:    16,
-    padding:         20,
-    marginBottom:    16,
-    shadowColor:     "#000",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopWidth: 3,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
@@ -167,9 +172,8 @@ const cardStyles = StyleSheet.create({
     marginBottom:   16,
   },
   titleRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  emoji:     { fontSize: 28 },
-  title:     { fontSize: 17, fontWeight: "700", color: "#111827" },
-  sub:       { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  title:    { fontSize: 17, fontWeight: "700", color: COLORS.text },
+  sub:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   pillRow:   { flexDirection: "row", gap: 8, marginBottom: 16 },
   actions:   { flexDirection: "row", gap: 10 },
   btn: {
@@ -185,7 +189,7 @@ const cardStyles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth:     1.5,
   },
-  btnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  btnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 13 },
 });
 
 const WeeklyChart = ({ trend }) => {
@@ -199,11 +203,11 @@ const WeeklyChart = ({ trend }) => {
 
       <View style={chartStyles.legend}>
         <View style={chartStyles.legendItem}>
-          <View style={[chartStyles.legendDot, { backgroundColor: "#4F46E5" }]} />
+          <View style={[chartStyles.legendDot, { backgroundColor: ACCENT.blue.solid }]} />
           <Text style={chartStyles.legendText}>{t("academic.student_other")}</Text>
         </View>
         <View style={chartStyles.legendItem}>
-          <View style={[chartStyles.legendDot, { backgroundColor: "#059669" }]} />
+          <View style={[chartStyles.legendDot, { backgroundColor: ACCENT.violet.solid }]} />
           <Text style={chartStyles.legendText}>{t("academic.teacher_other")}</Text>
         </View>
       </View>
@@ -224,7 +228,7 @@ const WeeklyChart = ({ trend }) => {
                       chartStyles.barFill,
                       {
                         height:          `${sRate}%`,
-                        backgroundColor: "#4F46E5",
+                        backgroundColor: ACCENT.blue.solid,
                         minHeight:       sRate > 0 ? 4 : 0,
                       },
                     ]}
@@ -236,7 +240,7 @@ const WeeklyChart = ({ trend }) => {
                       chartStyles.barFill,
                       {
                         height:          `${tRate}%`,
-                        backgroundColor: "#059669",
+                        backgroundColor: ACCENT.violet.solid,
                         minHeight:       tRate > 0 ? 4 : 0,
                       },
                     ]}
@@ -254,20 +258,22 @@ const WeeklyChart = ({ trend }) => {
 
 const chartStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#FFF",
-    borderRadius:    16,
-    padding:         20,
-    marginBottom:    16,
-    shadowColor:     "#000",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
   },
-  title:     { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  title:     { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 12 },
   legend:    { flexDirection: "row", gap: 16, marginBottom: 16 },
   legendItem:{ flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText:{ fontSize: 12, color: "#6B7280" },
+  legendText:{ fontSize: 12, color: COLORS.textSecondary },
   chart: {
     flexDirection:  "row",
     alignItems:     "flex-end",
@@ -292,13 +298,13 @@ const chartStyles = StyleSheet.create({
     justifyContent: "flex-end",
     borderRadius:   4,
     overflow:       "hidden",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
   },
   barFill: {
     width:        "100%",
     borderRadius: 4,
   },
-  barLabel: { fontSize: 11, color: "#6B7280", fontWeight: "600" },
+  barLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "600" },
 });
 
 export default function AttendanceReportScreen() {
@@ -380,7 +386,7 @@ export default function AttendanceReportScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={styles.loadingText}>{t("attAdmin.loadingOverview")}</Text>
       </View>
     );
@@ -388,7 +394,7 @@ export default function AttendanceReportScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -396,8 +402,10 @@ export default function AttendanceReportScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={styles.headerIcon} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("attendance.title")}</Text>
@@ -409,7 +417,7 @@ export default function AttendanceReportScreen() {
           onPress={() => loadData(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh" size={20} color="#4F46E5" />
+          <Ionicons name="refresh" size={20} color={ACCENT.green.solid} />
         </TouchableOpacity>
       </View>
 
@@ -430,7 +438,7 @@ export default function AttendanceReportScreen() {
             <Ionicons
               name={tab.icon}
               size={16}
-              color={activeTab === tab.key ? "#4F46E5" : "#9CA3AF"}
+              color={activeTab === tab.key ? ACCENT.green.solid : COLORS.textSubtle}
             />
             <Text
               style={[
@@ -451,14 +459,14 @@ export default function AttendanceReportScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
       >
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={16} color="#DC2626" />
+            <Ionicons name="alert-circle" size={16} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -469,7 +477,7 @@ export default function AttendanceReportScreen() {
               <View style={styles.rateCard}>
                 <RateRing
                   rate={overview?.students?.rate ?? 0}
-                  color="#4F46E5"
+                  color={ACCENT.blue.deep}
                   size={80}
                 />
                 <Text style={styles.rateLabel}>{t("attAdmin.rateStudents")}</Text>
@@ -478,7 +486,7 @@ export default function AttendanceReportScreen() {
               <View style={styles.rateCard}>
                 <RateRing
                   rate={overview?.teachers?.rate ?? 0}
-                  color="#059669"
+                  color={ACCENT.violet.deep}
                   size={80}
                 />
                 <Text style={styles.rateLabel}>{t("attAdmin.rateTeachers")}</Text>
@@ -487,8 +495,8 @@ export default function AttendanceReportScreen() {
 
             <AttendanceSummaryCard
               title={t("academic.student_other")}
-              emoji="🎒"
-              color="#4F46E5"
+              icon="people"
+              accent="blue"
               summary={overview?.students}
               onMarkAll={handleMarkStudentAttendance}
               onViewDetail={handleViewStudentReport}
@@ -496,8 +504,8 @@ export default function AttendanceReportScreen() {
 
             <AttendanceSummaryCard
               title={t("academic.teacher_other")}
-              emoji="👩‍🏫"
-              color="#059669"
+              icon="person"
+              accent="violet"
               summary={overview?.teachers}
               onMarkAll={handleMarkTeacherAttendance}
               onViewDetail={handleViewTeacherReport}
@@ -558,7 +566,7 @@ export default function AttendanceReportScreen() {
                     <Text style={styles.actionLabel}>{action.label}</Text>
                     <Text style={styles.actionSub}>{action.sub}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                  <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -609,10 +617,10 @@ export default function AttendanceReportScreen() {
                         {
                           color:
                             (day.students?.rate ?? 0) >= 75
-                              ? "#059669"
+                              ? SEMANTIC.success.text
                               : (day.students?.rate ?? 0) >= 50
-                              ? "#D97706"
-                              : "#DC2626",
+                              ? SEMANTIC.warning.text
+                              : SEMANTIC.error.text,
                         },
                       ]}
                     >
@@ -628,10 +636,10 @@ export default function AttendanceReportScreen() {
                         {
                           color:
                             (day.teachers?.rate ?? 0) >= 75
-                              ? "#059669"
+                              ? SEMANTIC.success.text
                               : (day.teachers?.rate ?? 0) >= 50
-                              ? "#D97706"
-                              : "#DC2626",
+                              ? SEMANTIC.warning.text
+                              : SEMANTIC.error.text,
                         },
                       ]}
                     >
@@ -651,51 +659,52 @@ export default function AttendanceReportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   centered: {
-    flex:            1,
-    justifyContent:  "center",
-    alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: COLORS.page,
   },
-  loadingText: { color: "#6B7280", marginTop: 12, fontSize: 14 },
+  loadingText: { color: COLORS.textSecondary, marginTop: 12, fontSize: 14 },
 
   header: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingHorizontal: 20,
     paddingTop:        60,
-    paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    paddingBottom: 16,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
-    width:           40,
-    height:          40,
-    borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerCenter:  { flex: 1, marginLeft: 12 },
-  headerTitle:   { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
+  headerCenter: { flex: 1, marginLeft: 12 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   refreshBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
+    backgroundColor: ACCENT.green.wash,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   tabBar: {
     flexDirection:   "row",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   tab: {
     flexDirection:   "row",
@@ -706,31 +715,35 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  tabActive: { borderBottomColor: "#4F46E5" },
-  tabText:   { fontSize: 14, color: "#9CA3AF", fontWeight: "600" },
-  tabTextActive: { color: "#4F46E5" },
+  tabActive: { borderBottomColor: ACCENT.green.base },
+  tabText: { fontSize: 14, color: COLORS.textSubtle, fontWeight: "600" },
+  tabTextActive: { color: ACCENT.green.deep },
 
   scroll: { padding: 16, paddingBottom: 40 },
 
   errorBanner: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FEF2F2",
-    borderRadius:    10,
+    backgroundColor: SEMANTIC.error.bg,
+    borderRadius: 10,
     padding:         12,
     marginBottom:    16,
     gap:             8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
 
   rateSummary: {
-    flexDirection:   "row",
-    backgroundColor: "#FFF",
-    borderRadius:    16,
-    padding:         20,
-    marginBottom:    16,
-    alignItems:      "center",
-    shadowColor:     "#000",
+    flexDirection: "row",
+    backgroundColor: ACCENT.green.wash,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopWidth: 3,
+    borderTopColor: ACCENT.green.base,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    alignItems: "center",
+    shadowColor: COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
@@ -742,22 +755,22 @@ const styles = StyleSheet.create({
   },
   rateDivider: {
     width:           1,
-    height:          80,
-    backgroundColor: "#F3F4F6",
+    height: 80,
+    backgroundColor: COLORS.border,
     marginHorizontal: 16,
   },
   rateLabel: {
-    fontSize:   12,
-    color:      "#6B7280",
+    fontSize: 12,
+    color: COLORS.textSecondary,
     fontWeight: "600",
-    textAlign:  "center",
+    textAlign: "center",
     lineHeight: 18,
   },
 
   sectionTitle: {
     fontSize:     15,
-    fontWeight:   "700",
-    color:        "#111827",
+    fontWeight: "700",
+    color: COLORS.text,
     marginBottom: 12,
   },
 
@@ -766,7 +779,7 @@ const styles = StyleSheet.create({
     ...tileShell("attendance"),
     borderRadius:    16,
     padding:         20,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
@@ -791,10 +804,14 @@ const styles = StyleSheet.create({
   actionSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   tableCard: {
-    backgroundColor: "#FFF",
-    borderRadius:    16,
-    padding:         20,
-    shadowColor:     "#000",
+    backgroundColor: ACCENT.green.wash,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopWidth: 3,
+    borderTopColor: ACCENT.green.base,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    8,
     elevation:       2,
@@ -804,17 +821,17 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
   },
   tableHeader: {
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: COLORS.border,
     borderBottomWidth: 1.5,
   },
-  tableRowToday: { backgroundColor: "#EEF2FF", borderRadius: 8 },
+  tableRowToday: { backgroundColor: COLORS.surface, borderRadius: 8 },
   tableCell: {
     flex:      1,
-    fontSize:  13,
-    color:     "#374151",
+    fontSize: 13,
+    color: COLORS.text,
     textAlign: "center",
     fontWeight: "500",
   },
@@ -822,11 +839,11 @@ const styles = StyleSheet.create({
     flex:      1.2,
     textAlign: "left",
     fontWeight: "700",
-    color:     "#111827",
+    color: COLORS.text,
   },
   tableCellSub: {
-    fontSize:   10,
-    color:      "#9CA3AF",
+    fontSize: 10,
+    color: COLORS.textSecondary,
     fontWeight: "400",
   },
   tableCellRate: { fontWeight: "700" },
