@@ -19,7 +19,8 @@ import { useAuthStore }          from "../../../src/store/auth.store";
 import { getDatabase }           from "../../../src/db/database";
 import { resolveStudentClassId } from "../../../src/services/student.service";
 import { useTranslation }        from "../../../src/i18n/useTranslation";
-import { COLORS, ACCENT }        from "../../../src/theme/colors";
+import { COLORS, ACCENT, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
 
 const SUBJECT_COLORS = [
   { bg: "#EEF2FF", color: "#4F46E5", icon: "calculator-outline"   },
@@ -92,7 +93,7 @@ const loadSubjects = async (db, classId) => {
 
 const SubjectCard = React.memo(({ subject, colorSet, onPress, viewLabel }) => (
   <TouchableOpacity
-    style={[st.card, { borderLeftColor: colorSet.color }]}
+    style={st.card}
     onPress={onPress}
     activeOpacity={0.7}
   >
@@ -111,7 +112,7 @@ const SubjectCard = React.memo(({ subject, colorSet, onPress, viewLabel }) => (
 
       {!!subject.teacherName && (
         <View style={st.teacherRow}>
-          <Ionicons name="person-outline" size={12} color="#9CA3AF" />
+          <Ionicons name="person-outline" size={12} color={ACCENT.violet.solid} />
           <Text style={st.teacherName} numberOfLines={1}>
             {subject.teacherName}
           </Text>
@@ -121,7 +122,7 @@ const SubjectCard = React.memo(({ subject, colorSet, onPress, viewLabel }) => (
 
     <View style={st.arrowWrap}>
       <Text style={st.viewContent}>{viewLabel}</Text>
-      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+      <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
     </View>
   </TouchableOpacity>
 ));
@@ -224,8 +225,9 @@ export default function StudentSubjectsScreen() {
           style={st.backBtn}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={st.headerTitle}>{t("subjects.my.title")}</Text>
           {!!className && (
@@ -298,17 +300,15 @@ export default function StudentSubjectsScreen() {
         }
       >
         {filtered.length === 0 ? (
-          <View style={st.emptyState}>
-            <Ionicons name="book-outline" size={52} color="#D1D5DB" />
-            <Text style={st.emptyTitle}>
-              {search ? t("subjects.my.noMatchSearch") : t("subjects.my.noneFound")}
-            </Text>
-            <Text style={st.emptySub}>
-              {search
-                ? t("subjects.my.tryDifferent")
-                : t("subjects.my.appearAfterSync")}
-            </Text>
-            {search.length > 0 && (
+          <EmptyState
+            icon="book-outline"
+            accent="slate"
+            style={st.emptyState}
+            title={search ? t("subjects.my.noMatchSearch") : t("subjects.my.noneFound")}
+            message={search
+              ? t("subjects.my.tryDifferent")
+              : t("subjects.my.appearAfterSync")}
+            action={search.length > 0 ? (
               <TouchableOpacity
                 style={st.clearBtn}
                 onPress={() => setSearch("")}
@@ -316,8 +316,8 @@ export default function StudentSubjectsScreen() {
               >
                 <Text style={st.clearBtnText}>{t("subjects.my.clearSearch")}</Text>
               </TouchableOpacity>
-            )}
-          </View>
+            ) : null}
+          />
         ) : (
           filtered.map((subject, idx) => {
             const colorSet = SUBJECT_COLORS[idx % SUBJECT_COLORS.length];
@@ -346,21 +346,22 @@ const st = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   countBadge: {
-    backgroundColor: "#ECFDF5", borderRadius: 10,
+    backgroundColor: accentBadge("slate").bg, borderRadius: 10,
+    borderWidth: 1, borderColor: accentBadge("slate").border,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  countText: { fontSize: 13, fontWeight: "700", color: "#059669" },
+  countText: { fontSize: 13, fontWeight: "700", color: accentBadge("slate").text },
 
   searchWrap: {
     flexDirection: "row", alignItems: "center",
@@ -389,9 +390,10 @@ const st = StyleSheet.create({
 
   card: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 14,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 14,
     padding: 14, marginBottom: 10, gap: 12,
-    borderLeftWidth: 4,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.slate.base,
     shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
   },
   cardIcon: {
@@ -399,27 +401,27 @@ const st = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   cardInfo: { flex: 1, gap: 4 },
-  cardName: { fontSize: 15, fontWeight: "700", color: "#111827" },
+  cardName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
   codeBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#F3F4F6", borderRadius: 6,
+    backgroundColor: accentBadge("slate").bg, borderRadius: 6,
+    borderWidth: 1, borderColor: accentBadge("slate").border,
     paddingHorizontal: 7, paddingVertical: 2,
   },
-  codeText:   { fontSize: 10, fontWeight: "700", color: "#6B7280" },
+  codeText:   { fontSize: 10, fontWeight: "700", color: accentBadge("slate").text },
   teacherRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  teacherName:{ fontSize: 12, color: "#9CA3AF" },
+  teacherName:{ fontSize: 12, color: COLORS.textSecondary },
   arrowWrap: { flexDirection: "row", alignItems: "center", gap: 2 },
-  viewContent: { fontSize: 10, fontWeight: "600", color: "#9CA3AF" },
+  viewContent: { fontSize: 10, fontWeight: "600", color: COLORS.textSecondary },
 
   emptyState: {
     alignItems: "center", paddingVertical: 60,
     paddingHorizontal: 32, gap: 10,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
   clearBtn: {
-    backgroundColor: "#EEF2FF", borderRadius: 10,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 16, paddingVertical: 8, marginTop: 4,
   },
-  clearBtnText: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
+  clearBtnText: { fontSize: 13, fontWeight: "700", color: ACCENT.slate.deep },
 });

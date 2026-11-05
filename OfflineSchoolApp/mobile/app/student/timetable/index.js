@@ -19,6 +19,8 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { getDatabase } from "../../../src/db/database";
 import { resolveStudentClassId } from "../../../src/services/student.service";
 import { syncTimetableFromServer } from "../../../src/services/timetableService";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -342,7 +344,7 @@ export default function StudentTimetableScreen() {
   if (loading) {
     return (
       <View style={st.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.teal.solid} />
         <Text style={st.loadingText}>{t("timetable.loading")}</Text>
       </View>
     );
@@ -352,7 +354,7 @@ export default function StudentTimetableScreen() {
   if (!classId) {
     return (
       <View style={st.centered}>
-        <Ionicons name="calendar-outline" size={52} color="#D1D5DB" />
+        <IconSquare icon="calendar-outline" accent="teal" size={56} radius={16} />
         <Text style={st.emptyTitle}>{t("timetable.noClassTitle")}</Text>
         <Text style={st.emptyText}>
           {t("timetable.noClassBody")}
@@ -365,7 +367,7 @@ export default function StudentTimetableScreen() {
   if (periods.length === 0) {
     return (
       <View style={st.centered}>
-        <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
+        <IconSquare icon="calendar-outline" accent="teal" size={56} radius={16} />
         <Text style={st.emptyTitle}>{t("timetable.noPeriodsTitle")}</Text>
         <Text style={st.emptyText}>
           {t("timetable.noPeriodsBody")}
@@ -378,7 +380,7 @@ export default function StudentTimetableScreen() {
   if (schedule.length === 0) {
     return (
       <View style={st.centered}>
-        <Ionicons name="time-outline" size={48} color="#D1D5DB" />
+        <IconSquare icon="time-outline" accent="teal" size={56} radius={16} />
         <Text style={st.emptyTitle}>{t("timetable.noScheduleTitle")}</Text>
         <Text style={st.emptyText}>
           {t("timetable.noScheduleBody")}
@@ -399,8 +401,9 @@ export default function StudentTimetableScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={st.pageTitle}>{t("timetable.myTimetable")}</Text>
           {className ? (
@@ -422,7 +425,7 @@ export default function StudentTimetableScreen() {
       {/* Sync error banner */}
       {syncError ? (
         <View style={st.syncErrorBanner}>
-          <Ionicons name="cloud-offline-outline" size={14} color="#92400E" />
+          <Ionicons name="cloud-offline-outline" size={14} color={SEMANTIC.warning.text} />
           <Text style={st.syncErrorText}>{syncError}</Text>
         </View>
       ) : null}
@@ -433,8 +436,8 @@ export default function StudentTimetableScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => load(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.teal.solid}
+            colors={[ACCENT.teal.solid]}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -449,7 +452,7 @@ export default function StudentTimetableScreen() {
             <View style={st.row}>
               {/* Corner cell */}
               <View style={[st.timeCell, st.cornerCell]}>
-                <Ionicons name="time-outline" size={16} color="#E0E7FF" />
+                <Ionicons name="time-outline" size={16} color={ACCENT.teal.wash} />
                 <Text style={st.cornerText}>{t("timetable.timeCol")}</Text>
               </View>
 
@@ -537,6 +540,7 @@ export default function StudentTimetableScreen() {
                   {DAYS.map((day, dIdx) => {
                     const slot    = getSlot(day, period.id);
                     const isToday = dIdx === todayIndex;
+                    const tint    = slot ? ACCENT[categoryAccent(slot.subjectName)] : null;
 
                     return (
                       <View
@@ -545,13 +549,14 @@ export default function StudentTimetableScreen() {
                           st.slotCell,
                           slot    ? st.slotFilled : st.slotEmpty,
                           isToday && st.slotToday,
+                          tint && { backgroundColor: tint.wash },
                           isToday && slot && st.slotFilledToday,
                         ]}
                       >
                         {slot ? (
                           <>
-                            <View style={st.slotAccent} />
-                            <Text style={st.subjectName} numberOfLines={2}>
+                            <View style={[st.slotAccent, { backgroundColor: tint.base }]} />
+                            <Text style={[st.subjectName, { color: tint.deep }]} numberOfLines={2}>
                               {slot.subjectName}
                             </Text>
                             {slot.teacherName ? (
@@ -592,7 +597,7 @@ export default function StudentTimetableScreen() {
               <View
                 style={[
                   st.legendSwatch,
-                  { backgroundColor: "#EEF2FF", borderWidth: 2, borderColor: "#4F46E5" },
+                  { backgroundColor: ACCENT.teal.wash, borderWidth: 2, borderColor: ACCENT.teal.base },
                 ]}
               />
               <Text style={st.legendText}>{t("timetable.todayLegend")}</Text>
@@ -611,18 +616,18 @@ export default function StudentTimetableScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const st = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     padding:         32,
     gap:             12,
   },
-  loadingText: { fontSize: 14, color: "#6B7280", marginTop: 8 },
-  emptyTitle:  { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center" },
-  emptyText:   { fontSize: 13, color: "#6B7280", textAlign: "center" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },
+  emptyTitle:  { fontSize: 17, fontWeight: "700", color: COLORS.text, textAlign: "center" },
+  emptyText:   { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 
   // ── Page header ───────────────────────────────────────────
   pageHeader: {
@@ -631,34 +636,34 @@ const st = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: COLORS.border,
     gap:               12,
   },
   backBtn: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  pageTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  pageSub:   { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  pageTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  pageSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   // ── Sync error ────────────────────────────────────────────
   syncErrorBanner: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               6,
-    backgroundColor:   "#FFFBEB",
+    backgroundColor:   SEMANTIC.warning.bg,
     borderBottomWidth: 1,
-    borderBottomColor: "#FDE68A",
+    borderBottomColor: SEMANTIC.warning.box,
     paddingHorizontal: 16,
     paddingVertical:   8,
   },
-  syncErrorText: { fontSize: 12, color: "#92400E", flex: 1 },
+  syncErrorText: { fontSize: 12, color: SEMANTIC.warning.text, flex: 1 },
 
   // ── Grid ──────────────────────────────────────────────────
   gridWrapper: { padding: 16 },
@@ -668,29 +673,30 @@ const st = StyleSheet.create({
   /*
    * ── The frame's colours ───────────────────────────────────────────────
    *
-   * One indigo family, read in the order the grid is read:
+   * The timetable's teal (ACCENT.teal), read in the order the grid is read:
    *
-   *   period column   #3730A3  the deepest, and the anchor down the side
-   *   weekday headers #4338CA  a step lighter, across the top
-   *   today           #4F46E5  one step lighter again, and nothing else
-   *   secondary text  #E0E7FF  on all three
+   *   period column   teal.deep   the deepest, and the anchor down the side
+   *   weekday headers teal.solid  a step lighter, across the top
+   *   today           teal.wash   the header turned over, deep text on the wash
+   *   secondary text  teal.wash   on the solid frame
    *
-   * Everything below the frame is neutral (#F8FAFC cells, #E2E8F0 rules)
-   * with green kept for the one thing it means: a lesson. Before this the
+   * Everything below the frame is neutral (page cells, border rules) and a
+   * lesson takes its subject's colour (categoryAccent), the same as the web
+   * console; today's lessons are ringed in teal. Before this the
    * headers ran from near-black to bright violet, the period column was the
    * same saturated purple as the selected day, and the empty cells were
    * lavender — a grid where four different things competed to be the
    * brightest. Nothing but colour changed.
    */
   cornerCell: {
-    backgroundColor: "#3730A3",
+    backgroundColor: ACCENT.teal.deep,
     justifyContent:  "center",
     alignItems:      "center",
   },
   cornerText: {
     fontSize:      10,
     fontWeight:    "700",
-    color:         "#E0E7FF",
+    color:         ACCENT.teal.wash,
     marginTop:     2,
     letterSpacing: 0.5,
   },
@@ -704,31 +710,31 @@ const st = StyleSheet.create({
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  2,
-    borderRightColor:  "#312E81",
+    borderRightColor:  ACCENT.teal.deep,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.12)",
   },
   // One ground, not a stripe: the hairline between rows is enough to
   // follow a period across the grid.
-  timeCellEven: { backgroundColor: "#3730A3" },
-  timeCellOdd:  { backgroundColor: "#3730A3" },
+  timeCellEven: { backgroundColor: ACCENT.teal.deep },
+  timeCellOdd:  { backgroundColor: ACCENT.teal.deep },
 
   periodLabel: {
     fontSize:      11,
     fontWeight:    "800",
-    color:         "#FFFFFF",
+    color:         COLORS.onPrimary,
     textAlign:     "center",
     letterSpacing: 0.3,
   },
   timeStart: {
     fontSize:   11,
-    color:      "#E0E7FF",
+    color:      ACCENT.teal.wash,
     marginTop:  4,
     fontWeight: "600",
   },
   timeEnd: {
     fontSize:  10,
-    color:     "#C7D2FE",
+    color:     ACCENT.teal.wash,
     marginTop: 1,
   },
 
@@ -736,30 +742,30 @@ const st = StyleSheet.create({
   breakTimeCell: {
     // A break is not a period: slate rather than indigo says so without
     // bringing a third hue onto the page.
-    backgroundColor: "#64748B",
+    backgroundColor: ACCENT.slate.solid,
   },
   breakLabel: {
     fontSize:   11,
     fontWeight: "800",
-    color:      "#FFFFFF",
+    color:      COLORS.onPrimary,
     textAlign:  "center",
   },
   breakTime: {
     fontSize:   10,
-    color:      "#E2E8F0",
+    color:      COLORS.border,
     marginTop:  2,
     fontWeight: "600",
   },
   breakCell: {
     width:             104,
     minHeight:         48,
-    backgroundColor:   "#F1F5F9",
+    backgroundColor:   ACCENT.slate.wash,
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  1,
-    borderRightColor:  "#E2E8F0",
+    borderRightColor:  COLORS.border,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: COLORS.border,
   },
   breakCellText: { fontSize: 16 },
 
@@ -767,7 +773,7 @@ const st = StyleSheet.create({
   dayHeaderCell: {
     width:             104,
     paddingVertical:   10,
-    backgroundColor:   "#4338CA",
+    backgroundColor:   ACCENT.teal.solid,
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  1,
@@ -775,30 +781,30 @@ const st = StyleSheet.create({
     // the columns separate without a second colour to reconcile.
     borderRightColor:  "rgba(255,255,255,0.14)",
     borderBottomWidth: 2,
-    borderBottomColor: "#3730A3",
+    borderBottomColor: ACCENT.teal.deep,
     gap:               2,
   },
   // One step lighter than the row it sits in — enough to find today at a
   // glance, not enough to make its column the subject of the page.
-  dayHeaderCellToday: { backgroundColor: "#4F46E5" },
+  dayHeaderCellToday: { backgroundColor: ACCENT.teal.wash },
   dayShort: {
-    color:         "#FFFFFF",
+    color:         COLORS.onPrimary,
     fontWeight:    "800",
     fontSize:      12,
     letterSpacing: 1,
   },
-  dayShortToday: { color: "#FFFFFF" },
+  dayShortToday: { color: ACCENT.teal.deep },
   dayFull: {
-    color:      "#E0E7FF",
+    color:      ACCENT.teal.wash,
     fontSize:   9,
     fontWeight: "500",
   },
-  dayFullToday: { color: "#E0E7FF" },
+  dayFullToday: { color: ACCENT.teal.deep },
   todayDot: {
     width:           5,
     height:          5,
     borderRadius:    3,
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.teal.base,
     marginTop:       2,
   },
 
@@ -808,24 +814,25 @@ const st = StyleSheet.create({
     minHeight:         72,
     padding:           8,
     borderRightWidth:  1,
-    borderRightColor:  "#E2E8F0",
+    borderRightColor:  COLORS.border,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: COLORS.border,
     justifyContent:    "center",
     alignItems:        "center",
     position:          "relative",
   },
-  slotFilled:      { backgroundColor: "#ECFDF5" },
-  slotEmpty:       { backgroundColor: "#F8FAFC" },
+  // A lesson's own wash comes from its subject (categoryAccent) inline;
+  // this teal is the fallback and the legend's swatch.
+  slotFilled:      { backgroundColor: ACCENT.teal.wash },
+  slotEmpty:       { backgroundColor: COLORS.page },
   // Today's own column is a shade of the same neutral, not a colour of its
   // own: the header names the day, and the grid stays quiet.
-  slotToday:       { backgroundColor: "#F1F5F9" },
+  slotToday:       { backgroundColor: ACCENT.slate.wash },
   slotFilledToday: {
-    backgroundColor: "#ECFDF5",
-    borderWidth:     1,
-    // The ring stays, in the lesson's own family rather than violet: a
-    // lesson today is still a lesson, marked once more rather than twice.
-    borderColor:     "#A7F3D0",
+    borderWidth:     2,
+    // Today's lessons are ringed in the timetable's teal; the wash stays
+    // the subject's own.
+    borderColor:     ACCENT.teal.base,
   },
   slotAccent: {
     position:        "absolute",
@@ -834,29 +841,29 @@ const st = StyleSheet.create({
     bottom:          8,
     width:           3,
     borderRadius:    2,
-    backgroundColor: "#22C55E",
+    backgroundColor: ACCENT.teal.base,
   },
   subjectName: {
     fontSize:   11,
     fontWeight: "700",
-    color:      "#166534",
+    color:      ACCENT.teal.deep,
     textAlign:  "center",
   },
   teacherName: {
     fontSize:   9,
-    color:      "#15803D",
+    color:      COLORS.textSecondary,
     marginTop:  2,
     textAlign:  "center",
     fontWeight: "500",
   },
   roomName: {
     fontSize:  9,
-    color:     "#64748B",
+    color:     COLORS.textSecondary,
     marginTop: 1,
     textAlign: "center",
   },
   freeText: {
-    color:      "#CBD5E1",
+    color:      COLORS.textMuted,
     fontSize:   18,
     fontWeight: "300",
   },
@@ -870,8 +877,8 @@ const st = StyleSheet.create({
     marginHorizontal: 16,
     paddingVertical:  14,
     borderTopWidth:   1,
-    borderTopColor:   "#E2E8F0",
-    backgroundColor:  "#FFF",
+    borderTopColor:   COLORS.border,
+    backgroundColor:  COLORS.surface,
     borderRadius:     12,
   },
   legendItem: {
@@ -886,7 +893,7 @@ const st = StyleSheet.create({
   },
   legendText: {
     fontSize:   12,
-    color:      "#64748B",
+    color:      COLORS.textSecondary,
     fontWeight: "500",
   },
 });

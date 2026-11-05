@@ -14,6 +14,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyPlans } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+
+/** A section heading with its solid icon square. */
+function SectionTitle({ icon, accent, children }) {
+  return (
+    <View style={st.sectionRow}>
+      <IconSquare icon={icon} accent={accent} size={28} />
+      <Text style={st.sectionTitle}>{children}</Text>
+    </View>
+  );
+}
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 const OPEN = ["PROPOSED", "ACCEPTED", "ACTIVE", "REVIEW_DUE", "ADAPTING", "PAUSED"];
@@ -38,12 +50,13 @@ export default function StudentPlansScreen() {
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={COLORS.text} /></TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title}>{t("devPlan.studentTitle")}</Text>
       </View>
       {loading ? <ActivityIndicator style={{ marginTop: 32 }} /> : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
-          <Text style={st.sectionTitle}>{t("devPlan.activePlans")}</Text>
+          <SectionTitle icon="map" accent="indigo">{t("devPlan.activePlans")}</SectionTitle>
           {active.length === 0 && <Text style={st.empty}>{t("devPlan.none")}</Text>}
           {active.map((p) => (
             <TouchableOpacity key={p.planId} style={st.card} onPress={() => router.push({ pathname: "/student/plans/[id]", params: { id: p.planId } })} activeOpacity={0.85}>
@@ -52,16 +65,16 @@ export default function StudentPlansScreen() {
               <Text style={st.sub2}>{t("devPlan.reviewOn", { when: day(p.reviewSchedule.reviewDate) })}</Text>
             </TouchableOpacity>
           ))}
-          <Text style={st.sectionTitle}>{t("devPlan.upcoming")}</Text>
+          <SectionTitle icon="flag" accent="indigo">{t("devPlan.upcoming")}</SectionTitle>
           {upcoming.length === 0 && <Text style={st.empty}>—</Text>}
           {upcoming.map(({ plan, m }) => <Text key={`${plan.planId}:${m.milestoneId}`} style={st.line}>• {t(`devPlan.milestone.${m.kind}`)} — {label(plan)}</Text>)}
-          <Text style={st.sectionTitle}>{t("devPlan.recentReviews")}</Text>
+          <SectionTitle icon="checkmark-done" accent="indigo">{t("devPlan.recentReviews")}</SectionTitle>
           {reviews.length === 0 && <Text style={st.empty}>—</Text>}
           {reviews.map(({ plan, r }) => <Text key={`${plan.planId}:${r.reviewId}`} style={st.line}>• {day(r.at)} · {label(plan)} · {t(`devPlan.outcome.${r.outcome ?? "CONTINUE"}`)} · {t(`devPlan.${r.decision}`)}</Text>)}
-          <Text style={st.sectionTitle}>{t("devPlan.whatChanged")}</Text>
+          <SectionTitle icon="git-compare" accent="indigo">{t("devPlan.whatChanged")}</SectionTitle>
           {changes.length === 0 && <Text style={st.empty}>—</Text>}
           {changes.map(({ plan, a }) => <Text key={`${plan.planId}:${a.index}`} style={st.line}>• {day(a.at)} · {label(plan)} · {t("devPlan.changedLine", { from: a.previous.actions.map((x) => t(`devPlan.action.${x}`)).join(", "), to: a.next.actions.map((x) => t(`devPlan.action.${x}`)).join(", ") })}</Text>)}
-          <Text style={st.sectionTitle}>{t("devPlan.myReflections")}</Text>
+          <SectionTitle icon="chatbubble-ellipses" accent="indigo">{t("devPlan.myReflections")}</SectionTitle>
           {reflections.length === 0 && <Text style={st.empty}>—</Text>}
           {reflections.map(({ plan, x }, i) => <Text key={i} style={st.line}>• {day(x.at)} · {label(plan)} · {x.codes.map((c) => t(`devPlan.reflection.${c}`)).join(", ")}</Text>)}
         </ScrollView>
@@ -73,11 +86,12 @@ export default function StudentPlansScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 8 },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 12, marginBottom: 6 },
-  empty: { fontSize: 13, color: "#6B7280" },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E5E7EB" },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 2 },
-  line: { fontSize: 13, color: "#1F2937", marginBottom: 4 },
-  sub2: { fontSize: 12, color: "#374151", marginTop: 2 },
+  title: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 6 },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  empty: { fontSize: 13, color: COLORS.textSecondary },
+  card: { backgroundColor: ACCENT.indigo.wash, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.indigo.base },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 2 },
+  line: { fontSize: 13, color: COLORS.text, marginBottom: 4 },
+  sub2: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 });

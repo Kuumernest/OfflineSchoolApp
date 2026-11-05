@@ -37,24 +37,9 @@ import AttendanceScreen, { monthKey, monthRange } from "../../src/components/por
 import FeesScreen     from "../../src/components/portal/FeesScreen";
 import MessagesScreen from "../../src/components/portal/MessagesScreen";
 import { LanguageToggle } from "../../src/components/portal/ui";
-
-const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
-};
+import { C } from "../../src/components/portal/theme";
+import { HeaderIcon } from "../../src/components/Tinted";
+import { COLORS } from "../../src/theme/colors";
 
 // The screens that are about one child, and so carry the child switcher. Home
 // shows every child at once; Messages covers the whole family.
@@ -420,7 +405,7 @@ export default function ParentPortalScreen() {
 
           <View style={styles.loginHead}>
             <View style={styles.loginBadge}>
-              <Ionicons name="school-outline" size={28} color="#FFFFFF" />
+              <Ionicons name="school-outline" size={28} color={COLORS.onPrimary} />
             </View>
             <Text style={styles.loginTitle} accessibilityRole="header">{t("portal.title")}</Text>
             <Text style={styles.loginIntro}>{t("portal.intro")}</Text>
@@ -481,7 +466,7 @@ export default function ParentPortalScreen() {
               accessibilityState={{ disabled: !admissionNo.trim() || !code.trim() || busy, busy }}
             >
               {busy
-                ? <ActivityIndicator color="#fff" />
+                ? <ActivityIndicator color={COLORS.onPrimary} />
                 : <Text style={styles.submitText}>{t("portal.signIn")}</Text>}
             </TouchableOpacity>
           </View>
@@ -531,6 +516,7 @@ export default function ParentPortalScreen() {
 
       {/* The school, the language, the way out. */}
       <View style={[styles.header, { paddingTop: headPad.paddingTop }]}>
+        <HeaderIcon size={32} style={styles.headerIcon} />
         <Text style={styles.title} numberOfLines={1}>
           {me?.school?.name || t("portal.title")}
         </Text>
@@ -649,6 +635,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line,
   },
   title:   { flex: 1, minWidth: 0, fontSize: 16, fontWeight: "700", color: C.ink },
+  headerIcon: { marginRight: 0 },
   iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 10 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
@@ -656,14 +643,14 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.warningBg, borderWidth: 1, borderColor: "#F0DCBB",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: C.warningLine,
   },
   bannerText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
   // Fields a thumb can hit and an eye can read off a slip of paper.
   label: { fontSize: 14, fontWeight: "600", color: C.inkBody, marginBottom: 6, marginTop: 12 },
   input: {
-    height: 52, borderRadius: 10, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 52, borderRadius: 10, borderWidth: 1, borderColor: C.lineStrong,
     paddingHorizontal: 14, fontSize: 17, color: C.ink, backgroundColor: C.surface,
   },
   codeInput: { fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", letterSpacing: 2 },
@@ -672,7 +659,7 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     marginTop: 14, padding: 12, borderRadius: 10,
-    backgroundColor: C.dangerBg, borderWidth: 1, borderColor: "#F2D3CF",
+    backgroundColor: C.dangerBg, borderWidth: 1, borderColor: C.dangerLine,
   },
   errorText: { flex: 1, fontSize: 14, color: C.danger, lineHeight: 20 },
 
@@ -681,7 +668,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   submitOff:  { opacity: 0.45 },
-  submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  submitText: { color: COLORS.onPrimary, fontSize: 16, fontWeight: "700" },
   footRow:    { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingHorizontal: 4 },
   footNote:   { flex: 1, fontSize: 14, color: C.inkMuted, lineHeight: 20 },
 });

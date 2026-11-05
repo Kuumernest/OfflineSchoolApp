@@ -23,7 +23,8 @@ import { useRouter }            from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { useAnnouncementStore } from "../../../src/store/announcement.store";
-import { ACCENT }               from "../../../src/theme/colors";
+import { COLORS, ACCENT, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,18 +34,18 @@ const TABS = [
 ];
 
 const PRIORITY_CONFIG = {
-  urgent: { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioUrgent" },
-  high:   { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioHigh"   },
-  normal: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal" },
-  medium: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal" },
-  low:    { color: "#059669", bg: "#ECFDF5", labelKey: "annTeacher.prioLow"    },
+  urgent: { accent: "red",   color: ACCENT.red.deep,   bg: ACCENT.red.wash,   labelKey: "annTeacher.prioUrgent" },
+  high:   { accent: "amber", color: ACCENT.amber.deep, bg: ACCENT.amber.wash, labelKey: "annTeacher.prioHigh"   },
+  normal: { accent: "sky",   color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   labelKey: "annTeacher.prioNormal" },
+  medium: { accent: "sky",   color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   labelKey: "annTeacher.prioNormal" },
+  low:    { accent: "slate", color: ACCENT.slate.deep, bg: ACCENT.slate.wash, labelKey: "annTeacher.prioLow"    },
 };
 
 const AUDIENCE_CONFIG = {
-  all:      { labelKey: "annTeacher.audAll", color: "#2563EB", bg: "#DBEAFE" },
-  teachers: { labelKey: "annTeacher.audTeachers", color: "#7C3AED", bg: "#EDE9FE" },
-  students: { labelKey: "annTeacher.audStudents", color: "#059669", bg: "#ECFDF5" },
-  class:    { labelKey: "annTeacher.audClass",    color: "#D97706", bg: "#FEF3C7" },
+  all:      { labelKey: "annTeacher.audAll",      accent: "sky",    color: ACCENT.sky.deep,    bg: ACCENT.sky.wash    },
+  teachers: { labelKey: "annTeacher.audTeachers", accent: "violet", color: ACCENT.violet.deep, bg: ACCENT.violet.wash },
+  students: { labelKey: "annTeacher.audStudents", accent: "blue",   color: ACCENT.blue.deep,   bg: ACCENT.blue.wash   },
+  class:    { labelKey: "annTeacher.audClass",    accent: "indigo", color: ACCENT.indigo.deep, bg: ACCENT.indigo.wash },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,13 +77,13 @@ const EmptyState = ({ tab, onCompose }) => {
                      const { t } = useTranslation();
                      return (
   <View style={styles.emptyWrap}>
-    <View style={styles.emptyIconCircle}>
-      <Ionicons
-        name={tab === "inbox" ? "mail-open-outline" : "send-outline"}
-        size={36}
-        color="#A78BFA"
-      />
-    </View>
+    <IconSquare
+      icon={tab === "inbox" ? "mail-open-outline" : "send-outline"}
+      accent="sky"
+      size={56}
+      radius={16}
+      style={styles.emptyIconCircle}
+    />
     <Text style={styles.emptyTitle}>
       {tab === "inbox" ? t("annTeacher.emptyInboxTitle") : t("annTeacher.emptySentTitle")}
     </Text>
@@ -148,14 +149,14 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
 
         {isPinned && (
           <View style={styles.pinnedBadge}>
-            <Ionicons name="pin" size={11} color="#7C3AED" />
+            <Ionicons name="pin" size={11} color={ACCENT.violet.deep} />
             <Text style={styles.pinnedText}>{t("annTeacher.pinned")}</Text>
           </View>
         )}
 
         {/* Top row */}
         <View style={styles.cardHeader}>
-          <View style={[styles.roleAvatar, { backgroundColor: audience.bg }]}>
+          <View style={[styles.roleAvatar, { backgroundColor: ACCENT[priority.accent].solid }]}>
             <Ionicons
               name={
                 item.authorRole === "super_admin" ||
@@ -166,7 +167,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
                   : "business-outline"
               }
               size={15}
-              color={audience.color}
+              color={COLORS.onPrimary}
             />
           </View>
 
@@ -195,29 +196,29 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
 
         {/* Tags row */}
         <View style={styles.tagsRow}>
-          <View style={[styles.tag, { backgroundColor: priority.bg }]}>
-            <View style={[styles.tagDot, { backgroundColor: priority.color }]} />
+          <View style={[styles.tag, { backgroundColor: COLORS.surface, borderColor: accentBadge(priority.accent).border }]}>
+            <View style={[styles.tagDot, { backgroundColor: ACCENT[priority.accent].base }]} />
             <Text style={[styles.tagText, { color: priority.color }]}>
               {t(priority.labelKey)}
             </Text>
           </View>
 
-          <View style={[styles.tag, { backgroundColor: audience.bg }]}>
+          <View style={[styles.tag, { backgroundColor: COLORS.surface, borderColor: accentBadge(audience.accent).border }]}>
             <Text style={[styles.tagText, { color: audience.color }]}>
               {t(audience.labelKey)}
             </Text>
           </View>
 
           {expired && (
-            <View style={[styles.tag, { backgroundColor: "#F3F4F6" }]}>
-              <Text style={[styles.tagText, { color: "#9CA3AF" }]}>{t("annTeacher.expired")}</Text>
+            <View style={[styles.tag, { backgroundColor: statusBadge("error").bg, borderColor: statusBadge("error").border }]}>
+              <Text style={[styles.tagText, { color: statusBadge("error").text }]}>{t("annTeacher.expired")}</Text>
             </View>
           )}
 
           {tab === "inbox" && item.isAcknowledged && (
-            <View style={[styles.tag, { backgroundColor: "#ECFDF5" }]}>
-              <Ionicons name="checkmark-done" size={11} color="#059669" />
-              <Text style={[styles.tagText, { color: "#059669" }]}>
+            <View style={[styles.tag, { backgroundColor: statusBadge("success").bg, borderColor: statusBadge("success").border }]}>
+              <Ionicons name="checkmark-done" size={11} color={statusBadge("success").text} />
+              <Text style={[styles.tagText, { color: statusBadge("success").text }]}>
                 {t("annTeacher.acknowledged")}
               </Text>
             </View>
@@ -225,7 +226,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
 
           {tab === "sent" && item.targetClasses?.length > 0 && (
             <View style={styles.classCountChip}>
-              <Ionicons name="school-outline" size={11} color="#6B7280" />
+              <Ionicons name="school-outline" size={11} color={ACCENT.indigo.solid} />
               <Text style={styles.classCountText}>
                 {t("annTeacher.classCount", { count: item.targetClasses.length })}
               </Text>
@@ -337,7 +338,7 @@ export default function AnnouncementsScreen() {
   // ─── Render ───────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
@@ -346,9 +347,10 @@ export default function AnnouncementsScreen() {
           onPress={() => router.back()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("annTeacher.listTitle")}</Text>
           {unreadCount > 0 && (
@@ -401,7 +403,7 @@ export default function AnnouncementsScreen() {
               <Ionicons
                 name={tab.icon}
                 size={15}
-                color={active ? "#4F46E5" : "#9CA3AF"}
+                color={active ? ACCENT.sky.solid : COLORS.textSecondary}
               />
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
                 {t(tab.labelKey)}
@@ -473,7 +475,7 @@ export default function AnnouncementsScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  container: { flex: 1, backgroundColor: COLORS.page },
 
   header: {
     flexDirection:     "row",
@@ -481,9 +483,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               12,
   },
   backBtn: {
@@ -494,8 +496,9 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerTitle:  { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerIcon:   { marginRight: 0 },
+  headerTitle:  { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   composeBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -541,7 +544,7 @@ const styles = StyleSheet.create({
     top:             6,
     width:           "46%",
     height:          38,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.sky.wash,
     borderRadius:    10,
   },
   tabBtn: {
@@ -553,10 +556,10 @@ const styles = StyleSheet.create({
     gap:             6,
     zIndex:          1,
   },
-  tabLabel:       { fontSize: 14, fontWeight: "600", color: "#9CA3AF" },
-  tabLabelActive: { color: "#4F46E5" },
+  tabLabel:       { fontSize: 14, fontWeight: "600", color: COLORS.textSecondary },
+  tabLabelActive: { color: ACCENT.sky.deep },
   tabBadge: {
-    backgroundColor:   "#DC2626",
+    backgroundColor:   ACCENT.red.solid,
     borderRadius:      8,
     paddingHorizontal: 5,
     paddingVertical:   1,
@@ -569,22 +572,27 @@ const styles = StyleSheet.create({
   listContentEmpty: { flexGrow: 1 },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.sky.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
     overflow:        "hidden",
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    4,
     elevation:       2,
   },
   cardUnread: {
-    backgroundColor: "#FAFAFF",
     borderWidth:     1.5,
-    borderColor:     "#E0E7FF",
+    borderColor:     ACCENT.sky.base + "4D",
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
   },
-  cardPinned:  { borderTopWidth: 2, borderTopColor: "#7C3AED" },
+  cardPinned:  { borderTopWidth: 3, borderTopColor: ACCENT.violet.base },
   cardExpired: { opacity: 0.6 },
   unreadStrip: {
     position:               "absolute",
@@ -592,7 +600,7 @@ const styles = StyleSheet.create({
     top:                    0,
     bottom:                 0,
     width:                  3,
-    backgroundColor:        "#4F46E5",
+    backgroundColor:        ACCENT.sky.solid,
     borderTopLeftRadius:    14,
     borderBottomLeftRadius: 14,
   },
@@ -601,13 +609,15 @@ const styles = StyleSheet.create({
     alignItems:        "center",
     gap:               3,
     alignSelf:         "flex-start",
-    backgroundColor:   "#EDE9FE",
+    backgroundColor:   ACCENT.violet.wash,
+    borderWidth:       1,
+    borderColor:       accentBadge("violet").border,
     paddingHorizontal: 7,
     paddingVertical:   2,
     borderRadius:      6,
     marginBottom:      8,
   },
-  pinnedText: { fontSize: 10, fontWeight: "700", color: "#7C3AED" },
+  pinnedText: { fontSize: 10, fontWeight: "700", color: ACCENT.violet.deep },
 
   cardHeader: {
     flexDirection: "row",
@@ -628,20 +638,20 @@ const styles = StyleSheet.create({
     gap:           6,
     flex:          1,
   },
-  cardTitle:     { flex: 1, fontSize: 14, fontWeight: "500", color: "#374151" },
-  cardTitleBold: { fontWeight: "700", color: "#111827" },
+  cardTitle:     { flex: 1, fontSize: 14, fontWeight: "500", color: COLORS.text },
+  cardTitleBold: { fontWeight: "700", color: COLORS.text },
   unreadDot: {
     width:           7,
     height:          7,
     borderRadius:    4,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.sky.solid,
   },
-  senderText: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
-  dateText:   { fontSize: 11, color: "#9CA3AF", paddingTop: 2 },
+  senderText: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  dateText:   { fontSize: 11, color: COLORS.textSecondary, paddingTop: 2 },
 
   bodyPreview: {
     fontSize:     13,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     lineHeight:   19,
     marginBottom: 10,
   },
@@ -659,6 +669,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
+    borderWidth:       1,
   },
   tagDot:  { width: 5, height: 5, borderRadius: 3 },
   tagText: { fontSize: 11, fontWeight: "600" },
@@ -668,7 +679,7 @@ const styles = StyleSheet.create({
     gap:           3,
     marginLeft:    "auto",
   },
-  classCountText: { fontSize: 11, color: "#9CA3AF" },
+  classCountText: { fontSize: 11, color: COLORS.textSecondary },
 
   emptyWrap: {
     flex:              1,
@@ -678,18 +689,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyIconCircle: {
-    width:           80,
-    height:          80,
-    borderRadius:    40,
-    backgroundColor: "#EDE9FE",
-    alignItems:      "center",
-    justifyContent:  "center",
     marginBottom:    16,
   },
-  emptyTitle:  { fontSize: 17, fontWeight: "700", color: "#374151", textAlign: "center" },
+  emptyTitle:  { fontSize: 17, fontWeight: "700", color: COLORS.text, textAlign: "center" },
   emptySub: {
     fontSize:     13,
-    color:        "#9CA3AF",
+    color:        COLORS.textSecondary,
     textAlign:    "center",
     lineHeight:   20,
     marginTop:    8,
@@ -712,7 +717,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap:            12,
   },
-  loaderText: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loaderText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   fab: {
     position:        "absolute",

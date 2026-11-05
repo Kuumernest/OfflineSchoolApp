@@ -29,29 +29,34 @@ import { useTranslation }       from "../../../src/i18n/useTranslation";
 import { loadOwnStaffNo }       from "../../../src/services/staffNumber.service";
 import { staffNoText }          from "../../../src/utils/staffNumber";
 import { needsInternetFailureText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
+// A teacher's own profile is violet, the teachers' colour everywhere.
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  info:      "#2563EB",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.violet.solid,
+  primaryBg: ACCENT.violet.wash,
+  primaryDeep: ACCENT.violet.deep,
+  primaryEdge: ACCENT.violet.base,
+  success:   ACCENT.green.solid,
+  successBg: SEMANTIC.success.bg,
+  warning:   COLORS.warning,
+  warningBg: SEMANTIC.warning.bg,
+  error:     COLORS.danger,
+  errorBg:   SEMANTIC.error.bg,
+  info:      SEMANTIC.info.icon,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textMuted,
+  gray500:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
 
@@ -125,7 +130,7 @@ const f = StyleSheet.create({
   icon:          { marginRight: 8 },
   input:         { flex: 1, fontSize: 14, color: C.gray900, paddingVertical: 12 },
   inputMulti:    { height: 80, textAlignVertical: "top", paddingTop: 12 },
-  hint:          { fontSize: 11, color: C.gray400, marginTop: 4 },
+  hint:          { fontSize: 11, color: COLORS.textSubtle, marginTop: 4 },
   errorText:     { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
 });
 
@@ -182,11 +187,11 @@ const sf = StyleSheet.create({
   selectorError:    { borderColor: C.error },
   selectorText:     { fontSize: 14, color: C.gray900, flex: 1 },
   placeholder:      { color: C.gray400 },
-  dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
+  dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: COLORS.shadow, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
   option:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.gray100 },
-  optionActive:     { backgroundColor: C.primaryBg },
+  optionActive:     { backgroundColor: C.primaryBg, borderWidth: 1, borderColor: C.primaryEdge },
   optionText:       { fontSize: 14, color: C.gray700 },
-  optionTextActive: { color: C.primary, fontWeight: "600" },
+  optionTextActive: { color: C.primaryDeep, fontWeight: "600" },
   errorText:        { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
 });
 
@@ -861,6 +866,7 @@ export default function TeacherProfileSetup() {
           <TouchableOpacity onPress={goBack} style={ss.backBtn} hitSlop={8}>
             <Ionicons name="arrow-back" size={22} color={C.gray700} />
           </TouchableOpacity>
+          <HeaderIcon style={ss.headerIcon} />
           <View style={{ flex: 1 }}>
             <Text style={ss.topTitle}>{t("profileTeacher.title")}</Text>
             <Text style={ss.topSub}>
@@ -901,7 +907,7 @@ export default function TeacherProfileSetup() {
                 ]}>
                   {isDone
                     ? <Ionicons name="checkmark" size={14} color={C.white} />
-                    : <Ionicons name={s.icon}    size={14} color={isCurrent ? C.white : C.gray400} />
+                    : <Ionicons name={s.icon}    size={14} color={isCurrent ? C.white : C.primary} />
                   }
                 </View>
                 <Text style={[
@@ -918,7 +924,10 @@ export default function TeacherProfileSetup() {
 
         {/* Step header */}
         <View style={ss.stepHeader}>
-          <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          <View style={ss.stepTitleRow}>
+            <IconSquare icon={STEPS[step].icon} accent="violet" size={28} />
+            <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          </View>
           <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
         </View>
 
@@ -977,28 +986,30 @@ const ss = StyleSheet.create({
   screen:           { flex: 1, backgroundColor: C.white },
   topBar:           { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: C.white, gap: 10 },
   backBtn:          { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  headerIcon:       { marginRight: 0 },
   topTitle:         { fontSize: 17, fontWeight: "700", color: C.gray900 },
-  topSub:           { fontSize: 12, color: C.gray400, marginTop: 1 },
-  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.gray50 },
+  topSub:           { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.white },
   skipBtnText:      { fontSize: 13, fontWeight: "600", color: C.gray500 },
   progressTrack:    { height: 4, backgroundColor: C.gray100, marginHorizontal: 16 },
   progressFill:     { height: "100%", backgroundColor: C.primary, borderRadius: 2 },
   stepRow:          { maxHeight: 80, backgroundColor: C.white },
   stepRowContent:   { paddingHorizontal: 16, paddingVertical: 12, gap: 24, alignItems: "center" },
   stepItem:         { alignItems: "center", gap: 4 },
-  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
-  stepCircleActive: { backgroundColor: C.primary },
-  stepCircleDone:   { backgroundColor: C.success },
-  stepLabel:        { fontSize: 10, color: C.gray400, fontWeight: "500" },
-  stepLabelActive:  { color: C.primary, fontWeight: "700" },
+  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.primaryBg, borderWidth: 1, borderColor: C.gray200, alignItems: "center", justifyContent: "center" },
+  stepCircleActive: { backgroundColor: C.primary, borderColor: C.primary },
+  stepCircleDone:   { backgroundColor: C.success, borderColor: C.success },
+  stepLabel:        { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
+  stepLabelActive:  { color: C.primaryDeep, fontWeight: "700" },
   stepLabelDone:    { color: C.success },
-  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray100, backgroundColor: C.gray50 },
+  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray200, backgroundColor: C.primaryBg },
+  stepTitleRow:     { flexDirection: "row", alignItems: "center", gap: 10 },
   stepTitle:        { fontSize: 18, fontWeight: "700", color: C.gray900 },
   stepDesc:         { fontSize: 13, color: C.gray500, marginTop: 2 },
   formContent:      { paddingHorizontal: 20, paddingTop: 20 },
   row:              { flexDirection: "row", alignItems: "flex-start" },
-  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#DBEAFE", borderRadius: 12, padding: 12, marginBottom: 16 },
-  infoText:         { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 18 },
+  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: SEMANTIC.info.box, borderRadius: 12, padding: 12, marginBottom: 16 },
+  infoText:         { flex: 1, fontSize: 13, color: SEMANTIC.info.text, lineHeight: 18 },
   bottomBar:        { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.white, gap: 12, borderTopWidth: 1, borderTopColor: C.gray100 },
   backAction:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary },
   backActionText:   { fontSize: 14, fontWeight: "700", color: C.primary },

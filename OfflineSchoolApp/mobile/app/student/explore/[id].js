@@ -24,6 +24,15 @@ import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import {
   getActivity, getExploration, getSuggestions, chooseActivity, startExploration, abandonExploration, submitExploration,
 } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
+
+// An exploration's status → its badge tone.
+const STATUS_TONE = { COMPLETED: "success", STOPPED: "error", DECLINED: "error", SKIPPED: "warning", SUBMITTED: "warning", REVIEW_REQUIRED: "warning" };
+const statusStyle = (status) => {
+  const b = statusBadge(STATUS_TONE[status] ?? "info");
+  return { color: b.text, backgroundColor: b.bg, borderColor: b.border };
+};
 
 const INTEREST = ["LOW", "MODERATE", "HIGH"];
 const DIFFICULTY = ["EASY", "MANAGEABLE", "DIFFICULT", "VERY_DIFFICULT"];
@@ -86,14 +95,17 @@ export default function ExploreDetailScreen() {
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: pad.paddingTop, paddingBottom: 64 }}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginBottom: 8 }}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
-        <Text style={st.title}>{activity.title}</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginBottom: 8 }}><Ionicons name="chevron-back" size={24} color={COLORS.text} /></TouchableOpacity>
+        <View style={st.titleRow}>
+          <HeaderIcon style={{ marginRight: 0 }} />
+          <Text style={st.title}>{activity.title}</Text>
+        </View>
         <Text style={st.meta}>{t(`explore.area.${activity.area}`)} · {t(`explore.level.${activity.level}`)} · {t("explore.minutes", { n: activity.estimatedMinutes })}</Text>
-        {status && <Text style={st.badge}>{t(`explore.status.${status}`)}</Text>}
+        {status && <Text style={[st.badge, statusStyle(status)]}>{t(`explore.status.${status}`)}</Text>}
 
         {done ? (
-          <View style={st.box}>
-            <Text style={st.h}>{t("explore.recorded")}</Text>
+          <View style={[st.box, st.boxDone]}>
+            <Text style={[st.h, { color: SEMANTIC.success.text }]}>{t("explore.recorded")}</Text>
             <Text style={st.p}>{t("explore.recordedHint")}</Text>
             <TouchableOpacity style={st.primary} onPress={() => router.back()}><Text style={st.primaryText}>{t("common.close", { defaultValue: "Close" })}</Text></TouchableOpacity>
           </View>
@@ -128,7 +140,7 @@ export default function ExploreDetailScreen() {
             )}
 
             {inProgress && (
-              <View style={st.box}>
+              <View style={[st.box, st.boxForm]}>
                 <Text style={st.h}>{t("explore.whatDidYouProduce")}</Text>
                 {activity.expectedOutputs.map((label) => (
                   <View key={label} style={{ marginBottom: 8 }}>
@@ -179,25 +191,28 @@ function Chips({ label, values, value, onPick, t }) {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
-  title: { fontSize: 22, fontWeight: "700", color: "#111827" },
-  meta: { color: "#6B7280", fontSize: 13, marginTop: 2, marginBottom: 6 },
-  badge: { alignSelf: "flex-start", fontSize: 11, color: "#3730A3", backgroundColor: "#EEF2FF", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginBottom: 8 },
-  box: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginTop: 10, borderWidth: 1, borderColor: "#E5E7EB" },
-  h: { fontSize: 12, fontWeight: "700", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 },
-  p: { fontSize: 14, color: "#111827", lineHeight: 20 },
-  small: { fontSize: 12, color: "#6B7280", marginTop: 6, marginBottom: 4 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  title: { fontSize: 22, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
+  meta: { color: COLORS.textSecondary, fontSize: 13, marginTop: 2, marginBottom: 6 },
+  badge: { alignSelf: "flex-start", fontSize: 11, fontWeight: "600", borderWidth: 1, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginBottom: 8 },
+  box: { backgroundColor: ACCENT.sky.wash, borderRadius: 12, padding: 14, marginTop: 10, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.sky.base },
+  boxDone: { backgroundColor: SEMANTIC.success.bg, borderTopColor: TONE_EDGE.success },
+  boxForm: { backgroundColor: COLORS.surface },
+  h: { fontSize: 12, fontWeight: "700", color: ACCENT.sky.deep, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 },
+  p: { fontSize: 14, color: COLORS.text, lineHeight: 20 },
+  small: { fontSize: 12, color: COLORS.textSecondary, marginTop: 6, marginBottom: 4 },
   input: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 8, padding: 10, minHeight: 44, backgroundColor: "#FFFFFF", color: "#111827" },
   actions: { marginTop: 14, gap: 8 },
-  primary: { backgroundColor: "#4F46E5", borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  primaryText: { color: "#FFFFFF", fontWeight: "700" },
-  secondary: { backgroundColor: "#EEF2FF", borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  secondaryText: { color: "#3730A3", fontWeight: "600" },
+  primary: { backgroundColor: ACCENT.sky.solid, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  primaryText: { color: COLORS.onPrimary, fontWeight: "700" },
+  secondary: { backgroundColor: ACCENT.sky.wash, borderRadius: 10, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: COLORS.border },
+  secondaryText: { color: ACCENT.sky.deep, fontWeight: "600" },
   ghost: { paddingVertical: 10, alignItems: "center" },
-  ghostText: { color: "#6B7280" },
+  ghostText: { color: COLORS.textSecondary },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "#E5E7EB" },
-  chipOn: { backgroundColor: "#4F46E5" },
-  chipText: { fontSize: 13, color: "#374151" },
-  chipTextOn: { color: "#FFFFFF", fontWeight: "600" },
+  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  chipOn: { backgroundColor: ACCENT.sky.wash, borderColor: ACCENT.sky.base },
+  chipText: { fontSize: 13, color: COLORS.textSecondary },
+  chipTextOn: { color: ACCENT.sky.deep, fontWeight: "600" },
   empty: { textAlign: "center", color: "#6B7280", marginTop: 80 },
 });

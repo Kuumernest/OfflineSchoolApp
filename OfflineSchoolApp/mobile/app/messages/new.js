@@ -26,12 +26,20 @@ import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { participantName, recipientSubtitle } from "../../src/utils/participantName";
 import { errorText } from "../../src/utils/appError";
 
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
+import { COLORS, ACCENT, SEMANTIC, roleAccent } from "../../src/theme/colors";
+
+// The app's theme under this screen's old names.
 const C = {
-  primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
-  gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray300: "#D1D5DB", gray400: "#9CA3AF", gray500: "#6B7280",
-  gray700: "#374151", gray900: "#111827", danger: "#DC2626",
+  primary: COLORS.primary, primaryBg: COLORS.primaryLight, white: COLORS.surface,
+  gray50: COLORS.page, gray100: COLORS.border, gray200: COLORS.border,
+  gray300: COLORS.textMuted, gray400: COLORS.textSubtle, gray500: COLORS.textSecondary,
+  gray700: COLORS.text, gray900: COLORS.text, danger: SEMANTIC.error.text,
 };
+
+/** A person's colour: a guardian sky, anyone else by role, else sky. */
+const personAccent = (p) =>
+  ACCENT[p?.kind === "guardian" ? "sky" : p?.role ? roleAccent(p.role) : "sky"];
 
 export default function NewConversationScreen() {
   const { t } = useTranslation();
@@ -98,6 +106,7 @@ export default function NewConversationScreen() {
     const key = `${item.kind}:${item.id}`;
     const who = participantName(item, t) || item.name;
     const sub = recipientSubtitle(item, t);
+    const a = personAccent(item);
     return (
       <TouchableOpacity
         style={s.row}
@@ -105,8 +114,8 @@ export default function NewConversationScreen() {
         disabled={opening !== null}
         onPress={() => handlePick(item)}
       >
-        <View style={s.avatar}>
-          <Text style={s.avatarText}>
+        <View style={[s.avatar, { backgroundColor: a.wash }]}>
+          <Text style={[s.avatarText, { color: a.deep }]}>
             {(who || "?").slice(0, 1).toUpperCase()}
           </Text>
         </View>
@@ -123,7 +132,7 @@ export default function NewConversationScreen() {
 
         {opening === key
           ? <ActivityIndicator size="small" color={C.primary} />
-          : <Ionicons name="chevron-forward" size={18} color={C.gray300} />}
+          : <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />}
       </TouchableOpacity>
     );
   };
@@ -136,7 +145,10 @@ export default function NewConversationScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="close" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>{t("msgMobile.newConversation")}</Text>
+        <View style={s.headerTitleRow}>
+          <HeaderIcon size={32} style={s.headerIcon} />
+          <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.newConversation")}</Text>
+        </View>
         <View style={s.backBtn} />
       </View>
 
@@ -178,6 +190,7 @@ export default function NewConversationScreen() {
           ListEmptyComponent={
             !error ? (
               <View style={s.empty}>
+                <IconSquare icon="people-outline" accent="sky" size={56} radius={16} />
                 <Text style={s.emptyText}>
                   {query.trim()
                     ? t("msgMobile.noMatch")
@@ -202,7 +215,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.gray200,
   },
   backBtn:     { width: 40, alignItems: "center" },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: "700", color: C.gray900, textAlign: "center" },
+  headerTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  headerIcon:  { marginRight: 8 },
+  headerTitle: { flexShrink: 1, fontSize: 17, fontWeight: "700", color: C.gray900, textAlign: "center" },
 
   searchWrap: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -214,7 +229,7 @@ const s = StyleSheet.create({
 
   errorBar: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#FEF2F2", paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: SEMANTIC.error.bg, paddingHorizontal: 16, paddingVertical: 10,
     marginHorizontal: 12, marginBottom: 8, borderRadius: 10,
   },
   errorText: { flex: 1, fontSize: 12, color: C.danger },
@@ -233,6 +248,6 @@ const s = StyleSheet.create({
   rowName:    { fontSize: 15, fontWeight: "600", color: C.gray900 },
   rowSub:     { fontSize: 12, color: C.gray500, marginTop: 1 },
 
-  empty:     { alignItems: "center", paddingTop: 60, paddingHorizontal: 40 },
-  emptyText: { fontSize: 13, color: C.gray400, textAlign: "center", lineHeight: 19 },
+  empty:     { alignItems: "center", paddingTop: 60, paddingHorizontal: 40, gap: 10 },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 19 },
 });

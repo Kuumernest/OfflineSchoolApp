@@ -15,6 +15,8 @@ import { Ionicons }     from "@expo/vector-icons";
 import NetInfo          from "@react-native-community/netinfo";
 import api              from "../../../src/services/api";
 import { getDatabase } from "../../../src/db/database";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -55,6 +57,26 @@ const formatTime = (time) => {
   } catch {
     return time;
   }
+};
+
+/** "08:30" / "8:30 AM" → minutes since midnight, or null. */
+const toMinutes = (time) => {
+  const m = String(time ?? "").match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!m) return null;
+  let h = Number(m[1]) % 12;
+  if (!m[3]) h = Number(m[1]);
+  else if (m[3].toUpperCase() === "PM") h += 12;
+  return h * 60 + Number(m[2]);
+};
+
+/** Today's period that is running now — highlighted with a teal border. */
+const isCurrentPeriod = (period) => {
+  const start = toMinutes(period.startTime);
+  const end   = toMinutes(period.endTime);
+  if (start == null || end == null) return false;
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return mins >= start && mins < end;
 };
 
 const normDay = (raw) =>
@@ -359,7 +381,7 @@ export default function TeacherTimetable() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.teal.solid} />
         <Text style={styles.loadingText}>{t("ttTeacher.loading")}</Text>
       </View>
     );
@@ -369,7 +391,7 @@ export default function TeacherTimetable() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
+        <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} />
         <Text style={styles.emptyTitle}>{t("ttTeacher.loadFailedTitle")}</Text>
         <Text style={styles.emptyText}>{error}</Text>
       </View>
@@ -380,7 +402,7 @@ export default function TeacherTimetable() {
   if (periods.length === 0) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
+        <IconSquare icon="calendar-outline" accent="teal" size={56} radius={16} />
         <Text style={styles.emptyTitle}>{t("timetable.noPeriodsTitle")}</Text>
         <Text style={styles.emptyText}>
           {t("ttTeacher.noPeriodsBody")}
@@ -393,7 +415,7 @@ export default function TeacherTimetable() {
   if (schedule.length === 0) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="time-outline" size={48} color="#D1D5DB" />
+        <IconSquare icon="time-outline" accent="teal" size={56} radius={16} />
         <Text style={styles.emptyTitle}>{t("timetable.noScheduleTitle")}</Text>
         <Text style={styles.emptyText}>
           {t("ttTeacher.noScheduleBody")}
@@ -413,8 +435,9 @@ export default function TeacherTimetable() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.pageTitle}>{t("ttTeacher.title")}</Text>
           <Text style={styles.pageSub}>
@@ -426,7 +449,7 @@ export default function TeacherTimetable() {
       {/* Offline banner */}
       {isOffline && (
         <View style={styles.offlineBanner}>
-          <Ionicons name="cloud-offline-outline" size={14} color="#92400E" />
+          <Ionicons name="cloud-offline-outline" size={14} color={SEMANTIC.warning.text} />
           <Text style={styles.offlineText}>{t("ttTeacher.offlineNote")}</Text>
         </View>
       )}
@@ -437,8 +460,8 @@ export default function TeacherTimetable() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.teal.solid}
+            colors={[ACCENT.teal.solid]}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -453,7 +476,7 @@ export default function TeacherTimetable() {
             {/* Column header row */}
             <View style={styles.row}>
               <View style={[styles.timeCell, styles.cornerCell]}>
-                <Ionicons name="time-outline" size={16} color="#E0E7FF" />
+                <Ionicons name="time-outline" size={16} color={ACCENT.teal.wash} />
                 <Text style={styles.cornerText}>{t("timetable.timeCol")}</Text>
               </View>
 
@@ -526,6 +549,8 @@ export default function TeacherTimetable() {
                   {DAYS.map((day, dIdx) => {
                     const slot    = getSlot(day, period.id);
                     const isToday = dIdx === todayIndex;
+                    const tint    = slot ? ACCENT[categoryAccent(slot.subjectName)] : null;
+                    const isNow   = isToday && isCurrentPeriod(period);
 
                     return (
                       <View
@@ -535,15 +560,18 @@ export default function TeacherTimetable() {
                           slot    ? styles.slotFilled : styles.slotEmpty,
                           isToday && styles.slotToday,
                           isToday && slot && styles.slotFilledToday,
+                          tint && { backgroundColor: tint.wash },
+                          tint && isToday && { borderColor: tint.base + "4D" },
+                          isNow && styles.slotNow,
                         ]}
                       >
                         {slot ? (
                           <>
-                            <View style={styles.slotAccent} />
-                            <Text style={styles.subjectName} numberOfLines={2}>
+                            <View style={[styles.slotAccent, { backgroundColor: tint.base }]} />
+                            <Text style={[styles.subjectName, { color: tint.deep }]} numberOfLines={2}>
                               {slot.subjectName}
                             </Text>
-                            <Text style={styles.className} numberOfLines={1}>
+                            <Text style={[styles.className, { color: tint.deep }]} numberOfLines={1}>
                               {slot.className}
                             </Text>
                             {slot.room ? (
@@ -579,7 +607,7 @@ export default function TeacherTimetable() {
             <View style={styles.legendItem}>
               <View style={[
                 styles.legendSwatch,
-                { backgroundColor: "#EEF2FF", borderWidth: 2, borderColor: "#4F46E5" },
+                { backgroundColor: ACCENT.slate.wash, borderWidth: 2, borderColor: ACCENT.teal.base },
               ]} />
               <Text style={styles.legendText}>{t("timetable.todayLegend")}</Text>
             </View>
@@ -597,36 +625,37 @@ export default function TeacherTimetable() {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex: 1, justifyContent: "center", alignItems: "center",
-    backgroundColor: "#F3F4F6", padding: 32, gap: 12,
+    backgroundColor: COLORS.page, padding: 32, gap: 12,
   },
-  loadingText: { fontSize: 14, color: "#6B7280", marginTop: 8 },
-  emptyTitle:  { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center" },
-  emptyText:   { fontSize: 13, color: "#6B7280", textAlign: "center" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },
+  emptyTitle:  { fontSize: 17, fontWeight: "700", color: COLORS.text, textAlign: "center" },
+  emptyText:   { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 
   pageHeader: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: "#FFF", borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB", gap: 12,
+    backgroundColor: COLORS.surface, borderBottomWidth: 1,
+    borderBottomColor: COLORS.border, gap: 12,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems: "center", justifyContent: "center",
   },
-  pageTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  pageSub:   { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerIcon: { marginRight: 0 },
+  pageTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  pageSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   offlineBanner: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#FFFBEB", borderBottomWidth: 1,
-    borderBottomColor: "#FDE68A",
+    backgroundColor: SEMANTIC.warning.bg, borderBottomWidth: 1,
+    borderBottomColor: SEMANTIC.warning.box,
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  offlineText: { fontSize: 12, color: "#92400E", flex: 1 },
+  offlineText: { fontSize: 12, color: SEMANTIC.warning.text, flex: 1 },
 
   gridWrapper: { padding: 16 },
   row:         { flexDirection: "row" },
@@ -634,101 +663,104 @@ const styles = StyleSheet.create({
   /*
    * ── The frame's colours ───────────────────────────────────────────────
    *
-   * The same palette the student's timetable uses, for the same reason:
-   * one indigo family read in the order the grid is read.
+   * Timetable is teal everywhere, so the frame is one teal family read in
+   * the order the grid is read:
    *
-   *   period column   #3730A3  the deepest, and the anchor down the side
-   *   weekday headers #4338CA  a step lighter, across the top
-   *   today           #4F46E5  one step lighter again, and nothing else
-   *   secondary text  #E0E7FF
+   *   period column   teal.deep   the deepest, and the anchor down the side
+   *   weekday headers teal.solid  a step lighter, across the top
+   *   today           teal.deep   marked by its dot
+   *   secondary text  teal.wash
    *
-   * Below the frame everything is neutral (#F8FAFC cells, #E2E8F0 rules)
-   * with green kept for the one thing it means: a lesson.
+   * Below the frame the cells are neutral; a lesson takes its subject's
+   * colour (categoryAccent), and the period running now a teal border.
    */
   cornerCell: {
-    backgroundColor: "#3730A3",
+    backgroundColor: ACCENT.teal.deep,
     justifyContent: "center", alignItems: "center",
   },
   timeCell: {
     width: 88, minHeight: 72,
     paddingVertical: 10, paddingHorizontal: 8,
     justifyContent: "center", alignItems: "center",
-    borderRightWidth: 2, borderRightColor: "#312E81",
+    borderRightWidth: 2, borderRightColor: ACCENT.teal.deep,
     borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)",
   },
   // One ground, not a stripe: the hairline between rows is enough to
   // follow a period across the grid.
-  timeCellEven: { backgroundColor: "#3730A3" },
-  timeCellOdd:  { backgroundColor: "#3730A3" },
+  timeCellEven: { backgroundColor: ACCENT.teal.deep },
+  timeCellOdd:  { backgroundColor: ACCENT.teal.deep },
   periodLabel: {
-    fontSize: 11, fontWeight: "800", color: "#FFFFFF",
+    fontSize: 11, fontWeight: "800", color: COLORS.onPrimary,
     textAlign: "center", letterSpacing: 0.3,
   },
-  timeStart: { fontSize: 11, color: "#E0E7FF", marginTop: 4, fontWeight: "600" },
-  timeEnd:   { fontSize: 10, color: "#C7D2FE", marginTop: 1 },
+  timeStart: { fontSize: 11, color: ACCENT.teal.wash, marginTop: 4, fontWeight: "600" },
+  timeEnd:   { fontSize: 10, color: ACCENT.teal.wash, marginTop: 1 },
 
   // A break is not a period: slate rather than indigo says so without
   // bringing a third hue onto the page.
-  breakTimeCell: { backgroundColor: "#64748B" },
-  breakLabel: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center" },
-  breakTime:  { fontSize: 10, color: "#E2E8F0", marginTop: 2, fontWeight: "600" },
+  breakTimeCell: { backgroundColor: ACCENT.slate.solid },
+  breakLabel: { fontSize: 11, fontWeight: "800", color: COLORS.onPrimary, textAlign: "center" },
+  breakTime:  { fontSize: 10, color: COLORS.border, marginTop: 2, fontWeight: "600" },
   breakCell: {
-    width: 104, minHeight: 48, backgroundColor: "#F1F5F9",
+    width: 104, minHeight: 48, backgroundColor: ACCENT.slate.wash,
     justifyContent: "center", alignItems: "center",
-    borderRightWidth: 1, borderRightColor: "#E2E8F0",
-    borderBottomWidth: 1, borderBottomColor: "#E2E8F0",
+    borderRightWidth: 1, borderRightColor: COLORS.border,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   breakCellText: { fontSize: 16 },
 
   dayHeaderCell: {
-    width: 104, paddingVertical: 10, backgroundColor: "#4338CA",
+    width: 104, paddingVertical: 10, backgroundColor: ACCENT.teal.solid,
     justifyContent: "center", alignItems: "center",
     borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.14)",
-    borderBottomWidth: 2, borderBottomColor: "#3730A3", gap: 2,
+    borderBottomWidth: 2, borderBottomColor: ACCENT.teal.deep, gap: 2,
   },
   // One step lighter than the row it sits in — enough to find today at a
   // glance, not enough to make its column the subject of the page.
-  dayHeaderCellToday: { backgroundColor: "#4F46E5" },
-  dayShort: { color: "#FFFFFF", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
-  dayShortToday: { color: "#FFFFFF" },
-  dayFull: { color: "#E0E7FF", fontSize: 9, fontWeight: "500" },
-  dayFullToday: { color: "#E0E7FF" },
+  dayHeaderCellToday: { backgroundColor: ACCENT.teal.deep },
+  dayShort: { color: COLORS.onPrimary, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
+  dayShortToday: { color: COLORS.onPrimary },
+  dayFull: { color: ACCENT.teal.wash, fontSize: 9, fontWeight: "500" },
+  dayFullToday: { color: ACCENT.teal.wash },
   todayDot: {
     width: 5, height: 5, borderRadius: 3,
-    backgroundColor: "#FFF", marginTop: 2,
+    backgroundColor: COLORS.surface, marginTop: 2,
   },
 
   slotCell: {
     width: 104, minHeight: 72, padding: 8,
-    borderRightWidth: 1, borderRightColor: "#E2E8F0",
-    borderBottomWidth: 1, borderBottomColor: "#E2E8F0",
+    borderRightWidth: 1, borderRightColor: COLORS.border,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     justifyContent: "center", alignItems: "center",
     position: "relative",
   },
-  slotFilled:      { backgroundColor: "#ECFDF5" },
-  slotEmpty:       { backgroundColor: "#F8FAFC" },
+  // A lesson takes its subject's wash inline; this is the legend's swatch.
+  slotFilled:      { backgroundColor: ACCENT.teal.wash },
+  slotEmpty:       { backgroundColor: COLORS.page },
   // Today's own column is a shade of the same neutral, not a colour of its
   // own: the header names the day, and the grid stays quiet.
-  slotToday:       { backgroundColor: "#F1F5F9" },
-  slotFilledToday: { backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#A7F3D0" },
+  slotToday:       { backgroundColor: ACCENT.slate.wash },
+  slotFilledToday: { borderWidth: 1, borderColor: COLORS.border },
+  // The period running now: a teal border round today's cell.
+  slotNow:         { borderWidth: 2, borderColor: ACCENT.teal.base },
   slotAccent: {
     position: "absolute", left: 0, top: 8, bottom: 8,
-    width: 3, borderRadius: 2, backgroundColor: "#22C55E",
+    width: 3, borderRadius: 2, backgroundColor: ACCENT.teal.base,
   },
-  subjectName: { fontSize: 11, fontWeight: "700", color: "#166534", textAlign: "center" },
-  className:   { fontSize: 10, color: "#15803D", marginTop: 3, textAlign: "center", fontWeight: "500" },
-  roomName:    { fontSize: 9, color: "#64748B", marginTop: 1, textAlign: "center" },
-  freeText:    { color: "#CBD5E1", fontSize: 18, fontWeight: "300" },
-  cornerText:  { fontSize: 10, fontWeight: "700", color: "#E0E7FF", marginTop: 2, letterSpacing: 0.5 },
+  subjectName: { fontSize: 11, fontWeight: "700", color: ACCENT.teal.deep, textAlign: "center" },
+  className:   { fontSize: 10, color: ACCENT.teal.deep, marginTop: 3, textAlign: "center", fontWeight: "500" },
+  roomName:    { fontSize: 9, color: COLORS.textSecondary, marginTop: 1, textAlign: "center" },
+  freeText:    { color: COLORS.textMuted, fontSize: 18, fontWeight: "300" },
+  cornerText:  { fontSize: 10, fontWeight: "700", color: ACCENT.teal.wash, marginTop: 2, letterSpacing: 0.5 },
 
   legend: {
     flexDirection: "row", justifyContent: "center", gap: 20,
     marginTop: 8, marginHorizontal: 16, paddingVertical: 14,
-    borderTopWidth: 1, borderTopColor: "#E2E8F0",
-    backgroundColor: "#FFF", borderRadius: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+    backgroundColor: COLORS.surface, borderRadius: 12,
   },
   legendItem:  { flexDirection: "row", alignItems: "center", gap: 6 },
   legendSwatch:{ width: 14, height: 14, borderRadius: 4 },
-  legendText:  { fontSize: 12, color: "#64748B", fontWeight: "500" },
+  legendText:  { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";

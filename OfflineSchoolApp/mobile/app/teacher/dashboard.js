@@ -31,7 +31,8 @@ import { toDisplayUri }        from "../../src/utils/logoUri";
 import { useTranslation }      from "../../src/i18n/useTranslation";
 import { reminderMessageKey, reminderRoute } from "../../src/utils/attendanceReminders";
 import { StatTile, ActionTile, TileIcon } from "../../src/components/Tiles";
-import { COLORS, SEMANTIC }    from "../../src/theme/colors";
+import { COLORS, SEMANTIC, ACCENT } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
@@ -422,6 +423,7 @@ export default function TeacherDashboard() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
+        <HeaderIcon />
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>{getGreeting(t)},</Text>
           <Text style={styles.userName} numberOfLines={1}>{user?.name || t("teacherHome.teacherFallback")}</Text>
@@ -659,9 +661,7 @@ export default function TeacherDashboard() {
         {alerts.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: SEMANTIC.error.box }]}>
-                <Ionicons name="notifications" size={18} color={COLORS.danger} />
-              </View>
+              <IconSquare icon="notifications" accent="red" size={32} />
               <Text style={styles.sectionTitle}>{t("teacherHome.sectionNotifications")}</Text>
               <View style={styles.alertCountBadge}>
                 <Text style={styles.alertCountText}>{alerts.length}</Text>
@@ -690,9 +690,7 @@ export default function TeacherDashboard() {
         {/* ── TODAY'S SCHEDULE ── */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <View style={[styles.sectionIcon, { backgroundColor: SEMANTIC.info.box }]}>
-              <Ionicons name="calendar" size={18} color={COLORS.info} />
-            </View>
+            <IconSquare icon="calendar" accent="teal" size={32} />
             <Text style={styles.sectionTitle}>{t("teacherHome.sectionTodayClasses")}</Text>
             {todayClasses.length > 0 && (
               <Text style={styles.scheduleSummary}>
@@ -704,11 +702,13 @@ export default function TeacherDashboard() {
           </View>
 
           {todayClasses.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="cafe-outline" size={32} color={COLORS.textMuted} />
-              <Text style={styles.emptyText}>{t("teacherHome.emptyClassesTitle")}</Text>
-              <Text style={styles.emptySubtext}>{t("teacherHome.emptyClassesSub")}</Text>
-            </View>
+            <EmptyState
+              icon="cafe-outline"
+              accent="teal"
+              title={t("teacherHome.emptyClassesTitle")}
+              message={t("teacherHome.emptyClassesSub")}
+              style={styles.emptyState}
+            />
           ) : (
             todayClasses.map((cls, index) => {
               const status    = cls.status || computeSlotStatus(cls.startTime, cls.endTime);
@@ -757,7 +757,7 @@ export default function TeacherDashboard() {
                         </View>
                       )}
                       {isPast && (
-                        <Ionicons name="checkmark-circle" size={14} color={COLORS.textMuted} />
+                        <Ionicons name="checkmark-circle" size={14} color={ACCENT.teal.solid} />
                       )}
                     </View>
                     <Text style={[styles.scheduleClass, isPast && styles.scheduleTextPast]}>
@@ -768,7 +768,7 @@ export default function TeacherDashboard() {
                   <Ionicons
                     name="chevron-forward"
                     size={16}
-                    color={isPast ? COLORS.border : COLORS.textMuted}
+                    color={COLORS.textSecondary}
                   />
                 </TouchableOpacity>
               );
@@ -836,7 +836,7 @@ export default function TeacherDashboard() {
                     <Text style={styles.moduleBadgeText}>{badgeValue}</Text>
                   </TouchableOpacity>
                 )}
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
             );
           })}
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  greeting:  { fontSize: 14, color: COLORS.textSubtle, fontWeight: "500" },
+  greeting:  { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   userName:  { fontSize: 24, fontWeight: "700", color: COLORS.text, marginTop: 2 },
   subtitle:  { fontSize: 13, color: COLORS.primary, fontWeight: "600", marginTop: 2 },
   headerActions:        { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 12 },
@@ -969,8 +969,7 @@ const styles = StyleSheet.create({
   section:         { paddingHorizontal: 20, marginBottom: 24, marginTop: 12 },
   sectionTitle:    { fontSize: 18, fontWeight: "700", color: COLORS.text, marginBottom: 12 },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  sectionIcon:     { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  scheduleSummary: { flex: 1, fontSize: 11, color: COLORS.textMuted, textAlign: "right", fontWeight: "500" },
+  scheduleSummary: { flex: 1, fontSize: 11, color: COLORS.textSecondary, textAlign: "right", fontWeight: "500" },
 
   announcementStatCard:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: SEMANTIC.info.bg, borderRadius: 14, padding: 14, marginTop: 8, borderWidth: 1, borderColor: SEMANTIC.info.box },
   announcementStatLeft:    { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
@@ -991,27 +990,26 @@ const styles = StyleSheet.create({
   alertCard:       { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 10, marginBottom: 8, gap: 10 },
   alertText:       { flex: 1, fontSize: 13, fontWeight: "500" },
 
-  emptyState:   { backgroundColor: COLORS.surface, borderRadius: 14, padding: 24, alignItems: "center", gap: 6 },
-  emptyText:    { fontSize: 14, fontWeight: "600", color: COLORS.textSubtle, marginTop: 8 },
-  emptySubtext: { fontSize: 12, color: COLORS.textMuted },
+  emptyState:   { backgroundColor: ACCENT.teal.wash, borderRadius: 14, padding: 24, borderWidth: 1, borderColor: COLORS.border },
 
   scheduleCard: {
-    flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface,
+    flexDirection: "row", alignItems: "center", backgroundColor: ACCENT.teal.wash,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base,
     borderRadius: 12, padding: 14, marginBottom: 8, gap: 12,
     shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 2,
   },
-  scheduleCardPast:    { opacity: 0.55, backgroundColor: COLORS.page },
-  scheduleCardCurrent: { borderWidth: 1.5, borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  scheduleCardPast:    { opacity: 0.55 },
+  scheduleCardCurrent: { borderWidth: 1.5, borderColor: ACCENT.teal.base, borderLeftWidth: 3 },
   scheduleTimeBlock:   { alignItems: "center", paddingRight: 12, borderRightWidth: 1, borderRightColor: COLORS.border, minWidth: 64 },
-  scheduleTime:        { fontSize: 12, fontWeight: "600", color: COLORS.primary },
-  scheduleTextPast:    { color: COLORS.textMuted },
-  scheduleTextCurrent: { color: COLORS.primaryHover, fontWeight: "700" },
-  scheduleDash:        { fontSize: 10, color: COLORS.textMuted },
+  scheduleTime:        { fontSize: 12, fontWeight: "600", color: ACCENT.teal.deep },
+  scheduleTextPast:    { color: COLORS.textSecondary },
+  scheduleTextCurrent: { color: ACCENT.teal.deep, fontWeight: "700" },
+  scheduleDash:        { fontSize: 10, color: COLORS.textSecondary },
   scheduleInfo:        { flex: 1 },
   scheduleTitleRow:    { flexDirection: "row", alignItems: "center", gap: 6 },
   scheduleSubject:     { fontSize: 14, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
-  scheduleClass:       { fontSize: 12, color: COLORS.textSubtle, marginTop: 2 },
-  currentBadge:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  scheduleClass:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  currentBadge:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: ACCENT.teal.solid, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   currentDot:          { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.surface },
   currentBadgeText:    { color: COLORS.onPrimary, fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
 
@@ -1022,7 +1020,7 @@ const styles = StyleSheet.create({
   moduleIcon:      { marginRight: 12 },
   moduleInfo:      { flex: 1 },
   moduleTitle:     { fontSize: 15, fontWeight: "600", color: COLORS.text },
-  moduleDesc:      { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  moduleDesc:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   moduleBadge:     { backgroundColor: COLORS.danger, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, minWidth: 22, alignItems: "center" },
   moduleBadgeText: { color: COLORS.onPrimary, fontSize: 11, fontWeight: "700" },
 

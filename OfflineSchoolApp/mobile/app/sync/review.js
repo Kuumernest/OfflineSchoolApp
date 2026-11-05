@@ -30,11 +30,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useAuthStore } from "../../src/store/auth.store";
 import LocalData from "../../src/services/perUserData.service";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE } from "../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../src/components/Tinted";
 
 const C = {
-  bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB", text: "#111827", muted: "#6B7280",
-  primary: "#2563EB", held: "#1E40AF", heldBg: "#EFF6FF", ok: "#059669", warn: "#B45309",
+  bg: COLORS.page, card: COLORS.surface, border: COLORS.border, text: COLORS.text, muted: COLORS.textSecondary,
+  primary: ACCENT.amber.solid, held: SEMANTIC.info.text, heldBg: SEMANTIC.info.bg,
+  ok: SEMANTIC.success.text, warn: SEMANTIC.warning.text,
 };
+
+/** An item's status as a tone: held waits on a decision, assigned is on its way, placed is done. */
+const STATUS_TONE = { held: "warning", assigned: "info", placed: "success" };
 
 const STATUS_KEYS = {
   held: "localData.statusHeld",
@@ -128,37 +134,43 @@ export default function HeldChangesScreen() {
     ]);
   }, [act, t, user]);
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.head}>
-        <Ionicons name={item.kind === "outbox" ? "cloud-upload-outline" : "create-outline"} size={16} color={C.held} />
-        <Text style={styles.title} numberOfLines={2}>{item.summary || item.row_id}</Text>
-        <Text style={styles.status}>{t(STATUS_KEYS[item.status] ?? "localData.statusHeld")}</Text>
-      </View>
-      <Text style={styles.meta}>{item.tbl} · {item.row_id}</Text>
-      <Text style={styles.meta}>{t("localData.heldSince", { date: String(item.created_at ?? "").slice(0, 10) })}</Text>
-      {reviewer && item.status === "held" ? (
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.btn} disabled={busy || !accounts.length} onPress={() => assign(item)}>
-            <Text style={styles.btnText}>{t("localData.assign")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} disabled={busy} onPress={() => sendAsMe(item)}>
-            <Text style={styles.btnText}>{t("localData.sendAsMe")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} disabled={busy} onPress={() => saveCopy(item)}>
-            <Text style={styles.btnText}>{t("localData.saveCopy")}</Text>
-          </TouchableOpacity>
+  const renderItem = ({ item }) => {
+    const tone = STATUS_TONE[item.status] ?? "warning";
+    return (
+      <View style={[styles.card, { backgroundColor: SEMANTIC[tone].bg, borderLeftColor: TONE_EDGE[tone] }]}>
+        <View style={styles.head}>
+          <Ionicons name={item.kind === "outbox" ? "cloud-upload-outline" : "create-outline"} size={16} color={SEMANTIC[tone].text} />
+          <Text style={styles.title} numberOfLines={2}>{item.summary || item.row_id}</Text>
+          <Badge tone={tone} label={t(STATUS_KEYS[item.status] ?? "localData.statusHeld")} textStyle={styles.status} />
         </View>
-      ) : null}
-    </View>
-  );
+        <Text style={styles.meta}>{item.tbl} · {item.row_id}</Text>
+        <Text style={styles.meta}>{t("localData.heldSince", { date: String(item.created_at ?? "").slice(0, 10) })}</Text>
+        {reviewer && item.status === "held" ? (
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.btn} disabled={busy || !accounts.length} onPress={() => assign(item)}>
+              <Text style={styles.btnText}>{t("localData.assign")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btn} disabled={busy} onPress={() => sendAsMe(item)}>
+              <Text style={styles.btnText}>{t("localData.sendAsMe")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btn} disabled={busy} onPress={() => saveCopy(item)}>
+              <Text style={styles.btnText}>{t("localData.saveCopy")}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: true, title: t("localData.reviewTitle"), headerTintColor: C.text, headerStyle: { backgroundColor: C.card } }} />
-      <View style={styles.intro}>
-        <Text style={styles.introText}>{t("localData.reviewIntro")}</Text>
-        {!reviewer ? <Text style={styles.introText}>{t("localData.reviewAdminOnly")}</Text> : null}
+      <View style={[styles.intro, styles.introRow]}>
+        <HeaderIcon size={28} style={styles.headerIcon} />
+        <View style={styles.introBody}>
+          <Text style={styles.introText}>{t("localData.reviewIntro")}</Text>
+          {!reviewer ? <Text style={styles.introText}>{t("localData.reviewAdminOnly")}</Text> : null}
+        </View>
       </View>
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={C.primary} />
@@ -168,7 +180,7 @@ export default function HeldChangesScreen() {
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>{t("localData.reviewEmpty")}</Text>}
+          ListEmptyComponent={<EmptyState icon="checkmark-circle-outline" accent="green" message={t("localData.reviewEmpty")} />}
           ListFooterComponent={reviewer && gate ? (
             <View style={styles.gate}>
               <Text style={styles.gateTitle}>{t("localData.legacyTitle")}</Text>
@@ -191,19 +203,21 @@ export default function HeldChangesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   intro: { padding: 14, gap: 6, backgroundColor: C.heldBg },
+  introRow: { flexDirection: "row", alignItems: "flex-start", gap: 0 },
+  introBody: { flex: 1, gap: 6 },
+  headerIcon: { marginRight: 10 },
   introText: { fontSize: 13, color: C.held, lineHeight: 19 },
   list: { padding: 14, gap: 12 },
-  card: { backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.border, gap: 4 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.border, borderLeftWidth: 3, gap: 4 },
   head: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { flex: 1, fontSize: 15, fontWeight: "700", color: C.text },
-  status: { fontSize: 11, fontWeight: "700", color: C.held },
+  status: { fontSize: 11, fontWeight: "700" },
   meta: { fontSize: 11.5, color: C.muted },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  btn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: C.primary },
-  btnText: { color: C.primary, fontWeight: "600", fontSize: 13 },
+  btn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: ACCENT.amber.base, backgroundColor: COLORS.surface },
+  btnText: { color: ACCENT.amber.deep, fontWeight: "600", fontSize: 13 },
   disabled: { opacity: 0.45 },
-  empty: { textAlign: "center", color: C.muted, marginTop: 30 },
-  gate: { marginTop: 18, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, gap: 6 },
+  gate: { marginTop: 18, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: ACCENT.amber.wash, borderTopWidth: 3, borderTopColor: ACCENT.amber.base, gap: 6 },
   gateTitle: { fontSize: 14, fontWeight: "700", color: C.text },
   gateOk: { fontSize: 13, color: C.ok },
   gateReason: { fontSize: 13, color: C.warn },

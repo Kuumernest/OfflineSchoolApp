@@ -9,6 +9,8 @@ import {
 import { useRouter }        from "expo-router";
 import { Ionicons }         from "@expo/vector-icons";
 import { TeacherService }   from "@/services/teacher.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -18,9 +20,9 @@ const MAX_NAME  = 60;
 const EMAIL_RGX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const NEXT_STEPS = [
-  { icon: "key-outline",  color: "#4F46E5", textKey: "teachersAdd.next0" },
-  { icon: "mail-outline", color: "#0891B2", textKey: "teachersAdd.next1" },
-  { icon: "lock-closed-outline", color: "#059669", textKey: "teachersAdd.next2" },
+  { icon: "key-outline",  accent: "violet", textKey: "teachersAdd.next0" },
+  { icon: "mail-outline", accent: "sky",    textKey: "teachersAdd.next1" },
+  { icon: "lock-closed-outline", accent: "green", textKey: "teachersAdd.next2" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -172,18 +174,14 @@ export default function AddTeacherScreen() {
           <View style={styles.successCard}>
 
             {/* Icon */}
-            <View style={[
-              styles.successIcon,
-              { backgroundColor: success.emailSent ? "#ECFDF5" : "#FFFBEB" },
-            ]}>
-              <Ionicons
-                name={success.emailSent
-                  ? "checkmark-circle-outline"
-                  : "alert-circle-outline"}
-                size={36}
-                color={success.emailSent ? "#059669" : "#D97706"}
-              />
-            </View>
+            <IconSquare
+              icon={success.emailSent
+                ? "checkmark-circle-outline"
+                : "alert-circle-outline"}
+              accent={success.emailSent ? "green" : "amber"}
+              size={72}
+              radius={20}
+            />
 
             <Text style={styles.successTitle}>
               {success.emailSent ? t("teachersAdd.addedBang") : t("teachersAdd.createdTitle")}
@@ -222,7 +220,7 @@ export default function AddTeacherScreen() {
                       <Ionicons
                         name={copied ? "checkmark" : "copy-outline"}
                         size={14}
-                        color="#4F46E5"
+                        color={ACCENT.violet.deep}
                       />
                       <Text style={styles.credCopyText}>
                         {copied ? t("teachersAdd.copied") : t("common.copy")}
@@ -285,7 +283,7 @@ export default function AddTeacherScreen() {
       >
         {/* Info banner */}
         <View style={styles.infoBanner}>
-          <Ionicons name="mail-outline" size={16} color="#1D4ED8" />
+          <Ionicons name="mail-outline" size={16} color={SEMANTIC.info.icon} />
           <Text style={styles.infoBannerText}>
             A temporary password will be generated and emailed to the teacher
             automatically. They will be prompted to set a personal password on
@@ -423,12 +421,13 @@ export default function AddTeacherScreen() {
 
         {/* What happens next */}
         <View style={styles.card}>
-          <Text style={styles.nextTitle}>{t("teachersAdd.whatNext")}</Text>
-          {NEXT_STEPS.map(({ icon, color, textKey }) => (
+          <View style={styles.nextTitleRow}>
+            <IconSquare icon="list-outline" accent="violet" size={28} />
+            <Text style={styles.nextTitle}>{t("teachersAdd.whatNext")}</Text>
+          </View>
+          {NEXT_STEPS.map(({ icon, accent, textKey }) => (
             <View key={textKey} style={styles.nextRow}>
-              <View style={[styles.nextIcon, { backgroundColor: "#F3F4F6" }]}>
-                <Ionicons name={icon} size={16} color={color} />
-              </View>
+              <IconSquare icon={icon} accent={accent} size={36} radius={10} />
               <Text style={styles.nextText}>{t(textKey)}</Text>
             </View>
           ))}
@@ -448,8 +447,9 @@ function ScreenHeader({ title, subtitle, onBack }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={20} color="#374151" />
+        <Ionicons name="arrow-back" size={20} color={COLORS.text} />
       </TouchableOpacity>
+      <HeaderIcon style={styles.headerIcon} />
       <View>
         <Text style={styles.headerTitle}>{title}</Text>
         {subtitle && <Text style={styles.headerSub}>{subtitle}</Text>}
@@ -464,34 +464,35 @@ function ScreenHeader({ title, subtitle, onBack }) {
 
 const styles = StyleSheet.create({
   scroll:       { padding: 16, gap: 14 },
-  card:         { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
-                  borderColor: "#E5E7EB", padding: 16, gap: 14,
+  card:         { backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1,
+                  borderColor: COLORS.border, padding: 16, gap: 14,
                   shadowColor: "#000", shadowOpacity: 0.04,
                   shadowRadius: 6, elevation: 2 },
   header:       { flexDirection: "row", alignItems: "center", gap: 12,
-                  backgroundColor: "#fff", borderBottomWidth: 1,
-                  borderBottomColor: "#E5E7EB", paddingHorizontal: 16, paddingVertical: 14 },
-  backBtn:      { width: 38, height: 38, borderRadius: 10, backgroundColor: "#F3F4F6",
+                  backgroundColor: COLORS.surface, borderBottomWidth: 1,
+                  borderBottomColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 14 },
+  backBtn:      { width: 38, height: 38, borderRadius: 10, backgroundColor: COLORS.border,
                   alignItems: "center", justifyContent: "center" },
-  headerTitle:  { fontSize: 17, fontWeight: "800", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerIcon:   { marginRight: 0 },
+  headerTitle:  { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   // Info banner
   infoBanner:     { flexDirection: "row", alignItems: "flex-start", gap: 10,
-                    backgroundColor: "#EFF6FF", borderRadius: 12, borderWidth: 1,
-                    borderColor: "#BFDBFE", padding: 14 },
-  infoBannerText: { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 19 },
+                    backgroundColor: SEMANTIC.info.bg, borderRadius: 12, borderWidth: 1,
+                    borderColor: SEMANTIC.info.box, padding: 14 },
+  infoBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.info.text, lineHeight: 19 },
 
   // Field
   fieldWrap:    { gap: 6 },
-  fieldLabel:   { fontSize: 14, fontWeight: "700", color: "#374151" },
+  fieldLabel:   { fontSize: 14, fontWeight: "700", color: COLORS.text },
   inputWrap:    { flexDirection: "row", alignItems: "center", gap: 10,
-                  borderWidth: 2, borderColor: "#E5E7EB", borderRadius: 12,
-                  backgroundColor: "#F9FAFB", paddingHorizontal: 14, paddingVertical: 12 },
-  inputError:   { borderColor: "#F87171", backgroundColor: "#FEF2F2" },
-  input:        { flex: 1, fontSize: 14, color: "#111827" },
+                  borderWidth: 2, borderColor: COLORS.border, borderRadius: 12,
+                  backgroundColor: COLORS.surface, paddingHorizontal: 14, paddingVertical: 12 },
+  inputError:   { borderColor: SEMANTIC.error.icon, backgroundColor: SEMANTIC.error.bg },
+  input:        { flex: 1, fontSize: 14, color: COLORS.text },
   fieldBottom:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  hint:         { fontSize: 12, color: "#9CA3AF", flex: 1 },
+  hint:         { fontSize: 12, color: COLORS.textSubtle, flex: 1 },
   errorRow:     { flexDirection: "row", alignItems: "center", gap: 4 },
   errorText:    { fontSize: 12, color: "#DC2626", fontWeight: "600" },
   charCount:    { fontSize: 11, color: "#D1D5DB", marginLeft: 8 },
@@ -508,22 +509,19 @@ const styles = StyleSheet.create({
   discardText:    { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
 
   // What happens next
-  nextTitle:    { fontSize: 13, fontWeight: "800", color: "#374151" },
+  nextTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  nextTitle:    { fontSize: 13, fontWeight: "800", color: COLORS.text },
   nextRow:      { flexDirection: "row", alignItems: "center", gap: 12 },
-  nextIcon:     { width: 36, height: 36, borderRadius: 10,
-                  alignItems: "center", justifyContent: "center" },
-  nextText:     { flex: 1, fontSize: 13, color: "#4B5563", lineHeight: 18 },
+  nextText:     { flex: 1, fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
 
   // Success
   successScroll:  { padding: 24, alignItems: "center" },
-  successCard:    { backgroundColor: "#fff", borderRadius: 20, borderWidth: 1,
-                    borderColor: "#E5E7EB", padding: 24, width: "100%",
+  successCard:    { backgroundColor: COLORS.surface, borderRadius: 20, borderWidth: 1,
+                    borderColor: COLORS.border, padding: 24, width: "100%",
                     alignItems: "center", gap: 12,
                     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
-  successIcon:    { width: 72, height: 72, borderRadius: 20,
-                    alignItems: "center", justifyContent: "center" },
-  successTitle:   { fontSize: 20, fontWeight: "800", color: "#111827" },
-  successMessage: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 20 },
+  successTitle:   { fontSize: 20, fontWeight: "800", color: COLORS.text },
+  successMessage: { fontSize: 14, color: COLORS.textSecondary, textAlign: "center", lineHeight: 20 },
 
   // Credentials
   credCard:      { backgroundColor: "#FFFBEB", borderRadius: 12, borderWidth: 1,

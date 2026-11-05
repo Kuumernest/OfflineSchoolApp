@@ -14,6 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyPlan, actOnMyPlan, moveMyPlanMilestone, reflectOnMyPlan } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 const REFLECTIONS = ["USEFUL", "NOT_USEFUL", "TOO_EASY", "TOO_DIFFICULT", "INTERESTING", "NOT_INTERESTING", "NEED_MORE_SUPPORT", "PREFER_DIFFERENT_APPROACH", "RESOURCE_PROBLEM", "OTHER"];
@@ -33,7 +35,7 @@ export default function StudentPlanScreen() {
   useEffect(() => { load(); }, [load]);
   const run = async (fn) => { try { await fn(); await load(); } catch { /* the server said no; the plan is unchanged */ } };
   if (loading) return <View style={st.root}><ActivityIndicator style={{ marginTop: 64 }} /></View>;
-  if (!p) return <View style={st.root}><Text style={st.empty}>{t("devPlan.none")}</Text></View>;
+  if (!p) return <View style={st.root}><EmptyState icon="map-outline" accent="indigo" style={st.empty} message={t("devPlan.none")} /></View>;
   const current = p.actions.filter((a) => !a.replacedAt);
   const sr = p.systemReview;
   const canMove = ["ACTIVE", "REVIEW_DUE", "ADAPTING"].includes(p.status);
@@ -41,7 +43,8 @@ export default function StudentPlanScreen() {
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={COLORS.text} /></TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title}>{p.dimension ? t(`strengths.dimension.${p.dimension}`) : p.subjectId ?? ""}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
@@ -99,24 +102,24 @@ export default function StudentPlanScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  status: { fontSize: 13, color: "#6B7280", marginBottom: 8 },
-  label: { fontSize: 13, fontWeight: "700", color: "#111827", marginTop: 14, marginBottom: 4 },
-  line: { fontSize: 14, color: "#1F2937" },
-  sub2: { fontSize: 12, color: "#374151", marginLeft: 6, marginTop: 2 },
-  hint: { fontSize: 11, color: "#6B7280", marginBottom: 6 },
-  empty: { fontSize: 14, color: "#6B7280", textAlign: "center", marginTop: 64 },
+  title: { fontSize: 20, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
+  status: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 8 },
+  label: { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep, marginTop: 14, marginBottom: 4 },
+  line: { fontSize: 14, color: COLORS.text },
+  sub2: { fontSize: 12, color: COLORS.textSecondary, marginLeft: 6, marginTop: 2 },
+  hint: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 6 },
+  empty: { marginTop: 64 },
   ms: { marginBottom: 4 },
   row: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  chip: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
-  chipOn: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  chipText: { fontSize: 12, color: "#374151" },
-  chipTextOn: { color: "#FFFFFF" },
-  input: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 8, padding: 8, marginTop: 8, backgroundColor: "#FFFFFF", fontSize: 13 },
-  btn: { backgroundColor: "#4F46E5", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, marginTop: 8, alignSelf: "flex-start" },
-  btnMuted: { backgroundColor: "#E5E7EB" },
+  chip: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
+  chipOn: { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  chipText: { fontSize: 12, color: COLORS.textSecondary },
+  chipTextOn: { color: ACCENT.indigo.deep, fontWeight: "600" },
+  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 8, marginTop: 8, backgroundColor: COLORS.surface, fontSize: 13, color: COLORS.text },
+  btn: { backgroundColor: ACCENT.indigo.solid, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, marginTop: 8, alignSelf: "flex-start" },
+  btnMuted: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   btnDisabled: { opacity: 0.5 },
-  btnText: { color: "#FFFFFF", fontWeight: "600" },
-  btnTextMuted: { color: "#374151", fontWeight: "600" },
+  btnText: { color: COLORS.onPrimary, fontWeight: "600" },
+  btnTextMuted: { color: COLORS.textSecondary, fontWeight: "600" },
 });

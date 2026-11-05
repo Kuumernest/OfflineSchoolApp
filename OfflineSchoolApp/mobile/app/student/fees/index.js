@@ -23,6 +23,8 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort, formatTime } from "../../../src/i18n/format";
 import { fetchMyFees } from "../../../src/services/studentFees.service";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT, SEMANTIC, TONE_EDGE, statusBadge, termAccent } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF",
@@ -63,8 +65,10 @@ export default function StudentFeesScreen() {
   const totals  = ledger?.totals ?? { charged: 0, waived: 0, paid: 0, balance: 0 };
   const balance = totals.balance ?? 0;
   const tone    = balance > 0 ? "owes" : balance < 0 ? "credit" : "settled";
-  const toneColor = tone === "owes" ? C.danger : C.success;
-  const toneBg    = tone === "owes" ? C.dangerBg : C.successBg;
+  const semTone   = tone === "owes" ? "error" : "success";
+  const toneColor = SEMANTIC[semTone].text;
+  const toneBg    = SEMANTIC[semTone].bg;
+  const toneEdge  = TONE_EDGE[semTone];
 
   return (
     <View style={styles.root}>
@@ -73,8 +77,9 @@ export default function StudentFeesScreen() {
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}
                           accessibilityRole="button" accessibilityLabel={t("common.back")}>
-          <Ionicons name="arrow-back" size={24} color={C.gray900} />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
+        <HeaderIcon />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("studentFees.title")}</Text>
           <Text style={styles.headerSub}>{t("studentFees.blurb")}</Text>
@@ -83,7 +88,7 @@ export default function StudentFeesScreen() {
 
       {stale && (
         <View style={styles.staleBar}>
-          <Ionicons name="cloud-offline-outline" size={16} color={C.warning} />
+          <Ionicons name="cloud-offline-outline" size={16} color={SEMANTIC.warning.icon} />
           <Text style={styles.staleText}>{t("studentFees.staleAt", { time: formatTime(stale) })}</Text>
         </View>
       )}
@@ -99,7 +104,7 @@ export default function StudentFeesScreen() {
         >
           {!!error && (
             <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={C.danger} />
+              <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity onPress={() => load()}>
                 <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -110,7 +115,7 @@ export default function StudentFeesScreen() {
           {ledger && (
             <>
               {/* The balance, first */}
-              <View style={[styles.balanceCard, { backgroundColor: toneBg, borderColor: toneColor + "40" }]}>
+              <View style={[styles.balanceCard, { backgroundColor: toneBg, borderColor: statusBadge(semTone).border, borderTopColor: toneEdge }]}>
                 <Text style={styles.balanceLabel}>
                   {tone === "owes" ? t("studentFees.owing") : tone === "credit" ? t("studentFees.credit") : t("studentFees.settled")}
                 </Text>
@@ -126,14 +131,17 @@ export default function StudentFeesScreen() {
 
               {/* What was billed */}
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t("fees.charges")}</Text>
+                <View style={styles.cardTitleRow}>
+                  <IconSquare icon="receipt-outline" accent="teal" size={28} />
+                  <Text style={styles.cardTitle}>{t("fees.charges")}</Text>
+                </View>
                 {(ledger.charges?.length ?? 0) === 0 ? (
                   <Text style={styles.empty}>{t("studentFees.empty")}</Text>
                 ) : (
                   ledger.charges.map((c) => {
                     const net = Math.max(0, (c.amount ?? 0) - (c.waivedAmount ?? 0));
                     return (
-                      <View key={c._id} style={styles.line}>
+                      <View key={c._id} style={[styles.line, { borderLeftColor: ACCENT[termAccent(c.term)].base }]}>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={styles.lineLabel} numberOfLines={1}>{c.label || c.code}</Text>
                           <Text style={styles.lineMeta}>
@@ -144,7 +152,7 @@ export default function StudentFeesScreen() {
                             ].filter(Boolean).join(" · ")}
                           </Text>
                           {(c.waivedAmount ?? 0) > 0 && (
-                            <Text style={[styles.lineMeta, { color: C.success }]}>
+                            <Text style={[styles.lineMeta, { color: SEMANTIC.success.text }]}>
                               {t("fees.waived")} {formatMoney(c.waivedAmount)}
                             </Text>
                           )}
@@ -158,12 +166,15 @@ export default function StudentFeesScreen() {
 
               {/* What was paid */}
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t("fees.payments")}</Text>
+                <View style={styles.cardTitleRow}>
+                  <IconSquare icon="cash-outline" accent="teal" size={28} />
+                  <Text style={styles.cardTitle}>{t("fees.payments")}</Text>
+                </View>
                 {(ledger.payments?.length ?? 0) === 0 ? (
                   <Text style={styles.empty}>{t("fees.noPayments")}</Text>
                 ) : (
                   ledger.payments.map((p) => (
-                    <View key={p._id} style={styles.line}>
+                    <View key={p._id} style={[styles.line, { borderLeftColor: p.amount < 0 ? TONE_EDGE.error : ACCENT.teal.base }]}>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.lineLabel} numberOfLines={1}>
                           {p.receiptNo ? `${t("fees.receiptNo")} ${p.receiptNo}` : t("fees.pendingReceipt")}
@@ -171,7 +182,7 @@ export default function StudentFeesScreen() {
                         </Text>
                         <Text style={styles.lineMeta}>{formatDateShort(p.receivedAt)}</Text>
                       </View>
-                      <Text style={[styles.lineAmount, p.amount < 0 && { color: C.danger }]}>
+                      <Text style={[styles.lineAmount, p.amount < 0 && { color: SEMANTIC.error.text }]}>
                         {formatMoney(p.amount)}
                       </Text>
                     </View>
@@ -192,34 +203,38 @@ const styles = StyleSheet.create({
   root:     { flex: 1, backgroundColor: C.gray50 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   header:   { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 52, paddingBottom: 12,
-              backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: C.gray200 },
+              backgroundColor: THEME.surface, borderBottomWidth: 1, borderBottomColor: THEME.border },
   backBtn:  { padding: 6, marginRight: 6 },
   headerCenter: { flex: 1 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
-  headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: THEME.text },
+  headerSub:    { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
 
-  staleBar:  { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.warningBg, paddingHorizontal: 16, paddingVertical: 8 },
-  staleText: { fontSize: 12, color: C.warning, flex: 1 },
+  staleBar:  { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: SEMANTIC.warning.bg, paddingHorizontal: 16, paddingVertical: 8 },
+  staleText: { fontSize: 12, color: SEMANTIC.warning.text, flex: 1 },
 
   scroll: { padding: 16, gap: 12, paddingBottom: 40 },
 
-  errorBox:  { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.dangerBg, borderRadius: 10, padding: 12 },
-  errorText: { flex: 1, fontSize: 13, color: C.danger },
-  retryText: { fontSize: 13, fontWeight: "600", color: C.primary },
+  errorBox:  { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: SEMANTIC.error.bg, borderRadius: 10, padding: 12,
+               borderWidth: 1, borderColor: statusBadge("error").border },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
+  retryText: { fontSize: 13, fontWeight: "600", color: SEMANTIC.error.text },
 
-  balanceCard:  { borderRadius: 14, padding: 16, borderWidth: 1 },
-  balanceLabel: { fontSize: 12, fontWeight: "600", color: C.gray600, textTransform: "uppercase", letterSpacing: 0.4 },
+  balanceCard:  { borderRadius: 14, padding: 16, borderWidth: 1, borderTopWidth: 3 },
+  balanceLabel: { fontSize: 12, fontWeight: "600", color: THEME.textSecondary, textTransform: "uppercase", letterSpacing: 0.4 },
   balanceValue: { fontSize: 28, fontWeight: "800", marginTop: 4 },
   balanceRow:   { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 },
-  balanceMeta:  { fontSize: 12, color: C.gray600 },
+  balanceMeta:  { fontSize: 12, color: THEME.textSecondary },
 
-  card:      { backgroundColor: C.white, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.gray200 },
-  cardTitle: { fontSize: 14, fontWeight: "700", color: C.gray900, marginBottom: 6 },
-  empty:     { fontSize: 13, color: C.gray400, paddingVertical: 8 },
-  line:      { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.gray100 },
-  lineLabel: { fontSize: 14, color: C.gray900, fontWeight: "500" },
-  lineMeta:  { fontSize: 12, color: C.gray500, marginTop: 2 },
-  lineAmount: { fontSize: 14, fontWeight: "700", color: C.gray900 },
+  card:      { backgroundColor: ACCENT.teal.wash, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: THEME.border,
+               borderTopWidth: 3, borderTopColor: ACCENT.teal.base },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  cardTitle: { fontSize: 14, fontWeight: "700", color: THEME.text },
+  empty:     { fontSize: 13, color: THEME.textSecondary, paddingVertical: 8 },
+  line:      { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: THEME.border,
+               borderLeftWidth: 3, paddingLeft: 8 },
+  lineLabel: { fontSize: 14, color: THEME.text, fontWeight: "500" },
+  lineMeta:  { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
+  lineAmount: { fontSize: 14, fontWeight: "700", color: ACCENT.teal.deep },
 
-  footnote: { fontSize: 12, color: C.gray500, textAlign: "center", marginTop: 4, paddingHorizontal: 8 },
+  footnote: { fontSize: 12, color: THEME.textSecondary, textAlign: "center", marginTop: 4, paddingHorizontal: 8 },
 });

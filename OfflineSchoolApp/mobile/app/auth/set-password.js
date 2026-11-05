@@ -22,6 +22,7 @@ import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { useSafeLogout } from "../../src/hooks/useSafeLogout";
 import { needsInternetFailureText } from "../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC } from "../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS & VALIDATION RULES
@@ -68,7 +69,7 @@ const RequirementRow = ({ met, label }) => (
     <Ionicons
       name={met ? "checkmark-circle" : "ellipse-outline"}
       size={16}
-      color={met ? "#059669" : "#D1D5DB"}
+      color={met ? SEMANTIC.success.icon : COLORS.textMuted}
     />
     <Text style={[reqStyles.label, met && reqStyles.labelMet]}>
       {label}
@@ -78,8 +79,8 @@ const RequirementRow = ({ met, label }) => (
 
 const reqStyles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  label: { fontSize: 13, color: "#9CA3AF" },
-  labelMet: { color: "#059669" },
+  label: { fontSize: 13, color: COLORS.textSecondary },
+  labelMet: { color: SEMANTIC.success.text },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ export default function SetPasswordScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.iconWrap}>
-            <Ionicons name="lock-closed" size={32} color="#4F46E5" />
+            <Ionicons name="lock-closed" size={32} color={COLORS.onPrimary} />
           </View>
 
           <Text style={styles.title}>
@@ -288,7 +289,7 @@ export default function SetPasswordScreen() {
         {/* ── Inline Error Banner ── */}
         {!!error && (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={16} color="#DC2626" />
+            <Ionicons name="alert-circle" size={16} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -310,7 +311,7 @@ export default function SetPasswordScreen() {
                     setError(null);
                   }}
                   placeholder={t("setPassword.currentPh")}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.textMuted}
                   secureTextEntry={!showCurrent}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -323,7 +324,7 @@ export default function SetPasswordScreen() {
                   <Ionicons
                     name={showCurrent ? "eye-off-outline" : "eye-outline"}
                     size={20}
-                    color="#9CA3AF"
+                    color={COLORS.textSubtle}
                   />
                 </TouchableOpacity>
               </View>
@@ -343,7 +344,7 @@ export default function SetPasswordScreen() {
                 setError(null);
               }}
               placeholder={t("setPassword.newPh")}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
               secureTextEntry={!showNew}
               autoCapitalize="none"
               autoCorrect={false}
@@ -356,7 +357,7 @@ export default function SetPasswordScreen() {
               <Ionicons
                 name={showNew ? "eye-off-outline" : "eye-outline"}
                 size={20}
-                color="#9CA3AF"
+                color={COLORS.textSubtle}
               />
             </TouchableOpacity>
           </View>
@@ -391,7 +392,7 @@ export default function SetPasswordScreen() {
                 setError(null);
               }}
               placeholder={t("setPassword.confirmPh")}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoCorrect={false}
@@ -404,7 +405,7 @@ export default function SetPasswordScreen() {
               <Ionicons
                 name={showConfirm ? "eye-off-outline" : "eye-outline"}
                 size={20}
-                color="#9CA3AF"
+                color={COLORS.textSubtle}
               />
             </TouchableOpacity>
           </View>
@@ -417,12 +418,12 @@ export default function SetPasswordScreen() {
                   passwordsMatch ? "checkmark-circle" : "close-circle"
                 }
                 size={16}
-                color={passwordsMatch ? "#059669" : "#DC2626"}
+                color={passwordsMatch ? SEMANTIC.success.icon : SEMANTIC.error.icon}
               />
               <Text
                 style={[
                   reqStyles.label,
-                  { color: passwordsMatch ? "#059669" : "#DC2626" },
+                  { color: passwordsMatch ? SEMANTIC.success.text : SEMANTIC.error.text },
                 ]}
               >
                 {passwordsMatch
@@ -444,10 +445,10 @@ export default function SetPasswordScreen() {
           activeOpacity={0.8}
         >
           {loading ? (
-            <ActivityIndicator color="#FFF" />
+            <ActivityIndicator color={COLORS.onPrimary} />
           ) : (
             <>
-              <Ionicons name="lock-closed-outline" size={18} color="#FFF" />
+              <Ionicons name="lock-closed-outline" size={18} color={COLORS.onPrimary} />
               <Text style={styles.submitBtnText}>
                 {isForcedReset
                   ? t("setPassword.submit")
@@ -462,7 +463,7 @@ export default function SetPasswordScreen() {
           <Ionicons
             name="shield-checkmark-outline"
             size={16}
-            color="#4F46E5"
+            color={SEMANTIC.info.icon}
           />
           <Text style={styles.noteText}>
             {t("setPassword.securityNote")}
@@ -478,7 +479,7 @@ export default function SetPasswordScreen() {
           <Ionicons
             name={isForcedReset ? "log-out-outline" : "arrow-back-outline"}
             size={16}
-            color="#9CA3AF"
+            color={COLORS.textSecondary}
           />
           <Text style={styles.logoutText}>
             {isForcedReset
@@ -498,7 +499,7 @@ export default function SetPasswordScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   scroll: { paddingHorizontal: 24 },
 
   // Header
@@ -507,7 +508,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.blue.solid,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -515,38 +516,40 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#111827",
+    color: COLORS.text,
     textAlign: "center",
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 14,
-    color: "#6B7280",
+    color: COLORS.textSecondary,
     textAlign: "center",
     lineHeight: 22,
   },
-  name: { fontWeight: "700", color: "#111827" },
+  name: { fontWeight: "700", color: COLORS.text },
 
   // Error Banner
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius: 10,
     padding: 14,
     marginBottom: 16,
     gap: 8,
     borderWidth: 1,
-    borderColor: "#FECACA",
+    borderColor: SEMANTIC.error.box,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626", fontWeight: "500" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
 
   // Card
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
+    borderTopWidth: 3,
+    borderTopColor: ACCENT.blue.base,
     padding: 24,
-    shadowColor: "#000",
+    shadowColor: COLORS.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
@@ -557,26 +560,26 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#374151",
+    color: COLORS.text,
     marginBottom: 8,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: COLORS.border,
     borderRadius: 10,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.surface,
     marginBottom: 12,
   },
   input: {
     flex: 1,
     padding: 13,
     fontSize: 15,
-    color: "#111827",
+    color: COLORS.text,
   },
-  inputError: { borderColor: "#FCA5A5" },
-  inputSuccess: { borderColor: "#6EE7B7" },
+  inputError: { borderColor: SEMANTIC.error.icon },
+  inputSuccess: { borderColor: SEMANTIC.success.icon },
   eyeBtn: {
     padding: 12,
     marginRight: 4,
@@ -584,7 +587,7 @@ const styles = StyleSheet.create({
 
   // Requirements
   requirements: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.blue.wash,
     borderRadius: 10,
     padding: 12,
     marginBottom: 4,
@@ -596,22 +599,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#4F46E5",
+    backgroundColor: COLORS.primary,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
-    shadowColor: "#4F46E5",
+    shadowColor: COLORS.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
   submitBtnDisabled: {
-    backgroundColor: "#A5B4FC",
+    opacity: 0.5,
     shadowOpacity: 0,
     elevation: 0,
   },
   submitBtnText: {
-    color: "#FFF",
+    color: COLORS.onPrimary,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -620,7 +623,9 @@ const styles = StyleSheet.create({
   noteBox: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: SEMANTIC.info.bg,
+    borderWidth: 1,
+    borderColor: SEMANTIC.info.box,
     borderRadius: 10,
     padding: 14,
     gap: 8,
@@ -629,7 +634,7 @@ const styles = StyleSheet.create({
   noteText: {
     flex: 1,
     fontSize: 12,
-    color: "#4338CA",
+    color: SEMANTIC.info.text,
     lineHeight: 18,
   },
 
@@ -643,7 +648,7 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     fontSize: 13,
-    color: "#9CA3AF",
+    color: COLORS.textSecondary,
     fontWeight: "500",
   },
 });

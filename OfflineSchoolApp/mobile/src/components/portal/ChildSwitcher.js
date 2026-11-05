@@ -10,6 +10,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 
 import { useTranslation } from "../../i18n/useTranslation";
 import { ChildAvatar } from "./ui";
+import { ACCENT } from "../../theme/colors";
 import { C, TAP } from "./theme";
 
 export default function ChildSwitcher({ family, selected, onSelect }) {
@@ -60,8 +61,8 @@ const s = StyleSheet.create({
     minHeight: TAP + 4, paddingLeft: 5, paddingRight: 14, borderRadius: 999,
     borderWidth: 1, borderColor: C.lineStrong, backgroundColor: C.surface,
   },
-  chipOn: { borderColor: C.primary, backgroundColor: C.primaryBg },
+  chipOn: { borderColor: ACCENT.blue.base, backgroundColor: ACCENT.blue.wash },
   name:   { fontSize: 14, fontWeight: "600", color: C.ink },
-  nameOn: { color: C.primary },
+  nameOn: { color: ACCENT.blue.deep },
   cls:    { fontSize: 11, color: C.inkMuted, marginTop: 1 },
 });

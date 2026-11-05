@@ -20,6 +20,8 @@ import {
   backfillTeacherNames,
 } from "../../../src/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS, ACCENT, SEMANTIC, levelAccent, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
@@ -80,9 +82,9 @@ const SubjectRow = React.memo(({ assignment, onRemove, isRemoving }) => {
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       {isRemoving ? (
-        <ActivityIndicator size="small" color="#EF4444" />
+        <ActivityIndicator size="small" color={ACCENT.red.solid} />
       ) : (
-        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+        <Ionicons name="trash-outline" size={16} color={ACCENT.red.solid} />
       )}
     </TouchableOpacity>
   </View>
@@ -90,16 +92,32 @@ const SubjectRow = React.memo(({ assignment, onRemove, isRemoving }) => {
                               });
 
 const ClassGroup = React.memo(({ classId, group, onRemove, removingId }) => (
-  <View style={styles.classGroup}>
+  <View
+    style={[
+      styles.classGroup,
+      {
+        backgroundColor: ACCENT[levelAccent(group.class?.level)].wash,
+        borderLeftColor: ACCENT[levelAccent(group.class?.level)].base,
+      },
+    ]}
+  >
     <View style={styles.classGroupHeader}>
-      <View style={styles.classGroupIcon}>
-        <Ionicons name="school" size={18} color="#7C3AED" />
-      </View>
+      <IconSquare icon="school" accent={levelAccent(group.class?.level)} size={36} radius={10} style={styles.classGroupIcon} />
       <Text style={styles.classGroupTitle} numberOfLines={1}>
         {group.className}
       </Text>
-      <View style={styles.classGroupBadge}>
-        <Text style={styles.classGroupBadgeText}>{group.subjects.length}</Text>
+      <View
+        style={[
+          styles.classGroupBadge,
+          {
+            backgroundColor: accentBadge(levelAccent(group.class?.level)).bg,
+            borderColor: accentBadge(levelAccent(group.class?.level)).border,
+          },
+        ]}
+      >
+        <Text style={[styles.classGroupBadgeText, { color: accentBadge(levelAccent(group.class?.level)).text }]}>
+          {group.subjects.length}
+        </Text>
       </View>
     </View>
 
@@ -118,7 +136,7 @@ const EmptyAssignments = React.memo(({ onAssign }) => {
                                       const { t } = useTranslation();
                                       return (
   <View style={styles.emptyState}>
-    <Ionicons name="git-branch-outline" size={48} color="#D1D5DB" />
+    <IconSquare icon="git-branch-outline" accent="violet" size={56} radius={16} />
     <Text style={styles.emptyTitle}>{t("assignList.detailEmpty")}</Text>
     <Text style={styles.emptySubtitle}>
       {t("assignList.detailEmptySub")}
@@ -128,7 +146,7 @@ const EmptyAssignments = React.memo(({ onAssign }) => {
       onPress={onAssign}
       activeOpacity={0.7}
     >
-      <Ionicons name="add-circle" size={18} color="#4F46E5" />
+      <Ionicons name="add-circle" size={18} color={ACCENT.violet.deep} />
       <Text style={styles.emptyActionText}>{t("assignList.assignSubjects")}</Text>
     </TouchableOpacity>
   </View>
@@ -333,8 +351,9 @@ export default function TeacherAssignmentDetail() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {teacherInfo?.name || fallbackTeacherName || t("assignList.teacher")}
@@ -369,7 +388,7 @@ export default function TeacherAssignmentDetail() {
         {/* ── Error banner ── */}
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadData()}
@@ -391,13 +410,16 @@ export default function TeacherAssignmentDetail() {
         {/* ── Section header ── */}
         {assignments.length > 0 && (
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t("assignList.byClassTitle")}</Text>
+            <View style={styles.sectionTitleRow}>
+              <IconSquare icon="school" accent="indigo" size={28} />
+              <Text style={styles.sectionTitle}>{t("assignList.byClassTitle")}</Text>
+            </View>
             <TouchableOpacity
               onPress={navigateToAssign}
               activeOpacity={0.7}
               style={styles.sectionAction}
             >
-              <Ionicons name="add-circle-outline" size={16} color="#4F46E5" />
+              <Ionicons name="add-circle-outline" size={16} color={ACCENT.violet.deep} />
               <Text style={styles.sectionActionText}>{t("assignList.addMore")}</Text>
             </TouchableOpacity>
           </View>
@@ -440,21 +462,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:      { marginLeft: 12, marginRight: 0 },
   headerCenter:    { flex: 1, marginLeft: 12 },
-  headerTitle:     { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle:  { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:     { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle:  { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addBtn: {
     width:           40,
     height:          40,
@@ -479,27 +502,29 @@ const styles = StyleSheet.create({
 
   teacherCard: {
     flexDirection:    "row",
-    backgroundColor:  "#FFFFFF",
+    backgroundColor:  ACCENT.violet.wash,
     marginHorizontal: 20,
     marginTop:        20,
     padding:          20,
     borderRadius:     16,
     borderWidth:      1,
-    borderColor:      "#E5E7EB",
+    borderColor:      COLORS.border,
+    borderTopWidth:   3,
+    borderTopColor:   ACCENT.violet.base,
   },
   teacherAvatar: {
     width:           56,
     height:          56,
     borderRadius:    16,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginRight:     16,
   },
-  teacherAvatarText: { fontSize: 22, fontWeight: "700", color: "#4F46E5" },
+  teacherAvatarText: { fontSize: 22, fontWeight: "700", color: COLORS.onPrimary },
   teacherInfoBlock:  { flex: 1 },
-  teacherName:       { fontSize: 18, fontWeight: "700", color: "#111827" },
-  teacherEmail:      { fontSize: 13, color: "#9CA3AF", marginTop: 2 },
+  teacherName:       { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  teacherEmail:      { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   teacherStats: {
     flexDirection: "row",
     alignItems:    "center",
@@ -507,9 +532,9 @@ const styles = StyleSheet.create({
     gap:           20,
   },
   teacherStatItem:   { alignItems: "center" },
-  teacherStatNumber: { fontSize: 18, fontWeight: "700", color: "#4F46E5" },
-  teacherStatLabel:  { fontSize: 11, color: "#9CA3AF", marginTop: 1, fontWeight: "500" },
-  teacherStatDivider: { width: 1, height: 28, backgroundColor: "#E5E7EB" },
+  teacherStatNumber: { fontSize: 18, fontWeight: "700", color: ACCENT.violet.deep },
+  teacherStatLabel:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 1, fontWeight: "500" },
+  teacherStatDivider: { width: 1, height: 28, backgroundColor: COLORS.border },
 
   sectionHeader: {
     flexDirection:  "row",
@@ -519,44 +544,37 @@ const styles = StyleSheet.create({
     marginTop:      24,
     marginBottom:   4,
   },
-  sectionTitle:      { fontSize: 14, fontWeight: "700", color: "#374151" },
+  sectionTitleRow:   { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle:      { fontSize: 14, fontWeight: "700", color: COLORS.text },
   sectionAction:     { flexDirection: "row", alignItems: "center", gap: 4 },
-  sectionActionText: { fontSize: 13, fontWeight: "600", color: "#4F46E5" },
+  sectionActionText: { fontSize: 13, fontWeight: "600", color: ACCENT.violet.deep },
 
   classGroup: {
-    backgroundColor:  "#FFFFFF",
+    backgroundColor:  COLORS.surface,
     marginHorizontal: 20,
     marginTop:        12,
     borderRadius:     14,
     overflow:         "hidden",
     borderWidth:      1,
-    borderColor:      "#E5E7EB",
+    borderColor:      COLORS.border,
+    borderLeftWidth:  3,
   },
   classGroupHeader: {
     flexDirection:     "row",
     alignItems:        "center",
     padding:           14,
-    backgroundColor:   "#FAFAFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
-  classGroupIcon: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
-    backgroundColor: "#EDE9FE",
-    alignItems:      "center",
-    justifyContent:  "center",
-    marginRight:     10,
-  },
-  classGroupTitle: { flex: 1, fontSize: 15, fontWeight: "600", color: "#111827" },
+  classGroupIcon: { marginRight: 10 },
+  classGroupTitle: { flex: 1, fontSize: 15, fontWeight: "600", color: COLORS.text },
   classGroupBadge: {
-    backgroundColor:   "#EDE9FE",
     paddingHorizontal: 8,
     paddingVertical:   2,
     borderRadius:      8,
+    borderWidth:       1,
   },
-  classGroupBadgeText: { fontSize: 12, fontWeight: "700", color: "#7C3AED" },
+  classGroupBadgeText: { fontSize: 12, fontWeight: "700" },
 
   subjectRow: {
     flexDirection:     "row",
@@ -565,23 +583,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
   },
   subjectRowLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   subjectDot: {
     width:           8,
     height:          8,
     borderRadius:    4,
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.slate.solid,
     flexShrink:      0,
   },
-  subjectName: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  subjectCode: { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  subjectName: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  subjectCode: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   removeBtn: {
     width:           32,
     height:          32,
     borderRadius:    8,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     alignItems:      "center",
     justifyContent:  "center",
     marginLeft:      8,
@@ -593,17 +611,17 @@ const styles = StyleSheet.create({
     paddingVertical:   50,
     paddingHorizontal: 20,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "600", color: "#374151", marginTop: 12 },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", marginTop: 4, textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "600", color: COLORS.text, marginTop: 12 },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4, textAlign: "center" },
   emptyAction: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.violet.wash,
     paddingHorizontal: 20,
     paddingVertical:   12,
     borderRadius:      10,
     marginTop:         20,
     gap:               8,
   },
-  emptyActionText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
+  emptyActionText: { fontSize: 14, fontWeight: "600", color: ACCENT.violet.deep },
 });

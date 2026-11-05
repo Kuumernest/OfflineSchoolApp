@@ -27,33 +27,48 @@ import { Ionicons }  from "@expo/vector-icons";
 import { StudentService } from "../../../src/services/student.service";
 import { getStudentStatusConfig } from "../../../src/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import {
+  COLORS, ACCENT, SEMANTIC, TONE_EDGE, levelAccent, accentBadge, statusBadge,
+} from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS  (unchanged)
 // ─────────────────────────────────────────────────────────
 
+// Students are blue; status colours are the semantic tones (theme/colors.js).
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#D1FAE5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEE2E2",
-  info:      "#0284C7",
-  infoBg:    "#E0F2FE",
-  purple:    "#7C3AED",
-  purpleBg:  "#EDE9FE",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:     ACCENT.blue.solid,
+  primaryBg:   ACCENT.blue.wash,
+  primaryDeep: ACCENT.blue.deep,
+  success:     ACCENT.green.solid,
+  successBg:   SEMANTIC.success.bg,
+  warning:     ACCENT.amber.solid,
+  warningBg:   SEMANTIC.warning.bg,
+  error:       ACCENT.red.solid,
+  errorBg:     SEMANTIC.error.bg,
+  info:        ACCENT.sky.solid,
+  infoBg:      ACCENT.sky.wash,
+  white:       COLORS.surface,
+  gray50:      COLORS.page,
+  gray100:     ACCENT.slate.wash,
+  gray200:     COLORS.border,
+  gray400:     COLORS.textMuted,
+  gray500:     COLORS.textSecondary,
+  gray700:     COLORS.text,
+  gray900:     COLORS.text,
 };
+
+/** A status's badge tone: active is good news, pending waits, the rest are bad news. */
+const STATUS_TONE = {
+  approved:  "success",
+  pending:   "warning",
+  suspended: "error",
+  rejected:  "error",
+  inactive:  "error",
+};
+const statusTone = (key) => STATUS_TONE[key] ?? "info";
+const COUNT_BADGE = accentBadge("blue");
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS  — mirrors web STATUS_OPTIONS exactly
@@ -92,8 +107,8 @@ const STATUS_FILTERS = [
     key:   "rejected",
     labelKey: "approvedStudents.rejected",
     icon:  "close-circle-outline",
-    color: C.purple,
-    bg:    C.purpleBg,
+    color: C.error,
+    bg:    C.errorBg,
   },
 ];
 
@@ -309,6 +324,8 @@ const StudentCard = React.memo(({ student, onPress }) => {
   const isSuspended  = student.status === "suspended";
   const isRejected   = student.status === "rejected";
   const isPending    = student.status === "pending";
+  const statusColors = statusBadge(statusTone(statusConfig.key));
+  const classColors  = accentBadge(levelAccent(student?.class?.level ?? student?.classLevel));
 
   // Card border tint by status
   const cardStyle = [
@@ -320,20 +337,14 @@ const StudentCard = React.memo(({ student, onPress }) => {
 
   // Avatar background by status
   const avatarBg = isSuspended
-    ? C.errorBg
-    : isRejected
-    ? C.purpleBg
-    : isPending
-    ? C.warningBg
-    : C.primaryBg;
-
-  const avatarFg = isSuspended
     ? C.error
     : isRejected
-    ? C.purple
+    ? C.error
     : isPending
     ? C.warning
     : C.primary;
+
+  const avatarFg = COLORS.onPrimary;
 
   return (
     <TouchableOpacity style={cardStyle} onPress={onPress} activeOpacity={0.72}>
@@ -355,21 +366,21 @@ const StudentCard = React.memo(({ student, onPress }) => {
           {/* Sub-line: email › phone › admission no */}
           {student.email ? (
             <View style={styles.metaRow}>
-              <Ionicons name="mail-outline" size={12} color={C.gray400} />
+              <Ionicons name="mail-outline" size={12} color={C.primary} />
               <Text style={styles.studentMeta} numberOfLines={1}>
                 {student.email}
               </Text>
             </View>
           ) : student.phone ? (
             <View style={styles.metaRow}>
-              <Ionicons name="call-outline" size={12} color={C.gray400} />
+              <Ionicons name="call-outline" size={12} color={C.primary} />
               <Text style={styles.studentMeta} numberOfLines={1}>
                 {student.phone}
               </Text>
             </View>
           ) : (student.admissionNumber || student.admissionNo) ? (
             <View style={styles.metaRow}>
-              <Ionicons name="card-outline" size={12} color={C.gray400} />
+              <Ionicons name="card-outline" size={12} color={C.primary} />
               <Text style={styles.studentMeta} numberOfLines={1}>
                 {student.admissionNumber || student.admissionNo}
               </Text>
@@ -378,9 +389,9 @@ const StudentCard = React.memo(({ student, onPress }) => {
 
           {/* Class pill (only when a real class is assigned) */}
           {className !== t("approvedStudents.unassigned") && (
-            <View style={styles.classPill}>
-              <Ionicons name="school-outline" size={10} color={C.primary} />
-              <Text style={styles.classPillText} numberOfLines={1}>
+            <View style={[styles.classPill, { backgroundColor: classColors.bg, borderColor: classColors.border }]}>
+              <Ionicons name="school-outline" size={10} color={classColors.text} />
+              <Text style={[styles.classPillText, { color: classColors.text }]} numberOfLines={1}>
                 {className}
               </Text>
             </View>
@@ -389,15 +400,15 @@ const StudentCard = React.memo(({ student, onPress }) => {
 
         {/* Right: status badge + chevron */}
         <View style={styles.cardRight}>
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColors.bg, borderColor: statusColors.border }]}>
+            <Text style={[styles.statusText, { color: statusColors.text }]}>
               {statusConfig.labelKey ? t(statusConfig.labelKey) : statusConfig.label}
             </Text>
           </View>
           <Ionicons
             name="chevron-forward"
             size={16}
-            color={C.gray400}
+            color={C.gray500}
             style={styles.chevron}
           />
         </View>
@@ -414,7 +425,7 @@ const StudentCard = React.memo(({ student, onPress }) => {
 const SectionHeader = React.memo(({ title, count }) => (
   <View style={styles.sectionHeader}>
     <View style={styles.sectionLeft}>
-      <Ionicons name="school-outline" size={14} color={C.primary} />
+      <Ionicons name="school-outline" size={14} color={ACCENT.indigo.solid} />
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
     <View style={styles.countBadge}>
@@ -435,7 +446,7 @@ const EmptyState = React.memo(({ searchQuery }) => {
       <Ionicons
         name={searchQuery ? "search-outline" : "people-outline"}
         size={40}
-        color={C.gray400}
+        color={COLORS.onPrimary}
       />
     </View>
     <Text style={styles.emptyTitle}>
@@ -630,6 +641,8 @@ export default function ApprovedStudents() {
           <Ionicons name="arrow-back" size={22} color={C.gray900} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
+
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("approvedStudents.title")}</Text>
           {/* Mirrors web countLabel() under the page heading */}
@@ -741,16 +754,19 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     backgroundColor: C.white,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: C.gray200,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: C.gray100,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.gray200,
     alignItems: "center",
     justifyContent: "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12 },
   headerTitle:    { fontSize: 20, fontWeight: "700", color: C.gray900 },
   headerSubtitle: { fontSize: 13, color: C.gray500, marginTop: 2 },
@@ -816,7 +832,7 @@ const styles = StyleSheet.create({
   },
   classPillBtnActive: {
     backgroundColor: C.primaryBg,
-    borderColor: C.primary,
+    borderColor: ACCENT.blue.base,
   },
   classPillBtnText: {
     fontSize: 12,
@@ -824,7 +840,7 @@ const styles = StyleSheet.create({
     color: C.gray500,
   },
   classPillBtnTextActive: {
-    color: C.primary,
+    color: C.primaryDeep,
   },
 
   // ── Search ───────────────────────────────────────────────────────────────
@@ -865,27 +881,31 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   countBadge: {
-    backgroundColor: C.gray200,
+    backgroundColor: COUNT_BADGE.bg,
+    borderWidth: 1,
+    borderColor: COUNT_BADGE.border,
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  countText: { fontSize: 12, fontWeight: "700", color: C.gray700 },
+  countText: { fontSize: 12, fontWeight: "700", color: COUNT_BADGE.text },
 
   // ── Student card ─────────────────────────────────────────────────────────
   card: {
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.blue.wash,
     marginHorizontal: 20,
     marginBottom: 8,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.gray200,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.blue.base,
     overflow: "hidden",
   },
-  // Status-specific card tints (mirrors web row highlight logic)
-  cardSuspended: { borderColor: "#FECACA", backgroundColor: "#FFFAFA" },
-  cardRejected:  { borderColor: "#DDD6FE", backgroundColor: "#FDFCFF" },
-  cardPending:   { borderColor: "#FDE68A", backgroundColor: "#FFFDF5" },
+  // Status-specific card tints (mirrors web row highlight logic): the tone's edge
+  cardSuspended: { borderColor: TONE_EDGE.error,   borderLeftColor: TONE_EDGE.error },
+  cardRejected:  { borderColor: TONE_EDGE.error,   borderLeftColor: TONE_EDGE.error },
+  cardPending:   { borderColor: TONE_EDGE.warning, borderLeftColor: TONE_EDGE.warning },
 
   cardInner: {
     flexDirection: "row",
@@ -916,12 +936,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: C.primaryBg,
+    borderWidth: 1,
+    borderColor: C.gray200,
     borderRadius: 8,
     paddingHorizontal: 7,
     paddingVertical: 3,
     marginTop: 2,
   },
-  classPillText: { fontSize: 11, fontWeight: "700", color: C.primary },
+  classPillText: { fontSize: 11, fontWeight: "700", color: C.primaryDeep },
 
   // ── Right: status badge + chevron ────────────────────────────────────────
   cardRight: {
@@ -930,7 +952,7 @@ const styles = StyleSheet.create({
     gap: 6,
     flexShrink: 0,
   },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
   statusText:  { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   chevron:     { marginTop: 2 },
 
@@ -945,7 +967,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: C.gray100,
+    backgroundColor: C.primary,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,

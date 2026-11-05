@@ -30,7 +30,8 @@ import { isStudentProfileComplete } from "./profile/setup";
 import { toDisplayUri }             from "../../src/utils/logoUri";
 import { useTranslation }           from "../../src/i18n/useTranslation";
 import { StatTile, ActionTile }     from "../../src/components/Tiles";
-import { COLORS, SEMANTIC, ACCENT } from "../../src/theme/colors";
+import { COLORS, SEMANTIC, ACCENT, accentBadge, statusBadge, categoryAccent } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare }   from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -66,7 +67,7 @@ const getDateString = () =>
 
 const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (!dueDateStr)
-    return { labelKey: "studentHome.dueNoDeadline", color: COLORS.textSubtle, bg: COLORS.page, urgent: false };
+    return { labelKey: "studentHome.dueNoDeadline", color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
 
   const due  = new Date(dueDateStr);
   const now  = new Date();
@@ -75,8 +76,8 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (submittedAt) {
     const wasLate = new Date(submittedAt) > due;
     return wasLate
-      ? { labelKey: "studentHome.dueSubmittedLate",   color: COLORS.warning, bg: SEMANTIC.warning.box, urgent: false }
-      : { labelKey: "studentHome.dueSubmittedOnTime", color: COLORS.success, bg: SEMANTIC.success.bg, urgent: false };
+      ? { labelKey: "studentHome.dueSubmittedLate",   color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: false }
+      : { labelKey: "studentHome.dueSubmittedOnTime", color: SEMANTIC.success.text, bg: SEMANTIC.success.bg, border: statusBadge("success").border, urgent: false };
   }
 
   if (diff < 0) {
@@ -84,7 +85,7 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
     return {
       labelKey:    daysAgo > 0 ? "studentHome.dueOverdueDays" : "studentHome.dueOverdue",
       labelParams: daysAgo > 0 ? { count: daysAgo } : undefined,
-      color:  COLORS.danger, bg: SEMANTIC.error.box,
+      color:  SEMANTIC.error.text, bg: SEMANTIC.error.bg, border: statusBadge("error").border,
       urgent: true, isPast: true,
     };
   }
@@ -92,11 +93,11 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
 
-  if (hours < 6)  return { labelKey: "studentHome.dueHoursLeft", labelParams: { count: hours }, color: COLORS.danger, bg: SEMANTIC.error.box, urgent: true  };
-  if (hours < 24) return { labelKey: "studentHome.dueToday",     color: COLORS.warning, bg: SEMANTIC.warning.box, urgent: true  };
-  if (days === 1) return { labelKey: "studentHome.dueTomorrow",  color: COLORS.warning, bg: SEMANTIC.warning.box, urgent: false };
-  if (days < 7)   return { labelKey: "studentHome.dueDaysLeft",  labelParams: { count: days }, color: COLORS.success, bg: SEMANTIC.success.bg, urgent: false };
-  return              { labelKey: "studentHome.dueWeeksLeft", labelParams: { count: Math.floor(days / 7) }, color: COLORS.success, bg: SEMANTIC.success.bg, urgent: false };
+  if (hours < 6)  return { labelKey: "studentHome.dueHoursLeft", labelParams: { count: hours }, color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: true  };
+  if (hours < 24) return { labelKey: "studentHome.dueToday",     color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: true  };
+  if (days === 1) return { labelKey: "studentHome.dueTomorrow",  color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: false };
+  if (days < 7)   return { labelKey: "studentHome.dueDaysLeft",  labelParams: { count: days }, color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
+  return              { labelKey: "studentHome.dueWeeksLeft", labelParams: { count: Math.floor(days / 7) }, color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
 };
 
 const getHomeworkSubmissionStatus = (hw) => {
@@ -107,19 +108,19 @@ const getHomeworkSubmissionStatus = (hw) => {
       type:     "graded",
       labelKey: "studentHome.hwGraded",
       labelParams: { score: hw.submission_score, max: hw.max_score, pct },
-      color: pct >= 70 ? COLORS.success : COLORS.danger,
+      tone:  pct >= 70 ? "success" : "error",
       icon:  "ribbon-outline",
     };
   }
   if (hw.submission_id)
-    return { type: "submitted", labelKey: "studentHome.hwSubmitted", color: COLORS.primary, icon: "checkmark-circle-outline" };
+    return { type: "submitted", labelKey: "studentHome.hwSubmitted", tone: "success", icon: "checkmark-circle-outline" };
 
   const due    = hw.due_date ? new Date(hw.due_date) : null;
   const isPast = due && new Date() > due;
   return {
     type:  "pending",
     labelKey: isPast ? "studentHome.hwLate" : "studentHome.hwPending",
-    color: isPast ? COLORS.warning : COLORS.textSubtle,
+    tone:  isPast ? "warning" : "info",
     icon:  "document-outline",
   };
 };
@@ -443,9 +444,9 @@ const SectionHead = ({ title, action, onAction }) => (
   </View>
 );
 
-const EmptyCard = ({ icon, title, subtitle }) => (
+const EmptyCard = ({ icon, title, subtitle, accent = "blue" }) => (
   <View style={s.emptyCard}>
-    <Ionicons name={icon} size={32} color={ACCENT.blue.solid} />
+    <IconSquare icon={icon} accent={accent} size={44} radius={12} />
     <Text style={s.emptyCardTitle}>{title}</Text>
     {subtitle && <Text style={s.emptyCardSub}>{subtitle}</Text>}
   </View>
@@ -667,6 +668,7 @@ export default function StudentDashboard() {
 
       {/* HEADER */}
       <View style={s.header}>
+        <HeaderIcon style={{ marginRight: 4 }} />
         <View style={{ flex: 1 }}>
           <Text style={s.greeting}>{t(getGreetingKey())},</Text>
           <Text style={s.userName} numberOfLines={1}>
@@ -908,20 +910,25 @@ export default function StudentDashboard() {
           {todayClasses.length === 0 ? (
             <EmptyCard
               icon="calendar-outline"
+              accent="teal"
               title={t("studentHome.emptyClassesTitle")}
               subtitle={t("studentHome.emptyClassesSub")}
             />
           ) : (
             todayClasses.slice(0, 7).map((item, idx) => {
               const isBreak = item.isbreak === 1 || item.isbreak === "1" || item.isBreak === true;
+              const tint    = ACCENT[categoryAccent(item.subjectName || item.periodName)];
               return (
-                <View key={item.id || idx} style={[s.ttCard, isBreak && s.ttCardBreak]}>
+                <View
+                  key={item.id || idx}
+                  style={[s.ttCard, { backgroundColor: tint.wash, borderLeftColor: tint.base }, isBreak && s.ttCardBreak]}
+                >
                   <View style={s.ttTime}>
-                    <Text style={s.ttTimeStart}>{formatTime(item.startTime)}</Text>
+                    <Text style={[s.ttTimeStart, { color: tint.deep }]}>{formatTime(item.startTime)}</Text>
                     <Text style={s.ttTimeSep}>–</Text>
                     <Text style={s.ttTimeEnd}>{formatTime(item.endTime)}</Text>
                   </View>
-                  <View style={s.ttDivider} />
+                  <View style={[s.ttDivider, { backgroundColor: isBreak ? SEMANTIC.warning.icon : tint.base }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.ttSubject, isBreak && s.ttSubjectBreak]} numberOfLines={1}>
                       {item.subjectName || item.periodName || (isBreak ? t("studentHome.breakLabel") : "—")}
@@ -977,6 +984,7 @@ export default function StudentDashboard() {
           {homework.length === 0 ? (
             <EmptyCard
               icon="document-text-outline"
+              accent="indigo"
               title={t("studentHome.emptyHomeworkTitle")}
               subtitle={t("studentHome.emptyHomeworkSub")}
             />
@@ -1002,8 +1010,8 @@ export default function StudentDashboard() {
                     onPress={() => router.push("/student/homework")}
                     activeOpacity={0.7}
                   >
-                    <View style={[s.hwIconBg, { backgroundColor: status.color + "18" }]}>
-                      <Ionicons name={status.icon} size={20} color={status.color} />
+                    <View style={[s.hwIconBg, { backgroundColor: ACCENT.indigo.solid }]}>
+                      <Ionicons name={status.icon} size={20} color={COLORS.onPrimary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.hwTitle} numberOfLines={1}>{hw.title}</Text>
@@ -1011,17 +1019,17 @@ export default function StudentDashboard() {
                         {[hw.subject_name, hw.class_name].filter(Boolean).join("  ·  ")}
                       </Text>
                       <View style={s.hwChipRow}>
-                        <View style={[s.hwChip, { backgroundColor: due.bg }]}>
+                        <View style={[s.hwChip, { backgroundColor: due.bg, borderColor: due.border }]}>
                           <Ionicons name="calendar-outline" size={10} color={due.color} />
                           <Text style={[s.hwChipText, { color: due.color }]}>{t(due.labelKey, due.labelParams)}</Text>
                         </View>
-                        <View style={[s.hwChip, { backgroundColor: status.color + "18" }]}>
-                          <Text style={[s.hwChipText, { color: status.color }]}>{t(status.labelKey, status.labelParams)}</Text>
+                        <View style={[s.hwChip, { backgroundColor: statusBadge(status.tone).bg, borderColor: statusBadge(status.tone).border }]}>
+                          <Text style={[s.hwChipText, { color: statusBadge(status.tone).text }]}>{t(status.labelKey, status.labelParams)}</Text>
                         </View>
                         {hw.submission_score != null && (
-                          <View style={[s.hwChip, { backgroundColor: COLORS.primaryLight }]}>
-                            <Ionicons name="ribbon-outline" size={10} color={COLORS.primary} />
-                            <Text style={[s.hwChipText, { color: COLORS.primary }]}>
+                          <View style={[s.hwChip, { backgroundColor: accentBadge("indigo").bg, borderColor: accentBadge("indigo").border }]}>
+                            <Ionicons name="ribbon-outline" size={10} color={ACCENT.indigo.deep} />
+                            <Text style={[s.hwChipText, { color: ACCENT.indigo.deep }]}>
                               {hw.submission_score}/{hw.max_score ?? 100}
                             </Text>
                           </View>
@@ -1060,6 +1068,7 @@ export default function StudentDashboard() {
           {availableQuizzes.length === 0 ? (
             <EmptyCard
               icon="help-circle-outline"
+              accent="indigo"
               title={t("studentHome.emptyQuizzesTitle")}
               subtitle={t("studentHome.emptyQuizzesSub")}
             />
@@ -1125,19 +1134,21 @@ export default function StudentDashboard() {
           {subjects.length === 0 ? (
             <EmptyCard
               icon="book-outline"
+              accent="slate"
               title={t("studentHome.emptySubjectsTitle")}
               subtitle={t("studentHome.emptySubjectsSub")}
             />
           ) : (
             <View style={s.subjectsGrid}>
-              {subjects.slice(0, 6).map((subj, idx) => {
-                // Subjects carry no status: their dots cycle the neutral accents.
-                const accents = Object.values(ACCENT);
-                const color   = accents[idx % accents.length].icon;
+              {subjects.slice(0, 6).map((subj) => {
+                // A subject takes its own colour from its name (categoryAccent),
+                // the same as on the timetable and the web console.
+                const tint  = ACCENT[categoryAccent(subj.name)];
+                const color = tint.base;
                 return (
                   <TouchableOpacity
                     key={subj.id}
-                    style={s.subjectChip}
+                    style={[s.subjectChip, { backgroundColor: tint.wash, borderLeftColor: tint.base }]}
                     activeOpacity={0.7}
                     onPress={() =>
                       router.push({
@@ -1153,7 +1164,7 @@ export default function StudentDashboard() {
                         <Text style={s.subjectTeacher} numberOfLines={1}>{subj.teacherName}</Text>
                       )}
                     </View>
-                    {subj.code && <Text style={s.subjectCode}>{subj.code}</Text>}
+                    {subj.code && <Text style={[s.subjectCode, { color: tint.deep }]}>{subj.code}</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -1170,14 +1181,17 @@ export default function StudentDashboard() {
               onAction={() => router.push("/student/quizzes/history")}
             />
             {quizHistory.slice(0, 4).map((attempt) => (
-              <View key={attempt.id} style={s.resultCard}>
+              <View
+                key={attempt.id}
+                style={[s.resultCard, { borderLeftColor: attempt.is_passed ? SEMANTIC.success.icon : SEMANTIC.error.icon }]}
+              >
                 <View style={[
                   s.resultScoreBg,
-                  { backgroundColor: attempt.is_passed ? SEMANTIC.success.bg : SEMANTIC.error.bg },
+                  { backgroundColor: attempt.is_passed ? SEMANTIC.success.box : SEMANTIC.error.box },
                 ]}>
                   <Text style={[
                     s.resultScore,
-                    { color: attempt.is_passed ? COLORS.success : COLORS.danger },
+                    { color: attempt.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text },
                   ]}>
                     {Math.round(attempt.percentage || 0)}%
                   </Text>
@@ -1211,7 +1225,7 @@ export default function StudentDashboard() {
             activeOpacity={0.7}
           >
             <View style={s.resultsIconBg}>
-              <Ionicons name="document-text-outline" size={24} color={COLORS.info} />
+              <Ionicons name="document-text-outline" size={24} color={COLORS.onPrimary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.resultsCardTitle}>{t("studentHome.reportCardsTitle")}</Text>
@@ -1219,7 +1233,7 @@ export default function StudentDashboard() {
                 {t("studentHome.reportCardsSub")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -1249,7 +1263,7 @@ export default function StudentDashboard() {
                     <Text style={s.annAuthor}>— {ann.authorName}</Text>
                   )}
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
             ))}
             {storeInbox.filter((a) => !a.isPinned).length > 3 && (
@@ -1367,8 +1381,8 @@ const s = StyleSheet.create({
     alignItems: "center", gap: 8,
     borderWidth: 1, borderColor: COLORS.border,
   },
-  emptyCardTitle: { fontSize: 14, fontWeight: "600", color: COLORS.textSubtle },
-  emptyCardSub:   { fontSize: 12, color: COLORS.textMuted },
+  emptyCardTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  emptyCardSub:   { fontSize: 12, color: COLORS.textSecondary },
 
   urgentBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -1396,25 +1410,28 @@ const s = StyleSheet.create({
   pinnedTitle: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
   pinnedBody:  { fontSize: 12, color: SEMANTIC.error.text, marginTop: 2 },
 
+  // A lesson row takes its subject's wash and left edge inline (categoryAccent).
   ttCard: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
     shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  ttCardBreak:    { backgroundColor: SEMANTIC.warning.bg, borderWidth: 1, borderColor: SEMANTIC.warning.box },
+  ttCardBreak:    { backgroundColor: SEMANTIC.warning.bg, borderColor: SEMANTIC.warning.box, borderLeftColor: SEMANTIC.warning.icon },
   ttTime:         { width: 60, alignItems: "center" },
-  ttTimeStart:    { fontSize: 11, fontWeight: "700", color: COLORS.primary },
-  ttTimeSep:      { fontSize: 9,  color: COLORS.contextBorder },
-  ttTimeEnd:      { fontSize: 10, color: COLORS.textMuted },
-  ttDivider:      { width: 3, height: 36, borderRadius: 2, backgroundColor: COLORS.primaryLight },
+  ttTimeStart:    { fontSize: 11, fontWeight: "700", color: ACCENT.teal.deep },
+  ttTimeSep:      { fontSize: 9,  color: COLORS.textSecondary },
+  ttTimeEnd:      { fontSize: 10, color: COLORS.textSecondary },
+  ttDivider:      { width: 3, height: 36, borderRadius: 2, backgroundColor: ACCENT.teal.base },
   ttSubject:      { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  ttSubjectBreak: { color: COLORS.warning, fontStyle: "italic" },
-  ttMeta:         { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  ttSubjectBreak: { color: SEMANTIC.warning.text, fontStyle: "italic" },
+  ttMeta:         { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   ttBadge: {
-    backgroundColor: COLORS.page, borderRadius: 6,
+    backgroundColor: accentBadge("teal").bg, borderRadius: 6,
+    borderWidth: 1, borderColor: accentBadge("teal").border,
     paddingHorizontal: 7, paddingVertical: 3,
   },
-  ttBadgeText: { fontSize: 10, fontWeight: "700", color: COLORS.textSubtle },
+  ttBadgeText: { fontSize: 10, fontWeight: "700", color: accentBadge("teal").text },
 
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   // Four to a row is narrow: a tighter inside so "Announcements" still fits.
@@ -1422,25 +1439,28 @@ const s = StyleSheet.create({
 
   hwCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
     shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  hwCardUrgent: { borderWidth: 1, borderColor: SEMANTIC.error.box, backgroundColor: SEMANTIC.error.bg },
+  hwCardUrgent: { borderColor: SEMANTIC.error.box, borderLeftColor: ACCENT.red.base, backgroundColor: SEMANTIC.error.bg },
   hwIconBg: {
     width: 38, height: 38, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
   },
   hwTitle:   { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  hwMeta:    { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  hwMeta:    { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   hwChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 5 },
   hwChip: {
     flexDirection: "row", alignItems: "center", gap: 3,
     borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1, borderColor: "transparent",
   },
   hwChipText:   { fontSize: 10, fontWeight: "600" },
   hwScoreBox:   { alignItems: "center", minWidth: 32 },
-  hwScoreValue: { fontSize: 15, fontWeight: "800", color: COLORS.textSecondary },
-  hwScoreLabel: { fontSize: 9, color: COLORS.textMuted, fontWeight: "500" },
+  hwScoreValue: { fontSize: 15, fontWeight: "800", color: ACCENT.indigo.deep },
+  hwScoreLabel: { fontSize: 9, color: COLORS.textSecondary, fontWeight: "500" },
 
   seeMoreBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -1451,7 +1471,9 @@ const s = StyleSheet.create({
 
   quizCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
     shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   quizIconBg: {
@@ -1459,11 +1481,11 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   quizTitle:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  quizMeta:        { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  quizAttemptInfo: { fontSize: 10, color: COLORS.warning, marginTop: 2, fontWeight: "600" },
+  quizMeta:        { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  quizAttemptInfo: { fontSize: 10, color: SEMANTIC.warning.text, marginTop: 2, fontWeight: "600" },
   quizStartBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: COLORS.primary, borderRadius: 8,
+    backgroundColor: ACCENT.indigo.solid, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 6,
   },
   quizStartText: { fontSize: 12, fontWeight: "700", color: COLORS.onPrimary },
@@ -1471,21 +1493,25 @@ const s = StyleSheet.create({
   subjectsGrid: { gap: 6 },
   subjectChip: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, gap: 10,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 12, padding: 12, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.slate.base,
     shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
   },
   subjectDot:     { width: 8, height: 8, borderRadius: 4 },
   subjectName:    { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  subjectTeacher: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  subjectTeacher: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   subjectCode: {
-    fontSize: 10, fontWeight: "700", color: COLORS.textMuted,
-    backgroundColor: COLORS.page,
+    fontSize: 10, fontWeight: "700", color: ACCENT.slate.deep,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
   },
 
   resultCard: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
     shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
   },
   resultScoreBg: {
@@ -1494,42 +1520,45 @@ const s = StyleSheet.create({
   },
   resultScore: { fontSize: 15, fontWeight: "800" },
   resultTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  resultMeta:  { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  resultMeta:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
 
   // Results card (exam results shortcut)
   resultsCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, gap: 12,
-    borderWidth: 1, borderColor: SEMANTIC.info.box,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 12, padding: 14, gap: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.slate.base,
     shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   resultsIconBg: {
     width: 48, height: 48, borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: ACCENT.slate.solid,
     alignItems: "center", justifyContent: "center",
   },
   resultsCardTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
-  resultsCardSub:   { fontSize: 12, color: COLORS.textSubtle, marginTop: 2 },
+  resultsCardSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   annCard: {
     flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    backgroundColor: ACCENT.sky.wash, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.sky.base + "4D",
     shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
     position: "relative", overflow: "hidden",
   },
-  annCardUnread:  { borderLeftWidth: 3, borderLeftColor: COLORS.primary, backgroundColor: SEMANTIC.info.bg },
+  annCardUnread:  { borderLeftColor: ACCENT.sky.solid },
   annUnreadDot: {
     position: "absolute", top: 8, right: 8,
-    width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary,
+    width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT.sky.solid,
   },
   annDot: {
     width: 8, height: 8, borderRadius: 4,
-    backgroundColor: COLORS.primary, marginTop: 4,
+    backgroundColor: ACCENT.sky.base, marginTop: 4,
   },
   annTitle:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  annTitleUnread: { fontWeight: "800" },
-  annBody:        { fontSize: 12, color: COLORS.textSubtle, marginTop: 2, lineHeight: 18 },
-  annAuthor:      { fontSize: 11, color: COLORS.textMuted, marginTop: 4, fontStyle: "italic" },
+  annTitleUnread: { fontWeight: "800", color: ACCENT.sky.deep },
+  annBody:        { fontSize: 12, color: COLORS.textSecondary, marginTop: 2, lineHeight: 18 },
+  annAuthor:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 4, fontStyle: "italic" },
 
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",

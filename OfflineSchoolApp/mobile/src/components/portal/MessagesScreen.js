@@ -18,6 +18,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDate } from "../../i18n/format";
 import { conversationName } from "../../utils/participantName";
+import { COLORS, ACCENT } from "../../theme/colors";
+import { IconSquare } from "../Tinted";
 import { Card, Skeleton, EmptyState, ChildAvatar, said } from "./ui";
 import { C, TAP } from "./theme";
 
@@ -28,17 +30,17 @@ const VIEW_LABEL = { messages: "tabMessages", notices: "tabNotices", news: "tabN
 // kind the server sends, so a kind that is added server-side and not listed
 // here falls back rather than rendering a blank card.
 const NOTICE_META = {
-  "gate.arrival":     { icon: "log-in-outline",       fg: C.success,  bg: C.successBg, labelKey: "portal.noticeArrival" },
-  "gate.departure":   { icon: "log-out-outline",      fg: C.primary,  bg: C.primaryBg, labelKey: "portal.noticeDeparture" },
-  "attendance.absent":{ icon: "alert-circle-outline", fg: C.danger,   bg: C.dangerBg,  labelKey: "portal.noticeAbsent" },
-  "fee.reminder":     { icon: "wallet-outline",       fg: C.warning,  bg: C.warningBg, labelKey: "portal.noticeFeeReminder" },
-  "fee.payment":      { icon: "receipt-outline",      fg: C.success,  bg: C.successBg, labelKey: "portal.noticePayment" },
-  "result.published": { icon: "school-outline",       fg: C.primary,  bg: C.primaryBg, labelKey: "portal.noticeResults" },
-  "announcement":     { icon: "megaphone-outline",    fg: C.primary,  bg: C.primaryBg, labelKey: "portal.noticeAnnouncement" },
+  "gate.arrival":     { icon: "log-in-outline",       accent: "green", labelKey: "portal.noticeArrival" },
+  "gate.departure":   { icon: "log-out-outline",      accent: "sky",   labelKey: "portal.noticeDeparture" },
+  "attendance.absent":{ icon: "alert-circle-outline", accent: "red",   labelKey: "portal.noticeAbsent" },
+  "fee.reminder":     { icon: "wallet-outline",       accent: "amber", labelKey: "portal.noticeFeeReminder" },
+  "fee.payment":      { icon: "receipt-outline",      accent: "green", labelKey: "portal.noticePayment" },
+  "result.published": { icon: "school-outline",       accent: "slate", labelKey: "portal.noticeResults" },
+  "announcement":     { icon: "megaphone-outline",    accent: "sky",   labelKey: "portal.noticeAnnouncement" },
   // Not a row in the Notification queue: derived by the server from threads
   // with something unread, so a message is not a message per message.
-  "message":          { icon: "chatbubble-outline",   fg: C.primary,  bg: C.primaryBg, labelKey: "portal.noticeMessage" },
-  default:            { icon: "notifications-outline", fg: C.inkMuted, bg: C.canvas,   labelKey: "portal.noticeOther" },
+  "message":          { icon: "chatbubble-outline",   accent: "sky",   labelKey: "portal.noticeMessage" },
+  default:            { icon: "notifications-outline", accent: "slate", labelKey: "portal.noticeOther" },
 };
 
 const nameOf = (family, id) =>
@@ -52,7 +54,10 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
 
   return (
     <View style={styles.stack}>
-      <Text style={styles.h1} accessibilityRole="header">{t("portal.messages")}</Text>
+      <View style={styles.h1Row}>
+        <IconSquare icon="chatbubbles" accent="sky" size={32} />
+        <Text style={styles.h1} accessibilityRole="header">{t("portal.messages")}</Text>
+      </View>
 
       {/* Three lists, each with its count. Messages counts unread threads,
           Notices unread school notices: disjoint, so no number is shown twice. */}
@@ -89,7 +94,7 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
           {/* ── News ── */}
           {tab === "news" && (
             (data?.length ?? 0) === 0 ? (
-              <Card><EmptyState icon="megaphone-outline" title={t("portal.noNews")} hint={t("portal.messagesScreen.noNewsHint")} /></Card>
+              <Card><EmptyState icon="megaphone-outline" accent="sky" title={t("portal.noNews")} hint={t("portal.messagesScreen.noNewsHint")} /></Card>
             ) : (
               data.map((a) => {
                 // Which of this parent's children it names, when it names any:
@@ -98,8 +103,8 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                 return (
                   <Card key={a._id} style={styles.newsCard}>
                     <View style={styles.newsRow}>
-                      <View style={[styles.round, { backgroundColor: C.primaryBg }]}>
-                        <Ionicons name="megaphone-outline" size={18} color={C.primary} />
+                      <View style={[styles.round, { backgroundColor: ACCENT.sky.solid }]}>
+                        <Ionicons name="megaphone-outline" size={18} color={COLORS.onPrimary} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.title}>{a.title || "—"}</Text>
@@ -124,12 +129,12 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                 onPress={() => router.push("/portal/messages/new")}
                 accessibilityRole="button"
               >
-                <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+                <Ionicons name="create-outline" size={18} color={COLORS.onPrimary} />
                 <Text style={styles.newText}>{t("msgMobile.newMessage")}</Text>
               </Pressable>
 
               {(data ?? []).length === 0 ? (
-                <Card><EmptyState icon="chatbubbles-outline" title={t("msgMobile.emptyTitle")} hint={t("portal.messagesScreen.noConversationsHint")} /></Card>
+                <Card><EmptyState icon="chatbubbles-outline" accent="sky" title={t("msgMobile.emptyTitle")} hint={t("portal.messagesScreen.noConversationsHint")} /></Card>
               ) : (
                 <Card>
                   {(data ?? []).map((c, i) => {
@@ -157,7 +162,7 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                               {c.lastMessagePreview || t("portal.noMessages")}
                             </Text>
                             {n > 0 ? (
-                              <View style={[styles.count, styles.countOn, { backgroundColor: C.primary }]}>
+                              <View style={[styles.count, styles.countOn]}>
                                 <Text style={styles.countText}>{n}</Text>
                               </View>
                             ) : null}
@@ -181,7 +186,7 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
 
           {tab === "notices" && (
             (data?.length ?? 0) === 0 ? (
-              <Card><EmptyState icon="notifications-outline" title={t("portal.noNotices")} hint={t("portal.messagesScreen.noNoticesHint")} /></Card>
+              <Card><EmptyState icon="notifications-outline" accent="sky" title={t("portal.noNotices")} hint={t("portal.messagesScreen.noNoticesHint")} /></Card>
             ) : (
               <Card>
                 {data.map((n, i) => {
@@ -209,9 +214,9 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                       accessibilityRole="button"
                       accessibilityLabel={said(t(meta.labelKey), unreadCard ? t("portal.unreadNotice") : null, n.subject, about)}
                     >
-                      {/* On the unread tint a tinted circle would vanish. */}
-                      <View style={[styles.round, { backgroundColor: unreadCard && meta.bg === C.primaryBg ? C.surface : meta.bg }]}>
-                        <Ionicons name={meta.icon} size={18} color={meta.fg} />
+                      {/* A solid circle in the notice's colour: it stays visible on the unread tint. */}
+                      <View style={[styles.round, { backgroundColor: ACCENT[meta.accent].solid }]}>
+                        <Ionicons name={meta.icon} size={18} color={COLORS.onPrimary} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={styles.rowHead}>
@@ -220,7 +225,7 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                               only ever one of it. A thread row has a count. */}
                           {unreadCard ? <View style={styles.unreadDot} /> : null}
                           {(n.unread ?? 0) > 0 ? (
-                            <View style={[styles.count, styles.countOn, { backgroundColor: C.primary }]}>
+                            <View style={[styles.count, styles.countOn]}>
                               <Text style={styles.countText}>{n.unread}</Text>
                             </View>
                           ) : null}
@@ -233,7 +238,7 @@ export default function MessagesScreen({ tab, onView, data, loading, me, markNot
                             failed. A skipped notice is one the school never
                             tried to send, and has no wording. */}
                         {n.status === "pending" || n.status === "failed" ? (
-                          <Text style={[styles.status, n.status === "failed" && { color: C.danger, backgroundColor: C.dangerBg }]}>
+                          <Text style={[styles.status, n.status === "failed" && { color: C.danger, backgroundColor: C.dangerBg, borderColor: C.dangerLine }]}>
                             {t(`portal.noticeStatus_${n.status}`)}
                           </Text>
                         ) : null}
@@ -268,6 +273,7 @@ function ListSkeleton() {
 const styles = StyleSheet.create({
   stack: { gap: 14 },
   h1:    { fontSize: 22, fontWeight: "700", color: C.ink },
+  h1Row: { flexDirection: "row", alignItems: "center", gap: 10 },
 
   segment: {
     flexDirection: "row", gap: 4, padding: 4, borderRadius: 14,
@@ -277,46 +283,46 @@ const styles = StyleSheet.create({
     flex: 1, minHeight: TAP, borderRadius: 10, paddingHorizontal: 4,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
   },
-  segmentBtnOn:  { backgroundColor: C.primary },
+  segmentBtnOn:  { backgroundColor: ACCENT.sky.wash, borderWidth: 1, borderColor: ACCENT.sky.base },
   segmentText:   { flexShrink: 1, fontSize: 13, fontWeight: "600", color: C.inkBody },
-  segmentTextOn: { color: "#FFFFFF" },
+  segmentTextOn: { color: ACCENT.sky.deep },
   count: {
     minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5,
-    backgroundColor: C.danger, alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.sky.solid, alignItems: "center", justifyContent: "center",
   },
-  countOn:   { backgroundColor: "rgba(255,255,255,0.28)" },
-  countText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
+  countOn:   { backgroundColor: ACCENT.sky.solid },
+  countText: { fontSize: 11, fontWeight: "700", color: COLORS.onPrimary },
 
   newBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     minHeight: TAP + 4, borderRadius: 12, backgroundColor: C.primary,
   },
-  newText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+  newText: { fontSize: 15, fontWeight: "700", color: COLORS.onPrimary },
 
   row:     { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 68, paddingHorizontal: 16, paddingVertical: 12 },
   rowLine: { borderTopWidth: 1, borderTopColor: C.line },
   rowHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   title:   { fontSize: 14, fontWeight: "600", color: C.ink },
   preview: { flex: 1, marginTop: 2, fontSize: 13, color: C.inkMuted },
-  date:    { fontSize: 12, color: C.inkFaint },
+  date:    { fontSize: 12, color: C.inkMuted },
   meta:    { marginTop: 3, fontSize: 12, color: C.inkMuted },
   body:    { marginTop: 4, fontSize: 13, color: C.inkBody, lineHeight: 19 },
 
   round: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
 
-  newsCard: { padding: 16 },
+  newsCard: { padding: 16, backgroundColor: ACCENT.sky.wash, borderLeftWidth: 3, borderLeftColor: ACCENT.sky.base },
   newsRow:  { flexDirection: "row", gap: 12 },
 
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   kind:   { flexShrink: 1, fontSize: 12, fontWeight: "700", color: C.inkMuted },
   status: {
     alignSelf: "flex-start", marginTop: 6, fontSize: 12, fontWeight: "600", color: C.warning,
-    backgroundColor: C.warningBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: C.warningLine, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden",
   },
   // An unread notice: a tinted edge and a dot by the kind. Colour is not
   // carrying this alone; the dot is a second cue.
-  cardUnread: { borderLeftWidth: 3, borderLeftColor: C.primary, backgroundColor: C.primaryBg },
-  unreadDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  cardUnread: { borderLeftWidth: 3, borderLeftColor: ACCENT.sky.base, backgroundColor: ACCENT.sky.wash },
+  unreadDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT.sky.solid },
 
   markAll: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "flex-end",

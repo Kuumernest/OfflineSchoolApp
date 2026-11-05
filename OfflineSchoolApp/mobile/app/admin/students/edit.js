@@ -34,18 +34,20 @@ import StudentService from "@/services/student.service";
 import DateField          from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText }      from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const COLORS = {
-  bg:      "#F8FAFC",
-  surface: "#FFFFFF",
-  border:  "#E2E8F0",
-  text:    "#0F172A",
-  muted:   "#64748B",
-  faint:   "#94A3B8",
-  primary: "#2563EB",
-  error:   "#DC2626",
-  warnBg:  "#FEF3C7",
-  warnText:"#92400E",
+  bg:      THEME.page,
+  surface: THEME.surface,
+  border:  THEME.border,
+  text:    THEME.text,
+  muted:   THEME.textSecondary,
+  faint:   THEME.textMuted,
+  primary: THEME.primary,
+  error:   THEME.danger,
+  warnBg:  SEMANTIC.warning.box,
+  warnText:SEMANTIC.warning.text,
 };
 
 /*
@@ -258,9 +260,12 @@ export default function EditStudentScreen() {
     );
   };
 
-  const section = (titleKey, fields, hintKey) => (
+  const section = (titleKey, fields, hintKey, icon, accent) => (
     <View style={s.card}>
-      <Text style={s.cardTitle}>{t(titleKey)}</Text>
+      <View style={s.cardHead}>
+        <IconSquare icon={icon} accent={accent} size={28} />
+        <Text style={s.cardTitle}>{t(titleKey)}</Text>
+      </View>
       {hintKey ? <Text style={s.cardHint}>{t(hintKey)}</Text> : null}
       {fields.map(renderField)}
     </View>
@@ -301,6 +306,7 @@ export default function EditStudentScreen() {
         >
           <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon icon="create" accent="blue" style={s.headerIcon} />
         <View style={s.headerText}>
           <Text style={s.title} numberOfLines={1}>
             {who.name || t("studentEdit.title")}
@@ -328,12 +334,15 @@ export default function EditStudentScreen() {
           contentContainerStyle={s.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          {section("studentEdit.identity", IDENTITY, "studentEdit.identityHint")}
-          {section("studentEdit.contact",  CONTACT)}
-          {section("studentEdit.guardian", GUARDIAN)}
+          {section("studentEdit.identity", IDENTITY, "studentEdit.identityHint", "person", "blue")}
+          {section("studentEdit.contact",  CONTACT, null, "call", "blue")}
+          {section("studentEdit.guardian", GUARDIAN, null, "people", "sky")}
 
           <View style={s.card}>
-            <Text style={s.cardTitle}>{t("studentEdit.reason")}</Text>
+            <View style={s.cardHead}>
+              <IconSquare icon="create" accent="slate" size={28} />
+              <Text style={s.cardTitle}>{t("studentEdit.reason")}</Text>
+            </View>
             <TextInput
               style={s.input}
               value={reason}
@@ -352,7 +361,7 @@ export default function EditStudentScreen() {
             accessibilityRole="button"
           >
             {saving
-              ? <ActivityIndicator color="#FFFFFF" />
+              ? <ActivityIndicator color={THEME.onPrimary} />
               : <Text style={s.primaryBtnText}>{t("studentEdit.save")}</Text>}
           </TouchableOpacity>
         </View>
@@ -373,6 +382,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn:    { padding: 6, borderRadius: 10 },
+  headerIcon: { marginRight: 0 },
   headerText: { flex: 1, minWidth: 0 },
   title:      { fontSize: 17, fontWeight: "700", color: COLORS.text },
   subtitle:   { fontSize: 12, color: COLORS.muted, marginTop: 2 },
@@ -383,7 +393,8 @@ const s = StyleSheet.create({
     backgroundColor: COLORS.surface, borderRadius: 14, padding: 14,
     borderWidth: 1, borderColor: COLORS.border, gap: 12,
   },
-  cardTitle: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+  cardHead:  { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardTitle: { flex: 1, fontSize: 13, fontWeight: "700", color: COLORS.text },
   cardHint:  { fontSize: 11, color: COLORS.muted, marginTop: -6 },
 
   field: { gap: 6 },
@@ -398,11 +409,11 @@ const s = StyleSheet.create({
   chips:      { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
-    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.bg,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
   },
-  chipOn:      { borderColor: COLORS.primary, backgroundColor: "#EFF6FF" },
+  chipOn:      { borderColor: ACCENT.blue.base, backgroundColor: ACCENT.blue.wash },
   chipText:    { fontSize: 12, fontWeight: "600", color: COLORS.muted },
-  chipTextOn:  { color: COLORS.primary },
+  chipTextOn:  { color: ACCENT.blue.deep },
 
   footer: {
     padding: 16, backgroundColor: COLORS.surface,
@@ -413,7 +424,7 @@ const s = StyleSheet.create({
     paddingVertical: 13, alignItems: "center", justifyContent: "center",
   },
   primaryBtnOff:  { opacity: 0.5 },
-  primaryBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  primaryBtnText: { color: THEME.onPrimary, fontSize: 15, fontWeight: "700" },
 
   secondaryBtn: {
     paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10,
