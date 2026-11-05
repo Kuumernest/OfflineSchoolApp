@@ -16,11 +16,15 @@
 //      French label costs one line, not a taller row.
 //
 // The tile is a white card; only its icon box is tinted, by the kind of
-// figure (config/sections.ts) — students blue, money teal, and so on.
+// figure (config/sections.ts) — students blue, money teal, and so on. With
+// `tinted` (the platform dashboard only) it takes the dashboards' look from
+// config/dashboardTint.ts instead: a wash, a top edge, a solid icon square and
+// a deeper figure, the schools count indigo.
 import { Link }               from "react-router-dom";
 import { Info, type LucideIcon } from "lucide-react";
 import { cn }                 from "@/utils/cn";
 import { CARD_SHELL, iconBox, type TileTone as KindTone } from "@/config/sections";
+import { DASH_ACCENT, DASH_TINT, type DashTint } from "@/config/dashboardTint";
 
 /** A kind, or `schools` for the platform's own count of schools. */
 export type TileTone = KindTone | "schools";
@@ -28,6 +32,10 @@ export type TileTone = KindTone | "schools";
 // The platform's school count belongs to no kind inside a school, so it takes
 // the neutral slate box.
 const boxFor = (tone: TileTone) => iconBox(tone === "schools" ? "neutral" : tone);
+
+// On a tinted dashboard nothing is grey: the schools count is indigo.
+const tintFor = (tone: TileTone): DashTint =>
+  DASH_TINT[tone === "schools" ? "indigo" : DASH_ACCENT[tone]];
 
 // The size follows the length: "70" can be large, "FCFA 10,065,000" cannot be
 // the same size in the same box. Chosen from the text, so it is the same on
@@ -49,11 +57,14 @@ interface MetricTileProps {
   href?:    string;
   loading?: boolean;
   className?: string;
+  /** The dashboards' tinted look (config/dashboardTint.ts). Off by default. */
+  tinted?:  boolean;
 }
 
 export function MetricTile({
-  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className,
+  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className, tinted = false,
 }: MetricTileProps) {
+  const tint = tinted ? tintFor(tone) : null;
   // Intl puts a no-break space between a currency code and its digits, which
   // makes "FCFA 17,308,000" one unbreakable word. As an ordinary space the
   // amount can drop its currency to the line above when the column is narrow
@@ -64,7 +75,7 @@ export function MetricTile({
       <span
         className={cn(
           "flex h-11 w-11 shrink-0 items-center justify-center rounded-control",
-          boxFor(tone),
+          tint ? tint.box : boxFor(tone),
         )}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
@@ -79,7 +90,8 @@ export function MetricTile({
               // break-normal: an amount wraps at the space after its currency,
               // never inside its digits. Only on a phone, where two tiles
               // share 360px, may a figure break anywhere rather than spill.
-              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-bold leading-tight tracking-tight tabular text-ink",
+              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-bold leading-tight tracking-tight tabular",
+              tint ? tint.number : "text-ink",
               sizeFor(text),
             )}
           >
@@ -87,7 +99,7 @@ export function MetricTile({
           </p>
         )}
         {hint ? (
-          <p className="mt-1 truncate text-xs text-ink-faint" title={hint}>{hint}</p>
+          <p className={cn("mt-1 truncate text-xs", tint ? "text-ink-muted" : "text-ink-faint")} title={hint}>{hint}</p>
         ) : null}
       </div>
     </div>
@@ -95,9 +107,10 @@ export function MetricTile({
 
   const shell = cn(
     "block min-w-0 p-5",
-    CARD_SHELL,
+    tint ? tint.card : CARD_SHELL,
     "transition duration-150 ease-[var(--ease-out-quiet)]",
-    href && "hover:border-line-strong hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+    href && (tint ? "hover:shadow-lift" : "hover:border-line-strong hover:shadow-lift"),
+    href && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
     className,
   );
 
