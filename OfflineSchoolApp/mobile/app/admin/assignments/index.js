@@ -739,7 +739,7 @@ export default function AssignmentsIndex() {
         {/* ── Stats ── */}
         <View style={styles.statsContainer}>
           {statCards.map((s) => (
-            <StatTile key={s.label} kind={s.kind} icon={s.icon} value={s.value} label={s.label}
+            <StatTile key={s.labelKey} kind={s.kind} icon={s.icon} value={s.value} label={t(s.labelKey)}
               tone={s.toneWhenAny && Number(s.value) > 0 ? s.toneWhenAny : undefined} />
           ))}
         </View>
