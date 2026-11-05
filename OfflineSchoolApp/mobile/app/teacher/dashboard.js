@@ -38,16 +38,17 @@ import { COLORS, SEMANTIC }    from "../../src/theme/colors";
 // ─────────────────────────────────────────────────────────────────────────────
 
 // The one primary action is taking attendance: the task every teacher does
-// every day. Everything else is a standard white shortcut.
+// every day: it is highlighted (blue border, ringed icon), not filled. Every
+// shortcut is a tinted tile in its kind's colour.
 const buildQuickActions = (t) => [
-  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        route: "/teacher/exams"                     },
-  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        route: "/teacher/exams?filter=pending-marks" },
-  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", route: "/teacher/content/upload-notes"       },
-  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   route: "/teacher/quizzes/create"             },
-  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     route: "/teacher/homework/create"            },
-  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      route: "/teacher/attendance", primary: true },
-  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     route: "/teacher/announcements/create"       },
-  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   route: "/messages"                           },
+  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        route: "/teacher/exams", kind: "exams" },
+  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        route: "/teacher/exams?filter=pending-marks", kind: "marks" },
+  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", route: "/teacher/content/upload-notes", kind: "content" },
+  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   route: "/teacher/quizzes/create", kind: "quizzes" },
+  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     route: "/teacher/homework/create", kind: "homework" },
+  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      route: "/teacher/attendance", primary: true, kind: "attendance" },
+  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     route: "/teacher/announcements/create", kind: "announcements" },
+  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   route: "/messages", kind: "messages" },
 ];
 
 const buildModules = (t) => [
@@ -783,6 +784,7 @@ export default function TeacherDashboard() {
               <ActionTile
                 key={action.id}
                 primary={action.primary}
+                kind={action.kind}
                 icon={action.icon}
                 label={action.title}
                 style={styles.actionButton}

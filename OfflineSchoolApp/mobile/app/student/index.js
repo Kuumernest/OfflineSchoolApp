@@ -445,7 +445,7 @@ const SectionHead = ({ title, action, onAction }) => (
 
 const EmptyCard = ({ icon, title, subtitle }) => (
   <View style={s.emptyCard}>
-    <Ionicons name={icon} size={32} color={COLORS.textMuted} />
+    <Ionicons name={icon} size={32} color={ACCENT.blue.solid} />
     <Text style={s.emptyCardTitle}>{title}</Text>
     {subtitle && <Text style={s.emptyCardSub}>{subtitle}</Text>}
   </View>
@@ -636,16 +636,16 @@ export default function StudentDashboard() {
 
   // ── Quick actions ─────────────────────────────────────────────────────────
   const QUICK_ACTIONS = useMemo(() => [
-    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          route: "/student/timetable"       },
-    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   route: "/student/quizzes"         },
-    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", route: "/student/homework"        },
-    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          route: "/student/subjects"        },
-    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      route: "/student/attendance"      },
-    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     route: "/student/announcements"   },
-    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   route: "/messages"                },
-    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        route: "/student/results"         },
-    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        route: "/student/fees"            },
-    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      route: "/student/settings"        },
+    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          route: "/student/timetable", kind: "timetable" },
+    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   route: "/student/quizzes", kind: "quizzes" },
+    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", route: "/student/homework", kind: "homework" },
+    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          route: "/student/subjects", kind: "subjects" },
+    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      route: "/student/attendance", kind: "attendance" },
+    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     route: "/student/announcements", kind: "announcements" },
+    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   route: "/messages", kind: "messages" },
+    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        route: "/student/results", kind: "results" },
+    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        route: "/student/fees", kind: "fees" },
+    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      route: "/student/settings", kind: "settings" },
   ], [t]);
 
   // ── Loading screen ────────────────────────────────────────────────────────
@@ -798,7 +798,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/explore")}
             activeOpacity={0.8}
           >
-            <Ionicons name="compass-outline" size={18} color={COLORS.primary} />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.sky.solid }]}>
+              <Ionicons name="compass-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("explore.subtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("explore.title")}</Text>
           </TouchableOpacity>
@@ -811,7 +813,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/development")}
             activeOpacity={0.8}
           >
-            <Ionicons name="trending-up-outline" size={18} color={COLORS.primary} />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.green.solid }]}>
+              <Ionicons name="trending-up-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("development.studentSubtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("development.studentTitle")}</Text>
           </TouchableOpacity>
@@ -824,7 +828,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/plans")}
             activeOpacity={0.8}
           >
-            <Ionicons name="clipboard-outline" size={18} color={COLORS.primary} />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.indigo.solid }]}>
+              <Ionicons name="clipboard-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("devPlan.activePlans")}</Text>
             <Text style={s.urgentBannerLink}>{t("devPlan.studentTitle")}</Text>
           </TouchableOpacity>
@@ -839,7 +845,9 @@ export default function StudentDashboard() {
             accessibilityRole="button"
             accessibilityLabel={t("intel.title")}
           >
-            <Ionicons name="sparkles-outline" size={18} color={COLORS.primary} />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.violet.solid }]}>
+              <Ionicons name="sparkles-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("intel.homeSubtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("intel.title")}</Text>
           </TouchableOpacity>
@@ -947,6 +955,7 @@ export default function StudentDashboard() {
               return (
                 <ActionTile
                   key={a.id}
+                  kind={a.kind}
                   icon={a.icon}
                   label={a.title}
                   badge={badgeNum}
@@ -1070,11 +1079,11 @@ export default function StudentDashboard() {
                   })
                 }
               >
-                <View style={[s.quizIconBg, { backgroundColor: COLORS.primaryLight }]}>
+                <View style={[s.quizIconBg, { backgroundColor: ACCENT.indigo.solid }]}>
                   <Ionicons
                     name={status.resumeId ? "play-circle" : "help-circle"}
                     size={20}
-                    color={COLORS.primary}
+                    color={COLORS.onPrimary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -1365,6 +1374,10 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: SEMANTIC.error.box, borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: SEMANTIC.error.box,
+  },
+  bannerIcon: {
+    width: 32, height: 32, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
   },
   urgentBannerText: { flex: 1, fontSize: 13, color: COLORS.danger, fontWeight: "600" },
   urgentBannerLink: { fontSize: 13, color: COLORS.danger, fontWeight: "700" },

@@ -45,39 +45,64 @@ export const COLORS = {
   contextText:   "#1E3A8A",
 };
 
-/** Icon accents for normal cards: colour on the icon box, nowhere else. */
+/**
+ * The accents. Each kind of card takes one, the same as the web console
+ * (web/src/config/dashboardTint.ts, tokens in web/src/index.css):
+ *
+ *   base   the 3px top edge of a tinted card
+ *   wash   the card's light background
+ *   solid  the icon square (with a white icon, COLORS.onPrimary)
+ *   deep   the figure on the wash
+ *
+ * `icon` / `box` are the older pale pair (a coloured glyph on a pale box),
+ * kept for a dot or a glyph on white; a tile's icon square is always `solid`.
+ * Measured (scripts/check-tile-contrast.js): white on solid ≥ 5.02, deep on
+ * wash ≥ 6.81, textSecondary on wash ≥ 6.78.
+ */
 export const ACCENT = {
-  blue:   { icon: "#2563EB", box: "#EFF6FF" },
-  indigo: { icon: "#4F46E5", box: "#EEF2FF" },
-  violet: { icon: "#7C3AED", box: "#F5F3FF" },
-  slate:  { icon: "#475569", box: "#F1F5F9" },
-  teal:   { icon: "#0D9488", box: "#F0FDFA" },
+  blue:   { base: "#2563EB", wash: "#EFF6FF", solid: "#2563EB", deep: "#1E40AF", icon: "#2563EB", box: "#EFF6FF" },
+  violet: { base: "#7C3AED", wash: "#F5F3FF", solid: "#7C3AED", deep: "#5B21B6", icon: "#7C3AED", box: "#F5F3FF" },
+  indigo: { base: "#4F46E5", wash: "#EEF2FF", solid: "#4F46E5", deep: "#3730A3", icon: "#4F46E5", box: "#EEF2FF" },
+  slate:  { base: "#475569", wash: "#F1F5F9", solid: "#475569", deep: "#1E293B", icon: "#475569", box: "#F1F5F9" },
+  teal:   { base: "#0D9488", wash: "#F0FDFA", solid: "#0F766E", deep: "#115E59", icon: "#0D9488", box: "#F0FDFA" },
+  amber:  { base: "#D97706", wash: "#FFFBEB", solid: "#B45309", deep: "#92400E", icon: "#B45309", box: "#FFFBEB" },
+  green:  { base: "#16A34A", wash: "#F0FDF4", solid: "#15803D", deep: "#166534", icon: "#15803D", box: "#F0FDF4" },
+  sky:    { base: "#0284C7", wash: "#F0F9FF", solid: "#0369A1", deep: "#075985", icon: "#0369A1", box: "#F0F9FF" },
+  red:    { base: "#DC2626", wash: "#FEF2F2", solid: "#B91C1C", deep: "#991B1B", icon: "#B91C1C", box: "#FEF2F2" },
 };
 
 /**
- * One accent per kind of thing, so Students is the same blue box everywhere.
- * Matches the web console's mapping.
+ * One accent per kind of thing, so Students is the same blue everywhere —
+ * the same mapping as the web console's dashboards.
  */
 export const TILE = {
   students:      ACCENT.blue,
-  teachers:      ACCENT.indigo,
-  classes:       ACCENT.violet,
+  teachers:      ACCENT.violet,
+  classes:       ACCENT.indigo,
   subjects:      ACCENT.slate,
   timetable:     ACCENT.teal,
-  attendance:    ACCENT.teal,
-  exams:         ACCENT.blue,
-  marks:         ACCENT.blue,
+  attendance:    ACCENT.green,
+  exams:         ACCENT.amber,
+  marks:         ACCENT.amber,
   homework:      ACCENT.indigo,
   quizzes:       ACCENT.indigo,
   content:       ACCENT.indigo,
-  results:       ACCENT.violet,
-  reports:       ACCENT.violet,
+  results:       ACCENT.slate,
+  reports:       ACCENT.slate,
   intelligence:  ACCENT.violet,
   fees:          ACCENT.teal,
   finance:       ACCENT.teal,
-  announcements: ACCENT.blue,
-  messages:      ACCENT.blue,
+  announcements: ACCENT.sky,
+  messages:      ACCENT.sky,
   settings:      ACCENT.slate,
+};
+
+/** The border a tinted tile takes when its value means something. */
+export const TONE_EDGE = {
+  warning: ACCENT.amber.solid,
+  error:   ACCENT.red.base,
+  info:    ACCENT.blue.solid,
+  success: ACCENT.green.solid,
 };
 
 /**
@@ -91,7 +116,10 @@ export const SEMANTIC = {
   success: { bg: "#F0FDF4", box: "#DCFCE7", icon: "#16A34A", text: "#166534" },
 };
 
-/** The shape every card shares: white, a hairline border, a faint shadow. */
+/**
+ * The shape every card shares: a hairline border, a faint shadow. White here;
+ * a tile (src/components/Tiles.js) puts its kind's wash and a 3px top edge on it.
+ */
 export const TILE_SHAPE = {
   borderRadius: 16,
   padding: 14,
