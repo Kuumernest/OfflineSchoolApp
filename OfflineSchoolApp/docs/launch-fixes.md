@@ -107,6 +107,13 @@ it. Also in the repo's `CLAUDE.md`.
   - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
   - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
 
+## Bug — Students to watch called the whole balance overdue (2026-11-06)
+
+- [x] **P1** The fee flag on Students to watch printed what a family owes as "(overdue)": Eunice Ashu "owes FCFA 145,000 (overdue)" while the Fees page said 145,000 owed, 50,000 overdue; Alain Onana 200,000 against 105,000.
+  - Both screens already read one calculation (`arrears.service` → `shared/arrears.js`); the watch list carried only the balance. The `fees_outstanding` signal now carries `balance` and `overdue`, and the web line reads "Owes X, of which Y is overdue" ("all of it overdue" when it is; plain "Owes X" if no overdue figure) — `web/src/utils/feeFlag.ts`.
+  - The 1/2-point weight is the overdue part over what was billed (the threshold always said "overdue only"): Eunice 1 point (was 2), Alain 2.
+  - Checks: backend `check:watchoverdue` (in `check:all`; Eunice, Alain, and a paid-up sibling on the same guardian), `check:watchfees` updated; web `check:feeflag`.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
