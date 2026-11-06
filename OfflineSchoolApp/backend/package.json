@@ -48,6 +48,7 @@
     "check:averages": "node scripts/check-averages.js",
     "check:outstanding": "node scripts/check-outstanding.js",
     "check:watchfees": "node scripts/check-watch-fees.js",
+    "check:watchdeleted": "node scripts/check-watch-deleted-exam.js",
     "check:portalcodes": "node scripts/check-portal-codes.js",
     "check:schooltypes": "node scripts/check-school-types.js",
     "check:studentoverview": "node scripts/check-student-overview.js",

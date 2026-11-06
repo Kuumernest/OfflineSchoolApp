@@ -48,10 +48,17 @@ const EXAM_FIELDS = "type academicYear term sequenceNumber startDate";
  * @param   {boolean}  [opts.withSubjects] load subjectBreakdown too. Off by
  *          default: the watch list reads a whole school and does not need it,
  *          and it is by far the largest field on the document.
+ * @param   {boolean}  [opts.skipDeletedExams] drop summaries whose exam has
+ *          been soft-deleted. Deleting an exam only stamps deletedAt on the
+ *          Exam; its summaries stay live, and without this they fall through
+ *          to the "exam missing" fallback below and are counted as if the exam
+ *          still existed. A summary whose exam row is gone altogether is still
+ *          kept, as before. Opt-in: the other readers of this history keep
+ *          their behaviour until each is reviewed.
  * @returns {Promise<Map<string, object[]>>} studentId → summaries, each with an
  *          added `occurrence`.
  */
-const publishedHistory = async ({ schoolId, studentIds = null, withSubjects = false }) => {
+const publishedHistory = async ({ schoolId, studentIds = null, withSubjects = false, skipDeletedExams = false }) => {
   const filter = { schoolId, isPublished: true, deletedAt: null };
   if (studentIds) {
     if (!studentIds.length) return new Map();
@@ -68,11 +75,23 @@ const publishedHistory = async ({ schoolId, studentIds = null, withSubjects = fa
   // in dozens, but scoping the read to the ids present keeps it that way for a
   // school with years of history and one pupil being looked at.
   const examIds = [...new Set(summaries.map((s) => String(s.examId)).filter(Boolean))];
-  const exams = await Exam.find({ _id: { $in: examIds }, deletedAt: null })
-    .select(EXAM_FIELDS)
-    .lean();
+  if (!skipDeletedExams) {
+    const exams = await Exam.find({ _id: { $in: examIds }, deletedAt: null })
+      .select(EXAM_FIELDS)
+      .lean();
+    return academicOrder.orderPublishedHistory(summaries, exams);
+  }
 
-  return academicOrder.orderPublishedHistory(summaries, exams);
+  // Read deleted exams too, so a summary of a deleted exam can be told apart
+  // from one whose exam row does not exist at all.
+  const exams = await Exam.find({ _id: { $in: examIds } })
+    .select(`${EXAM_FIELDS} deletedAt`)
+    .lean();
+  const deleted = new Set(exams.filter((e) => e.deletedAt).map((e) => String(e._id)));
+  return academicOrder.orderPublishedHistory(
+    summaries.filter((s) => !deleted.has(String(s.examId))),
+    exams.filter((e) => !e.deletedAt),
+  );
 };
 
 module.exports = {

@@ -105,7 +105,8 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
     // Published only: an unpublished summary is a draft nobody has signed off,
     // and flagging a child over it would leak marks the school has not issued.
     // Continuous assessment excluded and ordered academically — see the header.
-    academicHistory.publishedHistory({ schoolId, studentIds: ids }),
+    // A deleted exam's marks are not a reason to watch a child.
+    academicHistory.publishedHistory({ schoolId, studentIds: ids, skipDeletedExams: true }),
     // Homework due inside the window. dueDate is a day string, so string
     // comparison is date comparison.
     Homework.find({
