@@ -48,17 +48,18 @@ const EXAM_FIELDS = "type academicYear term sequenceNumber startDate";
  * @param   {boolean}  [opts.withSubjects] load subjectBreakdown too. Off by
  *          default: the watch list reads a whole school and does not need it,
  *          and it is by far the largest field on the document.
- * @param   {boolean}  [opts.skipDeletedExams] drop summaries whose exam has
- *          been soft-deleted. Deleting an exam only stamps deletedAt on the
+ * @param   {boolean}  [opts.skipDeletedExams=true] drop summaries whose exam
+ *          has been soft-deleted. Deleting an exam only stamps deletedAt on the
  *          Exam; its summaries stay live, and without this they fall through
- *          to the "exam missing" fallback below and are counted as if the exam
- *          still existed. A summary whose exam row is gone altogether is still
- *          kept, as before. Opt-in: the other readers of this history keep
- *          their behaviour until each is reviewed.
+ *          to the "exam missing" fallback in shared/ and are counted as if the
+ *          exam still existed. A summary whose exam row is gone altogether is
+ *          still kept. Pass false only for a view that is MEANT to show a
+ *          deleted exam's marks (an audit or recovery screen); no caller does
+ *          today.
  * @returns {Promise<Map<string, object[]>>} studentId → summaries, each with an
  *          added `occurrence`.
  */
-const publishedHistory = async ({ schoolId, studentIds = null, withSubjects = false, skipDeletedExams = false }) => {
+const publishedHistory = async ({ schoolId, studentIds = null, withSubjects = false, skipDeletedExams = true }) => {
   const filter = { schoolId, isPublished: true, deletedAt: null };
   if (studentIds) {
     if (!studentIds.length) return new Map();
