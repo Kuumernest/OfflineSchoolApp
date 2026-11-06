@@ -165,11 +165,9 @@ module.exports = [
     /**
      * Dense rankings by class, grade or school.
      *
-     * The server sorts by the scope's position field ascending with NO
-     * secondary key, and ties sit in storage order there — an order Mongo does
-     * not define. The mirror adds _id as a tie-break for the same reason the
-     * list endpoint does, so the desktop does not reshuffle between renders;
-     * where the two orders differ they differ only within a tie.
+     * Both sides sort by the scope's position field with _id as the
+     * tie-break, so a page boundary never repeats or drops a pupil and the
+     * desktop's pages are the server's.
      */
     handler: ({ params, query }, { docs, session }) => {
       const schoolId = query.schoolId
@@ -195,10 +193,22 @@ module.exports = [
       };
       if (query.classId) filter.classId = String(query.classId).trim();
 
+      // Every class's class positions are grouped by class, Form 1 before
+      // Form 2 before Form 10 — the server's order (className with numeric
+      // collation, then classId, position, _id), so a page is the same pupils
+      // online and off.
+      const grouped = scope === "class" && !query.classId;
+      const byName = (a, b) => {
+        const an = a.className ?? "", bn = b.className ?? "";
+        if (!an !== !bn) return an ? 1 : -1; // no name sorts first, as Mongo's null does
+        return an.localeCompare(bn, "en", { numeric: true })
+          || String(a.classId ?? "").localeCompare(String(b.classId ?? ""));
+      };
       const ordered = docs
         .find("resultSummary", filter, { order: sortField, dir: "ASC" })
         .slice()
         .sort((a, b) => {
+          if (grouped) { const c = byName(a, b); if (c) return c; }
           const ap = Number(a[sortField]);
           const bp = Number(b[sortField]);
           if (ap !== bp) return ap - bp;
@@ -207,9 +217,19 @@ module.exports = [
 
       // Sliced in JS, not LIMIT in SQL: the server fetches then slices, and a
       // NaN or negative limit has to behave the same way here as there.
-      const data = rowsOn20(ordered.slice(0, Number(query.limit ?? 100)), gradingOf(docs, schoolId));
+      // `page` and `total` as the server answers them: the analytics page's
+      // "N students" is the table's size, not this page's.
+      const limit  = Number(query.limit ?? 100);
+      const pageNo = Math.max(1, Math.floor(Number(query.page ?? 1)) || 1);
+      const from   = limit > 0 ? (pageNo - 1) * limit : 0;
+      const data   = rowsOn20(ordered.slice(from, from + limit), gradingOf(docs, schoolId));
+      const total  = ordered.length;
 
-      return ok({ rankBy: scope, count: data.length, data });
+      return ok({
+        rankBy: scope, count: data.length, total, page: pageNo,
+        totalPages: limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1,
+        data,
+      });
     },
   },
 

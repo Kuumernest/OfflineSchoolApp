@@ -316,6 +316,9 @@
     "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes",
     "allClasses": "Toutes les classes",
     "chooseClassForTop": "Choisissez une classe pour voir ses meilleurs et ses plus faibles élèves.",
+    "showingClassOnly": "Affichage : {{className}} uniquement",
+    "showAllClasses": "Afficher toutes les classes",
+    "searchThisPage": "La recherche porte sur cette page uniquement.",
     "allInTop": "Tous les élèves de cette classe figurent déjà ci-dessus."
   },
   "dashboard": {
