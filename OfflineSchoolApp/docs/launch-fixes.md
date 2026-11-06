@@ -107,6 +107,13 @@ it. Also in the repo's `CLAUDE.md`.
   - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
   - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
 
+## Bug — a deleted exam's marks still counted (2026-11-06)
+
+- [x] **P1** Deleting an exam only stamps `deletedAt` on the Exam; its `ResultSummary` rows stay live, and readers that went to the summaries directly still counted them.
+  - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
+  - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
+  - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
