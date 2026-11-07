@@ -5,10 +5,15 @@
 #     distribution to schools;
 #   - the Windows desktop installer and portable .exe, ONLY when the
 #     repository variable DESKTOP_RELEASE_ENABLED is "true";
-# and attaches them, with SHA256SUMS, to a GitHub PRE-RELEASE for testers.
-# A pre-release is published (downloadable by anyone who can see the repo)
-# but never marked "Latest". Nothing here deploys the server, publishes to a
-# store, or turns on auto-update.
+# and attaches them, with SHA256SUMS, to a GitHub release. Which kind is set by
+# the version, so a tag cannot ship the wrong one:
+#   0.x.y        a PRE-RELEASE for testers: published (downloadable by anyone
+#                who can see the repo), never marked "Latest";
+#   1.0.0 and up a PRODUCTION release, marked "Latest". Refused while either
+#                API URL still points at a Render (*.onrender.com) dev host:
+#                a production build must talk to the production API.
+# Nothing here deploys the server, publishes to a store, or turns on
+# auto-update.
 #
 # Configuration (Settings → Secrets and variables → Actions):
 #   secret   EXPO_TOKEN               an Expo access token (robot user) for EAS Build
@@ -42,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.version.outputs.channel }}
       desktop: ${{ steps.config.outputs.desktop }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -62,6 +68,9 @@ jobs:
             echo "::error::Tag $TAG but mobile/app.json version is $mobile — bump it, commit, and tag that commit"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "${version%%.*}" == "0" ]]; then channel=testing; else channel=production; fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "::notice::$TAG is a $channel release"
 
       - id: config
         name: Required configuration is present
@@ -70,11 +79,14 @@ jobs:
           PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
           DESKTOP_RELEASE_ENABLED: ${{ vars.DESKTOP_RELEASE_ENABLED }}
           DESKTOP_API_URL: ${{ vars.DESKTOP_API_URL }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
         run: |
           ok=1
           check_url() {   # name value
             if ! [[ "$2" =~ ^https://[^/]+/api$ ]] || [[ "$2" == *REPLACE* ]]; then
               echo "::error::$1 must be https://<api-domain>/api (got '${2:-unset}')"; ok=0
+            elif [[ "$CHANNEL" == "production" && "$2" =~ ^https://[^/]*\.onrender\.com/ ]]; then
+              echo "::error::$1 is the dev backend ($2): a production release must use the production API. Set it, or tag a 0.x version for testers"; ok=0
             fi
           }
           [[ -n "$EXPO_TOKEN" ]] || { echo "::error::Secret EXPO_TOKEN is not set"; ok=0; }
@@ -192,7 +204,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: GitHub pre-release
+    name: GitHub release
     needs: [preflight, android, desktop]
     if: always() && needs.android.result == 'success' && (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
     runs-on: ubuntu-latest
@@ -206,12 +218,20 @@ jobs:
       - name: Checksums
         working-directory: release
         run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
-      - name: Create the pre-release
+      - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          CHANNEL: ${{ needs.preflight.outputs.channel }}
         run: |
-          gh release create "$TAG" release/* \
-            --prerelease --latest=false --verify-tag --title "$TAG (testing)" \
-            --notes "Test build — not for production use. Android APK built by EAS (production-apk); install it by allowing installs from unknown sources. The Windows installer is UNSIGNED: SmartScreen shows \"Windows protected your PC\" — choose More info → Run anyway (docs/17). Verify downloads against SHA256SUMS."
+          unsigned='The Windows installer is UNSIGNED: SmartScreen shows "Windows protected your PC" — choose More info → Run anyway (docs/17). Verify downloads against SHA256SUMS.'
+          if [[ "$CHANNEL" == "production" ]]; then
+            gh release create "$TAG" release/* \
+              --latest --verify-tag --title "$TAG" \
+              --notes "Production release. Android APK built by EAS (production-apk); install it by allowing installs from unknown sources. Anyone who installed a test build (0.x) uninstalls it first, and on Windows deletes its app data: a test build's local data belongs to the test server. $unsigned"
+          else
+            gh release create "$TAG" release/* \
+              --prerelease --latest=false --verify-tag --title "$TAG (testing)" \
+              --notes "Test build — not for production use. Android APK built by EAS (production-apk); install it by allowing installs from unknown sources. $unsigned"
+          fi
