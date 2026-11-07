@@ -60,6 +60,11 @@ enrollmentSchema.index({ schoolId: 1, academicYear: 1, classId: 1 });
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 enrollmentSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). Reversing a promotion run removes the enrolments it made (promotion.service).
+enrollmentSchema.plugin(require("../plugins/syncTombstones"), { entity: "enrollment" });
+
 module.exports =
   mongoose.models.Enrollment ||
   mongoose.model("Enrollment", enrollmentSchema);

@@ -12,9 +12,14 @@ import { useToast }       from "@/components/ui/Toast";
 import {
   EXAM_TYPE_KEYS,
   ACADEMIC_YEAR_OPTIONS,
+  EXAM_STATUS_META,
   examTypeLabel,
 } from "@/constants/exam.constants";
 import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
+import { AlertTriangle, ClipboardList, BookOpen } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
+import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -825,6 +830,10 @@ form: DetailsForm;
 assignments: Record<string, ClassAssignment>;
 }) => {
   const { t } = useTranslation();
+  // The sequence as the picker on step 1 showed it — the school's own name.
+  const periods = useAcademicPeriods(form.academicYear);
+  const sequenceLabel = periods.sequencesOf(form.term)
+    .find((sq) => String(sq.number) === form.sequenceNumber)?.label ?? null;
 const totalSubjects = Object.values(assignments).reduce(
 (acc, cls) => acc + Object.keys(cls.subjects).length, 0
 );
@@ -832,24 +841,37 @@ return (
 <div className="space-y-6">
 
   {/* Exam summary */}
-  <div className="bg-gray-50 rounded-xl p-5">
-    <h3 className="font-semibold text-gray-900 mb-4">{t("examCreate.details")}</h3>
+  <div className={cn("bg-accent-amber-soft rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
+    <h3 className="flex items-center gap-2 font-semibold text-ink mb-4">
+      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+        <ClipboardList className="h-4 w-4" />
+      </span>
+      {t("examCreate.details")}
+    </h3>
     <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
       {[
         { label: t("common.name"),          value: form.name },
         { label: t("common.type"),          value: examTypeLabel(t, form.type) },
         { label: t("academic.schoolYear"), value: form.academicYear },
-        { label: t("academic.term"),          value: form.term },
-        { label: t("common.status"),        value: form.status },
+        // "1st Term" / "1er Trimestre", not the bare number the form holds.
+        { label: t("academic.term"),
+          value: form.term ? t(`examTerms.term${form.term}`, { defaultValue: form.term }) : "—" },
+        // The sequence picked on step 1: it was missing from the summary.
+        ...(form.type !== "practical"
+          ? [{ label: t("examCreate.sequence"), value: sequenceLabel ?? "—" }]
+          : []),
+        // "Draft" / "Brouillon", not the stored "draft".
+        { label: t("common.status"),
+          value: t(EXAM_STATUS_META[form.status as ExamStatus]?.labelKey ?? "examStatus.draft") },
         { label: t("common.startDate"),    value: form.startDate || "—" },
         { label: t("common.endDate"),      value: form.endDate   || "—" },
         { label: t("examCreate.totalMarks"),   value: form.totalMarks },
         { label: t("examCreate.passMark"),     value: form.passMark },
       ].map(({ label, value }) => (
         <div key={label} className="flex justify-between border-b
-                                    border-gray-200 pb-2">
-          <dt className="text-gray-500 font-medium">{label}</dt>
-          <dd className="font-semibold text-gray-900">{value}</dd>
+                                    border-accent-amber/30 pb-2">
+          <dt className="text-ink-muted font-medium">{label}</dt>
+          <dd className="font-semibold text-ink">{value}</dd>
         </div>
       ))}
     </dl>
@@ -858,9 +880,13 @@ return (
   {/* Assignments */}
   <div>
     <div className="flex items-center justify-between mb-3">
-      <h3 className="font-semibold text-gray-900">{t("examCreate.subjectAssignments")}</h3>
-      <span className="text-xs bg-primary-100 text-primary-700
-                       font-bold px-3 py-1 rounded-full">
+      <h3 className="flex items-center gap-2 font-semibold text-ink">
+        <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+          <BookOpen className="h-4 w-4" />
+        </span>
+        {t("examCreate.subjectAssignments")}
+      </h3>
+      <span className={cn("text-xs ring-1 ring-inset font-bold px-3 py-1 rounded-full", ACCENT_BADGE.slate)}>
         {t("subjects.classCount", { count: Object.keys(assignments).length })} ·
         {t("academic.subjectCount", { count: totalSubjects })}
       </span>
@@ -869,7 +895,7 @@ return (
     {Object.keys(assignments).length === 0 ? (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4
                       text-amber-700 text-sm text-center">
-        {t("examCreate.noSubjectsWarning")}
+        <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("examCreate.noSubjectsWarning")}
       </div>
     ) : (
       <div className="space-y-3">
@@ -1085,16 +1111,21 @@ return (
     >
       ← Back
     </button>
-    <h1 className="text-2xl font-bold text-gray-900">{t("examCreate.title")}</h1>
-    <p className="text-gray-500 text-sm">
-      {t("examCreate.blurb")}
-    </p>
+    <div className="flex items-start gap-3">
+      <PageIcon />
+      <div>
+        <h1 className="text-2xl font-bold text-ink">{t("examCreate.title")}</h1>
+        <p className="text-ink-muted text-sm">
+          {t("examCreate.blurb")}
+        </p>
+      </div>
+    </div>
   </div>
 
   <StepIndicator current={step} />
 
   {/* Card */}
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+  <div className={cn("bg-surface rounded-2xl shadow-card border border-line p-8", DASH_TINT.amber.edge)}>
     {step === 0 && (
       <StepDetails
         form={form}
@@ -1143,7 +1174,7 @@ return (
       <button
         onClick={handleSubmit}
         disabled={submitting}
-        className="px-8 py-2.5 bg-green-600 hover:bg-green-700
+        className="px-8 py-2.5 bg-primary-600 hover:bg-primary-700
                    text-white rounded-xl text-sm font-semibold
                    transition-colors disabled:opacity-60
                    flex items-center gap-2"

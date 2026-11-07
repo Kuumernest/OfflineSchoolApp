@@ -98,7 +98,8 @@ const normaliseSummary = (raw: unknown): AttendanceSummary => {
     excused:  s.excused  !== undefined ? Number(s.excused)  : undefined,
     on_leave: s.on_leave !== undefined ? Number(s.on_leave) : undefined,
     unmarked: s.unmarked !== undefined ? Number(s.unmarked) : undefined,
-    rate:     s.rate     !== undefined ? Number(s.rate)     : undefined,
+    // null stays null: nobody marked is "–", not 0% (C3).
+    rate:     s.rate === null ? null : s.rate !== undefined ? Number(s.rate) : undefined,
   };
 };
 
@@ -171,7 +172,9 @@ export async function fetchRoster(args: RosterArgs): Promise<RosterEntry[]> {
       id:          String(p._id ?? p.id ?? ""),
       name:        personName(p),
       email:       (p.email as string) ?? null,
-      admissionNo: (p.admissionNo as string) ?? null,
+      // The record holds enrollmentNo (what the ID card prints); admissionNo
+      // is the legacy name, read only when that is absent.
+      admissionNo: (p.enrollmentNo as string) || (p.admissionNo as string) || null,
       classId:     (p.classId as string) ?? null,
       className:   (p.className as string) ?? (classNames.length ? classNames.join(" · ") : null),
       attendance:  null,

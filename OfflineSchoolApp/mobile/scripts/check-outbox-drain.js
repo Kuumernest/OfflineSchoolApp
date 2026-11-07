@@ -89,6 +89,7 @@ const makeLoader = (stubs, pkgStubs) => {
   // ── The fake server ──────────────────────────────────────────────────────
   // `mode` decides how every request is answered; `log` records what arrived.
   const server = { mode: "ok", log: [], perUrl: new Map() };
+  const net    = { connected: true };
   const httpError = (status, data) => {
     const e = new Error(`HTTP ${status}`); e.response = { status, data }; return e;
   };
@@ -127,7 +128,9 @@ const makeLoader = (stubs, pkgStubs) => {
     }],
   ]);
   const pkgStubs = new Map([
-    ["@react-native-community/netinfo", { __esModule: true, default: { addEventListener: () => () => {}, fetch: async () => ({ isConnected: true }) } }],
+    // What the radio says. Separate from the fake server's `offline` mode,
+    // which is a send that gets no answer while NetInfo still says connected.
+    ["@react-native-community/netinfo", { __esModule: true, default: { addEventListener: () => () => {}, fetch: async () => ({ isConnected: net.connected }) } }],
   ]);
   const load = makeLoader(stubs, pkgStubs);
   const outbox = load("src/services/mutationQueue.service.js");
@@ -166,7 +169,10 @@ const makeLoader = (stubs, pkgStubs) => {
   server.mode = "offline";
   await enqueue("attendance:class:sch-a:c3a::2026-09-17", { __local: { table: "attendance", ids: [a1] } });
   let summary = await drain();
-  check("offline: the send fails as transient and the row is kept, backed off", [summary.synced, summary.retried, rows()[0].status, rows()[0].retry_count], [0, 1, "retrying", 1]);
+  // No answer is the network's fault, not the row's: backed off, but the
+  // retry budget (retry_count) is untouched. It used to count, and eight
+  // unanswered attempts parked the register as failed for good.
+  check("offline: the send fails as transient and the row is kept, backed off, retry budget untouched", [summary.synced, summary.retried, rows()[0].status, rows()[0].retry_count], [0, 1, "retrying", 0]);
   check("  the local row is still dirty", raw.prepare(`SELECT _synced FROM attendance WHERE id = ?`).get(a1)._synced, 0);
   // The app was closed and reopened: the row is in the table, not in memory.
   raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL`).run();  // its backoff has elapsed
@@ -202,7 +208,7 @@ const makeLoader = (stubs, pkgStubs) => {
   fakeApi.request = realRequest;
   const afterDrop = rows("entity_key LIKE 'hw:%'");
   check("first sent, second backed off in place, third sent", afterDrop.map((r) => r.status), ["synced", "retrying", "synced"]);
-  check("  the dropped row keeps its retry count and a next attempt", [afterDrop[1].retry_count, typeof afterDrop[1].next_attempt_at], [1, "string"]);
+  check("  the dropped row keeps its place with a next attempt, and its retry budget", [afterDrop[1].retry_count, typeof afterDrop[1].next_attempt_at], [0, "string"]);
   raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL WHERE status = 'retrying'`).run();
   summary = await drain();
   check("  the network returns: it goes, once", [summary.synced, rows("entity_key = 'hw:2'")[0].status], [1, "synced"]);
@@ -297,7 +303,9 @@ const makeLoader = (stubs, pkgStubs) => {
   await enqueue("message:m-1", { endpoint: "/messages/conversations/cv-1/messages", __reconcile: { kind: "message", clientId: "m-1" } });
   raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL`).run();
   await drain();
-  check("a refused message reaches its failure handler, with the server's reason", failedHeard, [["m-1", "HTTP 400"]]);
+  // The server's own words, not axios's "HTTP 400": they are what the failed
+  // bubble shows the person (check-message-privacy).
+  check("a refused message reaches its failure handler, with the server's reason", failedHeard, [["m-1", "classId is required"]]);
 
   // Retries used up count as failed too.
   server.perUrl.set("/messages/conversations/cv-2/messages", "500");
@@ -442,6 +450,67 @@ const makeLoader = (stubs, pkgStubs) => {
   const left = new Set(idsOf("1 = 1"));
   check("the drain removes sent rows older than a week, and only those",
     [agedIds.length, agedIds.filter((id) => left.has(id)).length, youngIds.length > 0, youngIds.every((id) => left.has(id))], [3, 0, true, true]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- I. draining while offline spends nothing (offline P0 #2) ---");
+  raw.prepare(`DELETE FROM mutation_outbox`).run();
+  server.log.length = 0; server.mode = "ok"; server.perUrl.clear();
+  for (let i = 1; i <= 3; i++) await enqueue(`off:${i}`, { endpoint: "/homework" });
+  net.connected = false;
+  for (let i = 0; i < 20; i++) summary = await drain();
+  check("NetInfo says offline: twenty drains send nothing at all", server.log.length, 0);
+  check("  every row still pending, retry budget untouched, nothing failed",
+    rows("entity_key LIKE 'off:%'").map((r) => [r.status, r.retry_count]), [["pending", 0], ["pending", 0], ["pending", 0]]);
+  check("  and the drain says why", summary.stopped, "offline");
+
+  // The radio claims a connection but nothing answers (captive portal, the
+  // server down, a timeout): sends happen, none count against the budget.
+  net.connected = true; server.mode = "offline";
+  for (let i = 0; i < 20; i++) {
+    raw.prepare(`UPDATE mutation_outbox SET next_attempt_at = NULL`).run();   // every backoff elapsed
+    await drain();
+  }
+  check("twenty unanswered drains: nothing parked as failed, retry_count still 0",
+    rows("entity_key LIKE 'off:%'").map((r) => [r.status, r.retry_count]), [["retrying", 0], ["retrying", 0], ["retrying", 0]]);
+
+  // A row an older build parked as failed after eight unanswered sends, one
+  // that ran out on 503s, and one the server refused. Connectivity drops and
+  // comes back.
+  await enqueue("legacy:dead", { endpoint: "/homework" });
+  raw.prepare(`UPDATE mutation_outbox SET status = 'failed', retry_count = 8, last_status = NULL, error = 'Network Error' WHERE entity_key = 'legacy:dead'`).run();
+  await enqueue("legacy:503", { endpoint: "/homework" });
+  raw.prepare(`UPDATE mutation_outbox SET status = 'failed', retry_count = 8, last_status = 503, error = 'unavailable' WHERE entity_key = 'legacy:503'`).run();
+  await enqueue("refused:400", { endpoint: "/homework/refused" });
+  raw.prepare(`UPDATE mutation_outbox SET status = 'failed', retry_count = 1, last_status = 400, error = 'classId is required' WHERE entity_key = 'refused:400'`).run();
+  net.connected = false; await drain();     // the queue sees the radio drop…
+  net.connected = true;  server.mode = "ok"; server.log.length = 0;
+  summary = await drain();                  // …and come back
+  check("back online: the unanswered rows go without waiting out their backoff",
+    rows("entity_key LIKE 'off:%'").map((r) => r.status), ["synced", "synced", "synced"]);
+  check("  rows parked failed by transient errors (no answer, 503) are re-armed and sent",
+    [rows("entity_key = 'legacy:dead'")[0].status, rows("entity_key = 'legacy:503'")[0].status], ["synced", "synced"]);
+  check("  a 4xx refusal stays parked for a person, and is not sent",
+    [rows("entity_key = 'refused:400'")[0].status, server.log.some((c) => c.url === "/homework/refused")], ["failed", false]);
+  check("  each of the five sent exactly once", server.log.length, 5);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- J. concurrent drains share one run (offline P0 #2) ---");
+  raw.prepare(`DELETE FROM mutation_outbox`).run();
+  server.log.length = 0;
+  for (let i = 1; i <= 6; i++) await enqueue(`conc:${i}`, { endpoint: "/homework" });
+  const unhurried = fakeApi.request;
+  fakeApi.request = async (opts) => { await new Promise((r) => setTimeout(r, 5)); return unhurried(opts); };
+  // Five screens drain at once (gate, register, enrolment, timetable, sync),
+  // and one more row is queued while the first pass is in flight.
+  const racing = [drain(), drain(), drain(), drain(), drain()];
+  await new Promise((r) => setTimeout(r, 1));
+  await enqueue("conc:late", { endpoint: "/homework" });
+  racing.push(drain());
+  await Promise.all(racing);
+  fakeApi.request = unhurried;
+  const sentKeys = server.log.map((c) => c.headers["Idempotency-Key"]);
+  check("six drains at once: every row sent exactly once", [server.log.length, new Set(sentKeys).size], [7, 7]);
+  check("  including the one queued mid-run (picked up by the shared follow-up pass)", rows("entity_key = 'conc:late'")[0].status, "synced");
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

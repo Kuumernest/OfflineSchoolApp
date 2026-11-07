@@ -18,6 +18,8 @@ import { PageHeader }       from "@/components/ui/PageHeader";
 import { Card }             from "@/components/ui/Card";
 import { Button }           from "@/components/ui/Button";
 import { Badge }            from "@/components/ui/Badge";
+import { DASH_TINT }        from "@/config/dashboardTint";
+import { cn }               from "@/utils/cn";
 import { Modal }            from "@/components/ui/Modal";
 import { PageSpinner, Spinner } from "@/components/ui/Spinner";
 import { FormField, Input, SelectField, Textarea } from "@/components/ui/FormField";
@@ -27,6 +29,8 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
 import { getErrorMessage }  from "@/lib/axios";
+import NeedsInternet        from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import {
   fetchRuns, fetchRun, generateRun, confirmRun, reverseRun,
 } from "@/services/finance.service";
@@ -34,10 +38,10 @@ import type { RunStatus, SpendMethod } from "@/types/finance.types";
 
 const METHODS: SpendMethod[] = ["cash", "mobile_money", "bank", "cheque", "other"];
 
-const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "default"> = {
+const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "danger"> = {
   draft:     "warning",
   confirmed: "success",
-  reversed:  "default",
+  reversed:  "danger",
 };
 
 /** Current month as YYYY-MM, which is what the API expects. */
@@ -51,6 +55,9 @@ export default function PayrollPage() {
   const schoolId = useUser()?.schoolId ?? "";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Generating, confirming and reversing are computed by the server from
+  // salary scales the desktop does not mirror: online-only there.
+  const net = useNeedsInternet();
   const [genOpen, setGenOpen]       = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
@@ -132,10 +139,10 @@ export default function PayrollPage() {
                 {t("common.back")}
               </Button>
               {run?.status === "draft" && (
-                <Button onClick={() => setConfirmOpen(true)}>{t("payroll.confirmRun")}</Button>
+                <Button disabled={net.blocked} title={net.hint} onClick={() => setConfirmOpen(true)}>{t("payroll.confirmRun")}</Button>
               )}
               {run?.status === "confirmed" && (
-                <Button variant="danger" onClick={() => setReverseOpen(true)}>
+                <Button variant="danger" disabled={net.blocked} title={net.hint} onClick={() => setReverseOpen(true)}>
                   {t("payroll.reverseRun")}
                 </Button>
               )}
@@ -143,13 +150,15 @@ export default function PayrollPage() {
           }
         />
 
+        <NeedsInternet />
+
         {detailQ.isLoading || !run ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : (
           <>
             {run.status === "draft" && (
               <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
                 <p>{t("payroll.draftNotice")}</p>
               </div>
             )}
@@ -161,11 +170,18 @@ export default function PayrollPage() {
                 ["salaries.deductions",      run.totalDeductions, true],
                 ["salaries.net",             run.totalNet, true],
               ] as const).map(([key, value, isMoney]) => (
-                <Card key={key}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                <Card key={key} className={DASH_TINT.teal.card}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                     {t(key)}
                   </p>
-                  <p className="mt-2 font-display text-[22px] leading-none text-ink tabular">
+                  <p
+                    className={cn(
+                      "mt-2 font-display text-[22px] leading-none tabular",
+                      key === "salaries.deductions" ? DASH_TINT.red.number
+                        : key === "salaries.net" ? DASH_TINT.green.number
+                        : DASH_TINT.teal.number,
+                    )}
+                  >
                     {isMoney ? fmt.money(value) : fmt.number(value)}
                   </p>
                 </Card>
@@ -281,11 +297,13 @@ export default function PayrollPage() {
         title={t("payroll.title")}
         description={t("payroll.blurb")}
         actions={
-          <Button icon={<Play className="h-4 w-4" />} onClick={() => setGenOpen(true)}>
+          <Button icon={<Play className="h-4 w-4" />} disabled={net.blocked} title={net.hint} onClick={() => setGenOpen(true)}>
             {t("payroll.generate")}
           </Button>
         }
       />
+
+      <NeedsInternet />
 
       <Card padding={false}>
         {runs.length === 0 ? (

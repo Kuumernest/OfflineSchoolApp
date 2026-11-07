@@ -55,6 +55,18 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     });
   }
 
+  // Class-subjects nobody teaches (B4): 69 of 105 had no teacher and the
+  // dashboard said nothing.
+  if (stats.unassignedClassSubjects > 0) {
+    list.push({
+      id:      "class-subjects-unassigned",
+      type:    "warning",
+      messageKey: "alerts.classSubjectsUnassigned",
+      params: { count: stats.unassignedClassSubjects, total: stats.totalSubjects },
+      route:   "/teachers",
+    });
+  }
+
   if (stats.classesWithoutSubjects > 0) {
     const n = stats.classesWithoutSubjects;
     list.push({

@@ -12,11 +12,18 @@ import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
-import api              from "../../../src/services/api";
+import {
+  getPickerClasses,
+  getPickerTeachers,
+  getPickerSubjects,
+} from "../../../src/services/pickerData.service";
 import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 import { useAcademicTerms } from "../../../src/hooks/useAcademicTerms";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -77,6 +84,14 @@ function isValidDate(str) {
 // REUSABLE FIELD COMPONENTS
 // ─────────────────────────────────────────────────────────
 
+/** A form section's title, headed by a solid icon square. */
+const SectionTitle = ({ icon, accent = "amber", children, style }) => (
+  <View style={[styles.sectionTitleRow, style]}>
+    <IconSquare icon={icon} accent={accent} size={28} />
+    <Text style={styles.sectionTitle}>{children}</Text>
+  </View>
+);
+
 const FieldLabel = ({ label, required }) => (
   <Text style={fs.label}>
     {label}
@@ -133,17 +148,17 @@ const PickerRow = ({ label, required, options, value, onChange }) => (
 
 const fs = StyleSheet.create({
   field:      { marginBottom: 20 },
-  label:      { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  label:      { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 8 },
   errorText:  { fontSize: 11, color: "#DC2626", marginTop: 4 },
   input: {
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.surface,
     borderRadius:      10,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     paddingHorizontal: 14,
     paddingVertical:   12,
     fontSize:          14,
-    color:             "#111827",
+    color:             COLORS.text,
   },
   inputMulti: { height: 90, textAlignVertical: "top" },
   pickerRow:  { gap: 8, paddingBottom: 4 },
@@ -151,13 +166,13 @@ const fs = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   8,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
-  chipActive:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  chipText:       { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  chipTextActive: { color: "#FFF" },
+  chipActive:     { backgroundColor: ACCENT.amber.wash, borderColor: ACCENT.amber.base },
+  chipText:       { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  chipTextActive: { color: ACCENT.amber.deep },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -258,7 +273,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
     keyboardShouldPersistTabs="handled"
   >
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("examNew.sectionBasic")}</Text>
+      <SectionTitle icon="document-text">{t("examNew.sectionBasic")}</SectionTitle>
 
       <FieldInput
         label={t("examNew.labelExamName")}
@@ -295,7 +310,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("examNew.sectionSchedule")}</Text>
+      <SectionTitle icon="calendar">{t("examNew.sectionSchedule")}</SectionTitle>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <DateInput
@@ -316,7 +331,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("examNew.sectionScoring")}</Text>
+      <SectionTitle icon="stats-chart">{t("examNew.sectionScoring")}</SectionTitle>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <FieldInput
@@ -345,7 +360,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
 
       {Number(form.totalMarks) > 0 && (
         <View style={styles.passPreview}>
-          <Ionicons name="information-circle-outline" size={14} color="#4F46E5" />
+          <Ionicons name="information-circle-outline" size={14} color={SEMANTIC.info.icon} />
           <Text style={styles.passPreviewText}>
             {t("examNew.passRate", {
               rate: ((Number(form.passMark) / Number(form.totalMarks)) * 100).toFixed(1),
@@ -356,7 +371,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("examNew.sectionInitialStatus")}</Text>
+      <SectionTitle icon="flag">{t("examNew.sectionInitialStatus")}</SectionTitle>
       <PickerRow
         options={statusOptions(t)}
         value={form.status}
@@ -365,7 +380,7 @@ const StepDetails = ({ form, onChange, errors, termOptions }) => {
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t("examNew.sectionAdditional")}</Text>
+      <SectionTitle icon="information-circle">{t("examNew.sectionAdditional")}</SectionTitle>
       <FieldInput
         label={t("examNew.labelDescription")}
         placeholder={t("examNew.phDescription")}
@@ -406,19 +421,14 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const load = async () => {
       try {
         setLoading(true);
-        const [clsRes, tchRes] = await Promise.all([
-          api.get("/admin/classes",  { params: { schoolId } }),
-          api.get("/admin/teachers", { params: { schoolId } }),
+        // Server when it answers, the phone's copy when it does not — so an
+        // exam can be drafted offline and ExamService.createExam queues it.
+        const [cls, tch] = await Promise.all([
+          getPickerClasses(),
+          getPickerTeachers(),
         ]);
-        setClasses(
-          clsRes.data?.classes ||
-          (Array.isArray(clsRes.data) ? clsRes.data : [])
-        );
-        setTeachers(
-          Array.isArray(tchRes.data)
-            ? tchRes.data
-            : tchRes.data?.teachers || tchRes.data?.data || []
-        );
+        setClasses(cls);
+        setTeachers(tch);
       } catch (err) {
         console.error("StepSubjects load error:", err.message);
         Alert.alert(
@@ -437,20 +447,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const loadSubjects = async () => {
       try {
         setSubjectsLoading(true);
-        const res = await api.get("/admin/subjects", {
-          params: { schoolId, classId: selectedClass.id },
-        });
-        let subs =
-          res.data?.subjects ||
-          (Array.isArray(res.data) ? res.data : []);
-        if (subs.length > 0 && selectedClass.id) {
-          const classFiltered = subs.filter(
-            (s) =>
-              String(s.class_id || s.classId || s.class || "") === selectedClass.id
-          );
-          if (classFiltered.length > 0) subs = classFiltered;
-        }
-        setFilteredSubjects(subs);
+        setFilteredSubjects(await getPickerSubjects(selectedClass.id));
       } catch (err) {
         console.warn("loadSubjects error:", err.message);
         setFilteredSubjects([]);
@@ -506,7 +503,9 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
               maxScore:    String(form.totalMarks || "100"),
               passMark:    String(form.passMark   || "50"),
               // Report-card coefficient — sent to the API as weight = coeff × 100.
-              coefficient: "1",
+              // Starts at the subject's own; a literal "1" was sent as an
+              // explicit weight of 100 and overrode it on every exam made here.
+              coefficient: String(Number(subject.coefficient) > 0 ? Number(subject.coefficient) : 1),
             },
           },
         },
@@ -575,7 +574,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
           <Text style={st.sideTitle}>{t("examNew.classes")}</Text>
           {classes.length === 0 ? (
             <View style={st.emptySide}>
-              <Ionicons name="school-outline" size={28} color="#D1D5DB" />
+              <IconSquare icon="school" accent="indigo" size={40} />
               <Text style={st.emptySmall}>{t("examNew.noClasses")}</Text>
             </View>
           ) : (
@@ -600,8 +599,8 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                       {cls.name}
                     </Text>
                     {subjectCount > 0 && (
-                      <View style={[st.badge, isSelected && { backgroundColor: "#FFF" }]}>
-                        <Text style={[st.badgeText, isSelected && { color: "#4F46E5" }]}>
+                      <View style={[st.badge, isSelected && { backgroundColor: COLORS.surface }]}>
+                        <Text style={st.badgeText}>
                           {subjectCount}
                         </Text>
                       </View>
@@ -617,7 +616,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
         <View style={st.subjectPanel}>
           {!selectedClass ? (
             <View style={st.centered}>
-              <Ionicons name="arrow-back" size={32} color="#D1D5DB" />
+              <Ionicons name="arrow-back" size={32} color={COLORS.textSecondary} />
               <Text style={st.emptyText}>{t("examNew.selectClassFirst")}</Text>
             </View>
           ) : (
@@ -650,7 +649,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                 </View>
               ) : displaySubjects.length === 0 ? (
                 <View style={st.emptySide}>
-                  <Ionicons name="book-outline" size={28} color="#D1D5DB" />
+                  <IconSquare icon="book" accent="slate" size={40} />
                   <Text style={st.emptySmall}>
                     {search
                       ? t("examNew.noSubjectsMatch")
@@ -673,11 +672,11 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                           activeOpacity={0.7}
                         >
                           <View style={[st.checkbox, assigned && st.checkboxActive]}>
-                            {assigned && <Ionicons name="checkmark" size={12} color="#FFF" />}
+                            {assigned && <Ionicons name="checkmark" size={12} color={COLORS.onPrimary} />}
                           </View>
                           <Text style={[
                             st.subjectName,
-                            assigned && { color: "#4F46E5", fontWeight: "700" },
+                            assigned && { color: ACCENT.slate.deep, fontWeight: "700" },
                           ]}>
                             {subject.name || subject.subjectName}
                           </Text>
@@ -709,11 +708,11 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                                       <Ionicons
                                         name="person-circle-outline"
                                         size={12}
-                                        color={isActive ? "#FFF" : "#6B7280"}
+                                        color={isActive ? ACCENT.violet.deep : COLORS.textSecondary}
                                       />
                                       <Text style={[
                                         st.teacherChipText,
-                                        isActive && { color: "#FFF" },
+                                        isActive && { color: ACCENT.violet.deep },
                                       ]}>
                                         {teacher.name || teacher.email}
                                       </Text>
@@ -782,34 +781,34 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
 
 const st = StyleSheet.create({
   centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { fontSize: 14, color: "#6B7280" },
-  emptyText:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary },
+  emptyText:   { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
   emptySide:   { alignItems: "center", paddingVertical: 24, gap: 8 },
-  emptySmall:  { fontSize: 12, color: "#D1D5DB", textAlign: "center" },
+  emptySmall:  { fontSize: 12, color: COLORS.textSecondary, textAlign: "center" },
   summaryBar: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    ...tileShell("exams"),
     paddingHorizontal: 16,
     paddingVertical:   10,
     gap:               12,
   },
   summaryItem:    { alignItems: "center" },
-  summaryNum:     { fontSize: 18, fontWeight: "800", color: "#4F46E5" },
-  summaryLabel:   { fontSize: 10, color: "#6B7280", fontWeight: "600" },
-  summaryDivider: { width: 1, height: 28, backgroundColor: "#C7D2FE" },
-  summaryHint:    { flex: 1, fontSize: 11, color: "#6B7280", lineHeight: 16 },
+  summaryNum:     { fontSize: 18, fontWeight: "800", color: ACCENT.amber.deep },
+  summaryLabel:   { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600" },
+  summaryDivider: { width: 1, height: 28, backgroundColor: COLORS.border },
+  summaryHint:    { flex: 1, fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
   classList: {
     width:            110,
     borderRightWidth: 1,
-    borderRightColor: "#F3F4F6",
-    backgroundColor:  "#FAFAFA",
+    borderRightColor: COLORS.border,
+    backgroundColor:  COLORS.page,
     paddingTop:       8,
   },
   sideTitle: {
     fontSize:          11,
     fontWeight:        "700",
-    color:             "#9CA3AF",
+    color:             COLORS.textSecondary,
     textTransform:     "uppercase",
     letterSpacing:     0.5,
     paddingHorizontal: 10,
@@ -819,22 +818,22 @@ const st = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     flexDirection:     "row",
     alignItems:        "center",
     justifyContent:    "space-between",
     gap:               4,
   },
-  classItemActive:     { backgroundColor: "#4F46E5" },
-  classItemText:       { fontSize: 12, fontWeight: "600", color: "#374151", flex: 1 },
-  classItemTextActive: { color: "#FFF" },
+  classItemActive:     { backgroundColor: ACCENT.indigo.solid },
+  classItemText:       { fontSize: 12, fontWeight: "600", color: COLORS.text, flex: 1 },
+  classItemTextActive: { color: COLORS.onPrimary },
   badge: {
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.indigo.wash,
     borderRadius:      8,
     paddingHorizontal: 5,
     paddingVertical:   2,
   },
-  badgeText:    { fontSize: 10, fontWeight: "700", color: "#4F46E5" },
+  badgeText:    { fontSize: 10, fontWeight: "700", color: ACCENT.indigo.deep },
   subjectPanel: { flex: 1, paddingHorizontal: 12, paddingTop: 8 },
   searchBox: {
     flexDirection:     "row",
@@ -848,11 +847,13 @@ const st = StyleSheet.create({
   },
   searchInput:  { flex: 1, fontSize: 13, color: "#111827" },
   subjectCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    10,
     marginBottom:    6,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.slate.base,
     overflow:        "hidden",
   },
   subjectHeader: {
@@ -867,17 +868,17 @@ const st = StyleSheet.create({
     height:          20,
     borderRadius:    5,
     borderWidth:     2,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.surface,
   },
-  checkboxActive: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  subjectName:    { fontSize: 13, fontWeight: "600", color: "#374151", flex: 1 },
+  checkboxActive: { backgroundColor: ACCENT.amber.solid, borderColor: ACCENT.amber.solid },
+  subjectName:    { fontSize: 13, fontWeight: "600", color: COLORS.text, flex: 1 },
   subjectConfig: {
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.surface,
     borderTopWidth:    1,
-    borderTopColor:    "#EEF2FF",
+    borderTopColor:    COLORS.border,
     paddingHorizontal: 12,
     paddingBottom:     12,
     paddingTop:        8,
@@ -885,18 +886,18 @@ const st = StyleSheet.create({
   configLabel: {
     fontSize:     11,
     fontWeight:   "600",
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     marginBottom: 6,
   },
   configInput: {
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderRadius:      8,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     paddingHorizontal: 10,
     paddingVertical:   6,
     fontSize:          13,
-    color:             "#111827",
+    color:             COLORS.text,
   },
   teacherChip: {
     flexDirection:     "row",
@@ -905,12 +906,12 @@ const st = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   5,
     borderRadius:      16,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
-  teacherChipActive: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  teacherChipText:   { fontSize: 11, fontWeight: "600", color: "#6B7280" },
+  teacherChipActive: { backgroundColor: ACCENT.violet.wash, borderColor: ACCENT.violet.base },
+  teacherChipText:   { fontSize: 11, fontWeight: "600", color: COLORS.textSecondary },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -933,7 +934,7 @@ const StepReview = ({ form, assignments, termOptions }) => {
       contentContainerStyle={styles.scroll}
     >
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t("examNew.sectionExamDetails")}</Text>
+        <SectionTitle icon="document-text">{t("examNew.sectionExamDetails")}</SectionTitle>
         {[
           { label: t("examNew.reviewName"),        value: form.name },
           { label: t("examNew.reviewType"),        value: examTypeOptions(t).find((o) => o.value === form.type)?.label || form.type },
@@ -954,7 +955,7 @@ const StepReview = ({ form, assignments, termOptions }) => {
 
       <View style={styles.section}>
         <View style={rv.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t("examNew.sectionSubjectAssignments")}</Text>
+          <SectionTitle icon="book" accent="slate" style={rv.sectionTitleRow}>{t("examNew.sectionSubjectAssignments")}</SectionTitle>
           <View style={rv.badge}>
             <Text style={rv.badgeText}>
               {t("examNew.classCount", { count: Object.keys(assignments).length })}
@@ -966,7 +967,7 @@ const StepReview = ({ form, assignments, termOptions }) => {
 
         {Object.keys(assignments).length === 0 ? (
           <View style={rv.emptyAssign}>
-            <Ionicons name="alert-circle-outline" size={32} color="#F59E0B" />
+            <IconSquare icon="alert-circle" accent="amber" size={40} />
             <Text style={rv.emptyAssignText}>
               {t("examNew.noAssignmentsTitle")}{"\n"}
               {t("examNew.noAssignmentsHint")}
@@ -976,7 +977,7 @@ const StepReview = ({ form, assignments, termOptions }) => {
           Object.entries(assignments).map(([classId, clsData]) => (
             <View key={classId} style={rv.classBlock}>
               <View style={rv.classBlockHeader}>
-                <Ionicons name="school-outline" size={14} color="#4F46E5" />
+                <Ionicons name="school-outline" size={14} color={ACCENT.indigo.solid} />
                 <Text style={rv.classBlockTitle}>{clsData.className}</Text>
                 <Text style={rv.classBlockCount}>
                   {t("examNew.subjectCount", { count: Object.keys(clsData.subjects).length })}
@@ -984,14 +985,14 @@ const StepReview = ({ form, assignments, termOptions }) => {
               </View>
               {Object.entries(clsData.subjects).map(([subjectId, sub]) => (
                 <View key={subjectId} style={rv.subjectRow}>
-                  <Ionicons name="book-outline" size={12} color="#6B7280" />
+                  <Ionicons name="book-outline" size={12} color={ACCENT.slate.solid} />
                   <Text style={rv.subjectRowName}>{sub.subjectName}</Text>
                   <Text style={rv.subjectRowMeta}>
                     {t("examNew.subjectMeta", { max: sub.maxScore, pass: sub.passMark })}
                   </Text>
                   {sub.teacherId ? (
                     <View style={rv.teacherTag}>
-                      <Ionicons name="person-outline" size={10} color="#059669" />
+                      <Ionicons name="person-outline" size={10} color={SEMANTIC.success.icon} />
                     </View>
                   ) : (
                     <View style={rv.teacherTagWarn}>
@@ -1016,12 +1017,12 @@ const rv = StyleSheet.create({
     justifyContent:    "space-between",
     paddingVertical:   8,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
   },
-  rowLabel: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  rowLabel: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "600" },
   rowValue: {
     fontSize:   13,
-    color:      "#111827",
+    color:      COLORS.text,
     fontWeight: "700",
     textAlign:  "right",
     flex:       1,
@@ -1033,24 +1034,29 @@ const rv = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom:   12,
   },
+  sectionTitleRow: { marginBottom: 0, flexShrink: 1 },
   badge: {
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.amber.wash,
+    borderWidth:       1,
+    borderColor:       ACCENT.amber.base + "4D",
     borderRadius:      12,
     paddingHorizontal: 10,
     paddingVertical:   4,
   },
-  badgeText:     { fontSize: 11, fontWeight: "700", color: "#4F46E5" },
+  badgeText:     { fontSize: 11, fontWeight: "700", color: ACCENT.amber.deep },
   emptyAssign:   { alignItems: "center", paddingVertical: 24, gap: 8 },
   emptyAssignText: {
     fontSize:   13,
-    color:      "#F59E0B",
+    color:      SEMANTIC.warning.text,
     textAlign:  "center",
     fontWeight: "600",
     lineHeight: 20,
   },
   classBlock: {
     borderWidth:  1,
-    borderColor:  "#EEF2FF",
+    borderColor:  COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.indigo.base,
     borderRadius: 10,
     marginBottom: 10,
     overflow:     "hidden",
@@ -1059,12 +1065,12 @@ const rv = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               6,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.indigo.wash,
     paddingHorizontal: 12,
     paddingVertical:   8,
   },
-  classBlockTitle: { fontSize: 13, fontWeight: "700", color: "#4F46E5", flex: 1 },
-  classBlockCount: { fontSize: 11, color: "#6B7280" },
+  classBlockTitle: { fontSize: 13, fontWeight: "700", color: ACCENT.indigo.deep, flex: 1 },
+  classBlockCount: { fontSize: 11, color: COLORS.textSecondary },
   subjectRow: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -1072,18 +1078,18 @@ const rv = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   8,
     borderTopWidth:    1,
-    borderTopColor:    "#F3F4F6",
+    borderTopColor:    COLORS.border,
   },
-  subjectRowName: { fontSize: 12, fontWeight: "600", color: "#374151", flex: 1 },
-  subjectRowMeta: { fontSize: 11, color: "#9CA3AF" },
-  teacherTag: { backgroundColor: "#ECFDF5", borderRadius: 10, padding: 4 },
+  subjectRowName: { fontSize: 12, fontWeight: "600", color: COLORS.text, flex: 1 },
+  subjectRowMeta: { fontSize: 11, color: COLORS.textSecondary },
+  teacherTag: { backgroundColor: SEMANTIC.success.box, borderRadius: 10, padding: 4 },
   teacherTagWarn: {
-    backgroundColor:   "#FEF3C7",
+    backgroundColor:   SEMANTIC.warning.box,
     borderRadius:      8,
     paddingHorizontal: 6,
     paddingVertical:   2,
   },
-  teacherTagWarnText: { fontSize: 10, color: "#D97706", fontWeight: "600" },
+  teacherTagWarnText: { fontSize: 10, color: SEMANTIC.warning.text, fontWeight: "600" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -1287,8 +1293,9 @@ export default function CreateExamScreen() {
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("examNew.createExam")}</Text>
           <Text style={styles.headerSub}>
@@ -1376,21 +1383,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   saveBtn: {
     backgroundColor:   "#4F46E5",
     borderRadius:      10,
@@ -1400,32 +1408,33 @@ const styles = StyleSheet.create({
   saveBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
   scroll:      { padding: 16 },
   section: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
   sectionTitle: {
     fontSize:     15,
     fontWeight:   "700",
-    color:        "#111827",
-    marginBottom: 16,
+    color:        COLORS.text,
+    flexShrink:   1,
   },
   row:         { flexDirection: "row" },
   passPreview: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             6,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: SEMANTIC.info.bg,
     borderRadius:    8,
     padding:         10,
     marginTop:       4,
   },
-  passPreviewText: { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+  passPreviewText: { fontSize: 13, color: SEMANTIC.info.text, fontWeight: "600" },
   bottomNav: {
     flexDirection:     "row",
     alignItems:        "center",

@@ -1,4 +1,4 @@
-import { useState, useMemo }                             from "react";
+import { useState, useMemo, useRef }                     from "react";
 import { useSearchParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }         from "@tanstack/react-query";
 import { School, Plus, Pencil, Trash2, BookOpen }        from "lucide-react";
@@ -13,10 +13,11 @@ import {
   deleteClass,
   fetchSubjects,
   createSubject,
-  updateSubject,
+  updateSubjectDetailed,
   deleteSubject,
 }                                                        from "@/services/class.service";
 import { fetchTeachers }                                 from "@/services/teacher.service";
+import { createIds }                                     from "@/lib/clientId";
 import type {
   Class,
   Subject,
@@ -28,9 +29,14 @@ import type {
 import { PageSpinner }                                   from "@/components/ui/Spinner";
 import { Button }                                        from "@/components/ui/Button";
 import { Badge }                                         from "@/components/ui/Badge";
+import { PageIcon }                                      from "@/components/ui/PageHeader";
+import { DASH_TINT, levelAccent, type DashAccent }       from "@/config/dashboardTint";
+import { cn }                                            from "@/utils/cn";
 import { Modal }                                         from "@/components/ui/Modal";
 import { SearchInput }                                   from "@/components/ui/SearchInput";
 import { FormField, Input, SelectField }                 from "@/components/ui/FormField";
+import { useToast }                                    from "@/components/ui/Toast";
+import { coefficientCascadeNotice }                    from "@/pages/subjects/coefficientCascade";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
@@ -70,7 +76,20 @@ const buildSubjectSchema = (t: Translate) => z.object({
   code:      z.string().optional(),
   classId:   z.string().min(1, t("subjectsEdit.errClassRequired")),
   teacherId: z.string().optional(),
+  // Same bounds as the subject pages and the server (parseCoefficient in
+  // admin.routes.js). Blank is allowed: on create the server applies 1, on an
+  // edit it leaves the stored value alone.
+  coefficient: z.string().optional().refine((v) => {
+    const raw = (v ?? "").trim();
+    return raw === "" || Number.isFinite(Number(raw));
+  }, t("subjectsEdit.errCoefficientNumber"))
+    .refine((v) => (v ?? "").trim() === "" || Number(v) >= 0.1, t("subjectsEdit.errCoefficientMin"))
+    .refine((v) => (v ?? "").trim() === "" || Number(v) <= 20,  t("subjectsEdit.errCoefficientMax")),
 });
+
+/** "" → leave to the server; anything else was validated as a number above. */
+const coefficientValue = (raw?: string): number | undefined =>
+  raw && raw.trim() !== "" ? Number(raw.trim()) : undefined;
 
 /*
  * The form types come from the builders' return types, not from a placeholder
@@ -127,9 +146,16 @@ const resolveSubjectTeacherName = (
 
 export default function ClassesPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
   const qc       = useQueryClient();
+
+  // The id each new class or subject is created under: kept while the same
+  // form is retried, renewed once it is created (lib/clientId.ts). It is what
+  // lets the desktop create them with no connection.
+  const classIds   = useRef(createIds());
+  const subjectIds = useRef(createIds());
 
   // ── URL-driven tab ─────────────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
@@ -232,8 +258,9 @@ export default function ClassesPage() {
     mutationFn: (values: ClassForm) =>
       editingClass
         ? updateClass(editingClass._id, { ...values, schoolId })
-        : createClass({ ...values, schoolId }),
+        : createClass({ ...values, schoolId, id: classIds.current.forAttempt({ ...values, schoolId }) }),
     onSuccess: () => {
+      classIds.current.created();
       qc.invalidateQueries({ queryKey: QK.classes(schoolId) });
       closeClassModal();
     },
@@ -242,7 +269,7 @@ export default function ClassesPage() {
   // ── Subject form ───────────────────────────────────────
   const subjectForm = useForm<SubjectForm>({
     resolver:      zodResolver(subjectRules),
-    defaultValues: { name: "", code: "", classId: "", teacherId: "" },
+    defaultValues: { name: "", code: "", classId: "", teacherId: "", coefficient: "" },
   });
 
   const openSubjectModal = (sub?: Subject) => {
@@ -254,12 +281,14 @@ export default function ClassesPage() {
             code:      sub.code      ?? "",
             classId:   sub.classId   ?? "",
             teacherId: sub.teacherId ?? "",
+            coefficient: String(sub.coefficient ?? 1),
           }
         : {
             name:      "",
             code:      "",
             classId:   filterClassId ?? "",
             teacherId: "",
+            coefficient: "",
           }
     );
     setSubjectModal(true);
@@ -271,11 +300,28 @@ export default function ClassesPage() {
   };
 
   const subjectMutation = useMutation({
-    mutationFn: (values: SubjectForm) =>
-      editingSubject
-        ? updateSubject(editingSubject._id, { ...values, schoolId })
-        : createSubject({ ...values, schoolId }),
-    onSuccess: () => {
+    mutationFn: async ({ coefficient, ...values }: SubjectForm) => {
+      const coeff = coefficientValue(coefficient);
+      if (!editingSubject) {
+        const attempt = { ...values, schoolId, coefficient: coeff };
+        await createSubject({ ...attempt, id: subjectIds.current.forAttempt(attempt) });
+        subjectIds.current.created();
+        return null;
+      }
+      // Sent only when it changed: the field opens on the value the list
+      // shows, which is 1 for a subject that never had one stored, and
+      // resaving that should not write a coefficient nobody chose.
+      const changed = coeff !== undefined && coeff !== editingSubject.coefficient;
+      const { cascade } = await updateSubjectDetailed(editingSubject._id, {
+        ...values, schoolId, ...(changed && { coefficient: coeff }),
+      });
+      return cascade;
+    },
+    onSuccess: (cascade) => {
+      // The edit page says where a coefficient change went; this modal edits
+      // the same field and owes the head the same account.
+      const notice = coefficientCascadeNotice(t, cascade);
+      if (notice) toast(notice);
       qc.invalidateQueries({ queryKey: ["subjects", schoolId] });
       closeSubjectModal();
     },
@@ -367,15 +413,16 @@ export default function ClassesPage() {
 
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900
-                         flex items-center gap-2">
-            <School className="h-7 w-7 text-primary-600" />
-            {t("classes.pageTitle")}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {t("classes.pageBlurb")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t("classes.pageTitle")}
+            </h1>
+            <p className="text-sm text-ink-muted mt-1">
+              {t("classes.pageBlurb")}
+            </p>
+          </div>
         </div>
 
         <Button
@@ -390,7 +437,7 @@ export default function ClassesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-line">
         <nav className="flex gap-6" aria-label={t("classes.pageTabs")}>
           {(["classes", "subjects"] as const).map((key) => (
             <button
@@ -401,7 +448,7 @@ export default function ClassesPage() {
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 tab === key
                   ? "border-primary-600 text-primary-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                  : "border-transparent text-ink-muted hover:text-ink"
               }`}
             >
               {key === "classes" ? t("classes.title") : t("subjects.title")}
@@ -453,7 +500,8 @@ export default function ClassesPage() {
       {tab === "classes" && (
         filteredClasses.length === 0 ? (
           <EmptyState
-            icon={<School className="h-10 w-10 text-gray-400" />}
+            icon={<School className="h-6 w-6" />}
+            accent="indigo"
             title={t("classes.none")}
             description={
               search
@@ -499,7 +547,8 @@ export default function ClassesPage() {
           <PageSpinner />
         ) : filteredSubjects.length === 0 ? (
           <EmptyState
-            icon={<BookOpen className="h-10 w-10 text-gray-400" />}
+            icon={<BookOpen className="h-6 w-6" />}
+            accent="slate"
             title={t("subjects.none")}
             description={
               search
@@ -637,6 +686,22 @@ export default function ClassesPage() {
           </FormField>
 
           <FormField
+            label={t("subjects.coefficientLabel")}
+            error={subjectForm.formState.errors.coefficient?.message}
+            hint={t("subjects.coefficientHint")}
+          >
+            <Input
+              {...subjectForm.register("coefficient")}
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min={0.1}
+              max={20}
+              placeholder={t("subjects.coefficientPh")}
+            />
+          </FormField>
+
+          <FormField
             label={t("academic.class")}
             error={subjectForm.formState.errors.classId?.message}
             required
@@ -750,26 +815,35 @@ function ClassCard({
   onViewSubjects,
 }: ClassCardProps) {
   const { t } = useTranslation();
+  const accent = levelAccent(cls.level);
+  const tint   = DASH_TINT[accent];
   return (
     <div
-      className="
-        bg-white rounded-xl
-        border border-gray-200
-        p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow
-      "
+      className={cn(
+        tint.card,
+        "p-5 flex flex-col gap-3 hover:shadow-lift transition-shadow",
+      )}
     >
       <div className="flex items-start justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 text-lg truncate">
-            {cls.name}
-          </h3>
-          <div className="flex gap-2 mt-1 flex-wrap">
-            {cls.level && (
-              <Badge variant="secondary">{t("common.level")} {cls.level}</Badge>
-            )}
-            {cls.section && (
-              <Badge variant="secondary">{t("common.section")} {cls.section}</Badge>
-            )}
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span
+            className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", tint.box)}
+            aria-hidden="true"
+          >
+            <School className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-ink text-lg truncate">
+              {cls.name}
+            </h3>
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {cls.level && (
+                <Badge accent={accent}>{t("common.level")} {cls.level}</Badge>
+              )}
+              {cls.section && (
+                <Badge accent={accent}>{t("common.section")} {cls.section}</Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -777,7 +851,7 @@ function ClassCard({
           <button
             onClick={() => onEdit(cls)}
             className="
-              p-1.5 rounded-lg text-gray-400
+              p-1.5 rounded-lg text-ink-muted
               hover:text-primary-600 hover:bg-primary-50
  transition
             "
@@ -789,7 +863,7 @@ function ClassCard({
           <button
             onClick={() => onDelete(cls)}
             className="
-              p-1.5 rounded-lg text-gray-400
+              p-1.5 rounded-lg text-ink-muted
               hover:text-red-600 hover:bg-red-50
  transition
             "
@@ -804,13 +878,13 @@ function ClassCard({
       <button
         type="button"
         className="
-          flex items-center gap-2 text-sm text-gray-500
+          flex items-center gap-2 text-sm text-ink-muted
           hover:text-primary-600 transition-colors text-left
         "
         onClick={() => onViewSubjects(cls)}
         aria-label={t("classes.viewSubjectsFor", { name: cls.name })}
       >
-        <BookOpen className="h-4 w-4 flex-shrink-0" />
+        <BookOpen className={cn("h-4 w-4 flex-shrink-0", tint.glyph)} />
         <span>
           {t("academic.subjectCount", { count: subjectCount })}
         </span>
@@ -842,24 +916,25 @@ function SubjectsTable({
   return (
     <div
       className="
-        bg-white rounded-xl
-        border border-gray-200
-        overflow-hidden shadow-sm
+        bg-surface rounded-xl
+        border border-line
+        overflow-hidden shadow-card
       "
     >
       <table className="w-full text-sm" role="grid">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-50">
+          <tr className="border-b border-line bg-surface">
             {([
             t("academic.subject"),
             t("common.code"),
+            t("subjects.coefficientLabel"),
             t("academic.class"),
             t("academic.teacher"),
             "",
           ]).map((h) => (
               <th
                 key={h}
-                className="text-left px-4 py-3 font-medium text-gray-600"
+                className="text-left px-4 py-3 font-medium text-ink-muted"
               >
                 {h}
               </th>
@@ -867,27 +942,31 @@ function SubjectsTable({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {subjects.map((sub) => (
             <tr
               key={sub._id}
-              className="hover:bg-gray-50 transition-colors"
+              className="hover:bg-accent-blue-soft/70 transition-colors"
             >
-              <td className="px-4 py-3 font-medium text-gray-900">
+              <td className="px-4 py-3 font-medium text-ink">
                 {sub.name}
               </td>
 
-              <td className="px-4 py-3 text-gray-500">
+              <td className="px-4 py-3 text-ink-muted">
                 {sub.code
-                  ? <Badge variant="secondary">{sub.code}</Badge>
+                  ? <Badge accent="slate">{sub.code}</Badge>
                   : "—"}
               </td>
 
-              <td className="px-4 py-3 text-gray-600">
+              <td className="px-4 py-3 text-ink-body tabular-nums">
+                {sub.coefficient}
+              </td>
+
+              <td className="px-4 py-3 text-ink-body">
                 {sub.class?.name ?? getClassName(sub.classId)}
               </td>
 
-              <td className="px-4 py-3 text-gray-600">
+              <td className="px-4 py-3 text-ink-body">
                 {getTeacherName(sub)}
               </td>
 
@@ -933,21 +1012,22 @@ function SubjectsTable({
 
 interface EmptyStateProps {
   icon:        React.ReactNode;
+  accent?:     DashAccent;
   title:       string;
   description: string;
   action?:     React.ReactNode;
 }
 
-function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+function EmptyState({ icon, accent = "indigo", title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-      <div className="p-4 bg-gray-100 rounded-full">
+      <div className={cn("flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT[accent].box)} aria-hidden="true">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-gray-900">
+      <h3 className="text-lg font-semibold text-ink">
         {title}
       </h3>
-      <p className="text-sm text-gray-500 max-w-xs">
+      <p className="text-sm text-ink-muted max-w-xs">
         {description}
       </p>
       {action && <div className="mt-2">{action}</div>}

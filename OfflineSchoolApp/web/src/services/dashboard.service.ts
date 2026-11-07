@@ -1,5 +1,7 @@
 // web/src/services/dashboard.service.ts
 import api from "@/lib/axios";
+import { EXAM_STATUSES } from "@/constants/exam.constants";
+import type { ExamStatus } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -25,18 +27,14 @@ export interface SubjectStats {
   total: number;
 }
 
-export interface ExamStats {
-  total:     number;
-  ongoing:   number;
-  completed: number;
-  draft:     number;
-  scheduled: number;
-}
+/** A count for every exam status, and their sum as `total`. */
+export type ExamStats = { total: number } & Record<ExamStatus, number>;
 
 export interface AttendanceStats {
   todayPresent: number;
   todayAbsent:  number;
-  rate:         number;
+  /** Null when nobody was marked today (C3) — shown "–", not 0%. */
+  rate:         number | null;
   /** Register rows written today — includes late and excused. */
   marked:       number;
   /** The roster this rate is a percentage of. */
@@ -70,7 +68,12 @@ export interface SystemHealthStats {
   unassignedTeachers:       number;
   // row 2
   totalClasses:             number;
+  /** Class-subject pairs: Mathematics in Form 1 and in Form 2 are two (B4). */
   totalSubjects:            number;
+  /** Distinct subject names across the school; null when the server sent none. */
+  distinctSubjects:         number | null;
+  /** Class-subjects no active assignment covers (B4). */
+  unassignedClassSubjects:  number;
   assignedSubjects:         number;
   activeAnnouncements:      number;
   // row 3
@@ -236,17 +239,15 @@ export async function fetchSubjectStats(schoolId: string): Promise<SubjectStats>
 export async function fetchExamStats(schoolId: string): Promise<ExamStats> {
   try {
     const { data } = await api.get(`${BASE}/exams/stats${qs({ schoolId })}`);
-    const d = (data as Record<string, unknown>)?.data ?? data;
+    const d = ((data as Record<string, unknown>)?.data ?? data) as Record<string, number>;
+    // Every status the exams page shows, read from the one list of them.
     return {
-      total:     n((d as Record<string, number>).total),
-      ongoing:   n((d as Record<string, number>).ongoing),
-      completed: n((d as Record<string, number>).completed),
-      draft:     n((d as Record<string, number>).draft),
-      scheduled: n((d as Record<string, number>).scheduled),
-    };
+      total: n(d.total),
+      ...Object.fromEntries(EXAM_STATUSES.map((s) => [s, n(d[s])])),
+    } as ExamStats;
   } catch (err) {
     console.warn("[dashboard] fetchExamStats failed:", err);
-    return { total: 0, ongoing: 0, completed: 0, draft: 0, scheduled: 0 };
+    return { total: 0, ...Object.fromEntries(EXAM_STATUSES.map((s) => [s, 0])) } as ExamStats;
   }
 }
 
@@ -281,7 +282,8 @@ export async function fetchAttendanceStats(
 
       const present = n(r.todayPresent ?? r.present    ?? r.totalPresent);
       const absent  = n(r.todayAbsent  ?? r.absent     ?? r.totalAbsent);
-      const rate    = n(r.rate         ?? r.percentage  ?? r.attendanceRate);
+      const rawRate = r.rate ?? r.percentage ?? r.attendanceRate;
+      const rate    = rawRate === null ? null : n(rawRate);
 
       // `marked` counts every register row, late and excused included.
       // The widget used to derive it as present + absent, which reads a
@@ -396,6 +398,8 @@ interface AdminStatsPayload {
   unassignedTeachers?:       number;
   totalClasses?:             number;
   totalSubjects?:            number;
+  distinctSubjects?:         number | null;
+  unassignedClassSubjects?:  number;
   totalAssignments?:         number;   // backend key → maps to assignedSubjects
   activeAnnouncements?:      number;
   totalPeriods?:             number;
@@ -421,6 +425,8 @@ export async function fetchSystemHealth(
     unassignedTeachers:       0,
     totalClasses:             0,
     totalSubjects:            0,
+    distinctSubjects:         null,
+    unassignedClassSubjects:  0,
     assignedSubjects:         0,
     activeAnnouncements:      0,
     totalPeriods:             0,
@@ -450,6 +456,8 @@ export async function fetchSystemHealth(
       unassignedTeachers:       n(s.unassignedTeachers),
       totalClasses:             n(s.totalClasses),
       totalSubjects:            n(s.totalSubjects),
+      distinctSubjects:         s.distinctSubjects == null ? null : n(s.distinctSubjects),
+      unassignedClassSubjects:  n(s.unassignedClassSubjects),
       assignedSubjects:         n(s.totalAssignments),   // key rename
       activeAnnouncements:      n(s.activeAnnouncements),
       totalPeriods:             n(s.totalPeriods),

@@ -15,40 +15,49 @@ import AsyncStorage     from "@react-native-async-storage/async-storage";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import api              from "../../../src/services/api";
+import { ExamService }  from "../../../src/services/exam.service";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT, SEMANTIC, TONE_EDGE, levelAccent, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
 import { MarkInputRow }  from "../../../src/components/MarkInputRow";
+import * as ExamCache    from "../../../src/services/examCache.service";
+import { useSyncStatus } from "../../../src/hooks/useSyncStatus";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
+// Exams are amber; a submission's status is its tone.
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.amber.solid,
+  primaryBg: ACCENT.amber.wash,
+  primaryDeep: ACCENT.amber.deep,
+  primaryEdge: ACCENT.amber.base,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text,
+  errorBg:   SEMANTIC.error.bg,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   THEME.border,
+  gray400:   THEME.textSecondary,
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
+// Submission status: pending amber, submitted sky, approved green, rejected red.
 const STATUS_META = {
-  pending:   { color: C.warning, bg: C.warningBg, labelKey: "teacherExamSubjects.statusPending",   icon: "time-outline"             },
-  submitted: { color: C.primary, bg: C.primaryBg, labelKey: "teacherExamSubjects.statusSubmitted", icon: "cloud-upload-outline"     },
-  approved:  { color: C.success, bg: C.successBg, labelKey: "teacherExamSubjects.statusApproved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: C.error,   bg: C.errorBg,   labelKey: "teacherExamSubjects.statusRejected",  icon: "close-circle-outline"     },
+  pending:   { color: ACCENT.amber.deep, bg: ACCENT.amber.wash, border: ACCENT.amber.base + "4D", labelKey: "teacherExamSubjects.statusPending",   icon: "time-outline"             },
+  submitted: { color: ACCENT.sky.deep,   bg: ACCENT.sky.wash,   border: ACCENT.sky.base + "4D",   labelKey: "teacherExamSubjects.statusSubmitted", icon: "cloud-upload-outline"     },
+  approved:  { color: ACCENT.green.deep, bg: ACCENT.green.wash, border: ACCENT.green.base + "4D", labelKey: "teacherExamSubjects.statusApproved",  icon: "checkmark-circle-outline" },
+  rejected:  { color: ACCENT.red.deep,   bg: ACCENT.red.wash,   border: ACCENT.red.base + "4D",   labelKey: "teacherExamSubjects.statusRejected",  icon: "close-circle-outline"     },
 };
 
 const SUBJECT_FILTERS = [
@@ -59,16 +68,8 @@ const SUBJECT_FILTERS = [
   { id: "approved",  labelKey: "teacherExamSubjects.statusApproved",   icon: "checkmark-circle-outline" },
 ];
 
-const CLASS_COLORS = [
-  { bg: "#EEF2FF", color: "#4F46E5", icon: "school-outline"  },
-  { bg: "#ECFDF5", color: "#059669", icon: "book-outline"    },
-  { bg: "#FEF3C7", color: "#D97706", icon: "library-outline" },
-  { bg: "#FEF2F2", color: "#DC2626", icon: "reader-outline"  },
-  { bg: "#F0F9FF", color: "#0284C7", icon: "school-outline"  },
-  { bg: "#FDF4FF", color: "#A855F7", icon: "book-outline"    },
-  { bg: "#FFF7ED", color: "#EA580C", icon: "library-outline" },
-  { bg: "#F0FDF4", color: "#16A34A", icon: "reader-outline"  },
-];
+// A class header takes its level's accent (the class name carries the level).
+const classAccent = (section) => levelAccent(section?.title);
 
 const ROW_HEIGHT = 62;
 const draftKey   = (examId, subjectId) => `exam_draft_${examId}_${subjectId}`;
@@ -381,6 +382,27 @@ function ScoreEntry({
   saveRef, saving, setSaving, dirtyRef,
 }) {
   const { t } = useTranslation();
+  // Who entered the marks, recorded on the device copy (enteredBy).
+  const userId = useAuthStore((s) => String(s.user?._id || s.user?.id || ""));
+
+  // Where each saved mark on this sheet stands in the unsent-changes queue —
+  // the same queue and the same join (ExamCache.sheetSyncState) as the
+  // pending count. Re-read whenever that count moves, so a row turns from
+  // "pending" to plain when the sync uploads it, or to "needs attention" when
+  // the server refuses it.
+  const { stats: queueStats } = useSyncStatus();
+  const queueKey = `${queueStats?.pending}|${queueStats?.retrying}|${queueStats?.failed}|${queueStats?.conflict}`;
+  const [sheetSync, setSheetSync] = useState({ byStudent: {}, pending: 0, attention: 0, reasons: [] });
+  const refreshSheetSync = useCallback(() => {
+    ExamCache.sheetSyncState({ examId, subjectId, classId })
+      .then(setSheetSync)
+      .catch(() => {});
+  }, [examId, subjectId, classId]);
+  useEffect(() => { refreshSheetSync(); }, [refreshSheetSync, queueKey]);
+  const syncLabels = useMemo(() => ({
+    pending:   t("teacherExamSubjects.rowPending"),
+    attention: t("teacherExamSubjects.rowAttention"),
+  }), [t]);
 
   const [isDirty,      setIsDirty]      = useState(false);
   const [search,       setSearch]       = useState("");
@@ -421,15 +443,16 @@ function ScoreEntry({
 
   const safeStudents = Array.isArray(students) ? students : [];
 
+  // Through the exam service, which caches the sheet on the device and reads
+  // it back from there: offline the marks already saved — including ones still
+  // waiting to upload — come back, where this used to show an empty sheet.
   const loadScores = useCallback(async () => {
     if (!examId) return {};
-    const res = await api
-      .get(`/exams/${examId}/scores`, {
-        params: { subjectId, classId, schoolId },
-      })
-      .catch(() => ({ data: { scores: [] } }));
+    const res = await ExamService
+      .getScores({ examId, subjectId, classId, schoolId })
+      .catch(() => ({ scores: [] }));
 
-    const existing = res?.data?.scores || [];
+    const existing = res?.scores || [];
     const map = {};
     for (const s of existing) {
       map[String(s.studentId)] = {
@@ -556,17 +579,29 @@ function ScoreEntry({
     const doSave = async () => {
       try {
         setSaving(true);
-        await api.post(`/exams/${examId}/scores/bulk`, {
-          classId, subjectId, examSubjectId,
-          scores: records, schoolId,
+        // The offline queue, like attendance: written to the device first,
+        // sent now when there is a connection, and otherwise queued on the
+        // outbox and sent by the next sync. This posted straight to the
+        // server, so offline the save failed and the marks lived only in an
+        // unsent draft. A refusal from the server still throws, and the
+        // service undoes the local write.
+        const res = await ExamService.saveBulkScores({
+          examId, classId, subjectId, examSubjectId, schoolId,
+          scores:    records.map((r) => ({ ...r, teacherRemark: null })),
+          enteredBy: userId || null,
         });
         await AsyncStorage.removeItem(
           draftKey(examId, subjectId)
         ).catch(() => {});
         setIsDirty(false);
+        refreshSheetSync();
         Alert.alert(
-          t("teacherExamSubjects.savedTitle"),
-          t("teacherExamSubjects.savedBody", { count: records.length }),
+          res?.queued
+            ? t("teacherExamSubjects.savedOfflineTitle")
+            : t("teacherExamSubjects.savedTitle"),
+          res?.queued
+            ? t("teacherExamSubjects.savedOfflineBody", { count: records.length })
+            : t("teacherExamSubjects.savedBody", { count: records.length }),
           [
             {
               text:    t("teacherExamSubjects.enterAnotherSubject"),
@@ -608,7 +643,7 @@ function ScoreEntry({
   }, [
     safeStudents, flush, maxScore,
     examId, classId, subjectId, examSubjectId,
-    schoolId, onSaved, setSaving, t,
+    schoolId, onSaved, setSaving, t, userId, refreshSheetSync,
   ]);
 
   useEffect(() => {
@@ -674,10 +709,12 @@ function ScoreEntry({
         onSubmit={onSubmitRow}
         registerInput={registerInput}
         readPending={readPending}
+        syncState={sheetSync.byStudent[item._id] ?? null}
+        syncLabels={syncLabels}
       />
     );
   }, [
-    scores, generation, maxScore, t,
+    scores, generation, maxScore, t, sheetSync, syncLabels,
     draftChanged, toggleAbsent, flush, onSubmitRow, registerInput, readPending,
   ]);
 
@@ -702,7 +739,7 @@ function ScoreEntry({
   if (studentsError) {
     return (
       <View style={se.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color={C.error} />
+        <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} />
         <Text style={[se.hint, { color: C.error }]}>{studentsError}</Text>
         <TouchableOpacity style={se.retryBtn} onPress={refreshStudents}>
           <Text style={se.retryText}>
@@ -716,7 +753,7 @@ function ScoreEntry({
   if (!safeStudents.length) {
     return (
       <View style={se.centered}>
-        <Ionicons name="people-outline" size={48} color={C.gray200} />
+        <IconSquare icon="people-outline" accent="amber" size={56} radius={16} />
         <Text style={[se.hint, { fontWeight: "700", color: C.gray700 }]}>
           {t("teacherExamSubjects.noStudentsTitle")}
         </Text>
@@ -778,13 +815,42 @@ function ScoreEntry({
           </View>
         </View>
 
+        {/* The sheet's place in the unsent-changes queue. "Needs attention"
+            wins: a refused or conflicting upload stays here, and on the
+            pending-changes screen, until somebody retries or discards it. */}
+        {sheetSync.attention > 0 ? (
+          <View style={se.syncAttention}>
+            <Ionicons name="alert-circle" size={16} color={ACCENT.red.solid} />
+            <View style={{ flex: 1 }}>
+              <Text style={se.syncAttentionText}>
+                {t("teacherExamSubjects.attentionBanner", { count: sheetSync.attention })}
+              </Text>
+              {sheetSync.reasons.length > 0 && (
+                <Text style={se.syncReason} numberOfLines={3}>
+                  {sheetSync.reasons.join(" · ")}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => router.push("/sync/pending")} style={se.syncReview}>
+              <Text style={se.syncReviewText}>{t("teacherExamSubjects.reviewPending")}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : sheetSync.pending > 0 ? (
+          <View style={se.syncPending}>
+            <Ionicons name="cloud-upload-outline" size={16} color={ACCENT.amber.solid} />
+            <Text style={se.syncPendingText}>
+              {t("teacherExamSubjects.pendingBanner", { count: sheetSync.pending })}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Search */}
         <View style={se.searchWrap}>
-          <Ionicons name="search-outline" size={16} color={C.gray400} />
+          <Ionicons name="search-outline" size={16} color={THEME.textMuted} />
           <TextInput
             style={se.searchInput}
             placeholder={t("teacherExamSubjects.searchPlaceholder")}
-            placeholderTextColor={C.gray400}
+            placeholderTextColor={THEME.textMuted}
             value={search}
             onChangeText={setSearch}
             autoCapitalize="none"
@@ -792,7 +858,7 @@ function ScoreEntry({
           />
           {!!search && (
             <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={16} color={C.gray400} />
+              <Ionicons name="close-circle" size={16} color={THEME.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -823,7 +889,7 @@ function ScoreEntry({
           }
           ListEmptyComponent={
             <View style={se.empty}>
-              <Ionicons name="people-outline" size={48} color={C.gray200} />
+              <IconSquare icon="people-outline" accent="amber" size={48} radius={14} />
               <Text style={se.emptyText}>
                 {search
                   ? t("teacherExamSubjects.emptySearch")
@@ -853,10 +919,10 @@ const se = StyleSheet.create({
     marginTop: 8, backgroundColor: C.primary, borderRadius: 10,
     paddingVertical: 10, paddingHorizontal: 24,
   },
-  retryText: { color: C.white, fontWeight: "700", fontSize: 14 },
+  retryText: { color: THEME.onPrimary, fontWeight: "700", fontSize: 14 },
   progress: {
     backgroundColor: C.white, paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
   progressTop: {
     flexDirection: "row", justifyContent: "space-between",
@@ -864,27 +930,28 @@ const se = StyleSheet.create({
   },
   progressText:  { fontSize: 13, fontWeight: "600", color: C.gray700 },
   progressRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  progressPct:   { fontSize: 13, fontWeight: "700", color: C.primary },
+  progressPct:   { fontSize: 13, fontWeight: "700", color: C.primaryDeep },
   dirtyDot: {
-    backgroundColor: C.error, borderRadius: 6,
+    backgroundColor: SEMANTIC.warning.bg, borderRadius: 6,
+    borderWidth: 1, borderColor: SEMANTIC.warning.icon + "4D",
     paddingHorizontal: 6, paddingVertical: 2,
   },
   dirtyText: {
-    fontSize: 9, fontWeight: "800", color: C.white, letterSpacing: 0.5,
+    fontSize: 9, fontWeight: "800", color: SEMANTIC.warning.text, letterSpacing: 0.5,
   },
   barBg: {
-    height: 5, backgroundColor: C.gray100, borderRadius: 3,
+    height: 5, backgroundColor: THEME.border, borderRadius: 3,
     overflow: "hidden", marginBottom: 8,
   },
-  barFill:        { height: 5, backgroundColor: C.primary, borderRadius: 3 },
+  barFill:        { height: 5, backgroundColor: C.primaryEdge, borderRadius: 3 },
   progressBottom: {
     flexDirection: "row", justifyContent: "space-between",
     alignItems: "center",
   },
   subLabel: { fontSize: 11, color: C.gray500 },
-  markAll:  { fontSize: 11, color: C.primary, fontWeight: "700" },
+  markAll:  { fontSize: 11, color: C.primaryDeep, fontWeight: "700" },
   searchWrap: {
-    flexDirection: "row", alignItems: "center", backgroundColor: C.gray50,
+    flexDirection: "row", alignItems: "center", backgroundColor: C.white,
     borderRadius: 10, paddingHorizontal: 12, height: 40,
     borderWidth: 1, borderColor: C.gray200, gap: 8, margin: 12, marginBottom: 4,
   },
@@ -894,10 +961,10 @@ const se = StyleSheet.create({
   emptyText:    { fontSize: 14, color: C.gray400, fontWeight: "600" },
   row: {
     flexDirection: "row", alignItems: "center", backgroundColor: C.white,
-    borderRadius: 12, padding: 10, borderWidth: 1, borderColor: C.gray100,
+    borderRadius: 12, padding: 10, borderWidth: 1, borderColor: THEME.border,
     gap: 8, height: ROW_HEIGHT - 6,
   },
-  rowAbsent:        { backgroundColor: C.errorBg, borderColor: "#FECACA" },
+  rowAbsent:        { backgroundColor: SEMANTIC.error.bg, borderColor: SEMANTIC.error.box },
   avatar: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: "center", justifyContent: "center",
@@ -906,16 +973,27 @@ const se = StyleSheet.create({
   info:             { flex: 1 },
   name:             { fontSize: 13, fontWeight: "700", color: C.gray900 },
   sub:              { fontSize: 11, color: C.gray400 },
+  syncPending:      { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginTop: 8,
+                      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                      backgroundColor: SEMANTIC.warning.bg, borderWidth: 1, borderColor: SEMANTIC.warning.box },
+  syncPendingText:  { flex: 1, fontSize: 12, color: SEMANTIC.warning.text, fontWeight: "600" },
+  syncAttention:    { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginTop: 8,
+                      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                      backgroundColor: SEMANTIC.error.bg, borderWidth: 1, borderColor: SEMANTIC.error.box },
+  syncAttentionText:{ fontSize: 12, color: SEMANTIC.error.text, fontWeight: "700" },
+  syncReason:       { fontSize: 11, color: SEMANTIC.error.text, marginTop: 2 },
+  syncReview:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: ACCENT.red.solid },
+  syncReviewText:   { fontSize: 12, color: THEME.onPrimary, fontWeight: "700" },
   absBtn: {
     paddingHorizontal: 8, paddingVertical: 5,
     borderRadius: 8, borderWidth: 1.5, borderColor: C.gray200,
   },
-  absBtnActive:     { backgroundColor: C.error, borderColor: C.error },
+  absBtnActive:     { backgroundColor: ACCENT.red.solid, borderColor: ACCENT.red.solid },
   absBtnText:       { fontSize: 10, fontWeight: "700", color: C.gray400 },
-  absBtnTextActive: { color: C.white },
+  absBtnTextActive: { color: THEME.onPrimary },
   scoreWrap:        { alignItems: "center", minWidth: 64 },
   scoreInput: {
-    backgroundColor: C.gray50, borderRadius: 8, borderWidth: 1,
+    backgroundColor: C.white, borderRadius: 8, borderWidth: 1,
     borderColor: C.gray200, paddingHorizontal: 8, paddingVertical: 6,
     fontSize: 15, fontWeight: "700", color: C.gray900,
     textAlign: "center", width: 60,
@@ -1118,7 +1196,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
   if (error) {
     return (
       <View style={sv.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color={C.error} />
+        <IconSquare icon="alert-circle-outline" accent="red" size={56} radius={16} />
         <Text style={sv.errorText}>{error}</Text>
         <TouchableOpacity style={sv.retryBtn} onPress={refresh}>
           <Text style={sv.retryText}>
@@ -1132,7 +1210,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
   if (!safeSubjects.length) {
     return (
       <View style={sv.centered}>
-        <Ionicons name="book-outline" size={48} color={C.gray200} />
+        <IconSquare icon="book-outline" accent="amber" size={56} radius={16} />
         <Text style={sv.emptyTitle}>
           {t("teacherExamSubjects.noSubjectsTitle")}
         </Text>
@@ -1171,7 +1249,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 <Ionicons
                   name={f.icon}
                   size={13}
-                  color={isActive ? C.white : C.gray500}
+                  color={isActive ? C.primaryDeep : C.gray500}
                 />
                 <Text
                   style={[
@@ -1206,7 +1284,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
 
       {sections.length === 0 ? (
         <View style={sv.filterEmpty}>
-          <Ionicons name="funnel-outline" size={40} color={C.gray200} />
+          <IconSquare icon="funnel-outline" accent="amber" size={48} radius={14} />
           <Text style={sv.filterEmptyText}>
             {t("teacherExamSubjects.noFilterMatch")}
           </Text>
@@ -1236,17 +1314,12 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
           }
 
           renderSectionHeader={({ section }) => {
-            const idx =
-              sections.findIndex((s) => s.title === section.title) %
-              CLASS_COLORS.length;
-            const cls = CLASS_COLORS[Math.max(0, idx)];
+            const accent = classAccent(section);
+            const cls    = ACCENT[accent];
+            const pill   = accentBadge(accent);
             return (
-              <View style={sv.sectionHeader}>
-                <View
-                  style={[sv.sectionIconBg, { backgroundColor: cls.bg }]}
-                >
-                  <Ionicons name={cls.icon} size={16} color={cls.color} />
-                </View>
+              <View style={[sv.sectionHeader, { backgroundColor: cls.wash, borderTopColor: cls.base }]}>
+                <IconSquare icon="school-outline" accent={accent} size={34} radius={10} />
                 <View style={sv.sectionHeaderText}>
                   <Text style={sv.sectionTitle}>{section.title}</Text>
                   <Text style={sv.sectionMeta}>
@@ -1256,10 +1329,10 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                   </Text>
                 </View>
                 <View
-                  style={[sv.sectionBadge, { backgroundColor: cls.bg }]}
+                  style={[sv.sectionBadge, { backgroundColor: THEME.surface, borderColor: pill.border }]}
                 >
                   <Text
-                    style={[sv.sectionBadgeText, { color: cls.color }]}
+                    style={[sv.sectionBadgeText, { color: pill.text }]}
                   >
                     {section.data.length}
                   </Text>
@@ -1274,10 +1347,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
             const meta       = STATUS_META[status] || STATUS_META.pending;
             const isRejected = status === "rejected";
             const isApproved = status === "approved";
-            const sIdx =
-              sections.findIndex((s) => s.title === section.title) %
-              CLASS_COLORS.length;
-            const cls = CLASS_COLORS[Math.max(0, sIdx)];
+            const cls        = ACCENT[classAccent(section)];
 
             return (
               <TouchableOpacity
@@ -1292,18 +1362,18 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 disabled={isApproved}
               >
                 <View
-                  style={[sv.cardAccent, { backgroundColor: cls.color }]}
+                  style={[sv.cardAccent, { backgroundColor: cls.base }]}
                 />
                 <View
                   style={[
                     sv.iconWrap,
-                    { backgroundColor: isRejected ? C.errorBg : cls.bg },
+                    { backgroundColor: isRejected ? ACCENT.red.solid : ACCENT.amber.solid },
                   ]}
                 >
                   <Ionicons
                     name="book"
                     size={20}
-                    color={isRejected ? C.error : cls.color}
+                    color={THEME.onPrimary}
                   />
                 </View>
                 <View style={sv.cardInfo}>
@@ -1329,7 +1399,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                       <Ionicons
                         name="alert-circle"
                         size={12}
-                        color={C.error}
+                        color={SEMANTIC.error.icon}
                       />
                       <Text style={sv.rejectionText} numberOfLines={2}>
                         {sub.rejectionReason}
@@ -1344,7 +1414,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 </View>
                 <View style={sv.cardRight}>
                   <View
-                    style={[sv.statusBadge, { backgroundColor: meta.bg }]}
+                    style={[sv.statusBadge, { backgroundColor: meta.bg, borderColor: meta.border }]}
                   >
                     <Text style={[sv.statusText, { color: meta.color }]}>
                       {t(meta.labelKey)}
@@ -1389,12 +1459,12 @@ const sv = StyleSheet.create({
     backgroundColor: C.primary, borderRadius: 10,
     paddingVertical: 10, paddingHorizontal: 24,
   },
-  retryText: { color: C.white, fontWeight: "700", fontSize: 14 },
+  retryText: { color: THEME.onPrimary, fontWeight: "700", fontSize: 14 },
 
   filterBar: {
     backgroundColor:   C.white,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: THEME.border,
   },
   filterScrollContent: {
     paddingHorizontal: 12, paddingVertical: 10, gap: 8,
@@ -1402,19 +1472,20 @@ const sv = StyleSheet.create({
   filterChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: C.gray100, borderWidth: 1, borderColor: C.gray200,
+    backgroundColor: C.white, borderWidth: 1, borderColor: C.gray200,
   },
-  filterChipActive:          { backgroundColor: C.primary, borderColor: C.primary },
+  filterChipActive:          { backgroundColor: C.primaryBg, borderColor: C.primaryEdge },
   filterChipText:            { fontSize: 12, fontWeight: "600", color: C.gray700 },
-  filterChipTextActive:      { color: C.white },
+  filterChipTextActive:      { color: C.primaryDeep },
   filterChipBadge: {
-    backgroundColor: C.white, borderRadius: 10,
+    backgroundColor: C.primaryBg, borderRadius: 10,
+    borderWidth: 1, borderColor: C.primaryEdge + "4D",
     minWidth: 20, paddingHorizontal: 6, paddingVertical: 1,
     alignItems: "center",
   },
-  filterChipBadgeActive:     { backgroundColor: "rgba(255,255,255,0.25)" },
-  filterChipBadgeText:       { fontSize: 10, fontWeight: "700", color: C.gray700 },
-  filterChipBadgeTextActive: { color: C.white },
+  filterChipBadgeActive:     { backgroundColor: C.primary, borderColor: C.primary },
+  filterChipBadgeText:       { fontSize: 10, fontWeight: "700", color: C.primaryDeep },
+  filterChipBadgeTextActive: { color: THEME.onPrimary },
 
   filterEmpty: {
     flex: 1, alignItems: "center", justifyContent: "center",
@@ -1425,7 +1496,7 @@ const sv = StyleSheet.create({
     backgroundColor: C.primary, borderRadius: 8,
     paddingVertical: 8, paddingHorizontal: 20,
   },
-  filterEmptyBtnText: { color: C.white, fontSize: 12, fontWeight: "700" },
+  filterEmptyBtnText: { color: THEME.onPrimary, fontSize: 12, fontWeight: "700" },
 
   list: { padding: 16, paddingBottom: 40 },
 
@@ -1433,35 +1504,31 @@ const sv = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: C.white, borderRadius: 14,
     borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
-    padding: 14, borderWidth: 1, borderBottomWidth: 0,
-    borderColor: C.gray200, shadowColor: "#000",
+    padding: 14, borderWidth: 1, borderBottomWidth: 0, borderTopWidth: 3,
+    borderColor: C.gray200, shadowColor: THEME.shadow,
     shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, marginTop: 4,
-  },
-  sectionIconBg: {
-    width: 34, height: 34, borderRadius: 10,
-    alignItems: "center", justifyContent: "center",
   },
   sectionHeaderText: { flex: 1 },
   sectionTitle:      { fontSize: 15, fontWeight: "700", color: C.gray900 },
   sectionMeta:       { fontSize: 11, color: C.gray500, marginTop: 2 },
   sectionBadge: {
-    width: 26, height: 26, borderRadius: 8,
+    width: 26, height: 26, borderRadius: 8, borderWidth: 1,
     alignItems: "center", justifyContent: "center",
   },
   sectionBadgeText: { fontSize: 12, fontWeight: "800" },
 
   card: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: C.white, borderLeftWidth: 1,
+    backgroundColor: C.primaryBg, borderLeftWidth: 1,
     borderRightWidth: 1, borderBottomWidth: 1,
     borderColor: C.gray200, overflow: "hidden", gap: 10,
   },
   cardLast: {
     borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
+    shadowColor: THEME.shadow, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
   },
-  cardRejected: { borderColor: "#FECACA" },
-  cardApproved: { borderColor: "#A7F3D0", opacity: 0.85 },
+  cardRejected: { borderColor: TONE_EDGE.error },
+  cardApproved: { borderColor: TONE_EDGE.success, opacity: 0.85 },
   cardAccent:   { width: 4, alignSelf: "stretch" },
   iconWrap: {
     width: 40, height: 40, borderRadius: 10,
@@ -1475,14 +1542,14 @@ const sv = StyleSheet.create({
   },
   rejectionBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 4,
-    marginTop: 6, backgroundColor: C.errorBg, borderRadius: 6, padding: 6,
+    marginTop: 6, backgroundColor: C.errorBg, borderWidth: 1, borderColor: SEMANTIC.error.box, borderRadius: 6, padding: 6,
   },
   rejectionText: { fontSize: 11, color: C.error, flex: 1 },
   approvedText:  {
     fontSize: 11, color: C.success, fontWeight: "600", marginTop: 4,
   },
   cardRight:   { alignItems: "flex-end", gap: 4, paddingRight: 12 },
-  statusBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   statusText:  { fontSize: 11, fontWeight: "700" },
 });
 
@@ -1593,6 +1660,7 @@ export default function TeacherExamSubjectsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={ms.headerIcon} />
         <View style={ms.headerCenter}>
           <Text style={ms.headerTitle} numberOfLines={1}>
             {headerTitle}
@@ -1609,7 +1677,7 @@ export default function TeacherExamSubjectsScreen() {
             disabled={saving}
           >
             {saving
-              ? <ActivityIndicator size="small" color={C.white} />
+              ? <ActivityIndicator size="small" color={THEME.onPrimary} />
               : <Text style={ms.saveBtnText}>
                   {t("teacherExamSubjects.save")}
                 </Text>
@@ -1628,7 +1696,7 @@ export default function TeacherExamSubjectsScreen() {
             {t("teacherExamSubjects.myExams")}
           </Text>
         </TouchableOpacity>
-        <Ionicons name="chevron-forward" size={13} color={C.gray200} />
+        <Ionicons name="chevron-forward" size={13} color={THEME.textSecondary} />
         <TouchableOpacity
           onPress={() => confirmDiscard(() => setSelectedSubject(null))}
           disabled={step === 0}
@@ -1647,7 +1715,7 @@ export default function TeacherExamSubjectsScreen() {
         </TouchableOpacity>
         {step === 1 && (
           <>
-            <Ionicons name="chevron-forward" size={13} color={C.gray200} />
+            <Ionicons name="chevron-forward" size={13} color={THEME.textSecondary} />
             <Text style={[ms.crumb, ms.crumbActive]} numberOfLines={1}>
               {selectedSubject?.subjectName}
             </Text>
@@ -1708,13 +1776,14 @@ const ms = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
     backgroundColor: C.white, borderBottomWidth: 1,
-    borderBottomColor: C.gray100, gap: 10,
+    borderBottomColor: THEME.border, gap: 10,
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
     backgroundColor: C.gray100,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon:      { marginRight: 0 },
   headerCenter:    { flex: 1 },
   headerTitle:     { fontSize: 18, fontWeight: "700", color: C.gray900 },
   headerSub:       { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -1724,15 +1793,15 @@ const ms = StyleSheet.create({
     minWidth: 70, alignItems: "center",
   },
   saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText:     { color: C.white, fontWeight: "700", fontSize: 14 },
+  saveBtnText:     { color: THEME.onPrimary, fontWeight: "700", fontSize: 14 },
   breadcrumb: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 16, paddingVertical: 10,
     backgroundColor: C.white, borderBottomWidth: 1,
-    borderBottomColor: C.gray100, flexWrap: "wrap",
+    borderBottomColor: THEME.border, flexWrap: "wrap",
   },
-  crumb:       { fontSize: 13, color: C.gray400, fontWeight: "600" },
-  crumbLink:   { fontSize: 13, color: C.primary, fontWeight: "600" },
+  crumb:       { fontSize: 13, color: THEME.textSecondary, fontWeight: "600" },
+  crumbLink:   { fontSize: 13, color: C.primaryDeep, fontWeight: "600" },
   crumbActive: { color: C.gray900, fontWeight: "700" },
 });
 // MarkInputRow's style contract, in this screen's colours. Module-level, so

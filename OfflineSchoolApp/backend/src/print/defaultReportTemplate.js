@@ -136,7 +136,7 @@ const PRINT_CSS = `
      get a signature line alone at the top of a second sheet. */
   @page {
     size:   A4;
-    margin: 9mm;
+    margin: 10mm;
   }
 
   @media print {

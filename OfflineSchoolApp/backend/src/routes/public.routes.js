@@ -23,6 +23,7 @@
 
 const express = require("express");
 const router  = express.Router();
+const { getStore } = require("../storage/fileStore");
 const multer  = require("multer");
 const path    = require("path");
 const fs      = require("fs");
@@ -206,11 +207,12 @@ const multerErrorHandler = (err, req, res, next) => {
   next(err);
 };
 
+// The local copy and, once adopted, the stored file (storage/fileStore.js).
 const cleanupFiles = (files = []) => {
   if (!Array.isArray(files)) return;
   files.forEach((f) => {
     const p = f?.path || f;
-    if (p && typeof p === "string") fs.unlink(p, () => {});
+    if (p && typeof p === "string") getStore().removeLocalPath(p).catch(() => {});
   });
 };
 
@@ -287,6 +289,18 @@ const fileToDocument = (file, docType = "other") => ({
   size:     file.size,
   mimeType: file.mimetype,
 });
+
+/**
+ * A document as it is saved on the application.
+ *
+ * The stored filename is the document's key, and the one door to the file
+ * (GET /api/students/applications/:id/documents/:key) resolves it against the
+ * uploads directory of whichever machine is serving. The absolute path is kept
+ * in memory only, to clean up after a refused submission: saved, it named a
+ * location on the machine that received the upload, which is wrong after a
+ * move, a restore, or a second server.
+ */
+const storedDocument = ({ path: _onDisk, ...doc }) => doc;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 5 — CLASS NORMALISER
@@ -508,6 +522,8 @@ router.get(
  *       Content-Type: multipart/form-data
  *       Body: { studentName, ... } + file parts on field "documents"
  */
+const { normalisePhone } = require("../../../shared/studentValidation");
+
 const handleApplyRequest = asyncHandler(async (req, res) => {
   const isJson =
     (req.headers["content-type"] || "").includes("application/json");
@@ -529,6 +545,10 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
   if (!studentName?.trim())  errors.push("Student name is required");
   if (!guardianName?.trim()) errors.push("Guardian name is required");
   if (!phone?.trim())        errors.push("Phone number is required");
+  // B3: stored as +237 and nine digits (shared/studentValidation.js).
+  const phoneCheck = phone?.trim() ? normalisePhone(phone) : { value: null };
+  if (phoneCheck.error) errors.push(phoneCheck.error);
+  const phoneStored = phoneCheck.value;
   if (!(typeof classId === "string" ? classId.trim() : ""))      errors.push("Please select a class");
   if (!schoolId?.trim())     errors.push("Please select a school");
   if (!email?.trim()) {
@@ -626,6 +646,23 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     );
   }
 
+  // Into the file store before any record points at them: the server's own
+  // disk does not survive a deploy. A file that cannot be stored is dropped,
+  // as a file that could not be written always was.
+  {
+    const stored = [];
+    for (const doc of savedDocs) {
+      try {
+        await getStore().adoptLocal(doc.path, { contentType: doc.mimeType, schoolId: schoolId.trim() });
+        stored.push(doc);
+      } catch (err) {
+        console.warn(`⚠️  Could not store "${doc.title}":`, err.message);
+        cleanupFiles([{ path: doc.path }]);
+      }
+    }
+    savedDocs = stored;
+  }
+
   // ── Duplicate detection ─────────────────────────────────────────────────────
   //
   // Match on: email + schoolId + studentName (case-insensitive)
@@ -681,12 +718,12 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
       );
     }
 
-    const mergedDocs = [...existingDocs, ...docsToAdd];
+    const mergedDocs = [...existingDocs, ...docsToAdd.map(storedDocument)];
 
     await StudentApplication.findByIdAndUpdate(existing._id, {
       studentName:  studentName.trim(),
       guardianName: guardianName.trim(),
-      phone:        phone.trim(),
+      phone:        phoneStored,
       classId:      classId.trim(),
       className:    resolvedName,
       notes:        notes?.trim() || null,
@@ -722,11 +759,11 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
     studentName:  studentName.trim(),
     guardianName: guardianName.trim(),
     email:        emailClean,
-    phone:        phone.trim(),
+    phone:        phoneStored,
     classId:      classId.trim(),
     className:    resolvedName,
     notes:        notes?.trim() || null,
-    documents:    savedDocs,
+    documents:    savedDocs.map(storedDocument),
     status:       "pending",
     schoolId:     schoolId.trim(),
   });

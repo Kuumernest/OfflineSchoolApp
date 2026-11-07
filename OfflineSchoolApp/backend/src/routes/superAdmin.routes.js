@@ -19,6 +19,8 @@ const { sendEmail }            = require("../services/email.service");
 const mail                     = require("../services/email.transport");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
 const { YEAR_FORMAT }                         = require("../services/rankingScope.service");
+const { resolveOfflineSettings } = require("../services/offlineSettings.service");
+const { ensureDefaultExpenseCategories } = require("../services/expenseCategories.service");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
 const { parseFilters, computePlatformStats, availableFilters } =
@@ -222,6 +224,15 @@ router.post("/schools", canManage, asyncHandler(async (req, res) => {
   }
 
   const id = String(school._id);
+
+  // Its expense book opens with the usual headings rather than empty. Best
+  // effort: the first read of the categories seeds them if this fails.
+  try {
+    await ensureDefaultExpenseCategories(id);
+  } catch (err) {
+    console.error(`Default expense categories for school ${id} failed:`, err.message);
+  }
+
   await recordAudit(req, {
     action: "school.created", schoolId: id, schoolName: school.name,
     resource: { type: "school", id, label: school.name },
@@ -348,6 +359,56 @@ const setActive = (isActive, action) => asyncHandler(async (req, res) => {
 
   return sendSuccess(res, { school: shape(after, (await countsFor([id])).get(id)), changed: true });
 });
+
+/**
+ * GET / PUT /schools/:schoolId/offline-settings — the per-school switch for
+ * per-user local data on phones (docs/40 D7).
+ *
+ * Platform-only on purpose: turning it on starts a one-way migration of every
+ * shared phone's local data in that school, so it is rolled out by whoever
+ * runs the platform, one school at a time, never by the school itself. Off is
+ * the default and is the phone's long-standing behaviour. A phone picks the
+ * value up at its next sign-in or token refresh.
+ *
+ *   PUT { perUserLocalData: true|false, reason? }
+ */
+router.get("/schools/:schoolId/offline-settings", canView, asyncHandler(async (req, res) => {
+  const school = await School.findOne({ _id: req.params.schoolId, ...School.notDeletedClause() })
+    .select("_id name settings.offline").lean()
+    .catch(() => null);
+  if (!school) return sendError(res, 404, "School not found");
+  return sendSuccess(res, { offline: resolveOfflineSettings(school) });
+}));
+
+router.put("/schools/:schoolId/offline-settings", canManage, asyncHandler(async (req, res) => {
+  if (!looksLikeSchoolId(req.params.schoolId)) return sendError(res, 404, "School not found");
+  const value = req.body?.perUserLocalData;
+  if (typeof value !== "boolean") {
+    return sendError(res, 400, "perUserLocalData must be true or false");
+  }
+  const before = await School.findOne({ _id: req.params.schoolId, ...School.notDeletedClause() })
+    .select("_id name settings.offline").lean();
+  if (!before) return sendError(res, 404, "School not found");
+  const was = resolveOfflineSettings(before);
+  if (was.perUserLocalData === value) {
+    return sendSuccess(res, { offline: was, changed: false });
+  }
+
+  await School.updateOne(
+    { _id: before._id },
+    { $set: { "settings.offline.perUserLocalData": value } },
+    { runValidators: true }
+  );
+  invalidateSchool(String(before._id));
+  await recordAudit(req, {
+    action: "school.offlineSettingsChanged",
+    schoolId: String(before._id), schoolName: before.name,
+    resource: { type: "school", id: String(before._id), label: before.name },
+    before: was, after: { perUserLocalData: value },
+    reason: req.body?.reason ? String(req.body.reason).trim() : null,
+  });
+  return sendSuccess(res, { offline: { perUserLocalData: value }, changed: true });
+}));
 
 router.post("/schools/:schoolId/activate",   canManage, setActive(true,  "school.activated"));
 router.post("/schools/:schoolId/deactivate", canManage, setActive(false, "school.deactivated"));
@@ -702,7 +763,13 @@ router.get("/intelligence/calibration", canReport, asyncHandler(async (req, res)
   const rows = [];
   for (const school of schools) {
     const reviews = await IntelligenceReview.find({ schoolId: String(school._id), deletedAt: null })
-      .select("category classifications review reviewedBy engineVersion").lean();
+      .select("category classifications review reviewedBy reviewerRole pilotKind engineVersion").lean();
+    // Rows from before reviewerRole was stamped take the user's role.
+    const unstamped = [...new Set(reviews.filter((r) => !r.reviewerRole).map((r) => String(r.reviewedBy)))];
+    const roleOf = new Map(unstamped.length
+      ? (await User.find({ _id: { $in: unstamped } }).select("role").lean()).map((u) => [String(u._id), u.role])
+      : []);
+    const roleFor = (r) => r.reviewerRole ?? roleOf.get(String(r.reviewedBy)) ?? null;
     const feedback = analyseReviews({
       cases: reviews.map((r, i) => ({
         caseId: `${school._id}#${i}`, category: r.category,
@@ -723,6 +790,12 @@ router.get("/intelligence/calibration", canReport, asyncHandler(async (req, res)
       pilotsClosed: closed,
       reviews:    reviews.length,
       reviewers:  new Set(reviews.map((r) => String(r.reviewedBy))).size,
+      // The same reviews by the exercise they were made in, and the operator's
+      // own — so a school's one synthetic-pilot review does not read as
+      // teacher evidence, and the school page's counts can be reconciled.
+      byKind: reviews.reduce((o, r) => { const k = r.pilotKind ?? "none"; o[k] = (o[k] ?? 0) + 1; return o; },
+        { real: 0, synthetic: 0, development: 0, none: 0 }),
+      operatorReviews: reviews.filter((r) => roleFor(r) === ROLES.SUPER_ADMIN).length,
       engineVersions: [...new Set(reviews.map((r) => r.engineVersion))].sort(),
       byOutcome:  feedback.totals.byOutcome,
       byCategory: reviews.reduce((o, r) => { o[r.category] = (o[r.category] ?? 0) + 1; return o; }, {}),

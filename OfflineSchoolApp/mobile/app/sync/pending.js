@@ -18,15 +18,68 @@ import {
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { MutationQueue } from "../../src/services/mutationQueue.service";
-import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+
+
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { getDatabase } from "../../src/db/database";
+import { countHeldChanges } from "../../src/db/heldChanges";
+import { reviewCounts } from "../../src/services/perUserData.service";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE } from "../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../src/components/Tinted";
 
 const C = {
-  bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB",
-  text: "#111827", muted: "#6B7280",
-  conflict: "#B45309", conflictBg: "#FEF3C7",
-  failed: "#B91C1C", failedBg: "#FEE2E2",
-  primary: "#2563EB", success: "#059669",
+  bg: COLORS.page, card: COLORS.surface, border: COLORS.border,
+  text: COLORS.text, muted: COLORS.textSecondary,
+  conflict: SEMANTIC.warning.text, conflictBg: SEMANTIC.warning.bg,
+  failed: SEMANTIC.error.text, failedBg: SEMANTIC.error.bg,
+  primary: ACCENT.amber.solid, success: ACCENT.green.solid,
+  heldBg: SEMANTIC.info.bg, held: SEMANTIC.info.text,
+};
+
+/**
+ * Changes on this phone that the signed-in account does not send: another
+ * account's, or nobody's (queued before ownership was recorded). Read-only —
+ * there is no action here on purpose. Sending them as this account would put
+ * someone else's work under this name; discarding them is not this person's
+ * decision to make. See docs/40-per-user-local-data.md.
+ */
+const HeldNotice = ({ held }) => {
+  const { t } = useTranslation();
+  if (!held.otherAccounts && !held.ownerlessQueued) return null;
+  return (
+    <View style={styles.held} accessibilityRole="summary">
+      <Ionicons name="people-outline" size={16} color={C.held} />
+      <View style={{ flex: 1, gap: 4 }}>
+        {held.otherAccounts > 0 && (
+          <Text style={styles.heldText}>
+            {t("syncScreens.heldOtherAccount", { count: held.otherAccounts })}
+          </Text>
+        )}
+        {held.ownerlessQueued > 0 && (
+          <Text style={styles.heldText}>
+            {t("syncScreens.heldOwnerless", { count: held.ownerlessQueued })}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+/**
+ * Per-user local data (docs/40): changes held in the review store because
+ * nobody could tell whose they are. Opens the review list.
+ */
+const ReviewLink = ({ count, onOpen }) => {
+  const { t } = useTranslation();
+  if (!count) return null;
+  return (
+    <TouchableOpacity style={styles.held} onPress={onOpen} accessibilityRole="button">
+      <Ionicons name="hand-left-outline" size={16} color={C.held} />
+      <Text style={[styles.heldText, { flex: 1 }]}>{t("localData.reviewLink", { count })}</Text>
+      <Ionicons name="chevron-forward" size={16} color={C.held} />
+    </TouchableOpacity>
+  );
 };
 
 /** Turns "POST /homework" into something a non-engineer can read. */
@@ -54,17 +107,11 @@ const StatusChip = ({ status }) => {
   const { t } = useTranslation();
   const isConflict = status === "conflict";
   return (
-    <View style={[
-      styles.chip,
-      { backgroundColor: isConflict ? C.conflictBg : C.failedBg },
-    ]}>
-      <Text style={[
-        styles.chipText,
-        { color: isConflict ? C.conflict : C.failed },
-      ]}>
-        {isConflict ? t("syncScreens.chipConflict") : t("syncScreens.chipFailed")}
-      </Text>
-    </View>
+    <Badge
+      tone={isConflict ? "warning" : "error"}
+      label={isConflict ? t("syncScreens.chipConflict") : t("syncScreens.chipFailed")}
+      textStyle={styles.chipText}
+    />
   );
 };
 
@@ -74,12 +121,16 @@ export default function PendingChangesScreen() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState({ otherAccounts: 0, ownerlessQueued: 0 });
+  const [reviewHeld, setReviewHeld] = useState(0);
   const { stats, refresh: refreshStats } = useSyncStatus({ poll: false });
 
   const load = useCallback(async () => {
     try {
       const list = await MutationQueue.listUnresolved();
       setRows(list);
+      setHeld(await countHeldChanges(await getDatabase()));
+      setReviewHeld((await reviewCounts().catch(() => ({ held: 0 }))).held);
     } catch (err) {
       console.warn("[pending] load failed:", err.message);
       setRows([]);
@@ -97,7 +148,7 @@ export default function PendingChangesScreen() {
       // force: the user tapped "sync now". Without it the global 15 s gap
       // could reject the call and the button would appear to do nothing.
       await SyncManager.ensureStarted();
-      await SyncManager.syncAll({ force: true });
+      await SyncManager.syncAll({ force: true, full: true });
     } catch (err) {
       console.warn("[pending] sync failed:", err.message);
     } finally {
@@ -130,22 +181,34 @@ export default function PendingChangesScreen() {
           text: t("common.discard"),
           style: "destructive",
           onPress: async () => {
-            await MutationQueue.discard(row.id);
-            await load();
-            await refreshStats();
+            // Drops the change and undoes it on this device. Where only the
+            // server's copy can restore the record, discard() resets the pull
+            // cursor; the sync after it (online) brings that copy down now.
+            const { refresh } = await MutationQueue.discard(row.id);
+            if (refresh) await runSync();
+            else {
+              await load();
+              await refreshStats();
+            }
           },
         },
       ]
     );
-  }, [load, refreshStats, t]);
+  }, [load, refreshStats, runSync, t]);
 
   const renderItem = ({ item }) => {
     const { labelKey, rawKind, detail } = describe(item);
     const label = labelKey ? t(labelKey) : (rawKind || t("syncScreens.kChange"));
     const attempts = item.retry_count || 0;
+    const tone = item.status === "conflict" ? "warning" : "error";
 
     return (
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: SEMANTIC[tone].bg, borderLeftColor: TONE_EDGE[tone] },
+        ]}
+      >
         <View style={styles.cardHead}>
           <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
           <StatusChip status={item.status} />
@@ -176,7 +239,7 @@ export default function PendingChangesScreen() {
             onPress={() => retryOne(item)}
             disabled={busy}
           >
-            <Ionicons name="refresh" size={14} color="#FFF" />
+            <Ionicons name="refresh" size={14} color={COLORS.onPrimary} />
             <Text style={styles.btnPrimaryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
 
@@ -207,6 +270,7 @@ export default function PendingChangesScreen() {
       />
 
       <View style={styles.summary}>
+        <HeaderIcon size={28} style={styles.headerIcon} />
         <Text style={styles.summaryText}>
           {t("syncScreens.waitingCount", { count: stats.pending + stats.retrying })}
           {stats.uploads > 0 ? `  ·  ${t("syncScreens.fileCount", { count: stats.uploads })}` : ""}
@@ -221,6 +285,9 @@ export default function PendingChangesScreen() {
         </TouchableOpacity>
       </View>
 
+      <HeldNotice held={held} />
+      <ReviewLink count={reviewHeld} onOpen={() => router.push("/sync/review")} />
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={C.primary} />
       ) : (
@@ -230,19 +297,21 @@ export default function PendingChangesScreen() {
           renderItem={renderItem}
           contentContainerStyle={rows.length ? styles.list : styles.listEmpty}
           refreshControl={
-            <RefreshControl refreshing={false} onRefresh={load} />
+            <RefreshControl refreshing={false} onRefresh={load} tintColor={C.primary} />
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="checkmark-circle-outline" size={44} color={C.success} />
-              <Text style={styles.emptyTitle}>{t("syncScreens.nothingStuck")}</Text>
-              <Text style={styles.emptyText}>
-                {t("syncScreens.nothingStuckSub")}
-              </Text>
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>{t("common.goBack")}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon="checkmark-circle-outline"
+              accent="green"
+              title={t("syncScreens.nothingStuck")}
+              message={t("syncScreens.nothingStuckSub")}
+              style={styles.empty}
+              action={
+                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>{t("common.goBack")}</Text>
+                </TouchableOpacity>
+              }
+            />
           }
           ListFooterComponent={
             rows.length > 1 ? (
@@ -271,7 +340,16 @@ const styles = StyleSheet.create({
   },
   summaryText: { flex: 1, fontSize: 12.5, color: C.muted, fontWeight: "600" },
   syncBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 12 },
-  syncBtnText: { color: C.primary, fontWeight: "700", fontSize: 13 },
+  syncBtnText: { color: ACCENT.amber.deep, fontWeight: "700", fontSize: 13 },
+  headerIcon: { marginRight: 10 },
+
+  held: {
+    flexDirection: "row", gap: 8, alignItems: "flex-start",
+    marginHorizontal: 14, marginTop: 12, padding: 12, borderRadius: 10,
+    backgroundColor: C.heldBg,
+    borderWidth: 1, borderColor: SEMANTIC.info.box,
+  },
+  heldText: { fontSize: 12.5, color: C.held, lineHeight: 18 },
 
   list: { padding: 14, gap: 12 },
   listEmpty: { flexGrow: 1, justifyContent: "center" },
@@ -279,10 +357,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: C.card, borderRadius: 12, padding: 14,
     borderWidth: 1, borderColor: C.border, gap: 6,
+    borderLeftWidth: 3,
   },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { flex: 1, fontSize: 15, fontWeight: "700", color: C.text },
-  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   chipText: { fontSize: 11, fontWeight: "700" },
   detail: { fontSize: 12, color: C.muted },
   meta: { fontSize: 11, color: C.muted, fontFamily: "monospace" },
@@ -295,19 +373,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
   btnPrimary: { backgroundColor: C.primary },
-  btnPrimaryText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
-  btnGhost: { borderWidth: 1, borderColor: C.border },
+  btnPrimaryText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 13 },
+  btnGhost: { borderWidth: 1, borderColor: C.border, backgroundColor: COLORS.surface },
   btnGhostText: { color: C.failed, fontWeight: "600", fontSize: 13 },
 
   retryAll: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 8, paddingVertical: 14,
   },
-  retryAllText: { color: C.primary, fontWeight: "700" },
+  retryAllText: { color: ACCENT.amber.deep, fontWeight: "700" },
 
-  empty: { alignItems: "center", padding: 32, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: "700", color: C.text },
-  emptyText: { fontSize: 13.5, color: C.muted, textAlign: "center", lineHeight: 20 },
+  empty: { padding: 32 },
   backBtn: { marginTop: 10, paddingHorizontal: 20, paddingVertical: 10 },
-  backBtnText: { color: C.primary, fontWeight: "700" },
+  backBtnText: { color: ACCENT.amber.deep, fontWeight: "700" },
 });

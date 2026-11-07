@@ -22,6 +22,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore }      from "../../../../src/store/auth.store";
 import { AttendanceService } from "../../../../src/services/attendance.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../../../src/components/Tinted";
 
 const MONTHS = [
   "Jan","Feb","Mar","Apr","May","Jun",
@@ -49,10 +51,17 @@ const fmtDate = (dateStr) => {
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 };
 
-const rateColor = (rate) => {
-  if (rate >= 80) return "#059669";
-  if (rate >= 60) return "#D97706";
-  return "#DC2626";
+const rateTone = (rate) => {
+  if (rate >= 80) return "success";
+  if (rate >= 60) return "warning";
+  return "error";
+};
+const rateColor = (rate) => SEMANTIC[rateTone(rate)].text;
+// A row's left edge follows the rate badge: ≥ 80% green, ≥ 60% amber, else red.
+const rateEdge = (rate) => {
+  if (rate >= 80) return ACCENT.green.base;
+  if (rate >= 60) return ACCENT.amber.base;
+  return ACCENT.red.base;
 };
 
 const DATE_PRESETS = [
@@ -135,8 +144,8 @@ const buildTeacherSummaries = (records, teacherMap, t) => {
   }));
 };
 
-const StatChip = ({ label, value, color }) => (
-  <View style={[chipS.chip, { backgroundColor: color + "15" }]}>
+const StatChip = ({ label, value, color, bg }) => (
+  <View style={[chipS.chip, { backgroundColor: bg }]}>
     <Text style={[chipS.val, { color }]}>{value}</Text>
     <Text style={chipS.lbl}>{label}</Text>
   </View>
@@ -153,7 +162,7 @@ const chipS = StyleSheet.create({
   val: { fontSize: 15, fontWeight: "800" },
   lbl: {
     fontSize:      9,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
@@ -163,10 +172,11 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
   const { t } = useTranslation();
   const { summary, rate } = teacher;
   const color = rateColor(rate);
+  const tone  = rateTone(rate);
 
   return (
     <TouchableOpacity
-      style={[cardS.card, isExpanded && cardS.cardExpanded]}
+      style={[cardS.card, { borderLeftColor: rateEdge(rate) }, isExpanded && cardS.cardExpanded]}
       onPress={onPress}
       activeOpacity={0.7}
     >
@@ -186,7 +196,7 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
           </Text>
         </View>
 
-        <View style={[cardS.rateBadge, { backgroundColor: color + "15" }]}>
+        <View style={[cardS.rateBadge, { backgroundColor: SEMANTIC[tone].bg }]}>
           <Text style={[cardS.rateNum, { color }]}>{rate}%</Text>
           <Text style={[cardS.rateLbl, { color }]}>rate</Text>
         </View>
@@ -194,24 +204,24 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
         <Ionicons
           name={isExpanded ? "chevron-up" : "chevron-down"}
           size={16}
-          color="#9CA3AF"
+          color={COLORS.textSecondary}
           style={{ marginLeft: 4 }}
         />
       </View>
 
       <View style={cardS.stats}>
-        <StatChip label={t("attStatus.present")}  value={summary?.present  ?? 0} color="#059669" />
-        <StatChip label={t("attStatus.absent")}   value={summary?.absent   ?? 0} color="#DC2626" />
-        <StatChip label={t("attStatus.late")}     value={summary?.late     ?? 0} color="#D97706" />
-        <StatChip label={t("attAdmin.leaveShort")}    value={summary?.on_leave ?? 0} color="#6B7280" />
-        <StatChip label={t("common.total")}    value={summary?.total    ?? 0} color="#4F46E5" />
+        <StatChip label={t("attStatus.present")}  value={summary?.present  ?? 0} color={SEMANTIC.success.text} bg={SEMANTIC.success.bg} />
+        <StatChip label={t("attStatus.absent")}   value={summary?.absent   ?? 0} color={SEMANTIC.error.text}   bg={SEMANTIC.error.bg} />
+        <StatChip label={t("attStatus.late")}     value={summary?.late     ?? 0} color={SEMANTIC.warning.text} bg={SEMANTIC.warning.bg} />
+        <StatChip label={t("attAdmin.leaveShort")}    value={summary?.on_leave ?? 0} color={SEMANTIC.info.text} bg={SEMANTIC.info.bg} />
+        <StatChip label={t("common.total")}    value={summary?.total    ?? 0} color={ACCENT.green.deep} bg={ACCENT.green.wash} />
       </View>
 
       <View style={cardS.barBg}>
         <View
           style={[
             cardS.barFill,
-            { width: `${Math.min(rate, 100)}%`, backgroundColor: color },
+            { width: `${Math.min(rate, 100)}%`, backgroundColor: SEMANTIC[tone].icon },
           ]}
         />
       </View>
@@ -221,13 +231,14 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
 
 const cardS = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     marginBottom:    4,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -247,14 +258,14 @@ const cardS = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: ACCENT.violet.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  avatarText:  { fontSize: 18, fontWeight: "800", color: "#059669" },
+  avatarText:  { fontSize: 18, fontWeight: "800", color: ACCENT.violet.deep },
   info:        { flex: 1 },
-  name:        { fontSize: 15, fontWeight: "700", color: "#111827" },
-  email:       { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  name:        { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  email:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   rateBadge: {
     alignItems:   "center",
     borderRadius: 10,
@@ -266,29 +277,31 @@ const cardS = StyleSheet.create({
   stats:    { flexDirection: "row", gap: 6, marginBottom: 10 },
   barBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     borderRadius:    3,
     overflow:        "hidden",
   },
   barFill: { height: 6, borderRadius: 3 },
 });
 
-const STATUS_COLORS = {
-  present:  "#059669",
-  absent:   "#DC2626",
-  late:     "#D97706",
-  on_leave: "#6B7280",
-  excused:  "#4F46E5",
+const STATUS_TONES = {
+  present:  "success",
+  absent:   "error",
+  late:     "warning",
+  on_leave: "info",
+  excused:  "info",
 };
 
 const TeacherDetailPanel = React.memo(({ teacher }) => {
   const { t } = useTranslation();
   if (!teacher?.records?.length) {
     return (
-      <View style={detailS.empty}>
-        <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
-        <Text style={detailS.emptyText}>{t("attAdmin.noRecordsPeriod")}</Text>
-      </View>
+      <EmptyState
+        icon="calendar-outline"
+        kind="attendance"
+        message={t("attAdmin.noRecordsPeriod")}
+        style={detailS.empty}
+      />
     );
   }
 
@@ -303,15 +316,17 @@ const TeacherDetailPanel = React.memo(({ teacher }) => {
       </Text>
 
       {sorted.map((rec, i) => {
-        const color = STATUS_COLORS[rec.status] || "#9CA3AF";
+        const tone = STATUS_TONES[rec.status];
         return (
           <View key={`${rec.date}-${i}`} style={detailS.row}>
             <Text style={detailS.date}>{fmtDate(rec.date)}</Text>
-            <View style={[detailS.badge, { backgroundColor: color + "18" }]}>
-              <Text style={[detailS.badgeText, { color }]}>
-                {(rec.status || "").replace("_", " ").toUpperCase()}
-              </Text>
-            </View>
+            <Badge
+              label={(rec.status || "").replace("_", " ").toUpperCase()}
+              tone={tone}
+              accent={tone ? undefined : "slate"}
+              style={detailS.badge}
+              textStyle={detailS.badgeText}
+            />
             {!!rec.note && (
               <Text style={detailS.note} numberOfLines={1}>
                 {rec.note}
@@ -326,7 +341,7 @@ const TeacherDetailPanel = React.memo(({ teacher }) => {
 
 const detailS = StyleSheet.create({
   container: {
-    backgroundColor:      "#F9FAFB",
+    backgroundColor:      COLORS.page,
     borderRadius:         16,
     borderTopLeftRadius:  0,
     borderTopRightRadius: 0,
@@ -334,34 +349,35 @@ const detailS = StyleSheet.create({
     marginBottom:         12,
     borderWidth:          1,
     borderTopWidth:       0,
-    borderColor:          "#F3F4F6",
+    borderColor:          COLORS.border,
   },
-  title:     { fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 10 },
+  title:     { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 10 },
   row: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingVertical:   8,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
-  date:      { fontSize: 13, color: "#374151", fontWeight: "500", flex: 1 },
+  date:      { fontSize: 13, color: COLORS.text, fontWeight: "500", flex: 1 },
   badge: {
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
+    alignSelf:         "auto",
   },
   badgeText: { fontSize: 10, fontWeight: "700" },
-  note:      { fontSize: 11, color: "#9CA3AF", flex: 1 },
+  note:      { fontSize: 11, color: COLORS.textSecondary, flex: 1 },
   empty: {
     alignItems:      "center",
     padding:         20,
     gap:             8,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
     borderRadius:    12,
     marginBottom:    12,
   },
-  emptyText: { fontSize: 13, color: "#9CA3AF" },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary },
 });
 
 const SummaryBar = ({ teachers }) => {
@@ -379,7 +395,7 @@ const SummaryBar = ({ teachers }) => {
     return t;
   }, [teachers]);
 
-  const color = rateColor(totals.rate);
+  const tone = rateTone(totals.rate);
 
   return (
     <View style={summaryS.card}>
@@ -387,8 +403,8 @@ const SummaryBar = ({ teachers }) => {
         <Text style={summaryS.title}>
           {t("academic.teacherCount", { count: teachers.length })}
         </Text>
-        <View style={[summaryS.badge, { backgroundColor: color + "15" }]}>
-          <Text style={[summaryS.badgeText, { color }]}>
+        <View style={[summaryS.badge, { backgroundColor: SEMANTIC[tone].bg, borderColor: SEMANTIC[tone].icon }]}>
+          <Text style={[summaryS.badgeText, { color: SEMANTIC[tone].text }]}>
             {totals.rate}% overall
           </Text>
         </View>
@@ -396,15 +412,15 @@ const SummaryBar = ({ teachers }) => {
 
       <View style={summaryS.pills}>
         {[
-          { labelKey: "attStatus.present",  val: totals.present,  color: "#059669" },
-          { labelKey: "attStatus.absent",   val: totals.absent,   color: "#DC2626" },
-          { labelKey: "attStatus.late",     val: totals.late,     color: "#D97706" },
-          { labelKey: "attAdmin.leaveShort",    val: totals.on_leave, color: "#6B7280" },
-          { labelKey: "common.total",    val: totals.total,    color: "#4F46E5" },
+          { labelKey: "attStatus.present",  val: totals.present,  color: SEMANTIC.success.text, bg: SEMANTIC.success.box },
+          { labelKey: "attStatus.absent",   val: totals.absent,   color: SEMANTIC.error.text,   bg: SEMANTIC.error.box },
+          { labelKey: "attStatus.late",     val: totals.late,     color: SEMANTIC.warning.text, bg: SEMANTIC.warning.box },
+          { labelKey: "attAdmin.leaveShort",    val: totals.on_leave, color: SEMANTIC.info.text, bg: SEMANTIC.info.box },
+          { labelKey: "common.total",    val: totals.total,    color: ACCENT.green.deep, bg: COLORS.surface },
         ].map((p) => (
           <View
             key={p.labelKey}
-            style={[summaryS.pill, { backgroundColor: p.color + "10" }]}
+            style={[summaryS.pill, { backgroundColor: p.bg }]}
           >
             <Text style={[summaryS.pillVal, { color: p.color }]}>{p.val}</Text>
             <Text style={summaryS.pillLbl}>{t(p.labelKey)}</Text>
@@ -416,7 +432,7 @@ const SummaryBar = ({ teachers }) => {
         <View
           style={[
             summaryS.barFill,
-            { width: `${Math.min(totals.rate, 100)}%`, backgroundColor: color },
+            { width: `${Math.min(totals.rate, 100)}%`, backgroundColor: SEMANTIC[tone].icon },
           ]}
         />
       </View>
@@ -426,13 +442,15 @@ const SummaryBar = ({ teachers }) => {
 
 const summaryS = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.green.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.green.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -443,8 +461,8 @@ const summaryS = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom:   12,
   },
-  title:     { fontSize: 15, fontWeight: "700", color: "#111827" },
-  badge:     { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  title:     { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  badge:     { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
   badgeText: { fontSize: 13, fontWeight: "700" },
   pills:     { flexDirection: "row", gap: 6, marginBottom: 10 },
   pill: {
@@ -457,13 +475,13 @@ const summaryS = StyleSheet.create({
   pillVal: { fontSize: 15, fontWeight: "800" },
   pillLbl: {
     fontSize:      9,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
   barBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
     borderRadius:    3,
     overflow:        "hidden",
   },
@@ -577,7 +595,7 @@ export default function TeacherAttendanceReportScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={styles.loadingText}>{t("attAdmin.loadingTeacherReport")}</Text>
       </View>
     );
@@ -585,7 +603,7 @@ export default function TeacherAttendanceReportScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -593,8 +611,10 @@ export default function TeacherAttendanceReportScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={styles.headerIcon} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("attAdmin.teacherReportTitle")}</Text>
@@ -608,7 +628,7 @@ export default function TeacherAttendanceReportScreen() {
           onPress={() => loadReport(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh" size={20} color="#059669" />
+          <Ionicons name="refresh" size={20} color={ACCENT.green.solid} />
         </TouchableOpacity>
       </View>
 
@@ -697,8 +717,8 @@ export default function TeacherAttendanceReportScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadReport(true)}
-            tintColor="#059669"
-            colors={["#059669"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
         ListHeaderComponent={
@@ -719,21 +739,19 @@ export default function TeacherAttendanceReportScreen() {
           </View>
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="person-outline" size={56} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>
-              {error
-                ? t("attAdmin.reportLoadFailedShort")
-                : search
-                ? t("attAdmin.noTeachersMatch")
-                : t("attAdmin.noRecords")}
-            </Text>
-            <Text style={styles.emptySub}>
-              {!error && !search
-                ? t("attAdmin.markTeachersFirst")
-                : ""}
-            </Text>
-            {!!error && (
+          <EmptyState
+            icon="person-outline"
+            kind={error ? undefined : "teachers"}
+            accent={error ? "red" : undefined}
+            title={error
+              ? t("attAdmin.reportLoadFailedShort")
+              : search
+              ? t("attAdmin.noTeachersMatch")
+              : t("attAdmin.noRecords")}
+            message={!error && !search
+              ? t("attAdmin.markTeachersFirst")
+              : ""}
+            action={error ? (
               <TouchableOpacity
                 style={styles.retryBtn}
                 onPress={() => loadReport()}
@@ -741,8 +759,9 @@ export default function TeacherAttendanceReportScreen() {
               >
                 <Text style={styles.retryText}>{t("attAdmin.tryAgain")}</Text>
               </TouchableOpacity>
-            )}
-          </View>
+            ) : null}
+            style={styles.empty}
+          />
         }
       />
     </View>
@@ -750,14 +769,14 @@ export default function TeacherAttendanceReportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
-  loadingText: { color: "#6B7280", marginTop: 12, fontSize: 14 },
+  loadingText: { color: COLORS.textSecondary, marginTop: 12, fontSize: 14 },
 
   header: {
     flexDirection:     "row",
@@ -765,34 +784,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:    { marginLeft: 12, marginRight: 0 },
   headerCenter:  { flex: 1, marginLeft: 12 },
-  headerTitle:   { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:   { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   refreshBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: ACCENT.green.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
 
   presetsRow: {
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   presetsScroll: {
     paddingHorizontal: 16,
@@ -803,19 +823,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   7,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
-  presetBtnActive:  { backgroundColor: "#059669", borderColor: "#059669" },
-  presetText:       { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  presetTextActive: { color: "#FFF" },
+  presetBtnActive:  { backgroundColor: ACCENT.green.wash, borderColor: ACCENT.green.base },
+  presetText:       { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  presetTextActive: { color: ACCENT.green.deep },
 
   searchRow: {
     paddingHorizontal: 16,
     paddingTop:        12,
     paddingBottom:     8,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
   },
   searchBox: {
     flexDirection:     "row",
@@ -834,22 +854,22 @@ const styles = StyleSheet.create({
     flexDirection:     "row",
     paddingHorizontal: 16,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               8,
   },
   sortBtn: {
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      8,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
-  sortBtnActive:  { backgroundColor: "#059669", borderColor: "#059669" },
-  sortText:       { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  sortTextActive: { color: "#FFF" },
+  sortBtnActive:  { backgroundColor: ACCENT.green.wash, borderColor: ACCENT.green.base },
+  sortText:       { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary },
+  sortTextActive: { color: ACCENT.green.deep },
 
   list: { padding: 16, paddingBottom: 60 },
 
@@ -863,21 +883,21 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize:   16,
     fontWeight: "600",
-    color:      "#374151",
+    color:      COLORS.text,
     textAlign:  "center",
   },
   emptySub: {
     fontSize:  13,
-    color:     "#9CA3AF",
+    color:     COLORS.textSecondary,
     textAlign: "center",
   },
   retryBtn: {
-    backgroundColor:   "#059669",
+    backgroundColor:   ACCENT.green.solid,
     borderRadius:      10,
     paddingVertical:   10,
     paddingHorizontal: 24,
     marginTop:         8,
   },
-  retryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  retryText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 });
 import { useTranslation } from "../../../../src/i18n/useTranslation";

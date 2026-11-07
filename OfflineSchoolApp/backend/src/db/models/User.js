@@ -61,6 +61,55 @@ const userSchema = new mongoose.Schema(
       trim:    true,
     },
 
+    // ── Staff number (CODE-STF-NNN) ─────────────────────────────────────────
+    // The school's number for a member of staff, as enrollmentNo is a pupil's.
+    // Issued by the server only (services/staffNumber.service.js) — at
+    // creation, by the boot backfill for older accounts — and changeable by an
+    // administrator (PUT /admin/teachers/:id). No default: absent until issued,
+    // and unique per school over the rows that have one (index below).
+    staffNo: {
+      type:      String,
+      trim:      true,
+      uppercase: true,
+      maxlength: [32, "Staff number cannot exceed 32 characters"],
+    },
+
+    // ── Teacher's own profile ─────────────────────────────────────────────────
+    // What a teacher fills in on the phone (contact, qualification, emergency
+    // contact…). Written only by PUT /teacher/profile, field by field — see
+    // services/teacherProfile.service.js. Absent until a teacher saves one.
+    teacherProfile: {
+      type: new mongoose.Schema(
+        {
+          firstName:         { type: String, trim: true, maxlength: 60 },
+          lastName:          { type: String, trim: true, maxlength: 60 },
+          gender:            { type: String, trim: true, maxlength: 20 },
+          dateOfBirth:       { type: String, trim: true, maxlength: 20 },
+          nationalId:        { type: String, trim: true, maxlength: 40 },
+          qualification:     { type: String, trim: true, maxlength: 80 },
+          employmentType:    { type: String, trim: true, maxlength: 30 },
+          joinDate:          { type: String, trim: true, maxlength: 20 },
+          yearsOfExperience: { type: String, trim: true, maxlength: 10 },
+          previousSchool:    { type: String, trim: true, maxlength: 120 },
+          phone:             { type: String, trim: true, maxlength: 30 },
+          alternatePhone:    { type: String, trim: true, maxlength: 30 },
+          address:           { type: String, trim: true, maxlength: 200 },
+          city:              { type: String, trim: true, maxlength: 80 },
+          state:             { type: String, trim: true, maxlength: 80 },
+          emergencyName:     { type: String, trim: true, maxlength: 100 },
+          emergencyPhone:    { type: String, trim: true, maxlength: 30 },
+          emergencyRelation: { type: String, trim: true, maxlength: 40 },
+          bloodGroup:        { type: String, trim: true, maxlength: 10 },
+          medicalConditions: { type: String, trim: true, maxlength: 1000 },
+          bio:               { type: String, trim: true, maxlength: 1000 },
+          completed:         { type: Boolean, default: false },
+          updatedAt:         { type: Date },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+
     // ── Authorization ─────────────────────────────────────────────────────────
     // The list lives in config/roles.js, which is also what every route guard
     // reads. A role added here and nowhere else would be storable and
@@ -185,6 +234,19 @@ userSchema.index(
   }
 );
 
+// staffNo — unique within a school, over the rows that have one. Partial on
+// $type "string" for the reason enrollmentNo is: a sparse index would still
+// index an explicit null. Built at boot by db/ensureStaffNoIndex.js (autoIndex
+// is off in production), which also reports it if it cannot be.
+userSchema.index(
+  { schoolId: 1, staffNo: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { staffNo: { $type: "string" } },
+    name: "schoolId_staffNo_unique_present",
+  }
+);
+
 // email lookup — non-unique sparse (matches "email_lookup_sparse" in DB)
 userSchema.index(
   { email: 1 },
@@ -270,6 +332,7 @@ userSchema.methods.toSafeObject = function () {
     name:              this.name,
     email:             this.email        ?? null,
     enrollmentNo:      this.enrollmentNo ?? null,
+    staffNo:           this.staffNo      ?? null,
     role:              this.role,
     schoolId:          this.schoolId     ?? null,
     classId:           this.classId      ?? null,
@@ -363,4 +426,9 @@ userSchema.virtual("isStudent").get(function () {
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 userSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). Deleting a pupil deletes the pupil's login account (students.routes).
+userSchema.plugin(require("../plugins/syncTombstones"), { entity: "user" });
+
 module.exports = mongoose.model("User", userSchema);

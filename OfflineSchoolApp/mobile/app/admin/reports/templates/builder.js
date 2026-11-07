@@ -14,25 +14,28 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation }  from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Templates are kept on the server (online-only): offline failures say so.
+import { needsInternetFailureText } from "../../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC } from "../../../../src/theme/colors";
+import { HeaderIcon } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#2563EB",
-  primaryBg: "#EFF6FF",
-  success:   "#059669",
-  error:     "#DC2626",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   COLORS.primary,
+  primaryBg: COLORS.primaryLight,
+  success:   ACCENT.green.solid,
+  error:     SEMANTIC.error.text,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   COLORS.border,
+  gray200:   COLORS.border,
+  gray400:   COLORS.textSubtle,
+  gray500:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -316,7 +319,7 @@ export default function TemplateBuilderScreen() {
       .catch((err) => {
         Alert.alert(
           t("templateBuilder.alerts.errorTitle"),
-          err?.response?.data?.error || errorText(t, err)
+          err?.response?.data?.error || needsInternetFailureText(t, err)
         );
       })
       .finally(() => setLoading(false));
@@ -384,7 +387,7 @@ export default function TemplateBuilderScreen() {
     } catch (err) {
       Alert.alert(
         t("templateBuilder.alerts.saveFailed"),
-        err?.response?.data?.error || errorText(t, err)
+        err?.response?.data?.error || needsInternetFailureText(t, err)
       );
     } finally {
       setSaving(false);
@@ -431,9 +434,9 @@ export default function TemplateBuilderScreen() {
           <Ionicons
             name={isDefault ? "star" : "star-outline"}
             size={16}
-            color={isDefault ? C.primary : C.gray400}
+            color={isDefault ? ACCENT.teal.solid : C.gray400}
           />
-          <Text style={[s.defaultToggleText, isDefault && { color: C.primary }]}>
+          <Text style={[s.defaultToggleText, isDefault && { color: ACCENT.teal.deep }]}>
             {t("templateBuilder.default")}
           </Text>
         </TouchableOpacity>
@@ -455,7 +458,7 @@ export default function TemplateBuilderScreen() {
             <Ionicons
               name={tab.icon}
               size={14}
-              color={activeTab === tab.id ? C.primary : C.gray500}
+              color={activeTab === tab.id ? ACCENT.slate.solid : C.gray500}
             />
             <Text style={[s.tabText, activeTab === tab.id && s.tabTextActive]}>
               {tab.label}
@@ -552,6 +555,7 @@ function BuilderHeader({ isEditing, saving, onSave }) {
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
         <Ionicons name="arrow-back" size={24} color={C.gray900} />
       </TouchableOpacity>
+      <HeaderIcon style={s.headerIcon} />
       <View style={s.headerCenter}>
         <Text style={s.headerTitle}>
           {isEditing
@@ -605,6 +609,7 @@ const s = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -646,10 +651,10 @@ const s = StyleSheet.create({
     paddingVertical:   8,
     borderRadius:      8,
     borderWidth:       1,
-    borderColor:       C.gray200,
-    backgroundColor:   C.gray50,
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
-  defaultToggleActive: { borderColor: C.primary, backgroundColor: C.primaryBg },
+  defaultToggleActive: { borderColor: ACCENT.teal.base, backgroundColor: ACCENT.teal.wash },
   defaultToggleText:   { fontSize: 12, fontWeight: "600", color: C.gray500 },
   tabs: {
     flexDirection:     "row",
@@ -665,9 +670,9 @@ const s = StyleSheet.create({
     gap:               4,
     paddingVertical:   10,
   },
-  tabActive:     { borderBottomWidth: 2, borderBottomColor: C.primary },
+  tabActive:     { borderBottomWidth: 2, borderBottomColor: ACCENT.slate.base },
   tabText:       { fontSize: 12, fontWeight: "600", color: C.gray500 },
-  tabTextActive: { color: C.primary },
+  tabTextActive: { color: ACCENT.slate.deep },
   editorScroll: { flex: 1 },
   editor: {
     flex:        1,

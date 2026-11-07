@@ -3,11 +3,12 @@ import { useTranslation }   from "react-i18next";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useFormat }        from "@/i18n/format";
 import { cn }               from "@/utils/cn";
+import { DASH_TINT }        from "@/config/dashboardTint";
 
 interface Props {
   present:  number;
   absent:   number;
-  rate:     number;   // 0–100
+  rate:     number | null;   // 0–100; null when nobody was marked (C3)
   /** Register rows written today — late and excused included. */
   marked?:  number;
   loading?: boolean;
@@ -16,9 +17,10 @@ interface Props {
 /**
  * Today's attendance.
  *
- * The rate is the headline and the bar is the only coloured element — present
- * and absent are figures, not alarms, so they are set in ink rather than in
- * matching green and red boxes competing with the bar for the same message.
+ * The rate is the headline, in ink. The bar under it is the only status
+ * colour — green or amber says whether the rate is healthy. Present and absent
+ * are figures, not alarms, so they are set in ink rather than in matching
+ * green and red boxes competing with the bar for the same message.
  */
 export default function AttendanceWidget({
   present,
@@ -33,25 +35,26 @@ export default function AttendanceWidget({
   // particular states: a morning where every child arrived late is a
   // register that exists, and present + absent calls it an empty day.
   const total = marked ?? present + absent;
-  const healthy = rate >= 75;
-  const pct = Math.max(0, Math.min(rate, 100));
+  const healthy = (rate ?? 0) >= 75;
+  const pct = Math.max(0, Math.min(rate ?? 0, 100));
 
   return (
-    <Card>
+    // Attendance is green across the dashboard.
+    <Card className={DASH_TINT.green.edge}>
       <CardHeader title={t("dashboard.attendanceToday")} />
 
       {loading ? (
         <div className="space-y-3">
-          <div className="h-8 w-24 animate-pulse rounded-control bg-canvas" />
+          <div className="h-[76px] w-full animate-pulse rounded-card bg-canvas" />
           <div className="h-1.5 w-full animate-pulse rounded-full bg-canvas" />
         </div>
       ) : (
         <>
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-[30px] leading-none text-ink tabular">
-              {fmt.number(rate)}%
+            <span className="text-[34px] font-bold leading-none tracking-tight text-ink tabular">
+              {rate == null ? "–" : `${fmt.number(rate)}%`}
             </span>
-            <span className="text-xs text-ink-muted">{t("dashboard.presentShort")}</span>
+            <span className="text-sm font-medium text-ink-muted">{t("dashboard.presentShort")}</span>
           </div>
 
           <div

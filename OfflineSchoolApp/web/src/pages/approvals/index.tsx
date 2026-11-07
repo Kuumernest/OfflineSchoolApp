@@ -54,10 +54,10 @@ const KIND_ICON: Record<ApprovalKind, typeof Receipt> = {
 };
 
 const STATUS_STYLE: Record<ApprovalStatus, string> = {
-  pending:   "bg-warning-soft text-warning",
-  approved:  "bg-success-soft text-success",
-  rejected:  "bg-danger-soft text-danger",
-  cancelled: "bg-surface-muted text-ink-faint",
+  pending:   "bg-warning-soft text-warning-text",
+  approved:  "bg-success-soft text-success-text",
+  rejected:  "bg-danger-soft text-danger-text",
+  cancelled: "bg-info-soft text-info-text",
 };
 
 const FILTERS: Array<ApprovalStatus | "all"> = ["pending", "approved", "rejected", "all"];
@@ -181,7 +181,7 @@ export default function ApprovalsPage() {
       <Card padding={false}>
         {rows.length === 0 ? (
           <EmptyTable
-            icon={<ShieldCheck className="h-6 w-6 text-ink-faint" aria-hidden="true" />}
+            icon={<ShieldCheck className="h-6 w-6" aria-hidden="true" />}
             title={
               status === "pending"
                 ? t("approvals.noneWaiting")
@@ -214,7 +214,7 @@ export default function ApprovalsPage() {
                     <Td>
                       <div className="flex items-start gap-2.5">
                         <Icon
-                          className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint"
+                          className="mt-0.5 h-4 w-4 shrink-0 text-accent-amber-solid"
                           aria-hidden="true"
                         />
                         <div className="min-w-0">
@@ -244,7 +244,7 @@ export default function ApprovalsPage() {
                           {/* Approved but never carried out. Loud on purpose:
                               somebody believes this happened and it did not. */}
                           {r.applyError && (
-                            <div className="mt-1 flex items-start gap-1.5 text-xs text-danger">
+                            <div className="mt-1 flex items-start gap-1.5 text-xs text-danger-text">
                               <AlertTriangle
                                 className="mt-0.5 h-3 w-3 shrink-0"
                                 aria-hidden="true"

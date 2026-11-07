@@ -1,7 +1,9 @@
 // web/src/pages/reports/cards.tsx
 import { useState, useEffect, useRef } from "react";
 import { Link }                from "react-router-dom";
-import { ArrowRight }          from "lucide-react";
+import { ArrowRight, BarChart3, AlertTriangle, CheckCircle, Printer, RefreshCw } from "lucide-react";
+import { PageIcon }            from "@/components/ui/PageHeader";
+import { ACCENT_LEFT_CARD, DASH_TINT } from "@/config/dashboardTint";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
@@ -19,6 +21,9 @@ import {
   printHtml,
 } from "@/print/document";
 import { isDesktop }      from "@/lib/offline/bridge";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -45,6 +50,9 @@ interface PreviewCard {
   id:   string;
   name: string;
   html: string;
+  /** The card as printed: fetched with ?issue=1, so it carries its
+   *  verification code (a preview no longer mints one); see issuedHtml. */
+  issued: () => Promise<string>;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -65,22 +73,19 @@ const ExamCard = ({
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left p-4 rounded-xl border transition-all
-        ${isSelected
-          ? "border-primary-500 bg-primary-50 shadow-md"
-          : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
-        }`}
+      className={`w-full text-left p-4 transition-all hover:shadow-lift ${ACCENT_LEFT_CARD.amber}
+        ${isSelected ? "ring-2 ring-accent-amber" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm truncate">
+          <p className="font-semibold text-ink text-sm truncate">
             {exam.name}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {examTypeLabel(t, exam.type)} · {exam.term} · {exam.academicYear}
+          <p className="text-xs text-ink-muted mt-0.5">
+            {examTypeLabel(t, exam.type)} · {t(`exams.term${exam.term}`, String(exam.term))} · {exam.academicYear}
           </p>
           {(exam.classNames || exam.className) && (
-            <p className="text-xs text-primary-600 font-medium mt-1">
+            <p className="text-xs text-accent-amber-deep font-medium mt-1">
               {exam.classNames || exam.className}
             </p>
           )}
@@ -106,6 +111,9 @@ export default function ReportCardsPage() {
   const { toast, confirm } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);
+  // Every card is rendered by the server (a PDF, an issued and counted
+  // copy): online-only on the desktop, so the actions say so up front.
+  const net      = useNeedsInternet();
 
   const { data: examsData, isLoading: examsLoading } = useExams();
 
@@ -116,6 +124,10 @@ export default function ReportCardsPage() {
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [selectedClass,   setSelectedClass]   = useState<ClassOption | null>(null);
   const [students,        setStudents]        = useState<StudentOption[]>([]);
+  // Sequence cards: pupils on the roster with no marks for the chosen exam.
+  // Left out of the picker and the run, and named in a note so the office
+  // knows who is missing rather than wondering.
+  const [noMarks,         setNoMarks]         = useState<StudentOption[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
   const [classLoading,    setClassLoading]    = useState(false);
   const [studentLoading,  setStudentLoading]  = useState(false);
@@ -256,9 +268,10 @@ export default function ReportCardsPage() {
   /**
    * Load the pupils this card can be printed for.
    *
-   * A sequence card comes from the class roster: the exam covers the class, and
-   * a pupil with no marks prints an empty card, which is a legitimate thing to
-   * hand a parent.
+   * A sequence card comes from the class roster, less the pupils with no marks
+   * for the exam: a result, a real score, or a mark of absent or exempt. A
+   * pupil with none used to be listed and printed as an empty card (or a
+   * 404); they are now named in a note under the picker instead.
    *
    * A term or annual card cannot. Its marks are computed — the sequences
    * combined by weight, then the terms — and a pupil the computation has not
@@ -272,13 +285,29 @@ export default function ReportCardsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudentLoading(true);
     setStudents([]);
+    setNoMarks([]);
     setSelectedStudent(null);
 
+    const examId = selectedExam?._id;
     const request = cardType === "sequence"
-      ? api.get("/admin/students", {
-          params: { schoolId, classId: selectedClass._id },
-        }).then((res) =>
-          res.data?.students || (Array.isArray(res.data) ? res.data : []))
+      ? Promise.all([
+          api.get("/admin/students", { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.students || (Array.isArray(res.data) ? res.data : [])) as StudentOption[]),
+          api.get(`/exams/${examId}/scores`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.scores ?? []) as { studentId: string; score: number | null; isAbsent?: boolean; isExempt?: boolean }[]),
+          api.get(`/exams/${examId}/results`, { params: { schoolId, classId: selectedClass._id } })
+            .then((res) => (res.data?.results ?? []) as { studentId: string }[]),
+        ]).then(([roster, scores, results]) => {
+          const marked = new Set<string>([
+            ...results.map((r) => String(r.studentId)),
+            ...scores
+              .filter((sc) => sc.score != null || sc.isAbsent || sc.isExempt)
+              .map((sc) => String(sc.studentId)),
+          ]);
+          const without = roster.filter((st) => !marked.has(String(st._id)));
+          if (!stale) setNoMarks(without);
+          return roster.filter((st) => marked.has(String(st._id)));
+        })
       : api.get(cardType === "term" ? "/term-results" : "/annual-results", {
           params: {
             schoolId, academicYear, classId: selectedClass._id,
@@ -304,7 +333,7 @@ export default function ReportCardsPage() {
       .catch(() => { if (!stale) setStudents([]); })
       .finally(() => { if (!stale) setStudentLoading(false); });
     return () => { stale = true; };
-  }, [selectedClass, cardType, academicYear, termNumber, schoolId]);
+  }, [selectedClass, cardType, selectedExam, academicYear, termNumber, schoolId]);
 
   // ── Generate ────────────────────────────────────────────
   /**
@@ -344,12 +373,14 @@ export default function ReportCardsPage() {
       });
     } catch (err) {
       const data = (err as {
-        response?: { data?: { error?: string; detail?: string } };
+        response?: { data?: { error?: string; detail?: string; code?: string } };
       })?.response?.data;
       setResult({
         success: 0,
         error:   1,
-        message: data?.detail ?? data?.error ?? t("reportCards.reissueFailed"),
+        message: data?.code === "NOT_ISSUED"
+          ? t("reportCards.reissueNotIssued")
+          : data?.detail ?? data?.error ?? t("reportCards.reissueFailed"),
       });
     } finally {
       setReissuing(false);
@@ -362,15 +393,20 @@ export default function ReportCardsPage() {
    * Three endpoints, one renderer behind all of them. The sequence one answers
    * JSON with the html inside; the term and annual ones answer the document
    * itself, because they were written for a browser to open directly.
+   *
+   * `issue` marks an actual print. Without it the card is fetched for the
+   * preview only: the server neither archives it as the parent's copy nor
+   * counts a print on its verification code.
    */
-  const cardRequest = (sid: string) => {
+  const cardRequest = (sid: string, issue = false) => {
     const lang   = i18n?.resolvedLanguage ?? "en";
+    const issued = issue ? { issue: 1 } : {};
     const school = user?.schoolName || user?.school?.name || "";
     if (cardType === "sequence") {
       return api.get(
         `/results/${selectedExam!._id}/student/${sid}/reportcard/html`,
         {
-          params: { schoolId, lang, schoolName: school },
+          params: { schoolId, lang, schoolName: school, ...issued },
           // One rendered card per request, and a class is generated one
           // pupil at a time — so this ceiling is reached per pupil, not
           // once. At 30s a slow render aborted mid-class and the run
@@ -384,9 +420,21 @@ export default function ReportCardsPage() {
       params: {
         schoolId, academicYear, classId: selectedClass!._id, lang,
         ...(cardType === "term" ? { term: termNumber } : {}),
+        ...issued,
       },
       timeout: TIMEOUTS.render,
     });
+  };
+
+  /**
+   * The card as it is printed: requested with ?issue=1, which archives it and
+   * mints (or reuses) its verification code. A preview no longer creates a
+   * code, so the paper has to come from this request rather than from the
+   * preview's HTML — which, for a card never printed, carries no code.
+   */
+  const issuedHtml = (sid: string) => async () => {
+    const body = (await cardRequest(sid, true))?.data;
+    return typeof body === "string" ? body : body?.data?.html || body?.html || "";
   };
 
   const handleGenerate = async () => {
@@ -466,7 +514,41 @@ export default function ReportCardsPage() {
       return true;
     };
 
-    for (let i = 0; i < targetStudents.length; i++) {
+    /*
+     * C2: a class is fetched four cards at a time. One at a time, a class of
+     * forty waited out forty renders back to back; the server answers several
+     * at once without trouble. Each card lands in its pupil's slot, so the
+     * preview and the print keep the roster's order whatever finishes first.
+     */
+    if (!singleInTab) {
+      const slots: (PreviewCard | null)[] = targetStudents.map(() => null);
+      let next = 0;
+      let done = 0;
+      const worker = async () => {
+        while (next < targetStudents.length && isCurrent()) {
+          const i       = next++;
+          const student = targetStudents[i];
+          const name    = student.studentName || student.name || String(student._id);
+          const sid     = String(student._id);
+          try {
+            const body = (await cardRequest(sid))?.data;
+            const html = typeof body === "string" ? body : body?.data?.html || body?.html || "";
+            if (html) slots[i] = { id: sid, name, html, issued: issuedHtml(sid) };
+            else error++;
+          } catch {
+            error++;
+          }
+          done++;
+          if (isCurrent()) setProgress({ done, total: targetStudents.length, current: name });
+        }
+      };
+      setProgress({ done: 0, total: targetStudents.length, current: "" });
+      await Promise.all(Array.from({ length: Math.min(4, targetStudents.length) }, worker));
+      if (stale()) return;
+      for (const card of slots) if (card) collected.push(card);
+    }
+
+    for (let i = 0; singleInTab && i < targetStudents.length; i++) {
       if (stale()) return;
       const student = targetStudents[i];
       const name    = student.studentName || student.name || String(student._id);
@@ -476,9 +558,10 @@ export default function ReportCardsPage() {
         current: name,
       });
       try {
-        // One renderer, three endpoints — see cardRequest.
+        // One renderer, three endpoints — see cardRequest. A single card in
+        // its own tab is printed straight away, so it is fetched as issued.
         const sid  = String(student._id);
-        const res2 = await cardRequest(sid);
+        const res2 = await cardRequest(sid, singleInTab);
         if (stale()) return;
 
         // The term and annual routes send the document; the sequence route
@@ -514,7 +597,7 @@ export default function ReportCardsPage() {
           // A class — and any single card in the packaged desktop app — is
           // shown in the in-app preview. Opening one window per pupil is
           // exactly what browsers block after the first card.
-          collected.push({ id: sid, name, html });
+          collected.push({ id: sid, name, html, issued: issuedHtml(sid) });
         }
       } catch {
         if (stale()) return;
@@ -583,13 +666,19 @@ export default function ReportCardsPage() {
    * rest of the console uses. "Requested", not "printed": the browser does not
    * tell the page whether the dialog was accepted.
    */
-  const handlePrintPreview = async () => {
+  // One print at a time: fetching the issued card takes a moment, and a
+  // second click would print it twice.
+  const printFlight = useSingleFlight();
+  const handlePrintPreview = () => printFlight.run("print", async () => {
     if (!previewCard) return;
     const run = ++printRunRef.current;
     setPreviewMessage("");
     try {
+      // The issued card, not the preview's HTML: it carries the code.
+      const html = await previewCard.issued();
+      if (printRunRef.current !== run) return;
       // Resolves once the iframe has reached print(); false when it could not.
-      const requested = await printHtml(previewCard.html);
+      const requested = html ? await printHtml(html) : false;
       if (printRunRef.current !== run) return;
       setPreviewMessage(
         requested
@@ -602,26 +691,29 @@ export default function ReportCardsPage() {
       if (printRunRef.current !== run) return;
       setPreviewMessage(t("reportCards.printNotStarted"));
     }
-  };
+  });
 
   return (
     <div className="space-y-6">
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("reportCards.title")}</h1>
-          <p className="text-gray-500 text-sm mt-1">
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+          <h1 className="text-2xl font-bold text-ink">{t("reportCards.title")}</h1>
+          <p className="text-ink-muted text-sm mt-1">
             {t("reportCards.blurb")}
           </p>
+          </div>
         </div>
         <Link
           to="/exams/results"
-          className="px-4 py-2 bg-indigo-50 text-indigo-700 border
-                     border-indigo-200 rounded-xl text-sm font-semibold
-                     hover:bg-indigo-100 transition-colors"
+          className="px-4 py-2 bg-primary-50 text-primary-700 border
+                     border-primary-200 rounded-xl text-sm font-semibold
+                     hover:bg-primary-100 transition-colors"
         >
-          📊 {t("reportCards.viewResults")}
+          <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.viewResults")}
         </Link>
       </div>
 
@@ -633,15 +725,15 @@ export default function ReportCardsPage() {
           {/* Which of the three cards. Chosen first, because it decides what the
               next step even asks for: a sequence card is one exam's, a term or
               annual card covers a period and has no exam behind it. */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+            <h3 className="font-semibold text-ink mb-1 flex items-center gap-2">
               <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                flex items-center justify-center text-xs font-bold">
                 1
               </span>
               {t("reportCards.selectType")}
             </h3>
-            <p className="text-xs text-gray-400 mb-3 ml-9">
+            <p className="text-xs text-ink-muted mb-3 ml-9">
               {t(`reportCards.typeHint_${cardType}`)}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -664,7 +756,7 @@ export default function ReportCardsPage() {
                   className={`px-4 py-2 rounded-xl text-sm font-semibold border
                     transition-colors ${cardType === ct
                       ? "bg-primary-600 border-primary-600 text-white"
-                      : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                      : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"}`}
                 >
                   {t(`reportCards.type_${ct}`)}
                 </button>
@@ -673,8 +765,8 @@ export default function ReportCardsPage() {
           </div>
 
           {/* Step 2: the period this card covers */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+            <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
               <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                flex items-center justify-center text-xs font-bold">
                 2
@@ -687,7 +779,7 @@ export default function ReportCardsPage() {
             {cardType !== "sequence" && (
               <div className="flex flex-wrap gap-4 mb-2">
                 <label className="block">
-                  <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                  <span className="block text-xs font-semibold text-ink-muted mb-1.5">
                     {t("academic.schoolYear")}
                   </span>
                   <select
@@ -697,7 +789,7 @@ export default function ReportCardsPage() {
                       setAcademicYear(e.target.value);
                       setSelectedClass(null);
                     }}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm
+                    className="rounded-xl border border-line px-3 py-2 text-sm
                                outline-none focus:border-primary-400"
                   >
                     {academicYears.length === 0 && <option value="">—</option>}
@@ -707,7 +799,7 @@ export default function ReportCardsPage() {
 
                 {cardType === "term" && (
                   <label className="block">
-                    <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                    <span className="block text-xs font-semibold text-ink-muted mb-1.5">
                       {t("academic.term")}
                     </span>
                     <div className="flex gap-2">
@@ -723,7 +815,7 @@ export default function ReportCardsPage() {
                           className={`px-3 py-2 rounded-xl text-sm font-semibold border
                             transition-colors ${termNumber === n
                               ? "bg-primary-600 border-primary-600 text-white"
-                              : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                              : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"}`}
                         >
                           {t(`exams.term${n}`)}
                         </button>
@@ -740,7 +832,7 @@ export default function ReportCardsPage() {
                                border-t-transparent rounded-full animate-spin" />
               </div>
             ) : exams.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-8 text-ink-muted">
                 <p className="font-semibold">{t("reportCards.noneCompleted")}</p>
                 <p className="text-sm mt-1">
                   {t("reportCards.completeFirst")}
@@ -768,8 +860,8 @@ export default function ReportCardsPage() {
 
           {/* Step 3: Class */}
           {periodChosen && (
-            <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+              <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
                   3
@@ -795,14 +887,14 @@ export default function ReportCardsPage() {
                         border transition-colors
                         ${selectedClass?._id === cls._id
                           ? "bg-primary-600 border-primary-600 text-white"
-                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                          : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                         }`}
                     >
                       {cls.name}
                     </button>
                   ))}
                   {classes.length === 0 && (
-                    <p className="text-sm text-gray-400">{t("classes.none")}</p>
+                    <p className="text-sm text-ink-muted">{t("classes.none")}</p>
                   )}
                 </div>
               )}
@@ -811,14 +903,14 @@ export default function ReportCardsPage() {
 
           {/* Step 4: Student (optional) */}
           {selectedClass && (
-            <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5">
+              <h3 className="font-semibold text-ink mb-1 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
                   4
                 </span>
                 {t("reportCards.selectStudent")}
-                <span className="text-xs text-gray-400 font-normal">
+                <span className="text-xs text-ink-muted font-normal">
                   {t("reportCards.optionalWholeClass")}
                 </span>
               </h3>
@@ -840,10 +932,12 @@ export default function ReportCardsPage() {
                  * unfinished.
                  */
                 <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
-                  <p className="text-sm font-semibold text-warning">
-                    {cardType === "sequence"
-                      ? t("reportCards.emptyRoster")
-                      : t("reportCards.emptyComputed", { type: typeLabel })}
+                  <p className="text-sm font-semibold text-warning-text">
+                    {cardType !== "sequence"
+                      ? t("reportCards.emptyComputed", { type: typeLabel })
+                      : noMarks.length > 0
+                        ? t("reportCards.noneMarked")
+                        : t("reportCards.emptyRoster")}
                   </p>
                   {cardType !== "sequence" && (
                     <Link
@@ -867,7 +961,7 @@ export default function ReportCardsPage() {
                       border transition-colors
                       ${!selectedStudent
                         ? "bg-primary-600 border-primary-600 text-white"
-                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                       }`}
                   >
                     {t("reportCards.allStudents", { count: students.length })}
@@ -885,7 +979,7 @@ export default function ReportCardsPage() {
                           border transition-colors
                           ${selectedStudent?._id === s._id
                             ? "bg-primary-600 border-primary-600 text-white"
-                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                            : "bg-surface border-line text-ink-body hover:bg-accent-slate-soft"
                           }`}
                       >
                         {name}
@@ -894,14 +988,30 @@ export default function ReportCardsPage() {
                   })}
                 </div>
               )}
+
+              {/* Who is left out, by name: a pupil with no marks for this
+                  exam has no card to print. */}
+              {!studentLoading && cardType === "sequence" && noMarks.length > 0 && (
+                <p className="mt-3 rounded-lg border border-info-line bg-info-soft px-3 py-2 text-xs text-info-text">
+                  <span className="font-semibold">
+                    {t("reportCards.noMarksNote", { count: noMarks.length })}
+                  </span>{" "}
+                  {noMarks.map((st) => st.studentName || st.name).filter(Boolean).join(", ")}
+                </p>
+              )}
             </div>
           )}
         </div>
 
         {/* Sidebar — Generate panel */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-5 sticky top-6">
-            <h3 className="font-semibold text-gray-900 mb-4">{t("common.generate")}</h3>
+          <div className="bg-surface rounded-xl border border-line border-t-[3px] border-t-accent-slate p-5 sticky top-6">
+            <h3 className="font-semibold text-ink mb-4 flex items-center gap-2">
+              <span className={`w-7 h-7 rounded-control flex items-center justify-center shrink-0 ${DASH_TINT.slate.box}`} aria-hidden="true">
+                <Printer className="w-4 h-4" />
+              </span>
+              {t("common.generate")}
+            </h3>
 
             {/* Summary */}
             <div className="space-y-2 mb-4">
@@ -914,12 +1024,12 @@ export default function ReportCardsPage() {
                 * said nothing had been chosen.
                 */}
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">
+                <span className="text-ink-muted">
                   {cardType === "sequence"
                     ? t("academic.exam")
                     : t("reportCards.selectPeriod")}
                 </span>
-                <span className="font-semibold text-gray-900 truncate
+                <span className="font-semibold text-ink truncate
                                  ml-2 max-w-[160px] text-right">
                   {cardType === "sequence"
                     ? (selectedExam?.name || "—")
@@ -929,14 +1039,14 @@ export default function ReportCardsPage() {
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{t("academic.class")}</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-ink-muted">{t("academic.class")}</span>
+                <span className="font-semibold text-ink">
                   {selectedClass?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{t("academic.student")}</span>
-                <span className="font-semibold text-gray-900">
+                <span className="text-ink-muted">{t("academic.student")}</span>
+                <span className="font-semibold text-ink">
                   {selectedStudent
                     ? selectedStudent.studentName || selectedStudent.name
                     : `All (${students.length})`}
@@ -962,9 +1072,11 @@ export default function ReportCardsPage() {
                   ? "bg-amber-50 text-amber-700"
                   : "bg-green-50 text-green-700"
                 }`}>
-                {result.error > 0 ? "⚠️" : "✅"} {result.message}
+                {result.error > 0 ? <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden /> : <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />}{result.message}
               </div>
             )}
+
+            <NeedsInternet />
 
             {/* Generate button */}
             <button
@@ -978,8 +1090,9 @@ export default function ReportCardsPage() {
                * set up completely and still not be printable, with nothing on
                * screen to say what was missing.
                */
-              disabled={!periodChosen || !selectedClass || generating}
-              className="w-full py-3 bg-green-600 hover:bg-green-700
+              disabled={!periodChosen || !selectedClass || generating || net.blocked}
+              title={net.hint}
+              className="w-full py-3 bg-primary-600 hover:bg-primary-700
                          text-white rounded-xl font-semibold text-sm
                          transition-colors disabled:opacity-50
                          flex items-center justify-center gap-2"
@@ -992,7 +1105,7 @@ export default function ReportCardsPage() {
                 </>
               ) : (
                 <>
-                  🖨️{" "}
+                  <Printer className="w-4 h-4" aria-hidden />
                   {selectedStudent
                     ? t("reportCards.printOne")
                     : t("reportCards.printAll", { count: students.length })}
@@ -1006,18 +1119,19 @@ export default function ReportCardsPage() {
             {selectedStudent && cardType === "sequence" && (
               <button
                 onClick={handleReissue}
-                disabled={reissuing || generating}
+                disabled={reissuing || generating || net.blocked}
+                title={net.hint}
                 className="w-full mt-2 py-2.5 border border-amber-300
                            hover:bg-amber-50 text-amber-800 rounded-xl
                            font-semibold text-sm transition-colors
                            disabled:opacity-50 flex items-center
                            justify-center gap-2"
               >
-                {reissuing ? t("reportCards.reissuing") : `♻️ ${t("reportCards.reissue")}`}
+                {reissuing ? t("reportCards.reissuing") : <><RefreshCw className="w-4 h-4" aria-hidden />{t("reportCards.reissue")}</>}
               </button>
             )}
 
-            <p className="text-xs text-gray-400 text-center mt-3">
+            <p className="text-xs text-ink-muted text-center mt-3">
               {t("reportCards.previewNote")}
             </p>
           </div>
@@ -1092,12 +1206,13 @@ export default function ReportCardsPage() {
             <button
               type="button"
               onClick={handlePrintPreview}
-              disabled={!previewCard}
-              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700
+              disabled={!previewCard || printFlight.busy || net.blocked}
+              title={net.hint}
+              className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700
                          text-white text-sm font-semibold transition-colors
                          disabled:opacity-50"
             >
-              {t("common.print")}
+              {printFlight.busy ? t("common.preparing") : t("common.print")}
             </button>
           </div>
         </div>

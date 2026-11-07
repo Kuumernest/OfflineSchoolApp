@@ -32,7 +32,10 @@ import {
   Users,
   Printer,
   RefreshCw,
+  CalendarX,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -70,6 +73,7 @@ import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -276,8 +280,8 @@ export default function TimetablePage() {
   if (periods.length === 0) {
     return (
       <Card className="max-w-xl mx-auto mt-6 text-center">
-        <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center mx-auto">
-          <Clock className="w-6 h-6 text-amber-600" />
+        <div className="w-12 h-12 rounded-xl bg-accent-teal-solid text-white flex items-center justify-center mx-auto">
+          <Clock className="w-6 h-6" />
         </div>
         <h2 className="mt-4 text-base font-semibold text-gray-800">
           {t("timetable.setUpDay")}
@@ -308,11 +312,14 @@ export default function TimetablePage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("timetable.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("timetable.gridHint")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("timetable.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("timetable.gridHint")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -364,7 +371,9 @@ export default function TimetablePage() {
             {/* Wide grids scroll inside the card; the page never scrolls
                 sideways. */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[52rem]">
+              {/* table-fixed: every day the same width, whatever its lessons say
+                  (Wednesday was narrower than the rest). */}
+              <table className="w-full table-fixed border-collapse min-w-[52rem]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">
@@ -476,6 +485,8 @@ export default function TimetablePage() {
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader
+                icon={CalendarX}
+                accent="teal"
                 title={t("timetable.unfilled")}
                 subtitle={
                   gaps.length === 0
@@ -489,13 +500,13 @@ export default function TimetablePage() {
                     <button
                       key={`${day}-${period._id}`}
                       onClick={() => setCell({ day, periodId: period._id })}
-                      className="px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-xs text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors"
+                      className={cn("px-2 py-1 rounded-md text-xs ring-1 ring-inset hover:shadow-lift transition-shadow", ACCENT_BADGE.teal)}
                     >
                       {t(DAY_SHORT_KEYS[day])} · {period.name}
                     </button>
                   ))}
                   {gaps.length > 24 && (
-                    <span className="px-2 py-1 text-xs text-gray-400">
+                    <span className="px-2 py-1 text-xs text-ink-muted">
                       {t("timetable.gapsMore", { count: gaps.length - 24 })}
                     </span>
                   )}
@@ -505,17 +516,19 @@ export default function TimetablePage() {
 
             <Card>
               <CardHeader
+                icon={Users}
+                accent="teal"
                 title={t("timetable.teacherLoad")}
                 subtitle={t("timetable.blurb")}
               />
               {workload.length === 0 ? (
-                <p className="text-sm text-gray-500">{t("timetable.nothingYet")}</p>
+                <p className="text-sm text-ink-muted">{t("timetable.nothingYet")}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {workload.slice(0, 8).map((w) => (
                     <li key={w.teacherId} className="flex items-center gap-3">
-                      <Users className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                      <span className="text-sm text-gray-700 truncate flex-1">
+                      <Users className={cn("w-3.5 h-3.5 shrink-0", DASH_TINT.teal.glyph)} />
+                      <span className="text-sm text-ink truncate flex-1">
                         {w.name}
                       </span>
                       <Badge
@@ -609,7 +622,9 @@ function LessonCard({
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
       }}
       className={cn(
-        "group h-14 px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing",
+        // min-h, not h: a long subject or a teacher's full name wraps to a
+        // second line instead of being cut to "Computer Sci…".
+        "group min-h-14 px-2.5 py-1.5 rounded-lg cursor-grab active:cursor-grabbing",
         "bg-primary-50 border border-primary-200",
         "hover:border-primary-400 hover:bg-primary-100/70 transition-colors",
         "focus:outline-none focus:ring-2 focus:ring-primary-500",
@@ -618,10 +633,12 @@ function LessonCard({
     >
       <GripVertical className="w-3 h-3 text-primary-300 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-primary-900 truncate leading-tight">
+        <p className="text-xs font-semibold text-primary-900 leading-tight line-clamp-2 [overflow-wrap:anywhere]"
+           title={slot.subject?.name ?? slot.subjectName ?? undefined}>
           {slot.subject?.name ?? slot.subjectName ?? t("timetable.unknownSubject")}
         </p>
-        <p className="text-[11px] text-primary-700/80 truncate">
+        <p className="text-[11px] leading-tight text-primary-700/80 line-clamp-2 [overflow-wrap:anywhere]"
+           title={slot.teacher?.name ?? undefined}>
           {slot.teacher?.name ?? t("timetable.unassigned")}
         </p>
         {slot.room && (
@@ -675,6 +692,15 @@ function SlotEditor({
   const [teacherId, setTeacherId] = useState(existing?.teacherId ?? "");
   const [room,      setRoom]      = useState(existing?.room ?? "");
 
+  // A lesson picked but not saved is lost by leaving the page or closing the
+  // editor; both ask first. Not while saving: the editor closes itself then.
+  const dirty =
+    subjectId !== (existing?.subjectId ?? "") ||
+    teacherId !== (existing?.teacherId ?? "") ||
+    room      !== (existing?.room      ?? "");
+  const { confirmDiscard } = useUnsavedChangesGuard(dirty && !saving);
+  const close = () => { void confirmDiscard().then((ok) => { if (ok) onClose(); }); };
+
   /**
    * Only the teachers assigned to this subject IN THIS CLASS.
    *
@@ -716,7 +742,7 @@ function SlotEditor({
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title={`${t(DAY_LABEL_KEYS[target.day])} · ${periodName}`}
     >
       <form
@@ -793,7 +819,7 @@ function SlotEditor({
           ) : <span />}
 
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={close}>
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saving}>

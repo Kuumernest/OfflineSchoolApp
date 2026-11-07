@@ -29,12 +29,14 @@
 // One check, at the top.
 
 import { useCallback, useEffect, useState } from "react";
-import { CloudOff, RefreshCw, AlertTriangle, Check, X } from "lucide-react";
+import { CloudOff, RefreshCw, AlertTriangle, Check, LogIn, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
 
 import { desktop, type SyncStatus, type OutboxSummary } from "@/lib/offline/bridge";
+import { canActOn, readOnlyReasonKey, refusalKey } from "@/lib/offline/outboxOwnership";
 import { cn } from "@/utils/cn";
+import { formatTime } from "../../../../shared/dateFormat.js";
 
 export default function SyncIndicator() {
   const { t } = useTranslation();
@@ -102,28 +104,56 @@ export default function SyncIndicator() {
 
   if (!bridge) return null;
 
+  /** A refusal from the main process (not this account's change), said in words. */
+  const refused = (title: string, err: unknown) => {
+    const key = refusalKey(err);
+    toast({ kind: "error", title, message: key ? t(key) : t("sync.refused") });
+    void refresh();
+  };
+
   const blocked = outbox?.blocked ?? 0;
   const waiting = outbox?.pending ?? 0;
+  // Of those, the requests this account will NOT send: queued by another
+  // account on this computer (sent when that person signs in here), or by
+  // nobody — before the queue recorded who (sent by no account). Said, not
+  // acted on: see docs/40-per-user-local-data.md. `ownerless` comes from the
+  // queue's summary and `mine` from the session; the rest is arithmetic, so a
+  // main process older than either reports 0.
+  const ownerless = (outbox as (OutboxSummary & { ownerless?: number }) | null)?.ownerless ?? 0;
+  const otherAccounts = outbox?.mine === undefined
+    ? 0
+    : Math.max(0, waiting + blocked - outbox.mine - ownerless);
   const offline = status?.phase === "offline";
+  // The server answered, but with a fault or a refusal of the whole pull. Shown
+  // like offline: it was reported as "idle" before, so it showed nothing.
+  const errored = status?.phase === "error";
   const syncing = status?.phase === "pushing" || status?.phase === "pulling";
+  // The server refused this machine's token: nothing goes until somebody signs
+  // in again. Not a calm "N waiting" — the queue is not draining and will not
+  // on its own. SignInAgainBanner carries the action; this says it in the bar.
+  const signedOut = status?.phase === "unauthenticated" && status.sessionRejected === true;
 
   // Nothing worth saying. See the note above about always-present indicators.
-  if (!blocked && !waiting && !offline && !syncing) return null;
+  if (!blocked && !waiting && !offline && !errored && !syncing && !signedOut) return null;
 
   const tone =
-    blocked ? "danger" :
-    offline ? "warning" :
+    blocked || signedOut ? "danger" :
+    offline || errored ? "warning" :
     "muted";
 
   const label =
+    signedOut ? t("sync.signInAgainShort") :
     blocked ? t("sync.blocked", { count: blocked }) :
     offline ? t("sync.offline") :
+    errored ? t("sync.error") :
     syncing ? t("sync.syncing") :
     t("sync.waiting", { count: waiting });
 
   const Icon =
+    signedOut ? LogIn :
     blocked ? AlertTriangle :
     offline ? CloudOff :
+    errored ? AlertTriangle :
     RefreshCw;
 
   return (
@@ -166,12 +196,21 @@ export default function SyncIndicator() {
                   {t("sync.allSent")}
                 </p>
               )}
+              {signedOut && <p className="mb-1 font-semibold text-danger-text">{t("sync.signInAgainBody")}</p>}
               {waiting > 0 && <p>{t("sync.waitingBody", { count: waiting })}</p>}
+              {otherAccounts > 0 && <p className="mt-1 text-blue-800">{t("sync.heldOtherAccount", { count: otherAccounts })}</p>}
+              {ownerless > 0 && <p className="mt-1 text-blue-800">{t("sync.heldOwnerless", { count: ownerless })}</p>}
               {offline && <p className="mt-1 text-amber-700">{t("sync.offlineBody")}</p>}
+              {errored && (
+                <p className="mt-1 text-amber-700">
+                  {t("sync.errorBody")}
+                  {status?.lastError && <span className="mt-0.5 block break-words font-mono">{status.lastError}</span>}
+                </p>
+              )}
               {status?.lastCycleAt && (
                 <p className="mt-1 text-gray-400">
                   {t("sync.lastChecked", {
-                    time: new Date(status.lastCycleAt).toLocaleTimeString(),
+                    time: formatTime(status.lastCycleAt),
                   })}
                 </p>
               )}
@@ -198,9 +237,18 @@ export default function SyncIndicator() {
                       {/* 410: the record was deleted on the server. Retrying can
                           never succeed, so it is not offered; what was typed can
                           be saved to a file before the change is discarded. */}
-                      {item.last_status === 410 && (
+                      {item.last_status === 410 && canActOn(item) && (
                         <p className="mt-1 text-xs text-amber-700">{t("sync.recordDeleted")}</p>
                       )}
+                      {/* Another account's change, or one with no recorded
+                          owner: read-only. The main process refuses these
+                          actions too; this is so they are never offered. */}
+                      {!canActOn(item) && (
+                        <p className="mt-1 text-xs text-blue-800" data-readonly={item.owner}>
+                          {t(readOnlyReasonKey(item) ?? "sync.readOnlyOtherAccount")}
+                        </p>
+                      )}
+                      {canActOn(item) && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           disabled={busy === item.seq}
@@ -210,6 +258,8 @@ export default function SyncIndicator() {
                               const saved = await bridge.outbox.saveCopy(item.seq);
                               if (saved.ok) {
                                 toast({ kind: "success", title: t("sync.saveCopy"), message: t("sync.copySaved", { path: saved.path }) });
+                              } else if (refusalKey(saved)) {
+                                refused(t("sync.saveCopy"), saved);
                               } else if (!saved.cancelled) {
                                 toast({ kind: "error", title: t("sync.saveCopy"), message: t("sync.copyFailed") });
                               }
@@ -225,6 +275,7 @@ export default function SyncIndicator() {
                           onClick={async () => {
                             setBusy(item.seq);
                             try { setOutbox(await bridge.outbox.unblock(item.seq)); }
+                            catch (err) { refused(t("sync.tryAgain"), err); }
                             finally { setBusy(null); }
                           }}
                           className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
@@ -246,6 +297,7 @@ export default function SyncIndicator() {
                             if (!ok) return;
                             setBusy(item.seq);
                             try { setOutbox(await bridge.outbox.discard(item.seq)); }
+                            catch (err) { refused(t("sync.discard"), err); }
                             finally { setBusy(null); }
                           }}
                           className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
@@ -253,6 +305,7 @@ export default function SyncIndicator() {
                           {t("sync.discard")}
                         </button>
                       </div>
+                      )}
                     </li>
                   ))}
                 </ul>

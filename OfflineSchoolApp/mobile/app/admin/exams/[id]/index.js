@@ -18,7 +18,24 @@ import { ExamService }  from "../../../../src/services/exam.service";
 // from the synced classes table instead.
 import { getClassesList } from "../../../../src/services/assignment.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../../src/components/Tinted";
+
+// A summary chip's status colour → the accent it stands for, so the chip takes
+// that accent's wash and its figure the deep shade. A colour with no accent
+// (the grey "total") keeps its own faint tint.
+const CHIP_ACCENT = {
+  "#D97706": ACCENT.amber,
+  "#4F46E5": ACCENT.indigo,
+  "#059669": ACCENT.green,
+  "#DC2626": ACCENT.red,
+  "#6B7280": ACCENT.slate, // the "total" chip: slate, not grey
+};
+const chipBg  = (color) => CHIP_ACCENT[color]?.wash ?? color + "12";
+const chipVal = (color) => CHIP_ACCENT[color]?.deep ?? color;
 
 // ─────────────────────────────────────────────────────────
 // UUID VALIDATOR
@@ -93,19 +110,21 @@ function resolveClassId(item) {
 // ─────────────────────────────────────────────────────────
 
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examDetail.statusDraft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examDetail.statusScheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examDetail.statusOngoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examDetail.statusCompleted" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examDetail.statusPublished" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examDetail.statusArchived"  },
+  draft:     { color: statusBadge("warning").text, bg: statusBadge("warning").bg, labelKey: "examDetail.statusDraft"     },
+  scheduled: { color: statusBadge("info").text,    bg: statusBadge("info").bg,    labelKey: "examDetail.statusScheduled" },
+  ongoing:   { color: statusBadge("info").text,    bg: statusBadge("info").bg,    labelKey: "examDetail.statusOngoing"   },
+  completed: { color: statusBadge("success").text, bg: statusBadge("success").bg, labelKey: "examDetail.statusCompleted" },
+  published: { color: statusBadge("success").text, bg: statusBadge("success").bg, labelKey: "examDetail.statusPublished" },
+  archived:  { color: accentBadge("slate").text,   bg: accentBadge("slate").bg,   labelKey: "examDetail.statusArchived"  },
 };
 
+// A submission's status → its accent: the card takes the wash and a left
+// edge in the base; the pill is white with the deep shade.
 const SUBMISSION_META = {
-  pending:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examDetail.statPending",   icon: "time-outline"             },
-  submitted: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examDetail.statSubmitted", icon: "cloud-upload-outline"     },
-  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "examDetail.statApproved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: "#DC2626", bg: "#FEF2F2", labelKey: "examDetail.statRejected",  icon: "close-circle-outline"     },
+  pending:   { accent: ACCENT.amber, color: ACCENT.amber.deep, bg: COLORS.surface, labelKey: "examDetail.statPending",   icon: "time-outline"             },
+  submitted: { accent: ACCENT.sky,   color: ACCENT.sky.deep,   bg: COLORS.surface, labelKey: "examDetail.statSubmitted", icon: "cloud-upload-outline"     },
+  approved:  { accent: ACCENT.green, color: ACCENT.green.deep, bg: COLORS.surface, labelKey: "examDetail.statApproved",  icon: "checkmark-circle-outline" },
+  rejected:  { accent: ACCENT.red,   color: ACCENT.red.deep,   bg: COLORS.surface, labelKey: "examDetail.statRejected",  icon: "close-circle-outline"     },
 };
 
 const EXAM_TYPE_KEYS = {
@@ -639,7 +658,7 @@ const cp = StyleSheet.create({
 const InfoRow = ({ icon, label, value }) => (
   <View style={ir.row}>
     <View style={ir.iconBox}>
-      <Ionicons name={icon} size={16} color="#6B7280" />
+      <Ionicons name={icon} size={16} color={COLORS.onPrimary} />
     </View>
     <View style={ir.content}>
       <Text style={ir.label}>{label}</Text>
@@ -655,24 +674,24 @@ const ir = StyleSheet.create({
     gap:               12,
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
   },
   iconBox: {
     width:           32,
     height:          32,
     borderRadius:    8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.amber.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
   content: { flex: 1 },
   label: {
     fontSize:      11,
-    color:         "#9CA3AF",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
-  value: { fontSize: 14, color: "#111827", fontWeight: "600", marginTop: 2 },
+  value: { fontSize: 14, color: COLORS.text, fontWeight: "600", marginTop: 2 },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -687,15 +706,21 @@ const SubmissionCard = ({
   const className = resolveClassName(subject);
 
   return (
-    <View style={sc.card}>
+    <View
+      style={[
+        sc.card,
+        { backgroundColor: meta.accent.wash, borderLeftColor: meta.accent.base },
+      ]}
+    >
       {!!className && (
         <View style={sc.classBadge}>
-          <Ionicons name="school-outline" size={11} color="#6B7280" />
+          <Ionicons name="school-outline" size={11} color={accentBadge("indigo").text} />
           <Text style={sc.classBadgeText}>{className}</Text>
         </View>
       )}
 
       <View style={sc.top}>
+        <IconSquare icon="book" accent="slate" size={32} style={sc.subjectIcon} />
         <View style={sc.info}>
           <Text style={sc.subjectName} numberOfLines={1}>
             {subject.subjectName || t("examDetail.unknownSubject")}
@@ -800,12 +825,14 @@ const SubmissionCard = ({
 
 const sc = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    10,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.amber.base,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    6,
@@ -815,19 +842,22 @@ const sc = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               4,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   accentBadge("indigo").bg,
+    borderWidth:       1,
+    borderColor:       accentBadge("indigo").border,
     alignSelf:         "flex-start",
     borderRadius:      6,
     paddingHorizontal: 8,
     paddingVertical:   3,
     marginBottom:      8,
   },
-  classBadgeText: { fontSize: 10, fontWeight: "600", color: "#6B7280" },
+  classBadgeText: { fontSize: 10, fontWeight: "600", color: accentBadge("indigo").text },
   top:            { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
+  subjectIcon:    { marginRight: 10 },
   info:           { flex: 1, marginRight: 10 },
-  subjectName:    { fontSize: 15, fontWeight: "700", color: "#111827" },
-  teacherName:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  scoresCount:    { fontSize: 11, color: "#059669", fontWeight: "600", marginTop: 2 },
+  subjectName:    { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  teacherName:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  scoresCount:    { fontSize: 11, color: ACCENT.green.deep, fontWeight: "600", marginTop: 2 },
   badge: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -838,10 +868,10 @@ const sc = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: "700" },
   metaRow:   { flexDirection: "row", gap: 12, marginBottom: 10 },
-  meta:      { fontSize: 11, color: "#6B7280" },
+  meta:      { fontSize: 11, color: COLORS.textSecondary },
   tag: {
-    backgroundColor:   "#EEF2FF",
-    color:             "#4F46E5",
+    backgroundColor:   accentBadge("indigo").bg,
+    color:             accentBadge("indigo").text,
     borderRadius:      4,
     paddingHorizontal: 6,
     fontWeight:        "600",
@@ -850,7 +880,7 @@ const sc = StyleSheet.create({
     flexDirection:  "row",
     gap:            8,
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
     flexWrap:       "wrap",
   },
@@ -873,11 +903,12 @@ const sc = StyleSheet.create({
 const ResultCard = ({ result }) => {
   const { t }     = useTranslation();
   const className = resolveClassName(result);
-  const color     = result.isPassing ? "#059669" : "#DC2626";
+  const tone      = SEMANTIC[result.isPassing ? "success" : "error"];
+  const color     = tone.text;
 
   return (
     <View style={rc.card}>
-      <View style={[rc.pos, { backgroundColor: color + "15" }]}>
+      <View style={[rc.pos, { backgroundColor: tone.box }]}>
         <Text style={[rc.posText, { color }]}>
           #{result.classPosition ?? "—"}
         </Text>
@@ -888,7 +919,7 @@ const ResultCard = ({ result }) => {
           {result.studentName || result.name || t("examDetail.unknownStudent")}
         </Text>
         <View style={rc.classRow}>
-          <Ionicons name="school-outline" size={10} color="#9CA3AF" />
+          <Ionicons name="school-outline" size={10} color={ACCENT.indigo.solid} />
           <Text style={rc.resolvedClass} numberOfLines={1}>
             {className ?? t("examDetail.noClass")}
           </Text>
@@ -907,7 +938,7 @@ const ResultCard = ({ result }) => {
             : "—"}
         </Text>
         <Text style={rc.grade}>{result.overallGrade || "—"}</Text>
-        <View style={[rc.passBadge, { backgroundColor: color + "15" }]}>
+        <View style={[rc.passBadge, { backgroundColor: tone.box }]}>
           <Text style={[rc.passText, { color }]}>
             {result.isPassing
               ? t("examDetail.resultPass")
@@ -923,12 +954,14 @@ const rc = StyleSheet.create({
   card: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    12,
     padding:         12,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.slate.base,
     gap:             12,
   },
   pos: {
@@ -940,13 +973,13 @@ const rc = StyleSheet.create({
   },
   posText:       { fontSize: 13, fontWeight: "800" },
   info:          { flex: 1 },
-  name:          { fontSize: 14, fontWeight: "700", color: "#111827" },
+  name:          { fontSize: 14, fontWeight: "700", color: COLORS.text },
   classRow:      { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  resolvedClass: { fontSize: 11, color: "#6B7280", fontWeight: "600", maxWidth: 150 },
-  sub:           { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  resolvedClass: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "600", maxWidth: 150 },
+  sub:           { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   scores:        { alignItems: "flex-end", gap: 2 },
   pct:           { fontSize: 16, fontWeight: "800" },
-  grade:         { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  grade:         { fontSize: 12, color: ACCENT.slate.deep, fontWeight: "600" },
   passBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   passText:      { fontSize: 10, fontWeight: "700" },
 });
@@ -960,18 +993,21 @@ const QuickActions = ({
   processing, router, id, t,
 }) => (
   <View style={qa.wrap}>
-    <Text style={qa.title}>{t("examDetail.quickActions")}</Text>
+    <View style={qa.titleRow}>
+      <IconSquare icon="flash" accent="amber" size={28} />
+      <Text style={qa.title}>{t("examDetail.quickActions")}</Text>
+    </View>
     <View style={qa.grid}>
 
       <TouchableOpacity
-        style={[qa.btn, { backgroundColor: "#EEF2FF" }]}
+        style={[qa.btn, { backgroundColor: ACCENT.indigo.wash }]}
         onPress={onEnterMarks}
         activeOpacity={0.8}
       >
-        <View style={[qa.icon, { backgroundColor: "#4F46E5" }]}>
-          <Ionicons name="create-outline" size={20} color="#FFF" />
+        <View style={[qa.icon, { backgroundColor: ACCENT.indigo.solid }]}>
+          <Ionicons name="create-outline" size={20} color={COLORS.onPrimary} />
         </View>
-        <Text style={[qa.btnLabel, { color: "#4F46E5" }]}>
+        <Text style={[qa.btnLabel, { color: ACCENT.indigo.deep }]}>
           {t("examDetail.enterMarks")}
         </Text>
         <Text style={qa.btnSub}>
@@ -984,27 +1020,27 @@ const QuickActions = ({
       <TouchableOpacity
         style={[
           qa.btn,
-          { backgroundColor: "#ECFDF5" },
+          { backgroundColor: ACCENT.green.wash },
           processing && { opacity: 0.6 },
         ]}
         onPress={onProcess}
         disabled={processing}
         activeOpacity={0.8}
       >
-        <View style={[qa.icon, { backgroundColor: "#059669" }]}>
+        <View style={[qa.icon, { backgroundColor: ACCENT.green.solid }]}>
           {processing
             ? <ActivityIndicator size="small" color="#FFF" />
             : <Ionicons name="calculator-outline" size={20} color="#FFF" />
           }
         </View>
-        <Text style={[qa.btnLabel, { color: "#059669" }]}>
+        <Text style={[qa.btnLabel, { color: ACCENT.green.deep }]}>
           {t("examDetail.process")}
         </Text>
         <Text style={qa.btnSub}>{t("examDetail.processSub")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[qa.btn, { backgroundColor: "#EFF6FF" }]}
+        style={[qa.btn, { backgroundColor: ACCENT.blue.wash }]}
         onPress={() =>
           router.push({
             pathname: "/admin/exams/results/[examId]",
@@ -1013,10 +1049,10 @@ const QuickActions = ({
         }
         activeOpacity={0.8}
       >
-        <View style={[qa.icon, { backgroundColor: "#2563EB" }]}>
-          <Ionicons name="trophy-outline" size={20} color="#FFF" />
+        <View style={[qa.icon, { backgroundColor: ACCENT.blue.solid }]}>
+          <Ionicons name="trophy-outline" size={20} color={COLORS.onPrimary} />
         </View>
-        <Text style={[qa.btnLabel, { color: "#2563EB" }]}>
+        <Text style={[qa.btnLabel, { color: ACCENT.blue.deep }]}>
           {t("examDetail.rankings")}
         </Text>
         <Text style={qa.btnSub}>{t("examDetail.rankingsSub")}</Text>
@@ -1024,14 +1060,14 @@ const QuickActions = ({
 
       {exam.status === "completed" && (
         <TouchableOpacity
-          style={[qa.btn, { backgroundColor: "#F5F3FF" }]}
+          style={[qa.btn, { backgroundColor: ACCENT.violet.wash }]}
           onPress={onPublish}
           activeOpacity={0.8}
         >
-          <View style={[qa.icon, { backgroundColor: "#7C3AED" }]}>
-            <Ionicons name="megaphone-outline" size={20} color="#FFF" />
+          <View style={[qa.icon, { backgroundColor: ACCENT.violet.solid }]}>
+            <Ionicons name="megaphone-outline" size={20} color={COLORS.onPrimary} />
           </View>
-          <Text style={[qa.btnLabel, { color: "#7C3AED" }]}>
+          <Text style={[qa.btnLabel, { color: ACCENT.violet.deep }]}>
             {t("examDetail.publish")}
           </Text>
           <Text style={qa.btnSub}>{t("examDetail.publishSub")}</Text>
@@ -1039,7 +1075,7 @@ const QuickActions = ({
       )}
 
       <TouchableOpacity
-        style={[qa.btn, { backgroundColor: "#F9FAFB" }]}
+        style={[qa.btn, { backgroundColor: ACCENT.slate.wash }]}
         onPress={() =>
           router.push({
             pathname: "/admin/exams/[id]/edit",
@@ -1048,10 +1084,10 @@ const QuickActions = ({
         }
         activeOpacity={0.8}
       >
-        <View style={[qa.icon, { backgroundColor: "#6B7280" }]}>
-          <Ionicons name="pencil-outline" size={20} color="#FFF" />
+        <View style={[qa.icon, { backgroundColor: ACCENT.slate.solid }]}>
+          <Ionicons name="pencil-outline" size={20} color={COLORS.onPrimary} />
         </View>
-        <Text style={[qa.btnLabel, { color: "#374151" }]}>
+        <Text style={[qa.btnLabel, { color: ACCENT.slate.deep }]}>
           {t("examDetail.edit")}
         </Text>
         <Text style={qa.btnSub}>{t("examDetail.editSub")}</Text>
@@ -1063,16 +1099,21 @@ const QuickActions = ({
 
 const qa = StyleSheet.create({
   wrap: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.amber.base,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
-  title: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  title: { fontSize: 14, fontWeight: "700", color: COLORS.text },
   grid:  { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   btn: {
     borderRadius: 14,
@@ -1089,7 +1130,7 @@ const qa = StyleSheet.create({
     justifyContent: "center",
   },
   btnLabel: { fontSize: 13, fontWeight: "700" },
-  btnSub:   { fontSize: 10, color: "#9CA3AF", textAlign: "center" },
+  btnSub:   { fontSize: 10, color: COLORS.textSecondary, textAlign: "center" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -1291,7 +1332,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                errorText(t, err, "examDetail.statusUpdateFailed")
+                needsInternetErrorText(t, err, "examDetail.statusUpdateFailed")
               );
             }
           },
@@ -1357,7 +1398,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.failedTitle"),
-                errorText(t, err, "examDetail.processFailed")
+                needsInternetErrorText(t, err, "examDetail.processFailed")
               );
             } finally {
               setProcessing(false);
@@ -1384,7 +1425,7 @@ export default function ExamDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("examDetail.failedTitle"),
-        errorText(t, err, "examDetail.unpublishFailed")
+        needsInternetErrorText(t, err, "examDetail.unpublishFailed")
       );
     }
   }, [t, id, schoolId, loadData]);
@@ -1404,7 +1445,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                errorText(t, err, "examDetail.publishFailed")
+                needsInternetErrorText(t, err, "examDetail.publishFailed")
               );
             }
           },
@@ -1424,7 +1465,7 @@ export default function ExamDetailScreen() {
       });
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     }
   }, [id, schoolId, loadData, t]);
 
@@ -1454,7 +1495,7 @@ export default function ExamDetailScreen() {
         );
       }
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     } finally {
       setCoeffSaving(false);
     }
@@ -1479,7 +1520,7 @@ export default function ExamDetailScreen() {
       setRejectModal(null);
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+      Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
     } finally {
       setRejectLoading(false);
     }
@@ -1575,8 +1616,9 @@ export default function ExamDetailScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {exam.name}
@@ -1664,9 +1706,12 @@ export default function ExamDetailScreen() {
             />
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {t("examDetail.detailsTitle")}
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <IconSquare icon="document-text" accent="amber" size={28} />
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.detailsTitle")}
+                </Text>
+              </View>
               <InfoRow
                 icon="document-text-outline"
                 label={t("examDetail.fieldName")}
@@ -1716,26 +1761,35 @@ export default function ExamDetailScreen() {
 
             {!!exam.description && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>
-                  {t("examDetail.descriptionTitle")}
-                </Text>
+                <View style={styles.cardTitleRow}>
+                  <IconSquare icon="reader" accent="amber" size={28} />
+                  <Text style={styles.cardTitle}>
+                    {t("examDetail.descriptionTitle")}
+                  </Text>
+                </View>
                 <Text style={styles.bodyText}>{exam.description}</Text>
               </View>
             )}
 
             {!!exam.instructions && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>
-                  {t("examDetail.instructionsTitle")}
-                </Text>
+                <View style={styles.cardTitleRow}>
+                  <IconSquare icon="list" accent="amber" size={28} />
+                  <Text style={styles.cardTitle}>
+                    {t("examDetail.instructionsTitle")}
+                  </Text>
+                </View>
                 <Text style={styles.bodyText}>{exam.instructions}</Text>
               </View>
             )}
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {t("examDetail.submissionSummary")}
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <IconSquare icon="cloud-upload" accent="amber" size={28} />
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.submissionSummary")}
+                </Text>
+              </View>
               <View style={styles.statRow}>
                 {[
                   { id: "total",     label: t("examDetail.statTotal"),     val: submissionStats.total,     color: "#6B7280" },
@@ -1746,9 +1800,9 @@ export default function ExamDetailScreen() {
                 ].map((s) => (
                   <View
                     key={s.id}
-                    style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                    style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                   >
-                    <Text style={[styles.statVal, { color: s.color }]}>
+                    <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                       {s.val}
                     </Text>
                     <Text style={styles.statLbl}>{s.label}</Text>
@@ -1763,9 +1817,12 @@ export default function ExamDetailScreen() {
         {activeTab === "submissions" && (
           <>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {t("examDetail.markEntryStatus")}
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <IconSquare icon="create" accent="amber" size={28} />
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.markEntryStatus")}
+                </Text>
+              </View>
               <View style={styles.statRow}>
                 {[
                   { id: "pending",   label: t("examDetail.statPending"),   val: submissionStats.pending,   color: "#D97706" },
@@ -1775,9 +1832,9 @@ export default function ExamDetailScreen() {
                 ].map((s) => (
                   <View
                     key={s.id}
-                    style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                    style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                   >
-                    <Text style={[styles.statVal, { color: s.color }]}>
+                    <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                       {s.val}
                     </Text>
                     <Text style={styles.statLbl}>{s.label}</Text>
@@ -1798,15 +1855,13 @@ export default function ExamDetailScreen() {
             </TouchableOpacity>
 
             {subjects.length === 0 ? (
-              <View style={styles.empty}>
-                <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyTitle}>
-                  {t("examDetail.noSubjects")}
-                </Text>
-                <Text style={styles.emptySub}>
-                  {t("examDetail.noSubjectsSub")}
-                </Text>
-              </View>
+              <EmptyState
+                icon="document-outline"
+                accent="slate"
+                title={t("examDetail.noSubjects")}
+                message={t("examDetail.noSubjectsSub")}
+                style={styles.empty}
+              />
             ) : (
               subjectGroups.map((group) => (
                 <View
@@ -1815,13 +1870,7 @@ export default function ExamDetailScreen() {
                 >
                   {subjectGroups.length > 1 && (
                     <View style={styles.classSectionHeader}>
-                      <View style={styles.classSectionIcon}>
-                        <Ionicons
-                          name="school-outline"
-                          size={13}
-                          color="#4F46E5"
-                        />
-                      </View>
+                      <IconSquare icon="school" accent="indigo" size={24} radius={8} />
                       <Text style={styles.classSectionTitle} numberOfLines={1}>
                         {group.className}
                       </Text>
@@ -1870,9 +1919,12 @@ export default function ExamDetailScreen() {
 
             {results.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>
-                  {t("examDetail.resultsSummary")}
-                </Text>
+                <View style={styles.cardTitleRow}>
+                  <IconSquare icon="bar-chart" accent="amber" size={28} />
+                  <Text style={styles.cardTitle}>
+                    {t("examDetail.resultsSummary")}
+                  </Text>
+                </View>
                 <View style={styles.statRow}>
                   {[
                     { id: "students", label: t("examDetail.statStudents"), val: resultStats.total,     color: "#4F46E5" },
@@ -1882,9 +1934,9 @@ export default function ExamDetailScreen() {
                   ].map((s) => (
                     <View
                       key={s.id}
-                      style={[styles.statChip, { backgroundColor: s.color + "12" }]}
+                      style={[styles.statChip, { backgroundColor: chipBg(s.color) }]}
                     >
-                      <Text style={[styles.statVal, { color: s.color }]}>
+                      <Text style={[styles.statVal, { color: chipVal(s.color) }]}>
                         {s.val}
                       </Text>
                       <Text style={styles.statLbl}>{s.label}</Text>
@@ -1934,15 +1986,13 @@ export default function ExamDetailScreen() {
             )}
 
             {results.length === 0 ? (
-              <View style={styles.empty}>
-                <Ionicons name="bar-chart-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyTitle}>
-                  {t("examDetail.noResults")}
-                </Text>
-                <Text style={styles.emptySub}>
-                  {t("examDetail.noResultsSub")}
-                </Text>
-              </View>
+              <EmptyState
+                icon="bar-chart-outline"
+                accent="slate"
+                title={t("examDetail.noResults")}
+                message={t("examDetail.noResultsSub")}
+                style={styles.empty}
+              />
             ) : (
               resultGroups.map((group) => (
                 <View
@@ -1951,13 +2001,7 @@ export default function ExamDetailScreen() {
                 >
                   {resultGroups.length > 1 && (
                     <View style={styles.classSectionHeader}>
-                      <View style={styles.classSectionIcon}>
-                        <Ionicons
-                          name="school-outline"
-                          size={13}
-                          color="#4F46E5"
-                        />
-                      </View>
+                      <IconSquare icon="school" accent="indigo" size={24} radius={8} />
                       <Text style={styles.classSectionTitle} numberOfLines={1}>
                         {group.className}
                       </Text>
@@ -2013,22 +2057,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        60,
     paddingBottom:     14,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:    { marginRight: 0 },
   headerCenter:  { flex: 1 },
-  headerTitle:   { fontSize: 16, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 11, color: "#6B7280", marginTop: 2 },
+  headerTitle:   { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  headerSub:     { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   statusBadge: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -2069,22 +2114,26 @@ const styles = StyleSheet.create({
   scroll: { padding: 16 },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.amber.base,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   cardTitle: {
     fontSize:     14,
     fontWeight:   "700",
-    color:        "#111827",
-    marginBottom: 12,
+    color:        COLORS.text,
   },
-  bodyText: { fontSize: 14, color: "#374151", lineHeight: 22 },
+  bodyText: { fontSize: 14, color: COLORS.text, lineHeight: 22 },
 
   statRow:  { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   statChip: {
@@ -2097,7 +2146,7 @@ const styles = StyleSheet.create({
   statVal: { fontSize: 16, fontWeight: "800" },
   statLbl: {
     fontSize:      9,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
@@ -2118,7 +2167,7 @@ const styles = StyleSheet.create({
     borderWidth:     1,
     borderColor:     "#FCA5A5",
   },
-  unpublishHint: { fontSize: 12, color: "#6B7280", marginTop: -4, marginBottom: 10 },
+  unpublishHint: { fontSize: 12, color: COLORS.textSecondary, marginTop: -4, marginBottom: 10 },
 
   // Per-class sections (multi-class exam — subjects & results grouped)
   classSection: { marginBottom: 14 },
@@ -2128,25 +2177,19 @@ const styles = StyleSheet.create({
     gap:           8,
     marginBottom:  10,
     paddingVertical: 6,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:  10,
-  },
-  classSectionIcon: {
-    width:           24,
-    height:          24,
-    borderRadius:    8,
-    backgroundColor: "#FFFFFF",
-    alignItems:      "center",
-    justifyContent:  "center",
   },
   classSectionTitle: {
     flex:        1,
     fontSize:    14,
     fontWeight:  "700",
-    color:       "#3730A3",
+    color:       ACCENT.indigo.deep,
   },
   classSectionCount: {
-    backgroundColor:   "#FFFFFF",
+    color:             ACCENT.indigo.deep,
+    fontWeight:        "700",
+    backgroundColor:   COLORS.surface,
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      10,
@@ -2159,6 +2202,5 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     gap:             10,
   },
-  emptyTitle: { fontSize: 15, fontWeight: "600", color: "#374151" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+
 });

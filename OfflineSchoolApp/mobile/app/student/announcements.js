@@ -18,6 +18,8 @@ import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
+import { COLORS as THEME, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../src/theme/colors";
+import { HeaderIcon } from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -84,25 +86,25 @@ const getPriorityConfig = (priority = "normal") => {
   const p = (priority || "normal").toLowerCase();
   switch (p) {
     case "urgent":
-      return { labelKey: "annStudent.prioUrgent", icon: "alert-circle",       color: C.error,   bg: C.errorBg,   border: "#FECACA" };
+      return { labelKey: "annStudent.prioUrgent", icon: "alert-circle",       color: statusBadge("error").text,   bg: statusBadge("error").bg,   border: statusBadge("error").border,   solid: ACCENT.red.solid };
     case "high":
-      return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A" };
+      return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: statusBadge("warning").text, bg: statusBadge("warning").bg, border: statusBadge("warning").border, solid: ACCENT.amber.solid };
     case "low":
-      return { labelKey: "annStudent.prioLow", icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200 };
+      return { labelKey: "annStudent.prioLow", icon: "remove-circle",      color: accentBadge("slate").text, bg: accentBadge("slate").bg, border: accentBadge("slate").border, solid: ACCENT.slate.solid };
     default:
-      return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE" };
+      return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: accentBadge("sky").text,   bg: accentBadge("sky").bg,   border: accentBadge("sky").border,   solid: ACCENT.sky.solid };
   }
 };
 
 const getAuthorConfig = (authorRole = "") => {
   const r = (authorRole || "").toLowerCase();
   if (["super_admin", "school_admin", "admin"].includes(r)) {
-    return { icon: "shield-checkmark", color: C.primary, labelKey: "annStudent.roleAdministrator" };
+    return { icon: "shield-checkmark", accent: "indigo", color: ACCENT.indigo.deep, labelKey: "annStudent.roleAdministrator" };
   }
   if (r === "teacher") {
-    return { icon: "school", color: C.success, labelKey: "annStudent.roleTeacher" };
+    return { icon: "school", accent: "violet", color: ACCENT.violet.deep, labelKey: "annStudent.roleTeacher" };
   }
-  return { icon: "person", color: C.gray500, labelKey: "annStudent.roleStaff" };
+  return { icon: "person", accent: "slate", color: ACCENT.slate.deep, labelKey: "annStudent.roleStaff" };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,15 +170,15 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
                 <Text style={[md.badgeText, { color: pri.color }]}>{t(pri.labelKey)}</Text>
               </View>
               {ann.isPinned && (
-                <View style={[md.badge, { backgroundColor: C.warningBg, borderColor: "#FDE68A" }]}>
-                  <Ionicons name="pin" size={13} color={C.warning} />
-                  <Text style={[md.badgeText, { color: C.warning }]}>{t("annStudent.pinned")}</Text>
+                <View style={[md.badge, { backgroundColor: statusBadge("warning").bg, borderColor: statusBadge("warning").border }]}>
+                  <Ionicons name="pin" size={13} color={SEMANTIC.warning.text} />
+                  <Text style={[md.badgeText, { color: SEMANTIC.warning.text }]}>{t("annStudent.pinned")}</Text>
                 </View>
               )}
               {ann.isRead && (
-                <View style={[md.badge, { backgroundColor: C.successBg, borderColor: "#A7F3D0" }]}>
-                  <Ionicons name="checkmark-circle" size={13} color={C.success} />
-                  <Text style={[md.badgeText, { color: C.success }]}>{t("annStudent.read")}</Text>
+                <View style={[md.badge, { backgroundColor: statusBadge("success").bg, borderColor: statusBadge("success").border }]}>
+                  <Ionicons name="checkmark-circle" size={13} color={SEMANTIC.success.text} />
+                  <Text style={[md.badgeText, { color: SEMANTIC.success.text }]}>{t("annStudent.read")}</Text>
                 </View>
               )}
             </View>
@@ -184,15 +186,15 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
             <Text style={md.title}>{ann.title}</Text>
 
             <View style={md.metaRow}>
-              <View style={[md.authorIcon, { backgroundColor: author.color + "18" }]}>
-                <Ionicons name={author.icon} size={16} color={author.color} />
+              <View style={[md.authorIcon, { backgroundColor: ACCENT[author.accent].solid }]}>
+                <Ionicons name={author.icon} size={16} color={THEME.onPrimary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={md.authorName}>{ann.authorName || t("annStudent.schoolFallback")}</Text>
                 <Text style={md.authorRoleText}>{t(author.labelKey)}</Text>
               </View>
               <View style={md.dateBox}>
-                <Ionicons name="time-outline" size={13} color={C.gray400} />
+                <Ionicons name="time-outline" size={13} color={THEME.textSecondary} />
                 <Text style={md.dateText}>{timeAgo(ann.createdAt, t)}</Text>
               </View>
             </View>
@@ -202,7 +204,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
             <Text style={md.body}>{ann.body || t("annStudent.noContent")}</Text>
 
             <View style={md.audienceRow}>
-              <Ionicons name="people-outline" size={15} color={C.gray400} />
+              <Ionicons name="people-outline" size={15} color={ACCENT.sky.solid} />
               <Text style={md.audienceText}>
                 {ann.audience === "all"
                   ? t("annStudent.audEveryone")
@@ -228,7 +230,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
 
             {ann.isAcknowledged && (
               <View style={md.ackDone}>
-                <Ionicons name="checkmark-done-circle" size={16} color={C.success} />
+                <Ionicons name="checkmark-done-circle" size={16} color={SEMANTIC.success.icon} />
                 <Text style={md.ackDoneText}>
                   {t("annStudent.ackedNote")}
                 </Text>
@@ -264,9 +266,9 @@ const md = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical:   14,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: THEME.border,
   },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: C.gray900 },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: THEME.text },
   closeBtn: {
     width:           36,
     height:          36,
@@ -307,29 +309,29 @@ const md = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  authorName:     { fontSize: 14, fontWeight: "600", color: C.gray900 },
-  authorRoleText: { fontSize: 11, color: C.gray400, marginTop: 1 },
+  authorName:     { fontSize: 14, fontWeight: "600", color: THEME.text },
+  authorRoleText: { fontSize: 11, color: THEME.textSecondary, marginTop: 1 },
   dateBox:        { flexDirection: "row", alignItems: "center", gap: 4 },
-  dateText:       { fontSize: 12, color: C.gray400, fontWeight: "500" },
-  fullDate:       { fontSize: 12, color: C.gray400, marginBottom: 16, marginLeft: 46 },
-  divider:        { height: 1, backgroundColor: C.gray100, marginBottom: 16 },
+  dateText:       { fontSize: 12, color: THEME.textSecondary, fontWeight: "500" },
+  fullDate:       { fontSize: 12, color: THEME.textSecondary, marginBottom: 16, marginLeft: 46 },
+  divider:        { height: 1, backgroundColor: THEME.border, marginBottom: 16 },
   body:           { fontSize: 15, color: C.gray700, lineHeight: 24, marginBottom: 20 },
   audienceRow: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             8,
-    backgroundColor: C.gray50,
+    backgroundColor: ACCENT.sky.wash,
     borderRadius:    10,
     padding:         12,
     marginBottom:    16,
   },
-  audienceText: { fontSize: 13, color: C.gray500, fontWeight: "500" },
+  audienceText: { fontSize: 13, color: ACCENT.sky.deep, fontWeight: "500" },
   ackBtn: {
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
     gap:             8,
-    backgroundColor: C.primary,
+    backgroundColor: ACCENT.sky.solid,
     borderRadius:    12,
     paddingVertical: 14,
     marginTop:       8,
@@ -339,12 +341,12 @@ const md = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             8,
-    backgroundColor: C.successBg,
+    backgroundColor: SEMANTIC.success.bg,
     borderRadius:    12,
     padding:         12,
     marginTop:       8,
   },
-  ackDoneText: { fontSize: 13, color: C.success, fontWeight: "600" },
+  ackDoneText: { fontSize: 13, color: SEMANTIC.success.text, fontWeight: "600" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -512,24 +514,24 @@ export default function StudentAnnouncements() {
         {isUnread && <View style={s.unreadStrip} />}
         {isUnread && <View style={s.unreadDot} />}
 
-        <View style={[s.cardIcon, { backgroundColor: pri.bg }]}>
-          <Ionicons name={pri.icon} size={20} color={pri.color} />
+        <View style={[s.cardIcon, { backgroundColor: pri.solid }]}>
+          <Ionicons name={pri.icon} size={20} color={THEME.onPrimary} />
         </View>
 
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={s.cardBadgeRow}>
             {ann.isPinned && (
               <View style={s.pinBadge}>
-                <Ionicons name="pin" size={10} color={C.warning} />
+                <Ionicons name="pin" size={10} color={SEMANTIC.warning.text} />
                 <Text style={s.pinBadgeText}>{t("annStudent.pinned")}</Text>
               </View>
             )}
-            <View style={[s.priBadge, { backgroundColor: pri.bg }]}>
+            <View style={[s.priBadge, { backgroundColor: pri.bg, borderColor: pri.border }]}>
               <Text style={[s.priBadgeText, { color: pri.color }]}>
                 {t(pri.labelKey)}
               </Text>
             </View>
-            <View style={[s.authorBadge, { backgroundColor: author.color + "12" }]}>
+            <View style={[s.authorBadge, { backgroundColor: accentBadge(author.accent).bg, borderColor: accentBadge(author.accent).border }]}>
               <Ionicons name={author.icon} size={10} color={author.color} />
               <Text style={[s.authorBadgeText, { color: author.color }]}>
                 {t(author.labelKey)}
@@ -557,7 +559,7 @@ export default function StudentAnnouncements() {
             {ann.isAcknowledged && (
               <>
                 <Text style={s.cardDot}>·</Text>
-                <Ionicons name="checkmark-done" size={12} color={C.success} />
+                <Ionicons name="checkmark-done" size={12} color={SEMANTIC.success.icon} />
               </>
             )}
           </View>
@@ -566,7 +568,7 @@ export default function StudentAnnouncements() {
         <Ionicons
           name="chevron-forward"
           size={16}
-          color={C.gray300}
+          color={THEME.textSecondary}
           style={{ marginTop: 2 }}
         />
       </TouchableOpacity>
@@ -588,8 +590,9 @@ export default function StudentAnnouncements() {
           style={s.backBtn}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={C.gray700} />
+          <Ionicons name="arrow-back" size={22} color={THEME.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={s.topTitle}>{t("annStudent.listTitle")}</Text>
           <Text style={s.topSub}>
@@ -673,7 +676,7 @@ export default function StudentAnnouncements() {
       {/* List */}
       {loadingInbox && inbox.length === 0 ? (
         <View style={s.centered}>
-          <ActivityIndicator size="large" color={C.primary} />
+          <ActivityIndicator size="large" color={ACCENT.sky.solid} />
           <Text style={s.loadingText}>{t("annStudent.loading")}</Text>
         </View>
       ) : (
@@ -691,8 +694,8 @@ export default function StudentAnnouncements() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={C.primary}
-              colors={[C.primary]}
+              tintColor={ACCENT.sky.solid}
+              colors={[ACCENT.sky.solid]}
             />
           }
           ListEmptyComponent={
@@ -701,7 +704,7 @@ export default function StudentAnnouncements() {
                 <Ionicons
                   name={searchQuery ? "search-outline" : "megaphone-outline"}
                   size={40}
-                  color={C.gray300}
+                  color={THEME.onPrimary}
                 />
               </View>
               <Text style={s.emptyTitle}>
@@ -737,7 +740,7 @@ export default function StudentAnnouncements() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  screen:      { flex: 1, backgroundColor: C.gray50 },
+  screen:      { flex: 1, backgroundColor: THEME.page },
   centered:    {
     flex:            1,
     alignItems:      "center",
@@ -745,7 +748,7 @@ const s = StyleSheet.create({
     gap:             12,
     paddingVertical: 60,
   },
-  loadingText: { fontSize: 14, color: C.gray500, fontWeight: "500" },
+  loadingText: { fontSize: 14, color: THEME.textSecondary, fontWeight: "500" },
 
   topBar: {
     flexDirection:     "row",
@@ -753,26 +756,26 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   C.white,
+    backgroundColor:   THEME.surface,
     gap:               10,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: THEME.border,
   },
   backBtn: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: C.gray100,
+    backgroundColor: ACCENT.slate.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  topTitle:    { fontSize: 18, fontWeight: "700", color: C.gray900 },
-  topSub:      { fontSize: 12, color: C.gray400, marginTop: 1 },
+  topTitle:    { fontSize: 18, fontWeight: "700", color: THEME.text },
+  topSub:      { fontSize: 12, color: THEME.textSecondary, marginTop: 1 },
   unreadBadge: {
     minWidth:          26,
     height:            26,
     borderRadius:      13,
-    backgroundColor:   C.error,
+    backgroundColor:   ACCENT.red.solid,
     alignItems:        "center",
     justifyContent:    "center",
     paddingHorizontal: 6,
@@ -783,13 +786,13 @@ const s = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               8,
-    backgroundColor:   C.errorBg,
+    backgroundColor:   SEMANTIC.error.bg,
     paddingHorizontal: 16,
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: "#FECACA",
+    borderBottomColor: SEMANTIC.error.box,
   },
-  urgentBannerText: { fontSize: 13, color: C.error, fontWeight: "600", flex: 1 },
+  urgentBannerText: { fontSize: 13, color: SEMANTIC.error.text, fontWeight: "600", flex: 1 },
 
   searchWrap: {
     flexDirection:     "row",
@@ -821,24 +824,24 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   8,
     borderRadius:      20,
-    backgroundColor:   C.white,
+    backgroundColor:   THEME.surface,
     borderWidth:       1,
-    borderColor:       C.gray200,
+    borderColor:       THEME.border,
   },
-  filterTabActive:       { backgroundColor: C.primary, borderColor: C.primary },
-  filterTabText:         { fontSize: 13, fontWeight: "600", color: C.gray500 },
+  filterTabActive:       { backgroundColor: ACCENT.sky.solid, borderColor: ACCENT.sky.solid },
+  filterTabText:         { fontSize: 13, fontWeight: "600", color: THEME.textSecondary },
   filterTabTextActive:   { color: C.white },
   filterBadge: {
     minWidth:          20,
     height:            20,
     borderRadius:      10,
-    backgroundColor:   C.gray100,
+    backgroundColor:   ACCENT.sky.wash,
     alignItems:        "center",
     justifyContent:    "center",
     paddingHorizontal: 4,
   },
-  filterBadgeActive:     { backgroundColor: "rgba(255,255,255,0.25)" },
-  filterBadgeText:       { fontSize: 10, fontWeight: "700", color: C.gray500 },
+  filterBadgeActive:     { backgroundColor: THEME.onPrimaryBox },
+  filterBadgeText:       { fontSize: 10, fontWeight: "700", color: ACCENT.sky.deep },
   filterBadgeTextActive: { color: C.white },
 
   listContent:      { padding: 12, paddingBottom: 60 },
@@ -847,23 +850,25 @@ const s = StyleSheet.create({
   card: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.sky.wash,
     borderRadius:    14,
     padding:         14,
     marginBottom:    8,
     gap:             12,
     borderWidth:     1,
-    borderColor:     C.gray100,
-    shadowColor:     "#000",
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    4,
     elevation:       1,
     position:        "relative",
     overflow:        "hidden",
   },
-  cardUnread: { backgroundColor: "#FAFAFF", borderWidth: 1.5, borderColor: "#E0E7FF" },
-  cardPinned: { borderTopWidth: 2, borderTopColor: C.warning },
-  cardUrgent: { backgroundColor: "#FFF5F5", borderColor: "#FECACA" },
+  cardUnread: { borderWidth: 1.5, borderTopWidth: 3, borderColor: ACCENT.sky.base + "4D", borderTopColor: ACCENT.sky.base },
+  cardPinned: { borderTopWidth: 3, borderTopColor: ACCENT.amber.base },
+  cardUrgent: { backgroundColor: ACCENT.red.wash, borderColor: SEMANTIC.error.box, borderTopColor: ACCENT.red.base },
 
   unreadStrip: {
     position:               "absolute",
@@ -871,7 +876,7 @@ const s = StyleSheet.create({
     top:                    0,
     bottom:                 0,
     width:                  3,
-    backgroundColor:        C.primary,
+    backgroundColor:        ACCENT.sky.solid,
     borderTopLeftRadius:    14,
     borderBottomLeftRadius: 14,
   },
@@ -882,7 +887,7 @@ const s = StyleSheet.create({
     width:           8,
     height:          8,
     borderRadius:    4,
-    backgroundColor: C.primary,
+    backgroundColor: ACCENT.sky.solid,
   },
 
   cardIcon: {
@@ -903,10 +908,12 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      4,
-    backgroundColor:   C.warningBg,
+    borderWidth:       1,
+    backgroundColor:   statusBadge("warning").bg,
+    borderColor:       statusBadge("warning").border,
   },
-  pinBadgeText:    { fontSize: 10, fontWeight: "700", color: C.warning },
-  priBadge:        { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  pinBadgeText:    { fontSize: 10, fontWeight: "700", color: SEMANTIC.warning.text },
+  priBadge:        { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1 },
   priBadgeText:    { fontSize: 10, fontWeight: "700" },
   authorBadge: {
     flexDirection:     "row",
@@ -915,16 +922,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      4,
+    borderWidth:       1,
   },
   authorBadgeText: { fontSize: 10, fontWeight: "600" },
 
-  cardTitle:       { fontSize: 15, fontWeight: "600", color: C.gray900, lineHeight: 20, marginBottom: 4 },
-  cardTitleUnread: { fontWeight: "800" },
-  cardBody:        { fontSize: 13, color: C.gray500, lineHeight: 18, marginBottom: 6 },
+  cardTitle:       { fontSize: 15, fontWeight: "600", color: THEME.text, lineHeight: 20, marginBottom: 4 },
+  cardTitleUnread: { fontWeight: "800", color: ACCENT.sky.deep },
+  cardBody:        { fontSize: 13, color: THEME.textSecondary, lineHeight: 18, marginBottom: 6 },
   cardMeta:        { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" },
-  cardAuthor:      { fontSize: 11, fontWeight: "600", color: C.gray500, maxWidth: 120 },
-  cardDot:         { fontSize: 11, color: C.gray300 },
-  cardTime:        { fontSize: 11, color: C.gray400 },
+  cardAuthor:      { fontSize: 11, fontWeight: "600", color: THEME.textSecondary, maxWidth: 120 },
+  cardDot:         { fontSize: 11, color: THEME.textSecondary },
+  cardTime:        { fontSize: 11, color: THEME.textSecondary },
 
   emptyState: {
     alignItems:      "center",
@@ -936,15 +944,15 @@ const s = StyleSheet.create({
     width:           80,
     height:          80,
     borderRadius:    40,
-    backgroundColor: C.gray100,
+    backgroundColor: ACCENT.sky.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginBottom:    4,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: C.gray500 },
+  emptyTitle: { fontSize: 16, fontWeight: "700", color: THEME.text },
   emptySub: {
     fontSize:   13,
-    color:      C.gray400,
+    color:      THEME.textSecondary,
     textAlign:  "center",
     maxWidth:   260,
     lineHeight: 20,

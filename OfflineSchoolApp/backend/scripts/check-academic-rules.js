@@ -17,7 +17,7 @@
  *      mark, the paper's summary carrying its year and term (the CA's does
  *      not), stamped exam-process/3; the card and class statistics read it as
  *      /20 (no ×5).
- *   3. §12: term and annual rows store the school's own band (term/3).
+ *   3. §12: term and annual rows store the school's own band (term/4).
  *   4. D1b/D2: the annual row's promotionStatus and the run's proposal come
  *      from ONE function and agree for every pupil; a class's own bar
  *      overrides the school's; a stored manual_only proposes nothing; an
@@ -222,12 +222,15 @@ const main = async () => {
   }
   r = await call("POST", "adm-A", "/term-results/compute", { academicYear: YEAR, term: 1, classId: "f1" });
   const term = await M("TermResult").findOne({ schoolId: A, studentId: "ama", term: 1 }).lean();
-  // (13.67 + 14.33)/2 = 14 → TOP (14–20); the built-in table would have said
-  // lookupGrade(14), which is not the school's band.
-  check("term 14.00 stored with the school's band, term/3",
-    [r.status, term?.termAverage, term?.overallGrade, term?.overallRemark, term?.calcVersion], [200, 14, "TOP", "Top band", "term/3"]);
+  // The term average is read from the term's marks (term/4): p2's summaries
+  // above have none behind them, so ama's term subjects are p1's — Maths 15.4
+  // (coef 2), English 10.2 (coef 1): (2·15.4 + 10.2)/3 = 13.67 → MID
+  // (10–13.99); the built-in table would have given a letter, not the
+  // school's band. Under term/3 it was (13.67 + 14.33)/2 = 14.
+  check("term 13.67 stored with the school's band, term/4",
+    [r.status, term?.termAverage, term?.overallGrade, term?.overallRemark, term?.calcVersion], [200, 13.67, "MID", "Middle band", "term/4"]);
   check("  each sequence's grade on the school's bands too", term?.sequenceAverages?.map((x) => x.overallGrade), ["MID", "TOP"]);
-  check("  and not the built-in letter", lookupGrade(14).grade !== "TOP", true);
+  check("  and not the built-in letter", lookupGrade(13.67).grade !== "MID", true);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- 4. D1b/D2: one promotion rule for the annual row and the run ---");
@@ -245,13 +248,18 @@ const main = async () => {
   check("bars set → 200", r.status, 200);
   r = await call("POST", "adm-A", "/annual-results/compute", { academicYear: YEAR, classId: "f1" });
   const annual = Object.fromEntries((await M("AnnualResult").find({ schoolId: A }).lean()).map((a) => [a.studentId, a]));
-  // Weights 33.33/33.33/33.34: Ama (14·33.33 + 13·33.33 + 15·33.34)/100 = 14.0001 → 14;
-  // Bih (9 + 8)·33.33 + 11·33.34 = 933.31 → 9.33; Cho (11 + 12)·33.33 + 10.5·33.34 = 1116.66 → 11.17.
-  check("annual averages", PUPILS.map((p) => annual[p]?.annualAverage), [14, 9.33, 11.17]);
-  check("annual status by Form 1's own bar of 12 (Cho's 11.17 repeats)",
-    PUPILS.map((p) => annual[p]?.promotionStatus), ["promoted", "repeated", "repeated"]);
-  check("annual rows: school bands and annual/3", PUPILS.map((p) => [annual[p]?.overallGrade, annual[p]?.calcVersion]),
-    [["TOP", "annual/3"], ["LOW", "annual/3"], ["MID", "annual/3"]]);
+  // The annual average is read from the year's marks (annual/4), not from
+  // the term rows above: the only marks are sequence 1's, so the year's
+  // subject marks are its subject marks and the averages are its averages —
+  // Ama 13.67, Bih 12.13, Cho 11 (section 2). Under annual/3 it was the
+  // weighted mean of the term rows: 14, 9.33, 11.17.
+  check("annual averages", PUPILS.map((p) => annual[p]?.annualAverage), [13.67, 12.13, 11]);
+  // Bih's 12.13 clears Form 1's bar of 12; Cho's 11 clears the school's bar
+  // of 10 but not Form 1's own, and repeats.
+  check("annual status by Form 1's own bar of 12 (Cho's 11 repeats)",
+    PUPILS.map((p) => annual[p]?.promotionStatus), ["promoted", "promoted", "repeated"]);
+  check("annual rows: school bands and annual/4", PUPILS.map((p) => [annual[p]?.overallGrade, annual[p]?.calcVersion]),
+    [["MID", "annual/4"], ["MID", "annual/4"], ["MID", "annual/4"]]);
 
   await M("AnnualResult").updateMany({ schoolId: A }, { $set: { isPublished: true } });
   const run1 = await promotion.generateRun({ schoolId: A, fromYear: YEAR, toYear: NEXT, generatedBy: "adm-A" });
@@ -260,7 +268,7 @@ const main = async () => {
   check("the run proposes exactly what the annual rows say",
     PUPILS.map((p) => d1[p]?.outcome), PUPILS.map((p) => annual[p]?.promotionStatus));
   check("with destinations and bases", PUPILS.map((p) => [d1[p]?.toClassId, d1[p]?.basis, d1[p]?.average]),
-    [["f2", "results_pass", 14], ["f1", "average_fail", 9.33], ["f1", "average_fail", 11.17]]);
+    [["f2", "results_pass", 13.67], ["f2", "results_pass", 12.13], ["f1", "average_fail", 11]]);
 
   r = await call("PUT", "adm-A", rulesUrl(), { rules: { classThresholds: { f1: 11 } }, reason: "lower Form 1's bar" });
   check("a bar change while a draft run exists → 409 PROMOTION_RUN_DRAFT", [r.status, r.body?.code], [409, "PROMOTION_RUN_DRAFT"]);

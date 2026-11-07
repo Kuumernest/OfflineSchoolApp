@@ -95,6 +95,23 @@ const IDLE = {
 let state = { ...IDLE };
 const listeners = new Set();
 
+/**
+ * Where the time went, step by step. Measurement only: nothing reads it to
+ * decide anything.
+ *
+ * Kept beside the state rather than in it, so a listener re-rendering on every
+ * emit does not also receive a growing list of timings. Each step's span runs
+ * from its step() call to the next one (or to end()), so the spans add up to the
+ * whole run. A step entered twice adds to its own total.
+ */
+let timing   = null;          // { startedAt, current, currentAt, ms: { key: number } }
+let lastTiming = null;
+
+const closeSpan = (now) => {
+  if (!timing?.current) return;
+  timing.ms[timing.current] = (timing.ms[timing.current] ?? 0) + (now - timing.currentAt);
+};
+
 const emit = () => {
   // A copy per listener call, so a consumer holding the previous object in
   // state sees a new reference and re-renders.
@@ -120,6 +137,8 @@ export const getState = () => ({ ...state });
  */
 export const begin = ({ steps, visible = false }) => {
   state = { ...IDLE, active: true, visible, steps: [...steps] };
+  const now = Date.now();
+  timing = { startedAt: now, current: null, currentAt: now, ms: {}, visible };
   emit();
 };
 
@@ -128,6 +147,12 @@ export const step = (key, detail = "") => {
   if (!state.active) return;
   const index = state.steps.indexOf(key);
   if (index === -1) return;
+  if (timing) {
+    const now = Date.now();
+    closeSpan(now);
+    timing.current   = key;
+    timing.currentAt = now;
+  }
   // Monotonic: a step that runs twice (a retry inside the pull) must not drag
   // the bar backwards, which reads as failure even when it is progress.
   state = {
@@ -153,10 +178,30 @@ export const items = (done, total, detail) => {
   emit();
 };
 
-export const end = () => {
+/**
+ * @param outcome  "completed" or "failed", for the timing line. Optional.
+ */
+export const end = (outcome = "ended") => {
+  if (timing) {
+    const now = Date.now();
+    closeSpan(now);
+    const totalMs = now - timing.startedAt;
+    const spans = Object.entries(timing.ms).sort((a, b) => b[1] - a[1]);
+    lastTiming = { at: new Date(now).toISOString(), outcome, forced: timing.visible, totalMs, steps: Object.fromEntries(spans) };
+    // One line, slowest step first, so a pasted log answers "where did the time
+    // go" without arithmetic.
+    console.log(
+      `[SyncTiming] ${outcome}${timing.visible ? " (forced)" : ""} in ${(totalMs / 1000).toFixed(1)}s — ` +
+      spans.map(([k, ms]) => `${k} ${(ms / 1000).toFixed(1)}s`).join(", ")
+    );
+    timing = null;
+  }
   state = { ...IDLE };
   emit();
 };
+
+/** The timings of the last finished sync, or null before the first. */
+export const getLastTiming = () => (lastTiming ? { ...lastTiming, steps: { ...lastTiming.steps } } : null);
 
 /**
  * Overall fraction, 0..1.
@@ -174,4 +219,4 @@ export const fractionOf = (s) => {
   return Math.min(1, (s.index + inner) / total);
 };
 
-export default { SYNC_STEPS, planFor, subscribe, getState, begin, step, items, end, fractionOf };
+export default { SYNC_STEPS, planFor, subscribe, getState, begin, step, items, end, fractionOf, getLastTiming };

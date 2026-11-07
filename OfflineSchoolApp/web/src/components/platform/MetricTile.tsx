@@ -15,38 +15,26 @@
 //   2. The label and the hint truncate with a title attribute, so a long
 //      French label costs one line, not a taller row.
 //
-// The hue says what family a figure belongs to — people, attendance, results,
-// money — and is the same hue the section rail and page headers use for that
-// family (config/sections.ts), so the tiles agree with the rest of the shell.
+// Each tile is coloured by the kind of
+// figure — students blue, money teal, and so on. By default (`tinted`) it
+// takes the app's card look from config/dashboardTint.ts: a wash, a top edge,
+// a solid icon square and a deeper figure, the schools count indigo.
 import { Link }               from "react-router-dom";
 import { Info, type LucideIcon } from "lucide-react";
 import { cn }                 from "@/utils/cn";
+import { CARD_SHELL, iconBox, type TileTone as KindTone } from "@/config/sections";
+import { DASH_ACCENT, DASH_TINT, type DashTint } from "@/config/dashboardTint";
 
-export type TileTone =
-  | "schools" | "students" | "teachers" | "attendance"
-  | "academic" | "exams" | "finance" | "reports" | "neutral";
+/** A kind, or `schools` for the platform's own count of schools. */
+export type TileTone = KindTone | "schools";
 
-// Whole class strings, never composed: Tailwind only emits what it can read.
-const TONES: Record<TileTone, { surface: string; well: string }> = {
-  schools:    { surface: "border-primary-200 from-surface to-primary-50",
-                well:    "bg-primary-100 text-primary-700" },
-  students:   { surface: "border-sec-students-line from-surface to-sec-students-soft",
-                well:    "bg-sec-students-soft text-sec-students" },
-  teachers:   { surface: "border-sec-teachers-line from-surface to-sec-teachers-soft",
-                well:    "bg-sec-teachers-soft text-sec-teachers" },
-  attendance: { surface: "border-sec-attendance-line from-surface to-sec-attendance-soft",
-                well:    "bg-sec-attendance-soft text-sec-attendance" },
-  academic:   { surface: "border-sec-academic-line from-surface to-sec-academic-soft",
-                well:    "bg-sec-academic-soft text-sec-academic" },
-  exams:      { surface: "border-sec-exams-line from-surface to-sec-exams-soft",
-                well:    "bg-sec-exams-soft text-sec-exams" },
-  finance:    { surface: "border-sec-finance-line from-surface to-sec-finance-soft",
-                well:    "bg-sec-finance-soft text-sec-finance" },
-  reports:    { surface: "border-sec-reports-line from-surface to-sec-reports-soft",
-                well:    "bg-sec-reports-soft text-sec-reports" },
-  neutral:    { surface: "border-line from-surface to-[#fcfcfe]",
-                well:    "bg-canvas text-ink-muted ring-1 ring-inset ring-line" },
-};
+// The platform's school count belongs to no kind inside a school, so it takes
+// the neutral slate box.
+const boxFor = (tone: TileTone) => iconBox(tone === "schools" ? "neutral" : tone);
+
+// On a tinted dashboard nothing is grey: the schools count is indigo.
+const tintFor = (tone: TileTone): DashTint =>
+  DASH_TINT[tone === "schools" ? "indigo" : DASH_ACCENT[tone]];
 
 // The size follows the length: "70" can be large, "FCFA 10,065,000" cannot be
 // the same size in the same box. Chosen from the text, so it is the same on
@@ -68,12 +56,14 @@ interface MetricTileProps {
   href?:    string;
   loading?: boolean;
   className?: string;
+  /** The app's tinted look (config/dashboardTint.ts). On by default. */
+  tinted?:  boolean;
 }
 
 export function MetricTile({
-  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className,
+  label, value, hint, icon: Icon, tone = "neutral", href, loading = false, className, tinted = true,
 }: MetricTileProps) {
-  const t = TONES[tone];
+  const tint = tinted ? tintFor(tone) : null;
   // Intl puts a no-break space between a currency code and its digits, which
   // makes "FCFA 17,308,000" one unbreakable word. As an ordinary space the
   // amount can drop its currency to the line above when the column is narrow
@@ -83,8 +73,8 @@ export function MetricTile({
     <div className="flex min-w-0 items-start gap-3.5">
       <span
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-          t.well,
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-control",
+          tint ? tint.box : boxFor(tone),
         )}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
@@ -92,14 +82,15 @@ export function MetricTile({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-ink-muted" title={label}>{label}</p>
         {loading ? (
-          <div className="mt-2 h-7 w-20 animate-pulse rounded-control bg-line/70" aria-hidden="true" />
+          <div className="mt-2 h-7 w-20 animate-pulse rounded-control bg-canvas" aria-hidden="true" />
         ) : (
           <p
             className={cn(
               // break-normal: an amount wraps at the space after its currency,
               // never inside its digits. Only on a phone, where two tiles
               // share 360px, may a figure break anywhere rather than spill.
-              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-semibold leading-tight tracking-tight text-ink tabular",
+              "mt-0.5 break-normal max-sm:[overflow-wrap:anywhere] font-bold leading-tight tracking-tight tabular",
+              tint ? tint.number : "text-ink",
               sizeFor(text),
             )}
           >
@@ -107,17 +98,18 @@ export function MetricTile({
           </p>
         )}
         {hint ? (
-          <p className="mt-1 truncate text-xs text-ink-faint" title={hint}>{hint}</p>
+          <p className={cn("mt-1 truncate text-xs", tint ? "text-ink-muted" : "text-ink-faint")} title={hint}>{hint}</p>
         ) : null}
       </div>
     </div>
   );
 
   const shell = cn(
-    "block min-w-0 rounded-card border bg-gradient-to-br p-4 shadow-card",
+    "block min-w-0 p-5",
+    tint ? tint.card : CARD_SHELL,
     "transition duration-150 ease-[var(--ease-out-quiet)]",
-    t.surface,
-    href && "hover:-translate-y-px hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+    href && (tint ? "hover:shadow-lift" : "hover:border-line-strong hover:shadow-lift"),
+    href && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
     className,
   );
 
@@ -152,10 +144,10 @@ export function MetricGrid({ children, className }: { children: React.ReactNode;
 export function MetricNote({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <p className={cn(
-      "flex items-start gap-2.5 rounded-card border border-info-line bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-ink-muted",
+      "flex items-start gap-2.5 rounded-card border border-info-line bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-info-text",
       className,
     )}>
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info-text" aria-hidden="true" />
       <span className="min-w-0">{children}</span>
     </p>
   );

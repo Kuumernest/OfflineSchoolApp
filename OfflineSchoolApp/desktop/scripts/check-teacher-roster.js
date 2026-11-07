@@ -30,7 +30,10 @@ const check = (label, actual, expected) => {
 const db   = open(":memory:");
 const docs = documents(db);
 const sync = state(db);
-const ctx  = (session = { userId: "admin-1", schoolId: "S1", role: "school_admin" }) => ({
+// Sessions carry the permissions the server hands each role at sign-in; local
+// reads are guarded by them (handlers/readPermissions.js).
+const PERMS = require("../../backend/src/config/permissions").DEFAULTS_BY_ROLE;
+const ctx  = (session = { userId: "admin-1", schoolId: "S1", role: "school_admin", permissions: PERMS.school_admin }) => ({
   docs, session, state: sync, queue: { add: () => ({ seq: 1, duplicate: false }) },
 });
 const roster = (query, c = ctx()) =>

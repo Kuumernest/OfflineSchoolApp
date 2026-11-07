@@ -21,6 +21,7 @@ import { Pencil,
   KeyRound,
   ShieldAlert,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 
 import { useUser }              from "@/store/auth.store";
@@ -35,10 +36,12 @@ import {
   resetStudentPassword,
 }                               from "@/services/student.service";
 import { cn }                   from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Button }               from "@/components/ui/Button";
+import { PageIcon }             from "@/components/ui/PageHeader";
 import { getErrorMessage }      from "@/lib/axios";
 import {
   uploadStudentPhoto, deleteStudentPhoto,
@@ -46,6 +49,10 @@ import {
   type DocumentVerificationRow,
 } from "@/services/document.service";
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
+import { formatDay } from "../../../../shared/dateFormat.js";
+import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
+import { useAuthedImage } from "@/hooks/useAuthedImage";
+import { genderLabel } from "@/utils/genderLabel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -74,6 +81,10 @@ const QK = {
 // student record and the settings form name a school's type the same way.
 const SCHOOL_TYPE_LABELS: Record<string, string> = {
   primary:    "settings.typePrimary",
+  college_general:   "settings.typeCollegeGeneral",
+  college_technical: "settings.typeCollegeTechnical",
+  lycee_general:     "settings.typeLyceeGeneral",
+  lycee_technical:   "settings.typeLyceeTechnical",
   jhs:        "settings.typeJhs",
   shs:        "settings.typeShs",
   combined:   "settings.typeCombined",
@@ -126,14 +137,7 @@ const getStatusConfig = (status: string) => {
 
 const formatDate = (value?: string | null): string | null => {
   if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString(undefined, {
-        year:  "numeric",
-        month: "long",
-        day:   "numeric",
-      });
+  return formatDay(value, value);
 };
 
 /**
@@ -155,7 +159,7 @@ function InfoRow({
   icon: Icon,
   label,
   value,
-  iconColor = "text-gray-400",
+  iconColor = DASH_TINT.blue.glyph,
   mono = false,
 }: {
   icon:       React.ElementType;
@@ -171,11 +175,11 @@ function InfoRow({
         <Icon className={cn("h-4 w-4", iconColor)} />
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
           {label}
         </p>
         <p className={cn(
-          "mt-0.5 text-sm font-medium text-gray-900 wrap-break-word",
+          "mt-0.5 text-sm font-medium text-ink wrap-break-word",
           mono && "font-mono tracking-widest"
         )}>
           {value}
@@ -187,14 +191,23 @@ function InfoRow({
 
 function Section({
   title,
+  icon: Icon,
+  accent = "blue",
   children,
 }: {
   title:    string;
+  icon:     React.ElementType;
+  accent?:  DashAccent;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-sm font-bold text-gray-900">{title}</h2>
+    <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.blue.edge)}>
+      <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+        <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)} aria-hidden="true">
+          <Icon className="h-4 w-4" />
+        </span>
+        {title}
+      </h2>
       <div className="flex flex-col gap-4">{children}</div>
     </div>
   );
@@ -216,10 +229,18 @@ function ActionButton({
   disabled?:   boolean;
 }) {
   const variants = {
-    default: "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+    default: "border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100",
     warning: "border-amber-200  bg-amber-50  text-amber-700  hover:bg-amber-100",
     danger:  "border-red-200    bg-red-50    text-red-700    hover:bg-red-100",
     success: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+  };
+
+  // The icon square: solid, in the action's colour, with a white icon.
+  const boxes = {
+    default: DASH_TINT.blue.box,
+    warning: DASH_TINT.amber.box,
+    danger:  DASH_TINT.red.box,
+    success: DASH_TINT.green.box,
   };
 
   return (
@@ -231,7 +252,7 @@ function ActionButton({
         variants[variant]
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-sm", boxes[variant])}>
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -312,19 +333,19 @@ function EnrollmentCard({
   if (!enrollmentNo) return null;
 
   return (
-    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+    <div className="rounded-2xl border border-primary-200 bg-primary-50 p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-3">
-        <IdCard className="h-4 w-4 text-indigo-600" />
-        <h2 className="text-sm font-bold text-indigo-900">{t("studentDetail.credentials")}</h2>
+        <IdCard className="h-4 w-4 text-primary-600" />
+        <h2 className="text-sm font-bold text-primary-900">{t("studentDetail.credentials")}</h2>
       </div>
 
-      <p className="text-xs text-indigo-600 mb-3 leading-relaxed">
+      <p className="text-xs text-primary-600 mb-3 leading-relaxed">
         {t("studentDetail.credentialsHint")}
       </p>
 
       {/* Enrollment number display */}
-      <div className="flex items-center gap-2 rounded-xl bg-white border border-indigo-200 px-4 py-3">
-        <span className="flex-1 font-mono text-base font-bold tracking-widest text-indigo-800 select-all">
+      <div className="flex items-center gap-2 rounded-xl bg-white border border-primary-200 px-4 py-3">
+        <span className="flex-1 font-mono text-base font-bold tracking-widest text-primary-800 select-all">
           {enrollmentNo}
         </span>
         <button
@@ -333,7 +354,7 @@ function EnrollmentCard({
             "shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
             copied
               ? "bg-emerald-100 text-emerald-700"
-              : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+              : "bg-primary-100 text-primary-700 hover:bg-primary-200"
           )}
         >
           {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
@@ -356,7 +377,7 @@ function EnrollmentCard({
         <button
           onClick={() => setConfirming(true)}
           disabled={!studentId}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 transition disabled:opacity-50"
         >
           <KeyRound className="h-3.5 w-3.5" />
           {t("studentDetail.resetPassword")}
@@ -450,8 +471,8 @@ function MoveClassPicker({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
-          <ArrowRightLeft className="h-5 w-5 text-indigo-600" />
-          <h3 className="text-lg font-bold text-gray-900">{t("studentDetail.moveToClass")}</h3>
+          <ArrowRightLeft className="h-5 w-5 text-primary-600" />
+          <h3 className="text-lg font-bold text-ink">{t("studentDetail.moveToClass")}</h3>
         </div>
 
         {others.length === 0 ? (
@@ -466,11 +487,11 @@ function MoveClassPicker({
                 key={cls._id ?? cls.id}
                 onClick={() => onSelect(cls)}
                 className={cn(
-                  "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 transition-colors",
+                  "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary-50 transition-colors",
                   i < others.length - 1 && "border-b border-gray-100"
                 )}
               >
-                <School className="h-4 w-4 shrink-0 text-indigo-500" />
+                <School className="h-4 w-4 shrink-0 text-primary-500" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900">
                     {cls.name}
@@ -520,9 +541,8 @@ function PhotoCard({
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const src = photoUrl
-    ? (/^https?:/i.test(photoUrl) ? photoUrl : photoUrl)
-    : null;
+  // A photo needs the signed-in user's token, which an <img> cannot send.
+  const src = useAuthedImage(photoUrl);
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;
@@ -569,16 +589,16 @@ function PhotoCard({
   };
 
   return (
-    <div className="flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-indigo-500 bg-indigo-50">
+    <div className={cn("flex items-start gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.blue.edge)}>
+      <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-primary-500 bg-primary-50">
         {src
           ? <img src={src} alt="" className="h-full w-full object-cover" />
-          : <IdCard className="h-8 w-8 text-indigo-300" aria-hidden="true" />}
+          : <IdCard className="h-8 w-8 text-primary-300" aria-hidden="true" />}
       </div>
 
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-bold text-gray-700">{t("photo.title")}</h2>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("photo.hint")}</p>
+        <h2 className="text-sm font-bold text-ink">{t("photo.title")}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t("photo.hint")}</p>
 
         <div className="mt-3 flex flex-wrap gap-2">
           <input
@@ -670,16 +690,21 @@ function VerificationsCard({ studentId, schoolId }: {
       : [t("verif.reportCard"), r.examName].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-bold text-gray-700">{t("verif.title")}</h2>
-      <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("verif.hint")}</p>
+    <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.slate.edge)}>
+      <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+        <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+          <ShieldCheck className="h-4 w-4" />
+        </span>
+        {t("verif.title")}
+      </h2>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t("verif.hint")}</p>
 
       {rows.length === 0 ? (
-        <p className="mt-3 text-xs text-gray-400">
+        <p className="mt-3 text-xs text-ink-muted">
           {query.isLoading ? "…" : t("verif.none")}
         </p>
       ) : (
-        <ul className="mt-3 divide-y divide-gray-100">
+        <ul className="mt-3 divide-y divide-line">
           {rows.map((r) => {
             const revoked = Boolean(r.revokedAt);
             return (
@@ -746,7 +771,7 @@ function VerificationsCard({ studentId, schoolId }: {
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       placeholder={t("verif.reasonPh")}
-                      className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
+                      className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary-400 focus:outline-none"
                       maxLength={200}
                       autoFocus
                     />
@@ -968,7 +993,7 @@ export default function StudentDetailPage() {
   if (studentQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("studentDetail.loading")}</p>
       </div>
     );
@@ -977,8 +1002,8 @@ export default function StudentDetailPage() {
   if (studentQuery.isError || !student) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
-          <AlertCircle className="h-7 w-7 text-red-500" />
+        <div className={cn("flex h-16 w-16 items-center justify-center rounded-2xl", DASH_TINT.red.box)}>
+          <AlertCircle className="h-7 w-7" />
         </div>
         <p className="text-lg font-bold text-gray-900">{t("studentDetail.notFound")}</p>
         <p className="text-sm text-gray-400">
@@ -986,7 +1011,7 @@ export default function StudentDetailPage() {
         </p>
         <button
           onClick={() => navigate("/students")}
-          className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+          className="mt-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           {t("studentDetail.back")}
         </button>
@@ -1013,11 +1038,13 @@ export default function StudentDetailPage() {
           <ChevronLeft className="h-5 w-5" />
         </button>
 
+        <PageIcon />
+
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold text-gray-900">
+          <h1 className="truncate text-2xl font-bold text-ink">
             {student.name}
           </h1>
-          <p className="text-sm text-gray-500">{t("studentDetail.title")}</p>
+          <p className="text-sm text-ink-muted">{t("studentDetail.title")}</p>
         </div>
 
         <button
@@ -1033,7 +1060,7 @@ export default function StudentDetailPage() {
       </div>
 
       {/* ── Profile card ── */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className={cn(DASH_TINT.blue.card, "rounded-2xl p-6")}>
         <div className="flex items-center gap-4">
           {/* Avatar */}
           <div
@@ -1041,7 +1068,7 @@ export default function StudentDetailPage() {
               "flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold",
               isSuspended
                 ? "bg-red-100 text-red-600"
-                : "bg-indigo-100 text-indigo-600"
+                : "bg-primary-100 text-primary-600"
             )}
           >
             {firstLetter}
@@ -1049,20 +1076,20 @@ export default function StudentDetailPage() {
 
           {/* Name + badges */}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xl font-bold text-gray-900">
+            <p className="truncate text-xl font-bold text-ink">
               {student.name}
             </p>
 
             {/* Show enrollment number under the name if available */}
             {enrollmentNo && (
-              <p className="mt-0.5 font-mono text-sm font-semibold text-indigo-600 tracking-widest">
+              <p className="mt-0.5 font-mono text-sm font-semibold text-primary-600 tracking-widest">
                 {enrollmentNo}
               </p>
             )}
 
             {/* Fall back to admission number */}
             {!enrollmentNo && student.admissionNumber && (
-              <p className="mt-0.5 text-sm text-gray-400">
+              <p className="mt-0.5 text-sm text-ink-muted">
                 #{student.admissionNumber}
               </p>
             )}
@@ -1083,7 +1110,7 @@ export default function StudentDetailPage() {
 
               {/* Class badge */}
               {classNameDisplay && classNameDisplay !== "Unassigned" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-bold text-primary-700">
                   <School className="h-3 w-3" />
                   {classNameDisplay}
                 </span>
@@ -1104,7 +1131,7 @@ export default function StudentDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
 
         {/* ── Personal info ── */}
-        <Section title={t("studentDetail.personal")}>
+        <Section title={t("studentDetail.personal")} icon={User} accent="blue">
           <InfoRow
             icon={User}
             label={t("common.fullName")}
@@ -1115,7 +1142,7 @@ export default function StudentDetailPage() {
             icon={Mail}
             label={t("common.email")}
             value={student.email}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Phone}
@@ -1133,66 +1160,66 @@ export default function StudentDetailPage() {
             icon={IdCard}
             label={t("academic.enrollmentNo")}
             value={enrollmentNo}
-            iconColor="text-indigo-600"
+            iconColor="text-primary-600"
             mono
           />
           <InfoRow
             icon={Hash}
             label={t("studentDetail.admissionNumber")}
             value={student.admissionNumber}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={User}
             label={t("common.gender")}
-            value={student.gender}
+            value={genderLabel(t, student.gender)}
             iconColor="text-pink-500"
           />
           <InfoRow
             icon={MapPin}
             label={t("common.address")}
             value={student.address}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
         </Section>
 
         {/* ── School info ── */}
-        <Section title={t("studentDetail.school")}>
+        <Section title={t("studentDetail.school")} icon={School} accent="indigo">
           <InfoRow
             icon={School}
             label={t("studentDetail.schoolName")}
             value={school?.name ?? null}
-            iconColor="text-indigo-600"
+            iconColor="text-primary-600"
           />
           <InfoRow
             icon={School}
             label={t("settings.motto")}
             value={school?.motto ?? null}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("settings.schoolType")}
             value={schoolTypeLabel}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={School}
             label={t("settings.termSystem")}
             value={termSystemLabel}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Calendar}
             label={t("studentDetail.academicYear")}
             value={academicYear}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("studentDetail.schoolAddress")}
             value={schoolAddress}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Phone}
@@ -1210,19 +1237,19 @@ export default function StudentDetailPage() {
             icon={School}
             label={t("settings.schoolCode")}
             value={school?.code ?? null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={School}
             label={t("settings.regNumber")}
             value={school?.registrationNumber ?? null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={Calendar}
             label={t("settings.yearFounded")}
             value={school?.foundedYear ? String(school.foundedYear) : null}
-            iconColor="text-gray-500"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={User}
@@ -1234,19 +1261,19 @@ export default function StudentDetailPage() {
             icon={Calendar}
             label={t("settings.schoolDays")}
             value={schoolDays}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Calendar}
             label={t("settings.startTime")}
             value={schoolHours}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={School}
             label={t("academic.class")}
             value={classNameDisplay}
-            iconColor="text-indigo-500"
+            iconColor="text-primary-500"
           />
           <InfoRow
             icon={Users}
@@ -1264,21 +1291,26 @@ export default function StudentDetailPage() {
             icon={Calendar}
             label={t("studentDetail.enrolledOn")}
             value={formatDate(student.enrolledAt)}
-            iconColor="text-indigo-400"
+            iconColor="text-primary-400"
           />
           <InfoRow
             icon={Calendar}
             label={t("common.created")}
             value={formatDate(student.createdAt)}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
           <InfoRow
             icon={Calendar}
             label={t("common.lastUpdated")}
             value={formatDate(student.updatedAt)}
-            iconColor="text-gray-400"
+            iconColor={DASH_TINT.blue.glyph}
           />
         </Section>
+
+        {/* ── Results, attendance, fees, guardian (C10) ── */}
+        <div className="lg:col-span-2">
+          <StudentOverviewCard studentId={student._id} />
+        </div>
 
         {/* ── ID card photo ── */}
         <div className="lg:col-span-2">
@@ -1309,7 +1341,7 @@ export default function StudentDetailPage() {
 
         {/* ── Actions ── */}
         <div className="flex flex-col gap-3 lg:col-span-2">
-          <h2 className="text-sm font-bold text-gray-700">{t("common.actions")}</h2>
+          <h2 className="text-sm font-bold text-ink">{t("common.actions")}</h2>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {/*

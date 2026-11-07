@@ -17,7 +17,10 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  ListOrdered,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -40,7 +43,8 @@ import {
   padTime,
 } from "@/services/period.service";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/axios";
+import api, { getErrorMessage } from "@/lib/axios";
+import { SchoolHoursWarning } from "@/components/settings/SchoolHoursWarning";
 import { cn } from "@/utils/cn";
 import type { Period } from "@/types/timetable.types";
 import { useTranslation } from "react-i18next";
@@ -196,6 +200,17 @@ export default function PeriodsPage() {
     if (ok) removeMutation.mutate(p._id);
   };
 
+  // The school's hours from Settings, to say when the grid disagrees (B2).
+  const hoursQ = useQuery({
+    queryKey: ["school-hours", schoolId],
+    queryFn:  async () => {
+      const { data } = await api.get("/admin/school-info", { params: { schoolId } });
+      const s = data?.school || data;
+      return { start: s?.schoolStartTime ?? null, end: s?.schoolEndTime ?? null };
+    },
+    enabled: !!schoolId,
+  });
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const teaching = periods.filter((p) => !p.isBreak && p.isActive);
 
@@ -213,10 +228,10 @@ export default function PeriodsPage() {
     return (
       <Card>
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">{t("periods.loadFailed")}</h3>
-            <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(error)}</p>
+            <h3 className="text-sm font-semibold text-ink">{t("periods.loadFailed")}</h3>
+            <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(error)}</p>
           </div>
         </div>
       </Card>
@@ -228,14 +243,17 @@ export default function PeriodsPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("periods.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {teaching.length} teaching {teaching.length === 1 ? "period" : "periods"}
-            {dayLength && (
-              <> · {fmtMinutes(dayLength.from)} to {fmtMinutes(dayLength.to)}</>
-            )}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("periods.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {teaching.length} teaching {teaching.length === 1 ? "period" : "periods"}
+              {dayLength && (
+                <> · {fmtMinutes(dayLength.from)} to {fmtMinutes(dayLength.to)}</>
+              )}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -255,10 +273,19 @@ export default function PeriodsPage() {
         </div>
       </div>
 
+      <SchoolHoursWarning
+        schoolStart={hoursQ.data?.start}
+        schoolEnd={hoursQ.data?.end}
+        periods={periods}
+        fixLink={{ to: "/settings", label: t("schoolHours.editInSettings") }}
+      />
+
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-line">
           <CardHeader
+            icon={ListOrdered}
+            accent="teal"
             title={t("periods.inOrder")}
             subtitle={t("periods.orderNote")}
           />
@@ -266,11 +293,13 @@ export default function PeriodsPage() {
 
         {periods.length === 0 ? (
           <div className="py-16 text-center">
-            <Clock className="w-8 h-8 text-gray-300 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700">
+            <div className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.teal.box)} aria-hidden="true">
+              <Clock className="w-6 h-6" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-ink">
               {t("periods.notSetUp")}
             </p>
-            <p className="mt-1 text-sm text-gray-500 max-w-sm mx-auto">
+            <p className="mt-1 text-sm text-ink-muted max-w-sm mx-auto">
               Add your periods — first lesson, break, and so on. The timetable
               builder uses these as its rows, so it needs them first.
             </p>
@@ -302,7 +331,7 @@ export default function PeriodsPage() {
                   <tr
                     key={p._id}
                     className={cn(
-                      "transition-colors hover:bg-gray-50",
+                      "transition-colors hover:bg-accent-blue-soft/70",
                       !p.isActive && "opacity-55",
                     )}
                   >
@@ -331,16 +360,16 @@ export default function PeriodsPage() {
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {p.isBreak && <Coffee className="w-4 h-4 text-amber-500 shrink-0" />}
-                        <span className="font-medium text-gray-800">{p.name}</span>
+                        {p.isBreak && <Coffee className="w-4 h-4 text-accent-amber-solid shrink-0" />}
+                        <span className="font-medium text-ink">{p.name}</span>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600 tabular-nums">
+                    <td className="px-4 py-3 text-ink-body tabular-nums">
                       {p.startTime} – {p.endTime}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-ink-muted">
                       {Number.isNaN(mins) ? "—" : `${mins} min`}
                     </td>
 
@@ -348,7 +377,7 @@ export default function PeriodsPage() {
                       <div className="flex items-center gap-1.5">
                         <Badge
                           label={p.isActive ? t("common.inUse") : t("periods.hidden")}
-                          variant={p.isActive ? "success" : "default"}
+                          variant={p.isActive ? "success" : "info"}
                         />
                         {p.isBreak && <Badge label={t("timetable.break")} variant="warning" />}
                       </div>

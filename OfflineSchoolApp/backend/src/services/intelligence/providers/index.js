@@ -30,7 +30,7 @@
 
 const { NullProvider, isProvider } = require("../../../../../shared/advancedIntelligence/provider");
 
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-sonnet-5-5";
 const DEFAULT_TIMEOUT_MS = 20000;
 
 const warnedFor = new Set();

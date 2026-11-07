@@ -54,9 +54,31 @@ const createHandler = ({ body }, { docs, session }) => {
   if (!cls) return null;
   const subj = exists(docs, "subject", subjectId, schoolId);
   if (!subj) return null;
+  // No id: the server would mint one, and a row stored here under a guess is
+  // an orphan. The web sends one (web/src/lib/clientId.ts).
   if (!body?.id) return null;
   const id = String(body.id).trim();
-  if (docs.get("teacherAssignment", id)) return null;
+  if (!id) return null;
+  const dedupeKey = `create:teacherAssignment:${id}`;
+
+  // The same create sent again under its id — EditTeacherPage retries with the
+  // same one when the list refresh after a create fails. The server answers it
+  // with the row it holds; so does this, queued once. Another school's row
+  // under this id is the server's to refuse.
+  const held = docs.get("teacherAssignment", id);
+  if (held) {
+    if (String(held.schoolId ?? "") !== String(schoolId)) return null;
+    const { _pending, ...already } = held;
+    return {
+      collection: "teacherAssignment",
+      doc:        already,
+      request: { method: "POST", path: "/api/admin/assignments", body, dedupeKey },
+      response: {
+        status: 200,
+        data: { success: true, assignment: already, serverId: id, clientId: id, deduplicated: true },
+      },
+    };
+  }
   // No $or in the store's filter language — it threw "Unsupported filter" on
   // every call, so this create has never once been queued. Two equality reads
   // and a union say the same thing. Both spellings, because the collection
@@ -71,7 +93,7 @@ const createHandler = ({ body }, { docs, session }) => {
   return {
     collection: "teacherAssignment",
     doc,
-    request: { method: "POST", path: "/api/admin/assignments", body },
+    request: { method: "POST", path: "/api/admin/assignments", body, dedupeKey },
     response: {
       status: 201,
       data: { success: true, assignment: doc, serverId: id, clientId: id, data: doc },

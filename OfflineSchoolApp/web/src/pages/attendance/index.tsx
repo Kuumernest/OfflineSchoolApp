@@ -28,6 +28,8 @@ import {
   AlertCircle,
   CalendarDays,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { ACCENT_BADGE, DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -36,6 +38,7 @@ import { Select } from "@/components/ui/Select";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 import {
   fetchRegister,
@@ -77,6 +80,15 @@ const STATUS_STYLE: Record<AttendanceStatus, { on: string; off: string; icon: ty
   late:     { on: "bg-amber-500 text-white border-amber-500",     off: "text-amber-700 border-amber-200 hover:bg-amber-50",       icon: Clock3 },
   excused:  { on: "bg-blue-600 text-white border-blue-600",       off: "text-blue-700 border-blue-200 hover:bg-blue-50",          icon: FileMinus },
   on_leave: { on: "bg-blue-600 text-white border-blue-600",       off: "text-blue-700 border-blue-200 hover:bg-blue-50",          icon: FileMinus },
+};
+
+/** The tally chip's colour for each status — the same hue as its mark button. */
+const TALLY_ACCENT: Record<AttendanceStatus, DashAccent> = {
+  present:  "green",
+  absent:   "red",
+  late:     "amber",
+  excused:  "blue",
+  on_leave: "blue",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,6 +202,16 @@ export default function AttendancePage() {
 
   const dirtyCount = Object.keys(draft).length;
 
+  // Leaving the page, or switching to another register, used to drop the
+  // draft without a word — "10 unsaved changes", then a click on the sidebar,
+  // and they were gone. Both now ask first.
+  const { confirmDiscard } = useUnsavedChangesGuard(dirtyCount > 0, {
+    message: t("unsaved.marks", { count: dirtyCount }),
+  });
+  const switchRegister = (apply: () => void) => {
+    void confirmDiscard().then((ok) => { if (ok) apply(); });
+  };
+
   // ── Save ───────────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -260,7 +282,7 @@ export default function AttendancePage() {
   const discard = async () => {
     const ok = await confirm({
       title:        t("attendance.discardConfirm"),
-      message:      `${dirtyCount} ${dirtyCount === 1 ? "mark" : "marks"} will be lost.`,
+      message:      t("unsaved.marks", { count: dirtyCount }),
       confirmLabel: t("common.discard"),
       kind:         "warning",
     });
@@ -281,11 +303,14 @@ export default function AttendancePage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("attendance.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("attendance.markThenSave")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("attendance.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("attendance.markThenSave")}
+            </p>
+          </div>
         </div>
 
         <Link to="/attendance/reports">
@@ -309,7 +334,7 @@ export default function AttendancePage() {
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setSubject(s)}
+                    onClick={() => switchRegister(() => setSubject(s))}
                     className={cn(
                       "px-3 py-2 text-sm capitalize transition-colors",
                       subject === s
@@ -330,7 +355,7 @@ export default function AttendancePage() {
               <Select
                 options={classOptions}
                 value={classId}
-                onChange={(e) => setClassId(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setClassId(v)); }}
                 className="min-w-44"
               />
             </label>
@@ -353,7 +378,7 @@ export default function AttendancePage() {
                   })),
                 ]}
                 value={periodId}
-                onChange={(e) => setPeriodId(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setPeriodId(v)); }}
                 className="min-w-44"
               />
             </label>
@@ -367,7 +392,7 @@ export default function AttendancePage() {
               <button
                 type="button"
                 aria-label={t("attendance.prevDay")}
-                onClick={() => setDate((d) => shiftDateKey(d, -1))}
+                onClick={() => switchRegister(() => setDate((d) => shiftDateKey(d, -1)))}
                 className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -376,14 +401,14 @@ export default function AttendancePage() {
                 type="date"
                 value={date}
                 max={todayKey()}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => { const v = e.target.value; switchRegister(() => setDate(v)); }}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 type="button"
                 aria-label={t("attendance.nextDay")}
                 disabled={isFutureDate(shiftDateKey(date, 1))}
-                onClick={() => setDate((d) => shiftDateKey(d, 1))}
+                onClick={() => switchRegister(() => setDate((d) => shiftDateKey(d, 1)))}
                 className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -403,9 +428,11 @@ export default function AttendancePage() {
       {/* ── Register ────────────────────────────────────────────────────── */}
       {!ready ? (
         <Card className="text-center py-16">
-          <Users className="w-8 h-8 text-gray-300 mx-auto" />
-          <p className="mt-3 text-sm font-medium text-gray-700">{t("attendance.pickClass")}</p>
-          <p className="mt-1 text-sm text-gray-500">
+          <div className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.green.box)} aria-hidden="true">
+            <Users className="w-6 h-6" />
+          </div>
+          <p className="mt-3 text-sm font-medium text-ink">{t("attendance.pickClass")}</p>
+          <p className="mt-1 text-sm text-ink-muted">
             {t("attendance.blurb")}
           </p>
         </Card>
@@ -414,20 +441,22 @@ export default function AttendancePage() {
       ) : registerQ.error ? (
         <Card>
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-sm font-semibold text-gray-800">{t("attendance.loadFailed")}</h3>
-              <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(registerQ.error)}</p>
+              <h3 className="text-sm font-semibold text-ink">{t("attendance.loadFailed")}</h3>
+              <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(registerQ.error)}</p>
             </div>
           </div>
         </Card>
       ) : roster.length === 0 ? (
         <Card className="text-center py-16">
-          <ClipboardCheck className="w-8 h-8 text-gray-300 mx-auto" />
-          <p className="mt-3 text-sm font-medium text-gray-700">
+          <div className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.green.box)} aria-hidden="true">
+            <ClipboardCheck className="w-6 h-6" />
+          </div>
+          <p className="mt-3 text-sm font-medium text-ink">
             {t("attendance.nobody")}
           </p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {subject === "students"
               ? t("attendance.noActiveStudents")
               : periodId
@@ -442,25 +471,27 @@ export default function AttendancePage() {
             {statuses.map((s) => (
               <div
                 key={s}
-                className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 flex items-center gap-2"
+                className={cn("px-3 py-1.5 rounded-lg ring-1 ring-inset flex items-center gap-2", ACCENT_BADGE[TALLY_ACCENT[s]])}
               >
-                <span className="text-xs text-gray-500">{statusLabel(s)}</span>
-                <span className="text-sm font-semibold text-gray-900 tabular-nums">
+                <span className="text-xs">{statusLabel(s)}</span>
+                <span className="text-sm font-semibold tabular-nums">
                   {counts[s] ?? 0}
                 </span>
               </div>
             ))}
-            <div className="px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 flex items-center gap-2">
-              <span className="text-xs text-gray-500">{t("attendance.unmarked")}</span>
-              <span className="text-sm font-semibold text-gray-500 tabular-nums">
+            <div className="px-3 py-1.5 rounded-lg bg-warning-soft text-warning-text ring-1 ring-inset ring-warning-line flex items-center gap-2">
+              <span className="text-xs">{t("attendance.unmarked")}</span>
+              <span className="text-sm font-semibold tabular-nums">
                 {counts.unmarked}
               </span>
             </div>
           </div>
 
           <Card padding={false}>
-            <div className="p-4 border-b border-gray-100 space-y-3">
+            <div className="p-4 border-b border-line space-y-3">
               <CardHeader
+                icon={Users}
+                accent="green"
                 title={t("attendance.onRoster", { count: roster.length })}
                 subtitle={
                   dirtyCount > 0
@@ -478,7 +509,7 @@ export default function AttendancePage() {
               />
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-gray-400">{t("attendance.quickMark")}</span>
+                <span className="text-xs text-ink-muted">{t("attendance.quickMark")}</span>
                 <Button size="sm" variant="secondary" onClick={() => markAll("present")}>
                   {t("attendance.allPresent")}
                 </Button>
@@ -489,14 +520,18 @@ export default function AttendancePage() {
                   {t("attendance.restAbsent")}
                 </Button>
                 {search && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-ink-muted">
                     (applies to the {filtered.length} shown)
                   </span>
                 )}
               </div>
             </div>
 
-            <ul className="divide-y divide-gray-100">
+            {/* With unsaved marks the save bar floats over the foot of the
+                list: room below the last row, and a scroll margin on every
+                row, keep the pupil being marked above it — more on a phone,
+                where the bar wraps to two lines. */}
+            <ul className={cn("divide-y divide-line", dirtyCount > 0 && "pb-32 sm:pb-24")}>
               {filtered.map((entry) => {
                 const current = statusOf(entry);
                 const isDirty = entry.id in draft;
@@ -505,24 +540,24 @@ export default function AttendancePage() {
                   <li
                     key={entry.id}
                     className={cn(
-                      "px-4 py-2.5 flex flex-wrap items-center gap-3 transition-colors",
+                      "px-4 py-2.5 flex flex-wrap items-center gap-3 transition-colors scroll-mb-36 sm:scroll-mb-28",
                       isDirty && "bg-primary-50/40",
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-800 truncate">
+                      <p className="text-sm font-medium text-ink truncate">
                         {entry.name}
                       </p>
                       {entry.admissionNo && (
-                        <p className="text-xs text-gray-400">{entry.admissionNo}</p>
+                        <p className="text-xs text-ink-muted">{entry.admissionNo}</p>
                       )}
                       {subject === "teachers" && entry.className && (
-                        <p className="truncate text-xs text-gray-400" title={entry.className}>{entry.className}</p>
+                        <p className="truncate text-xs text-ink-muted" title={entry.className}>{entry.className}</p>
                       )}
                     </div>
 
                     {!current && (
-                      <Badge label={t("attendance.notMarked")} variant="default" />
+                      <Badge label={t("attendance.notMarked")} variant="warning" />
                     )}
 
                     <div className="flex items-center gap-1">
@@ -561,9 +596,8 @@ export default function AttendancePage() {
           {dirtyCount > 0 && (
             <div className="sticky bottom-4 z-10">
               <div className="mx-auto max-w-xl px-4 py-3 rounded-xl bg-gray-900 text-white shadow-lg flex items-center justify-between gap-4">
-                <p className="text-sm">
-                  <strong>{dirtyCount}</strong> unsaved{" "}
-                  {dirtyCount === 1 ? "mark" : "marks"}
+                <p className="text-sm font-medium">
+                  {t("attendance.unsavedCount", { count: dirtyCount })}
                 </p>
                 <div className="flex items-center gap-2">
                   <button

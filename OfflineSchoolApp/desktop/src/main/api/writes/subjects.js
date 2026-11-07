@@ -62,9 +62,31 @@ module.exports = [
       const classId = String(body.classId).trim();
       const cls = classOf(docs, schoolId, classId);
       if (!cls) return null;
+      // No id: the server would mint one, and a row stored here under a guess
+      // is an orphan. The web sends one (web/src/lib/clientId.ts).
       if (!body?.id) return null;
       const id = String(body.id).trim();
-      if (docs.get("subject", id)) return null;
+      if (!id) return null;
+      const dedupeKey = `create:subject:${id}`;
+
+      // The same create sent again under its id: answered with the row already
+      // made, as the server answers it, and queued once. Another school's row
+      // under this id is the server's 409.
+      const held = docs.get("subject", id);
+      if (held) {
+        if (String(held.schoolId ?? "") !== String(schoolId)) return null;
+        const { _pending, ...already } = held;
+        return {
+          collection: "subject",
+          doc:        already,
+          request: { method: "POST", path: "/api/admin/subjects", body, dedupeKey },
+          response: {
+            status: 200,
+            data: { success: true, subject: already, serverId: id, clientId: id, deduplicated: true },
+          },
+        };
+      }
+
       const coeff = parseCoefficient(body?.coefficient);
       if (!coeff.ok) return null;
       // The store's filter language has equality, in, not and the comparisons —
@@ -77,7 +99,7 @@ module.exports = [
       return {
         collection: "subject",
         doc:        subject,
-        request: { method: "POST", path: "/api/admin/subjects", body },
+        request: { method: "POST", path: "/api/admin/subjects", body, dedupeKey },
         response: {
           status: 201,
           data: { success: true, subject, serverId: id, clientId: id },

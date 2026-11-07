@@ -4,6 +4,7 @@ import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
 import { appError }     from "../utils/appError";
+import { appBuildHeaders, isUpdateRequiredAnswer } from "../config/appBuild";
 
 // ── Safe imports ───────────────────────────────────────────────────────────
 let NetInfo = null;
@@ -11,13 +12,6 @@ try {
   NetInfo = require("@react-native-community/netinfo").default;
 } catch (e) {
   console.warn("NetInfo not available");
-}
-
-let CryptoJS = null;
-try {
-  CryptoJS = require("crypto-js");
-} catch (e) {
-  console.warn("CryptoJS not available");
 }
 
 let DB = null;
@@ -32,21 +26,27 @@ const TOKEN_KEY         = "auth_token";
 const REFRESH_TOKEN_KEY = "auth_refresh_token";
 const USER_KEY          = "user";
 const OFFLINE_TOKEN     = "offline_mode";
+const ACTIVE_SCHOOL_KEY = "active_school";
 
-// ── Crypto helpers ─────────────────────────────────────────────────────────
-const generateSalt = () =>
-  Date.now().toString(36) + Math.random().toString(36).substring(2);
+// ── Offline sign-in credentials ────────────────────────────────────────────
+// PBKDF2-HMAC-SHA256 over expo-crypto (security/passwordHash.js). This used to
+// call CryptoJS.PBKDF2, but crypto-js was never installed, so every phone
+// stored `password + salt` — the password in clear text. Those old values
+// still verify offline; the account's next ONLINE sign-in replaces every copy
+// (users tables, device.db) with the new form (docs/14).
 
-const hashPassword = (password, salt) => {
-  if (!CryptoJS) return password + salt;
-  return CryptoJS.PBKDF2(password, salt, {
-    keySize:    256 / 32,
-    iterations: 10000,
-  }).toString();
+// Loaded on first use (it brings in expo-crypto), like the safe imports above.
+const passwordHashModule = () => require("../security/passwordHash");
+
+/** The new stored value for `password`, or null if it could not be made. */
+const makeCredential = async (password) => {
+  try {
+    return await passwordHashModule().hashPassword(password);
+  } catch (e) {
+    console.warn("Offline credentials could not be hashed:", e?.message || String(e));
+    return null;
+  }
 };
-
-const comparePassword = (password, salt, hash) =>
-  hashPassword(password, salt) === hash;
 
 // ── User normalizer ────────────────────────────────────────────────────────
 const normalizeUser = (user) => {
@@ -60,6 +60,20 @@ const normalizeUser = (user) => {
     user.enrollmentNo = user.enrollmentNo ?? null;
   }
   return user;
+};
+
+/**
+ * A super_admin's user, with the school they are working inside mirrored in.
+ *
+ * The account has no school of its own, by design. Every screen and service on
+ * the phone reads its school from user.schoolId (about seventy places), so the
+ * chosen school is mirrored there — the same arrangement as the web console's
+ * enterSchool — and the ordinary admin screens work unchanged. Everyone else
+ * is returned untouched.
+ */
+const withActiveSchool = (user, school) => {
+  if (!user || user.role !== "super_admin" || !school?._id) return user;
+  return { ...user, schoolId: school._id, school_id: school._id, schoolName: school.name };
 };
 
 // ── Module-level sync guard ────────────────────────────────────────────────
@@ -109,6 +123,125 @@ export const resetSyncLock = () => {
 };
 
 // ── Store ──────────────────────────────────────────────────────────────────
+/**
+ * Remove messages this phone holds for anyone but `keepUserId`.
+ *
+ * The message store and the guardian portal's cache live in the one shared
+ * schoolapp.db, and nothing cleared them between accounts: a pupil who
+ * signed in after an admin read the admin's threads with parents from the
+ * local store. With an id, that person's own threads are kept (their
+ * history stays offline-readable) and every other thread is deleted; with
+ * none, everything is. Any guardian portal session is signed out either way,
+ * which also clears the portal's cached threads. Never throws: failing to
+ * tidy must not fail a sign-in or a sign-out.
+ */
+async function forgetOtherPeoplesMessages(keepUserId) {
+  try {
+    const messages = require("../services/message.service");
+    if (keepUserId) await messages.purgeNotMine(keepUserId);
+    else            await messages.clearLocalMessages();
+  } catch (err) {
+    console.warn("[auth] clearing other accounts' messages failed:", err?.message);
+  }
+  try {
+    const portal = require("../services/portal.service");
+    if (await portal.hasSession()) await portal.signOut();
+  } catch (err) {
+    console.warn("[auth] signing out the guardian portal failed:", err?.message);
+  }
+}
+
+/** Per-user local data (docs/40); null if the module cannot load. */
+const localData = () => {
+  try { return require("../services/perUserData.service"); } catch { return null; }
+};
+
+/**
+ * Point the app at this account's local data (local only, never the network):
+ * its own store if it has completed its first sync, otherwise the shared file.
+ * Never throws — a failure leaves the shared file active, today's behaviour.
+ */
+async function resolveLocalData(user) {
+  try { await localData()?.prepareSession(user, { online: false }); }
+  catch (err) { console.warn("[auth] local data:", err?.message); }
+}
+
+/**
+ * Was this phone's local data written by a newer build (docs/40 §8.9)? Read
+ * only, offline. An error answers "fine": the guard must never be what stops
+ * a phone that has no device.db at all.
+ */
+async function localDataFormatOk() {
+  try {
+    const { checkLocalDataFormat } = require("../db/deviceDb");
+    return (await checkLocalDataFormat()).ok !== false;
+  } catch (err) {
+    console.warn("[auth] could not check the local data format:", err?.message);
+    return true;
+  }
+}
+
+/** Would this sign-in need the first full sync of a new per-user store? */
+async function needsPreparing(user, online) {
+  try { return !!(await localData()?.needsPriming(user, { online })); }
+  catch { return false; }
+}
+
+/**
+ * How many of this account's changes have not reached the server yet — the
+ * outbox rows it owns plus queued file uploads (MutationQueue.getStats().unsent,
+ * the number the sync strip shows). Null when the outbox cannot be read.
+ */
+export async function getUnsentCount() {
+  try {
+    const { MutationQueue } = require("../services/mutationQueue.service");
+    const stats = await MutationQueue.getStats();
+    return Number(stats?.unsent) || 0;
+  } catch (err) {
+    console.warn("[auth] could not count unsent changes:", err?.message);
+    return null;
+  }
+}
+
+/** True while the outbox still holds a change that has not reached the server. */
+export async function hasPendingUploads() {
+  try {
+    const { MutationQueue } = require("../services/mutationQueue.service");
+    // pendingKeys answers a Set. `.length` on a Set is undefined, and
+    // `undefined > 0` is false — so this said "nothing pending" always.
+    return (await MutationQueue.pendingKeys("")).size > 0;
+  } catch (err) {
+    // Unknown is treated as pending: switching is the step that cannot be undone.
+    console.warn("[auth] could not read the outbox:", err?.message);
+    return true;
+  }
+}
+
+/**
+ * After a super_admin changes school: forget the cached school details and
+ * pull the new school from the beginning. The sync cursor is one value for the
+ * phone, so without the reset the first pull would ask for the new school's
+ * changes since the OLD school's last sync and miss nearly everything.
+ */
+async function restartSyncForSchool() {
+  try {
+    const { clearSchoolCache } = require("../services/school.service");
+    clearSchoolCache();
+  } catch { /* non-critical */ }
+  resetSyncLock();
+  try {
+    const { SyncManager } = require("../services/syncManager");
+    await SyncManager.resetLastSync();
+    // Started if it was not: a super_admin outside any school had nothing to sync.
+    await SyncManager.ensureStarted();
+    SyncManager.syncAll({ force: true }).catch((err) =>
+      console.warn("[auth] sync after changing school failed:", err?.message)
+    );
+  } catch (err) {
+    console.warn("[auth] restarting sync after changing school failed:", err?.message);
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
   user:             null,
   token:            null,
@@ -124,8 +257,85 @@ export const useAuthStore = create((set, get) => ({
   //    name also works without needing a find-and-replace across the app.
   hasInitialized:   false,
   profileCompleted: false,
+  // The school a super_admin is working inside: { _id, name, code }, or null.
+  activeSchool:     null,
+  // The server definitively refused to renew this session (refresh token
+  // expired / revoked, account or school closed). The session is NOT ended:
+  // the person keeps reading what the phone holds, queued work stays in the
+  // outbox under this account, and SyncStatusBar asks them to sign in again.
+  needsSignIn:       false,
+  needsSignInReason: null,
+  // "preparing" while a per-user store has its first full sync (docs/40):
+  // the layout shows a progress screen instead of any data screen, so nobody
+  // reads a half-filled store. "idle" otherwise — always, with the switch off.
+  localDataPhase:    "idle",
+  // This build may not go on (app/_layout.js shows UpdateRequired instead of
+  // any screen, and nothing is sent): "server" — the server answered 426
+  // APP_UPDATE_REQUIRED; "local-data-format" — this phone's data was written
+  // by a newer build. Nothing is deleted or signed out: the session, the
+  // local data and the outbox stay exactly as they are for the updated app.
+  updateRequired:       false,
+  updateRequiredReason: null,
+
+  /**
+   * First full sync of this account's own store, behind the preparing screen.
+   * Whatever happens, the phase ends "idle" with either the new store (it
+   * completed) or the shared file (it did not) active.
+   */
+  _prepareLocalData: async (user) => {
+    try {
+      await localData()?.prepareSession(user, { online: true });
+    } catch (err) {
+      console.warn("[auth] preparing local data failed:", err?.message);
+    } finally {
+      set({ localDataPhase: "idle" });
+    }
+  },
+
+  /** The preparing screen's "use the app now". */
+  skipPreparingLocalData: () => {
+    localData()?.requestCancelPreparing?.();
+  },
 
   setProfileCompleted: (val) => set({ profileCompleted: val }),
+
+  markUpdateRequired: (reason = "server") => {
+    if (get().updateRequired && get().updateRequiredReason === reason) return;
+    // A newer build's data outranks a server answer: it cannot be retried away.
+    if (get().updateRequiredReason === "local-data-format") return;
+    console.log(`⛔ App update required (${reason}) — local data and queued work kept`);
+    try {
+      const { SyncManager } = require("../services/syncManager");
+      SyncManager.destroy();   // stops timers only; nothing is cleared
+    } catch { /* not started */ }
+    set({ updateRequired: true, updateRequiredReason: reason });
+  },
+  /** "Check again" after a server refusal. A newer build's data is not retried. */
+  clearUpdateRequired: () => {
+    if (!get().updateRequired || get().updateRequiredReason !== "server") return;
+    set({ updateRequired: false, updateRequiredReason: null });
+  },
+
+  markNeedsSignIn: (reason = null) => {
+    if (!get().user) return;
+    if (get().needsSignIn && get().needsSignInReason === reason) return;
+    console.log(`🔒 Session needs sign-in (${reason ?? "refused"}) — queued work kept`);
+    set({ needsSignIn: true, needsSignInReason: reason });
+  },
+  clearNeedsSignIn: () => {
+    if (get().needsSignIn) set({ needsSignIn: false, needsSignInReason: null });
+  },
+
+  /**
+   * The "Sign in again" button. Ends this session so the login screen shows
+   * (the layout guard redirects once token is null). The outbox is not
+   * touched: its rows belong to this account and drain after the same person
+   * signs in again on this phone.
+   */
+  signInAgain: async () => {
+    await get().logout();
+    return true;
+  },
 
   // ✅ Set/clear sync error so the UI can warn about stale data
   setSyncError: (msg) => set({ syncError: msg }),
@@ -134,7 +344,7 @@ export const useAuthStore = create((set, get) => ({
   // ── SET USER ──────────────────────────────────────────────────────────────
   setUser: async (user, token) => {
     try {
-      const normalized = normalizeUser(user);
+      const normalized = withActiveSchool(normalizeUser(user), get().activeSchool);
       await Promise.all([
         SecureStore.setItemAsync(USER_KEY,  JSON.stringify(normalized)),
         SecureStore.setItemAsync(TOKEN_KEY, token || ""),
@@ -173,11 +383,22 @@ export const useAuthStore = create((set, get) => ({
     // hit the isLoading guard above instead of starting a second read.
     set({ isLoading: true });
 
+    // Before anything is read for an account: data written by a newer build
+    // is not opened, changed or sent by this one. The session stays stored.
+    if (!(await localDataFormatOk())) {
+      set({
+        user: null, token: null, hydrated: true, hasInitialized: true, isLoading: false,
+        error: null, updateRequired: true, updateRequiredReason: "local-data-format",
+      });
+      return false;
+    }
+
     try {
-      const [token, userJson, storedRefresh] = await Promise.all([
+      const [token, userJson, storedRefresh, schoolJson] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         SecureStore.getItemAsync(USER_KEY),
         SecureStore.getItemAsync(REFRESH_TOKEN_KEY).catch(() => null),
+        SecureStore.getItemAsync(ACTIVE_SCHOOL_KEY).catch(() => null),
       ]);
 
       console.log("🔑 token from SecureStore:", token ? "found" : "null");
@@ -204,18 +425,30 @@ export const useAuthStore = create((set, get) => ({
         return false;
       }
 
-      const user = normalizeUser(JSON.parse(userJson));
+      let activeSchool = null;
+      try { activeSchool = schoolJson ? JSON.parse(schoolJson) : null; } catch { /* ignore */ }
+      const user = withActiveSchool(normalizeUser(JSON.parse(userJson)), activeSchool);
+
+      // Before any screen can read: this account's own store, or the shared file.
+      await resolveLocalData(user);
+      let online = false;
+      try { online = token !== OFFLINE_TOKEN && (NetInfo ? (await NetInfo.fetch()).isConnected !== false : true); }
+      catch { online = false; }
+      const preparing = await needsPreparing(user, online);
 
       // ✅ Single atomic set — all fields in one render
       set({
         user,
         token,
+        activeSchool: user?.role === "super_admin" ? activeSchool : null,
         refreshTokenValue: storedRefresh || null,
         hydrated:       true,
         hasInitialized: true,
         isLoading:      false,   // ← combined into one set()
         error:          null,
+        localDataPhase: preparing ? "preparing" : "idle",
       });
+      if (preparing) get()._prepareLocalData(user);
       return true;
 
     } catch (error) {
@@ -238,9 +471,10 @@ export const useAuthStore = create((set, get) => ({
   // ── LOGIN ─────────────────────────────────────────────────────────────────
   login: async (payloadOrIdentifier, legacyPassword) => {
     if (get().isLoading) return false;
+    if (get().updateRequiredReason === "local-data-format") return false;
 
     // Mark loading synchronously before any await
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, errorKey: null });
 
     try {
       let email        = null;
@@ -294,11 +528,15 @@ export const useAuthStore = create((set, get) => ({
       if (isOnline) {
         const res = await fetch(`${API_URL}/auth/login`, {
           method:  "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...appBuildHeaders() },
           body:    JSON.stringify(requestBody),
         });
 
         const data = await res.json().catch(() => ({}));
+        if (isUpdateRequiredAnswer(res.status, data)) {
+          get().markUpdateRequired("server");
+          throw appError("svcErr.appUpdateRequired", "Update the app to keep syncing.");
+        }
         if (!res.ok) {
           throw data.message
             ? new Error(data.message)
@@ -311,6 +549,21 @@ export const useAuthStore = create((set, get) => ({
 
         if (!token || !user?.role) throw appError("svcErr.invalidServerResponse", "Invalid server response");
 
+        // The school's per-user local data switch (docs/40 D7), and — before
+        // this session is stored — whether this phone has room for one more
+        // account's data (D6: five, and never by evicting unsent work).
+        const LD = localData();
+        if (LD) {
+          await LD.rememberSchoolSwitch(user.schoolId, data?.localData?.perUserLocalData === true).catch(() => {});
+          const room = await LD.admitForSignIn(user);
+          if (!room?.ok) {
+            throw appError(
+              "svcErr.deviceFullOfAccounts",
+              "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone."
+            );
+          }
+        }
+
         await Promise.all([
           SecureStore.setItemAsync(TOKEN_KEY,         token),
           SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken || ""),
@@ -319,57 +572,44 @@ export const useAuthStore = create((set, get) => ({
 
         console.log("✅ Session saved to SecureStore");
 
-        // Cache to SQLite for offline use
-        if (DB && typeof DB.upsert === "function") {
+        // Cache to SQLite for offline use. The new value goes into the active
+        // file and device.db, and every older clear-text copy of this
+        // account's password on the phone is replaced (or, if the new value
+        // could not be made, removed) — never left behind after an online
+        // sign-in.
+        const cred = await makeCredential(password);
+        if (cred && DB) {
           try {
-            const salt = generateSalt();
-            await DB.upsert("users", {
-              id:           user.id,
-              name:         user.name,
-              email:        user.email        || null,
-              enrollmentNo: user.enrollmentNo || null,
-              role:         user.role,
-              schoolId:     user.schoolId     || null,
-              passwordSalt: salt,
-              passwordHash: hashPassword(password, salt),
-              updated_at:   new Date().toISOString(),
-            });
+            const { getDatabase } = require("../db/database");
+            const { upsertCachedCredential, flushWal } = require("../db/credentialCache");
+            const db = await getDatabase();
+            const { replacedLegacy } = await upsertCachedCredential(db, user, cred);
+            if (replacedLegacy) await flushWal(db);
             console.log("✅ User cached to SQLite");
           } catch (e) {
             console.warn("Offline cache failed:", e?.message || String(e));
           }
-        } else if (DB) {
-          try {
-            const { getDatabase } = require("../db/database");
-            const db   = await getDatabase();
-            const salt = generateSalt();
-            const now  = new Date().toISOString();
+        }
 
-            await db.runAsync(
-              `INSERT INTO users
-                 (id, name, email, enrollmentNo, role, schoolId,
-                  passwordSalt, passwordHash, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 name         = excluded.name,
-                 email        = excluded.email,
-                 enrollmentNo = excluded.enrollmentNo,
-                 role         = excluded.role,
-                 schoolId     = excluded.schoolId,
-                 passwordSalt = excluded.passwordSalt,
-                 passwordHash = excluded.passwordHash,
-                 updated_at   = excluded.updated_at`,
-              [
-                user.id, user.name, user.email || null,
-                user.enrollmentNo || null, user.role,
-                user.schoolId || null, salt,
-                hashPassword(password, salt), now,
-              ]
-            );
-            console.log("✅ User cached to SQLite (direct)");
-          } catch (e) {
-            console.warn("Offline cache failed (direct):", e?.message || String(e));
+        // Per-user local data: credentials also live in device.db, which the
+        // offline sign-in reads first once it exists. No-op otherwise.
+        try {
+          if (cred) await localData()?.saveCredentials(user, cred);
+        } catch (e) {
+          console.warn("Offline credentials (device) failed:", e?.message || String(e));
+        }
+        try {
+          const LDcopies = localData();
+          if (LDcopies) {
+            await LDcopies.replaceLegacyCredentialCopies(user, cred);
+          } else if (DB) {
+            const { getDatabase } = require("../db/database");
+            const { replaceLegacyCredential, flushWal } = require("../db/credentialCache");
+            const db = await getDatabase();
+            if (await replaceLegacyCredential(db, user.id, cred)) await flushWal(db);
           }
+        } catch (e) {
+          console.warn("Replacing old offline credentials failed:", e?.message || String(e));
         }
       }
 
@@ -389,12 +629,20 @@ export const useAuthStore = create((set, get) => ({
           ? ["enrollmentNo", enrollmentNo]
           : ["email",        email];
 
-        const rows = await queryFn(
+        const legacyRows = await queryFn(
           `SELECT * FROM users WHERE ${column} = ? LIMIT 1`,
           [value]
         );
+        // Per-user local data: device.db holds every account's credentials
+        // (copied from `users` before anything relied on them). Either copy
+        // may answer; with no device.db this is exactly the query above.
+        let deviceRow = null;
+        try {
+          deviceRow = await localData()?.findCredentials(isEnrollment ? { enrollmentNo } : { email });
+        } catch { deviceRow = null; }
+        const candidates = [deviceRow, ...(legacyRows ?? [])].filter(Boolean);
 
-        if (!rows?.length) {
+        if (!candidates.length) {
           throw isEnrollment
             ? appError(
                 "svcErr.noOfflineAccountEnrollment",
@@ -403,12 +651,17 @@ export const useAuthStore = create((set, get) => ({
             : appError("svcErr.noOfflineAccount", "No offline account found");
         }
 
-        const cached = rows[0];
+        // Either copy may answer (one may be newer). An old clear-text value
+        // verifies too; it is replaced at the next online sign-in.
+        let cached = null;
+        const tried = new Set();
+        for (const r of candidates) {
+          if (!r.passwordHash || tried.has(r.passwordHash)) continue;
+          tried.add(r.passwordHash);
+          if ((await passwordHashModule().verifyPassword(password, r.passwordSalt, r.passwordHash)).ok) { cached = r; break; }
+        }
 
-        if (
-          !cached.passwordSalt ||
-          !comparePassword(password, cached.passwordSalt, cached.passwordHash)
-        ) {
+        if (!cached) {
           throw isEnrollment
             ? appError(
                 "svcErr.invalidEnrollmentOrPassword",
@@ -446,20 +699,38 @@ export const useAuthStore = create((set, get) => ({
         );
       }
 
+      // A phone is shared. Whatever the previous account left in the
+      // message store, and any guardian portal session with its cached
+      // threads, belong to somebody else; this person sees neither.
+      await forgetOtherPeoplesMessages(String(user?.id ?? user?._id ?? ""));
+
       resetSyncLock();
+
+      // A sign-in starts outside any school: a super_admin picks one next.
+      await SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY).catch(() => {});
+
+      // This account's own store if it has one, else the shared file; and
+      // whether its first full sync should run now (online, switch on).
+      await resolveLocalData(user);
+      const preparing = await needsPreparing(user, isOnline && token !== OFFLINE_TOKEN);
 
       // ✅ Single atomic set — isLoading:false included so the component
       //    only re-renders once after login completes.
       set({
         user,
         token,
+        activeSchool: null,
         refreshTokenValue: refreshToken || null,
         hydrated:         true,
         hasInitialized:   true,
         isLoading:        false,   // ← no separate finally needed
         profileCompleted: false,
         error:            null,
+        needsSignIn:       false,
+        needsSignInReason: null,
+        localDataPhase:    preparing ? "preparing" : "idle",
       });
+      if (preparing) get()._prepareLocalData(user);
       return true;
 
     } catch (error) {
@@ -467,6 +738,7 @@ export const useAuthStore = create((set, get) => ({
       // ✅ Single atomic set on error too
       set({
         error:          error.message,
+        errorKey:       error.i18nKey ?? null,
         user:           null,
         token:          null,
         isLoading:      false,   // ← combined
@@ -484,7 +756,11 @@ export const useAuthStore = create((set, get) => ({
   updateUser: async (updatedUser) => {
     try {
       const current    = get().user || {};
-      const normalized = normalizeUser({ ...current, ...updatedUser });
+      // Re-mirrored: an update carrying the server's copy of a super_admin
+      // (schoolId null) must not drop them out of the school they are in.
+      const normalized = withActiveSchool(
+        normalizeUser({ ...current, ...updatedUser }), get().activeSchool
+      );
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(normalized));
       set({ user: normalized });
       console.log("✅ Store user updated:", normalized.name);
@@ -502,22 +778,35 @@ export const useAuthStore = create((set, get) => ({
       if (!currentRefreshToken) return false;
       const res = await fetch(`${API_URL}/auth/refresh`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...appBuildHeaders() },
         body:    JSON.stringify({ refreshToken: currentRefreshToken }),
       });
+      if (res.status === 426) {
+        const body = await res.json().catch(() => ({}));
+        if (isUpdateRequiredAnswer(res.status, body)) get().markUpdateRequired("server");
+        return false;
+      }
       if (res.status === 401 || res.status === 403) {
-        await get().logout();
+        // A definitive refusal — but never a silent logout: queued work is
+        // kept and the person is asked to sign in again.
+        const body = await res.json().catch(() => ({}));
+        get().markNeedsSignIn(body?.code ?? `HTTP_${res.status}`);
         return false;
       }
       const data = await res.json();
       if (!res.ok || !data.token) return false;
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
+      if (data.localData && get().user?.schoolId) {
+        await localData()?.rememberSchoolSwitch(get().user.schoolId, data.localData.perUserLocalData === true).catch(() => {});
+      }
       if (data.refreshToken) {
         await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken);
       }
       set({
         token: data.token,
         ...(data.refreshToken ? { refreshTokenValue: data.refreshToken } : {}),
+        needsSignIn:       false,
+        needsSignInReason: null,
       });
       return true;
     } catch (err) {
@@ -598,7 +887,16 @@ export const useAuthStore = create((set, get) => ({
 
     resetSyncLock();
 
+    // Per-user local data: wait for the sync to let go of this account's
+    // store, then point the app back at the shared file. No-op when the
+    // shared file is already active (always, with the switch off).
+    try { await localData()?.endSession(); }
+    catch (err) { console.warn("[auth] returning to the shared file failed:", err?.message); }
+
     await get()._clearStorage();
+
+    // Nobody is signed in: no conversation on this phone is anybody's now.
+    await forgetOtherPeoplesMessages(null);
 
     // ✅ Single atomic set — hydrated stays true so the splash doesn't
     //    re-appear; the navigation guard sees token:null and redirects
@@ -611,10 +909,57 @@ export const useAuthStore = create((set, get) => ({
       hasInitialized:    true,
       isLoading:         false,
       profileCompleted:  false,
+      activeSchool:      null,
       error:             null,
+      needsSignIn:       false,
+      needsSignInReason: null,
+      localDataPhase:    "idle",
     });
 
     return true;
+  },
+
+  // ── ENTER / LEAVE A SCHOOL (super_admin only) ─────────────────────────────
+  //
+  // Returns { ok: true } or { ok: false, reason }. Refused while changes are
+  // waiting to upload: the push names the CURRENT school, so a change made
+  // inside one school and sent after switching would be written to the other.
+  enterSchool: async (school) => {
+    const current = get().user;
+    if (!current || current.role !== "super_admin" || !school?._id) {
+      return { ok: false, reason: "notSuperAdmin" };
+    }
+    if (String(current.schoolId ?? "") === String(school._id)) return { ok: true };
+    if (await hasPendingUploads()) return { ok: false, reason: "pendingUploads" };
+
+    const activeSchool = {
+      _id:  String(school._id),
+      name: school.name ?? "",
+      code: school.code ?? null,
+    };
+    const user = withActiveSchool({ ...current }, activeSchool);
+    await Promise.all([
+      SecureStore.setItemAsync(ACTIVE_SCHOOL_KEY, JSON.stringify(activeSchool)),
+      SecureStore.setItemAsync(USER_KEY,          JSON.stringify(user)),
+    ]);
+    set({ activeSchool, user });
+    await restartSyncForSchool();
+    return { ok: true };
+  },
+
+  leaveSchool: async () => {
+    const current = get().user;
+    if (!current || current.role !== "super_admin") return { ok: false, reason: "notSuperAdmin" };
+    if (await hasPendingUploads()) return { ok: false, reason: "pendingUploads" };
+
+    const user = { ...current, schoolId: null, school_id: null, schoolName: null };
+    await Promise.all([
+      SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY).catch(() => {}),
+      SecureStore.setItemAsync(USER_KEY, JSON.stringify(user)),
+    ]);
+    set({ activeSchool: null, user });
+    await restartSyncForSchool();
+    return { ok: true };
   },
 
   // ── CLEAR STORAGE ─────────────────────────────────────────────────────────
@@ -623,6 +968,7 @@ export const useAuthStore = create((set, get) => ({
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
       SecureStore.deleteItemAsync(USER_KEY),
+      SecureStore.deleteItemAsync(ACTIVE_SCHOOL_KEY),
     ]);
   },
 

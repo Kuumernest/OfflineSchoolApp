@@ -36,7 +36,7 @@
  *     has bought a fee system and thrown away the reason for it.
  *   • User and permission management. A role that can grant itself
  *     permissions has no ceiling, and neither does anybody it appoints.
- *   • Promotion, report-card templates, school settings, sync push. Each
+ *   • Promotion, report-card templates, school settings. Each
  *     rewrites the school rather than recording something about it.
  *   • Message audit. Reading a conversation you are not part of is the
  *     strongest right in the system and is never a side effect.
@@ -334,8 +334,6 @@ const PERMISSION_DEFS = [
 
   p("permissions.manage", "permissions", ADMIN_ROLES, false,
     "This screen. A role that can grant itself permissions has no ceiling."),
-  p("sync.push",        "sync", ADMIN_ROLES, false,
-    "Write period definitions and promotion decisions from a device."),
 
   // ── The platform ──────────────────────────────────────────────────────────
   //
@@ -404,6 +402,23 @@ const DEFAULTS_BY_ROLE = Object.freeze(
  */
 const isPermission = (key) => BY_KEY.has(String(key ?? ""));
 
+/**
+ * Keys that USED to be permissions and were removed on purpose.
+ *
+ * A school's stored overrides (settings.permissions) or a screen still open on
+ * an older build may carry one. They are harmless: cleanOverrides drops them on
+ * read like any unknown key, setRolePermissions drops them silently on write
+ * rather than answering UNKNOWN_PERMISSION (the administrator did nothing
+ * wrong), and because the write $sets the whole granted/revoked lists they are
+ * never saved back. A typo is still refused — only these names are forgiven.
+ *
+ *   sync.push — POST /sync/push is retired (410 SYNC_PUSH_RETIRED to any
+ *               authenticated caller); nothing is left for the key to guard.
+ */
+const RETIRED_KEYS = Object.freeze(["sync.push"]);
+
+const isRetiredPermission = (key) => RETIRED_KEYS.includes(String(key ?? "").trim());
+
 const definitionOf = (key) => BY_KEY.get(String(key ?? "")) ?? null;
 
 module.exports = {
@@ -416,4 +431,6 @@ module.exports = {
   DEFAULTS_BY_ROLE,
   isPermission,
   definitionOf,
+  RETIRED_KEYS,
+  isRetiredPermission,
 };

@@ -147,8 +147,11 @@ const makeLoader = (stubs, pkgStubs) => {
   raw.close();
   raw = new DatabaseSync(file);
   db  = adapt(raw);
+  // Counted as unreachable, not against the retry budget: a send with no
+  // answer is the network's failure, not the row's (offline P0 #2).
   check("after a restart the row is still there, with its attempt counted",
-    rows("entity_key='att:restart'").map((x) => [x.status, x.retry_count]), [["retrying", 1]]);
+    raw.prepare("SELECT status, retry_count, unreachable_count FROM mutation_outbox WHERE entity_key='att:restart'").all()
+      .map((x) => [x.status, x.retry_count, x.unreachable_count]), [["retrying", 0, 1]]);
   server.default = "ok";
   dueNow();
   r = await drain();
@@ -255,7 +258,7 @@ const makeLoader = (stubs, pkgStubs) => {
   await enqueue("student:gone", "/students/st-gone", { name: "Renamed" }, "PUT");
   await enqueue("student:gone-del", "/students/st-gone", {}, "DELETE");
   r = await drain();
-  check("an update to a vanished record is parked as failed, with the reason kept", rows("entity_key='student:gone'").map((x) => [x.status, x.error]), [["failed", "HTTP 404"]]);
+  check("an update to a vanished record is parked as failed, with the reason kept", rows("entity_key='student:gone'").map((x) => [x.status, x.error]), [["failed", "Student not found"]]);   // the server's words, not "HTTP 404"
   check("a delete of a vanished record has nothing left to do and settles", rows("entity_key='student:gone-del'")[0].status, "synced");
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -280,7 +283,7 @@ const makeLoader = (stubs, pkgStubs) => {
   try { r = await drain(); } catch (e) { threw = e.message; }
   check("the drain does not throw", threw, null);
   check("unparseable payload: sent as nothing, refused, parked", rows("entity_key='bad:json'")[0].status, "failed");
-  check("unknown method: treated as unreachable and, its budget spent, parked", rows("entity_key='bad:method'").map((x) => [x.status, x.retry_count]), [["failed", 8]]);
+  check("unknown method: refused before it is sent, and parked", rows("entity_key='bad:method'").map((x) => [x.status, x.retry_count]), [["failed", 8]]);
   check("empty endpoint: refused, parked", rows("entity_key='bad:endpoint'")[0].status, "failed");
   check("the healthy row beside them went out", rows("entity_key='att:healthy'")[0].status, "synced");
   check("nothing was silently dropped: every row is still in the table", rows("entity_key LIKE 'bad:%'").length, 3);

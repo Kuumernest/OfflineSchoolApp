@@ -25,16 +25,23 @@ import AnnouncementService  from "../../../src/services/announcement.service";
 import { ClassService }     from "../../../src/services/class.service";
 import { useTranslation }   from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+import {
+  COLORS, ACCENT, SEMANTIC, roleAccent, statusBadge,
+} from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
+// The preview's priority pill takes the status tone; the chips, the section
+// square and the send button take the priority's accent.
 const PRIORITY_COLORS = {
-  normal:    { bg: "#F0FDF4", text: "#15803D", border: "#BBF7D0" },
-  important: { bg: "#FEF3C7", text: "#92400E", border: "#FDE68A" },
-  urgent:    { bg: "#FEE2E2", text: "#991B1B", border: "#FECACA" },
+  normal:    statusBadge("info"),
+  important: statusBadge("warning"),
+  urgent:    statusBadge("error"),
 };
+const PRIORITY_ACCENT = { normal: "sky", important: "amber", urgent: "red" };
 
 const AUDIENCES = [
   {
@@ -42,28 +49,28 @@ const AUDIENCES = [
     labelKey: "annAdmin.audAll",
     descKey:  "annAdmin.audAllDesc",
     icon:     "globe-outline",
-    color:    "#4F46E5",
+    accent:   "sky",
   },
   {
     key:      "teachers",
     labelKey: "annAdmin.audTeachers",
     descKey:  "annAdmin.audTeachersDesc",
     icon:     "people-outline",
-    color:    "#0891B2",
+    accent:   roleAccent("teacher"),
   },
   {
     key:      "students",
     labelKey: "annAdmin.audStudents",
     descKey:  "annAdmin.audStudentsDesc",
     icon:     "school-outline",
-    color:    "#7C3AED",
+    accent:   roleAccent("student"),
   },
   {
     key:      "class",
     labelKey: "annAdmin.audClass",
     descKey:  "annAdmin.audClassDesc",
     icon:     "layers-outline",
-    color:    "#EA580C",
+    accent:   "sky",
   },
 ];
 
@@ -72,26 +79,33 @@ const PRIORITIES = [
     key:      "normal",
     labelKey: "annAdmin.prioNormal",
     icon:     "information-circle-outline",
-    color:    "#15803D",
-    bg:       "#F0FDF4",
+    accent:   PRIORITY_ACCENT.normal,
   },
   {
     key:      "important",
     labelKey: "annAdmin.prioImportant",
     icon:     "alert-circle-outline",
-    color:    "#92400E",
-    bg:       "#FEF3C7",
+    accent:   PRIORITY_ACCENT.important,
   },
   {
     key:      "urgent",
     labelKey: "annAdmin.prioUrgent",
     icon:     "warning-outline",
-    color:    "#991B1B",
-    bg:       "#FEE2E2",
+    accent:   PRIORITY_ACCENT.urgent,
   },
 ];
 
 const MAX_BODY = 5000;
+
+/** A form section's title: a small solid square and the label. */
+function SectionLabel({ icon, accent = "sky", children }) {
+  return (
+    <View style={styles.labelRow}>
+      <IconSquare icon={icon} accent={accent} size={28} />
+      <Text style={[styles.label, styles.labelInRow]}>{children}</Text>
+    </View>
+  );
+}
 
 // ─────────────────────────────────────────────────────────
 // MAIN SCREEN
@@ -229,7 +243,7 @@ export default function CreateAnnouncementScreen() {
   // ─────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -239,10 +253,11 @@ export default function CreateAnnouncementScreen() {
           activeOpacity={0.7}
           disabled={saving}
         >
-          <Ionicons name="close" size={24} color="#111827" />
+          <Ionicons name="close" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
+          <HeaderIcon />
           <Text style={styles.headerTitle}>{t("announcements.new")}</Text>
         </View>
 
@@ -253,10 +268,10 @@ export default function CreateAnnouncementScreen() {
           activeOpacity={0.7}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#9CA3AF" />
+            <ActivityIndicator size="small" color={COLORS.textSecondary} />
           ) : (
             <>
-              <Ionicons name="send" size={18} color="#FFF" />
+              <Ionicons name="send" size={18} color={COLORS.onPrimary} />
               <Text style={styles.sendText}>{t("announceCreate.send")}</Text>
             </>
           )}
@@ -273,39 +288,39 @@ export default function CreateAnnouncementScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Title ── */}
-          <Text style={styles.label}>{t("annAdmin.fieldTitle")}</Text>
+          <SectionLabel icon="text">{t("annAdmin.fieldTitle")}</SectionLabel>
           <TextInput
             ref={titleRef}
             style={styles.titleInput}
             value={title}
             onChangeText={setTitle}
             placeholder={t("annAdmin.phTitle")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             maxLength={200}
             returnKeyType="next"
           />
 
           {/* ── Body ── */}
-          <Text style={styles.label}>{t("annAdmin.fieldMessage")}</Text>
+          <SectionLabel icon="chatbox-ellipses">{t("annAdmin.fieldMessage")}</SectionLabel>
           <TextInput
             style={styles.bodyInput}
             value={body}
             onChangeText={setBody}
             placeholder={t("announceCreate.phBody")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             multiline
             textAlignVertical="top"
             maxLength={MAX_BODY}
           />
           <Text style={[
             styles.charCount,
-            body.length > MAX_BODY * 0.9 && { color: "#DC2626" },
+            body.length > MAX_BODY * 0.9 && { color: SEMANTIC.error.text },
           ]}>
             {body.length}/{MAX_BODY}
           </Text>
 
           {/* ── Audience ── */}
-          <Text style={styles.label}>{t("annAdmin.fieldAudience")}</Text>
+          <SectionLabel icon="people">{t("annAdmin.fieldAudience")}</SectionLabel>
           <View style={styles.optionsGrid}>
             {AUDIENCES.map((a) => (
               <TouchableOpacity
@@ -313,8 +328,8 @@ export default function CreateAnnouncementScreen() {
                 style={[
                   styles.optionCard,
                   audience === a.key && {
-                    borderColor:     a.color,
-                    backgroundColor: `${a.color}08`,
+                    borderColor:     ACCENT[a.accent].base,
+                    backgroundColor: ACCENT[a.accent].wash,
                   },
                 ]}
                 onPress={() => setAudience(a.key)}
@@ -324,25 +339,25 @@ export default function CreateAnnouncementScreen() {
                   styles.optionIcon,
                   {
                     backgroundColor:
-                      audience === a.key ? `${a.color}15` : "#F3F4F6",
+                      audience === a.key ? ACCENT[a.accent].solid : ACCENT[a.accent].wash,
                   },
                 ]}>
                   <Ionicons
                     name={a.icon}
                     size={18}
-                    color={audience === a.key ? a.color : "#9CA3AF"}
+                    color={audience === a.key ? COLORS.onPrimary : ACCENT[a.accent].solid}
                   />
                 </View>
                 <Text style={[
                   styles.optionLabel,
-                  audience === a.key && { color: a.color },
+                  audience === a.key && { color: ACCENT[a.accent].deep },
                 ]}>
                   {t(a.labelKey)}
                 </Text>
                 <Text style={styles.optionDesc}>{t(a.descKey)}</Text>
                 {audience === a.key && (
-                  <View style={[styles.checkMark, { backgroundColor: a.color }]}>
-                    <Ionicons name="checkmark" size={10} color="#FFF" />
+                  <View style={[styles.checkMark, { backgroundColor: ACCENT[a.accent].solid }]}>
+                    <Ionicons name="checkmark" size={10} color={COLORS.onPrimary} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -353,7 +368,7 @@ export default function CreateAnnouncementScreen() {
           {audience === "class" && (
             <>
               <View style={styles.classTitleRow}>
-                <Text style={styles.label}>{t("annAdmin.fieldClasses")}</Text>
+                <SectionLabel icon="school" accent="indigo">{t("annAdmin.fieldClasses")}</SectionLabel>
                 {classes.length > 0 && (
                   <TouchableOpacity
                     onPress={toggleAllClasses}
@@ -370,7 +385,7 @@ export default function CreateAnnouncementScreen() {
 
               {loadingClasses ? (
                 <View style={styles.classesLoader}>
-                  <ActivityIndicator size="small" color="#4F46E5" />
+                  <ActivityIndicator size="small" color={ACCENT.indigo.solid} />
                   <Text style={styles.classesLoaderText}>
                     {t("annAdmin.loadingClasses")}
                   </Text>
@@ -397,7 +412,7 @@ export default function CreateAnnouncementScreen() {
                         <Ionicons
                           name={sel ? "checkbox" : "square-outline"}
                           size={16}
-                          color={sel ? "#4F46E5" : "#9CA3AF"}
+                          color={sel ? ACCENT.indigo.solid : COLORS.textSecondary}
                         />
                         <Text style={[
                           styles.classChipText,
@@ -423,7 +438,7 @@ export default function CreateAnnouncementScreen() {
           )}
 
           {/* ── Priority ── */}
-          <Text style={styles.label}>{t("announcements.priority")}</Text>
+          <SectionLabel icon="flag" accent={PRIORITY_ACCENT[priority] || "sky"}>{t("announcements.priority")}</SectionLabel>
           <View style={styles.priorityRow}>
             {PRIORITIES.map((p) => (
               <TouchableOpacity
@@ -431,8 +446,8 @@ export default function CreateAnnouncementScreen() {
                 style={[
                   styles.priorityChip,
                   priority === p.key && {
-                    backgroundColor: p.bg,
-                    borderColor:     p.color,
+                    backgroundColor: ACCENT[p.accent].wash,
+                    borderColor:     ACCENT[p.accent].base,
                   },
                 ]}
                 onPress={() => setPriority(p.key)}
@@ -441,11 +456,11 @@ export default function CreateAnnouncementScreen() {
                 <Ionicons
                   name={p.icon}
                   size={14}
-                  color={priority === p.key ? p.color : "#9CA3AF"}
+                  color={priority === p.key ? ACCENT[p.accent].solid : COLORS.textSecondary}
                 />
                 <Text style={[
                   styles.priorityText,
-                  priority === p.key && { color: p.color, fontWeight: "700" },
+                  priority === p.key && { color: ACCENT[p.accent].deep, fontWeight: "700" },
                 ]}>
                   {t(p.labelKey)}
                 </Text>
@@ -456,7 +471,7 @@ export default function CreateAnnouncementScreen() {
           {/* ── Pin toggle ── */}
           <View style={styles.optionRow}>
             <View style={styles.optionLeft}>
-              <Ionicons name="pin-outline" size={18} color="#6B7280" />
+              <IconSquare icon="pin" accent="sky" size={28} />
               <View>
                 <Text style={styles.optionTitle}>{t("annAdmin.pinTitle")}</Text>
                 <Text style={styles.optionSubtitle}>
@@ -483,7 +498,7 @@ export default function CreateAnnouncementScreen() {
               <View style={styles.previewCard}>
                 {isPinned && (
                   <View style={styles.previewPin}>
-                    <Ionicons name="pin" size={10} color="#4F46E5" />
+                    <Ionicons name="pin" size={10} color={ACCENT.sky.deep} />
                     <Text style={styles.previewPinText}>{t("annAdmin.pinned")}</Text>
                   </View>
                 )}
@@ -498,7 +513,10 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.previewMeta}>
                   <View style={[
                     styles.previewBadge,
-                    { backgroundColor: PRIORITY_COLORS[priority]?.bg },
+                    {
+                      backgroundColor: PRIORITY_COLORS[priority]?.bg,
+                      borderColor:     PRIORITY_COLORS[priority]?.border,
+                    },
                   ]}>
                     <Text style={{
                       fontSize:      10,
@@ -531,7 +549,7 @@ export default function CreateAnnouncementScreen() {
           <TouchableOpacity
             style={[
               styles.submitBtn,
-              { backgroundColor: PRIORITY_COLORS[priority]?.text || "#4F46E5" },
+              { backgroundColor: ACCENT[PRIORITY_ACCENT[priority] || "sky"].solid },
               saving && { opacity: 0.6 },
             ]}
             onPress={handleSubmit}
@@ -539,10 +557,10 @@ export default function CreateAnnouncementScreen() {
             activeOpacity={0.85}
           >
             {saving ? (
-              <ActivityIndicator color="#FFF" size="small" />
+              <ActivityIndicator color={COLORS.onPrimary} size="small" />
             ) : (
               <>
-                <Ionicons name="megaphone-outline" size={20} color="#FFF" />
+                <Ionicons name="megaphone-outline" size={20} color={COLORS.onPrimary} />
                 <Text style={styles.submitText}>
                   {submitLabel}
                 </Text>
@@ -562,7 +580,7 @@ export default function CreateAnnouncementScreen() {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
 
   // ── Header ──────────────────────────────────────────────
   header: {
@@ -571,20 +589,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
   headerCenter: {
     flex:              1,
+    flexDirection:     "row",
     alignItems:        "center",
     justifyContent:    "center",
     paddingHorizontal: 12,
@@ -592,31 +611,31 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize:   17,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   sendBtn: {
     flexDirection:     "row",
     alignItems:        "center",
     justifyContent:    "center",
     gap:               6,
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   ACCENT.sky.solid,
     paddingHorizontal: 16,
     paddingVertical:   10,
     borderRadius:      12,
     minWidth:          80,
-    shadowColor:       "#4F46E5",
+    shadowColor:       ACCENT.sky.solid,
     shadowOpacity:     0.3,
     shadowRadius:      6,
     shadowOffset:      { width: 0, height: 2 },
     elevation:         3,
   },
   sendBtnDisabled: {
-    backgroundColor: "#E5E7EB",
+    backgroundColor: COLORS.border,
     shadowOpacity:   0,
     elevation:       0,
   },
   sendText: {
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
     fontSize:   14,
     fontWeight: "700",
   },
@@ -631,41 +650,49 @@ const styles = StyleSheet.create({
   label: {
     fontSize:      13,
     fontWeight:    "700",
-    color:         "#374151",
+    color:         COLORS.text,
     marginTop:     20,
     marginBottom:  8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  labelRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           8,
+    marginTop:     20,
+    marginBottom:  8,
+  },
+  labelInRow: { marginTop: 0, marginBottom: 0, flexShrink: 1 },
 
   // ── Inputs ──────────────────────────────────────────────
   titleInput: {
     borderWidth:       1.5,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     borderRadius:      12,
     paddingHorizontal: 14,
     paddingVertical:   14,
     fontSize:          16,
     fontWeight:        "600",
-    color:             "#111827",
-    backgroundColor:   "#FFF",
+    color:             COLORS.text,
+    backgroundColor:   COLORS.surface,
   },
   bodyInput: {
     borderWidth:       1.5,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     borderRadius:      12,
     paddingHorizontal: 14,
     paddingVertical:   14,
     fontSize:          15,
-    color:             "#111827",
-    backgroundColor:   "#FFF",
+    color:             COLORS.text,
+    backgroundColor:   COLORS.surface,
     minHeight:         160,
     maxHeight:         320,
     lineHeight:        22,
   },
   charCount: {
     fontSize:   11,
-    color:      "#9CA3AF",
+    color:      COLORS.textSubtle,
     textAlign:  "right",
     marginTop:  6,
     fontWeight: "600",
@@ -680,10 +707,10 @@ const styles = StyleSheet.create({
   optionCard: {
     width:           "48%",
     borderWidth:     1.5,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     borderRadius:    14,
     padding:         14,
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     position:        "relative",
     gap:             6,
   },
@@ -698,11 +725,11 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize:   14,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   optionDesc: {
     fontSize:   11,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     lineHeight: 15,
   },
   checkMark: {
@@ -727,11 +754,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      8,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.indigo.wash,
   },
   selectAllText: {
     fontSize:   12,
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
     fontWeight: "700",
   },
   classesLoader: {
@@ -743,19 +770,19 @@ const styles = StyleSheet.create({
   },
   classesLoaderText: {
     fontSize: 13,
-    color:    "#6B7280",
+    color:    COLORS.textSecondary,
   },
   noClassText: {
     fontSize:          13,
-    color:             "#6B7280",
+    color:             COLORS.textSecondary,
     fontStyle:         "italic",
     textAlign:         "center",
     paddingVertical:   20,
     paddingHorizontal: 14,
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.page,
     borderRadius:      12,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     borderStyle:       "dashed",
   },
   classGrid: {
@@ -771,25 +798,25 @@ const styles = StyleSheet.create({
     paddingVertical:   9,
     borderRadius:      10,
     borderWidth:       1.5,
-    borderColor:       "#E5E7EB",
-    backgroundColor:   "#FFF",
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
   classChipSelected: {
-    borderColor:     "#4F46E5",
-    backgroundColor: "#EEF2FF",
+    borderColor:     ACCENT.indigo.base,
+    backgroundColor: ACCENT.indigo.wash,
   },
   classChipText: {
     fontSize:   13,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "600",
   },
   classChipTextSelected: {
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
     fontWeight: "700",
   },
   selectedCount: {
     fontSize:   12,
-    color:      "#4F46E5",
+    color:      ACCENT.indigo.deep,
     fontWeight: "700",
     marginTop:  10,
     textAlign:  "right",
@@ -812,12 +839,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius:      10,
     borderWidth:       1.5,
-    borderColor:       "#E5E7EB",
-    backgroundColor:   "#FFF",
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
   priorityText: {
     fontSize:   13,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "600",
   },
 
@@ -830,8 +857,8 @@ const styles = StyleSheet.create({
     marginTop:         20,
     borderRadius:      12,
     borderWidth:       1.5,
-    borderColor:       "#E5E7EB",
-    backgroundColor:   "#FFF",
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
   optionLeft: {
     flexDirection: "row",
@@ -842,30 +869,30 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize:   14,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   optionSubtitle: {
     fontSize:  11,
-    color:     "#6B7280",
+    color:     COLORS.textSecondary,
     marginTop: 2,
   },
   toggle: {
     width:           46,
     height:          26,
     borderRadius:    13,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: COLORS.border,
     padding:         3,
     justifyContent:  "center",
   },
   toggleActive: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.sky.solid,
   },
   toggleDot: {
     width:           20,
     height:          20,
     borderRadius:    10,
-    backgroundColor: "#FFF",
-    shadowColor:     "#000",
+    backgroundColor: COLORS.surface,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.15,
     shadowRadius:    2,
     shadowOffset:    { width: 0, height: 1 },
@@ -882,7 +909,7 @@ const styles = StyleSheet.create({
   previewLabel: {
     fontSize:      12,
     fontWeight:    "700",
-    color:         "#9CA3AF",
+    color:         COLORS.textSecondary,
     marginBottom:  8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -890,11 +917,13 @@ const styles = StyleSheet.create({
   previewCard: {
     borderRadius:    14,
     borderWidth:     1.5,
-    borderColor:     "#E5E7EB",
-    backgroundColor: "#FFF",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
+    backgroundColor: ACCENT.sky.wash,
     padding:         14,
     gap:             8,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     shadowOffset:    { width: 0, height: 2 },
@@ -908,22 +937,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
-    backgroundColor:   "#EEF2FF",
+    borderWidth:       1,
+    borderColor:       ACCENT.sky.base + "4D",
+    backgroundColor:   COLORS.surface,
   },
   previewPinText: {
     fontSize:   10,
-    color:      "#4F46E5",
+    color:      ACCENT.sky.deep,
     fontWeight: "700",
   },
   previewTitle: {
     fontSize:   15,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
     lineHeight: 20,
   },
   previewBody: {
     fontSize:   13,
-    color:      "#4B5563",
+    color:      COLORS.textSecondary,
     lineHeight: 19,
   },
   previewMeta: {
@@ -937,10 +968,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
+    borderWidth:       1,
   },
   previewAudience: {
     fontSize:   11,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "600",
   },
 
@@ -953,14 +985,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius:    14,
     marginTop:       28,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.15,
     shadowRadius:    8,
     shadowOffset:    { width: 0, height: 4 },
     elevation:       4,
   },
   submitText: {
-    color:      "#FFF",
+    color:      COLORS.onPrimary,
     fontSize:   15,
     fontWeight: "700",
   },

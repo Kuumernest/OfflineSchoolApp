@@ -3,8 +3,11 @@
 import React            from "react";
 import { isStale }      from "../../hooks/useApplications";
 import { formatDate }   from "../../utils/formatDate";
-import type { NormalisedApplication } from "../../types/applications";
+import type { NormalisedApplication } from "../../types/applications";
+
 import { useTranslation } from "react-i18next";
+import { cn }             from "@/utils/cn";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
 
 // ── Icons (inline SVGs to avoid external dependency) ─────────────────────
 
@@ -12,7 +15,8 @@ const Icon: React.FC<{
   d:     string;
   color: string;
   size?: number;
-}> = ({ d, color, size = 14 }) => (
+  className?: string;
+}> = ({ d, color, size = 14, className }) => (
   <svg
     width={size}
     height={size}
@@ -22,7 +26,7 @@ const Icon: React.FC<{
     strokeWidth={2}
     strokeLinecap="round"
     strokeLinejoin="round"
-    className="flex-shrink-0"
+    className={cn("flex-shrink-0", className)}
   >
     <path d={d} />
   </svg>
@@ -46,7 +50,7 @@ const MetaItem: React.FC<{
 }> = ({ icon, children }) => (
   <div className="flex items-center gap-1.5 min-w-0">
     {icon}
-    <span className="text-[13px] font-medium text-gray-700 truncate">
+    <span className="text-[13px] font-medium text-ink-body truncate">
       {children}
     </span>
   </div>
@@ -69,10 +73,10 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
 
   return (
     <div
-      className={[
-        "bg-white rounded-2xl border p-4 transition-shadow hover:shadow-md",
-        stale ? "border-red-200 border-[1.5px]" : "border-gray-200",
-      ].join(" ")}
+      className={cn(
+        stale ? DASH_TINT.blue.errorCard : DASH_TINT.blue.card,
+        "rounded-2xl p-4 transition-shadow hover:shadow-lift",
+      )}
     >
       {/* ── Top row ── */}
       <div className="flex items-center gap-3">
@@ -88,21 +92,19 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-gray-900 truncate text-[15px]">
+          <p className="font-bold text-ink truncate text-[15px]">
             {application.name}
           </p>
-          <p className="text-xs text-gray-400 truncate mt-0.5">
+          <p className="text-xs text-ink-muted truncate mt-0.5">
             {application.email || t("admissions.noEmail")}
           </p>
         </div>
 
         <span
-          className={[
-            "text-[10px] font-bold uppercase px-2 py-1 rounded-lg flex-shrink-0",
-            stale
-              ? "bg-red-100 text-red-700"
-              : "bg-amber-100 text-amber-700",
-          ].join(" ")}
+          className={cn(
+            "text-[10px] font-bold uppercase px-2 py-1 rounded-lg flex-shrink-0 ring-1 ring-inset",
+            stale ? ACCENT_BADGE.red : ACCENT_BADGE.amber,
+          )}
         >
           {stale ? t("common.stale") : t("common.pending")}
         </span>
@@ -114,11 +116,11 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
           {application.className || t("admissions.noClassSelected")}
         </MetaItem>
 
-        <MetaItem icon={<Icon d={ICONS.people}   color="#6B7280" />}>
+        <MetaItem icon={<Icon d={ICONS.people}   color="currentColor" className={DASH_TINT.blue.glyph} />}>
           {application.guardianName || t("admissions.noGuardian")}
         </MetaItem>
 
-        <MetaItem icon={<Icon d={ICONS.calendar} color="#6B7280" />}>
+        <MetaItem icon={<Icon d={ICONS.calendar} color="currentColor" className={DASH_TINT.blue.glyph} />}>
           {formatDate(application.created_at)}
         </MetaItem>
 

@@ -398,7 +398,11 @@ router.handleStudentAnnouncements = handleStudentAnnouncements;
 
 router.get("/stats/summary", adminOnly, async (req, res) => {
   try {
-    const schoolId      = req.user.schoolId;
+    // resolveSchoolId, not req.user.schoolId: a super_admin has no school of
+    // their own and names the one they are working in. Counting with theirs
+    // asked for { schoolId: null } and answered 0 for every school.
+    const schoolId      = resolveSchoolId(req);
+    if (!schoolId) return res.status(400).json({ message: "schoolId is required" });
     const now           = new Date();
     const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
@@ -554,7 +558,12 @@ router.get("/", adminOrTeacher, async (req, res) => {
       limit = 50,
     } = req.query;
 
-    const schoolId = req.user.schoolId;
+    // The school the caller may read: their own, or for a super_admin the one
+    // they named. req.user.schoolId alone listed nothing for a super_admin
+    // working in a school — the web page said "0 posted" while the desktop,
+    // which mirrors that school, showed its announcements.
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return res.status(400).json({ message: "schoolId is required" });
     const userRole = req.user.role;
     const isAdmin  = ["super_admin", "school_admin"].includes(userRole);
     const userId   = extractUserId(req);
@@ -656,6 +665,13 @@ router.post("/", adminOrTeacher, async (req, res) => {
       return res.status(400).json({ message: "title and body are required" });
     }
 
+    // As for the list: written with req.user.schoolId, a super_admin's notice
+    // was stored with no school and no list in any school ever showed it.
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return res.status(400).json({ message: "schoolId is required" });
+    }
+
     const isAdminRole   = ["super_admin", "school_admin"].includes(req.user.role);
     const isTeacherRole = req.user.role === "teacher";
 
@@ -749,7 +765,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
       author:        req.user._id,
       authorName:    req.user.name || req.user.fullName || "Unknown",
       authorRole:    req.user.role,
-      schoolId:      req.user.schoolId,
+      schoolId,
       audience,
       targetClasses: audience === "class" ? targetClasses : [],
       priority,
@@ -900,8 +916,27 @@ router.put("/:id", adminOrTeacher, async (req, res) => {
 
     if (title         !== undefined) existing.title         = title.trim();
     if (body          !== undefined) existing.body          = body.trim();
-    if (audience      !== undefined) existing.audience      = audience;
     if (targetClasses !== undefined) existing.targetClasses = targetClasses;
+    if (audience !== undefined) {
+      const LEGACY_AUDIENCES = ["all", "students", "teachers", "parents", "class"];
+      if (!LEGACY_AUDIENCES.includes(audience)) {
+        return res.status(400).json({ message: `Unknown audience: ${audience}` });
+      }
+      if (audience === "class" && !(existing.targetClasses ?? []).length) {
+        return res.status(400).json({
+          message: "targetClasses required when audience is 'class'",
+        });
+      }
+      existing.audience = audience;
+      // Readers decide by `audiences` whenever it is set (audienceMatch), and
+      // POST stores both. Changing only `audience` left the old set in force:
+      // an Everyone notice edited to Parents still reached every pupil and
+      // teacher. Recomputed here the way POST computes it.
+      existing.audiences = Announcement.expandLegacyAudience(audience);
+      // Class scoping belongs to "class" alone; a notice moved off it would
+      // otherwise keep reaching only the classes it used to name.
+      if (audience !== "class") existing.targetClasses = [];
+    }
     if (priority      !== undefined) existing.priority      = priority;
     if (expiresAt     !== undefined) existing.expiresAt     = expiresAt ? new Date(expiresAt) : null;
     if (isPinned !== undefined && isAdmin) existing.isPinned = isPinned;

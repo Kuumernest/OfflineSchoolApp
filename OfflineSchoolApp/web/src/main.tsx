@@ -9,7 +9,8 @@
 //   1. restore the session from localStorage BEFORE the first render, so
 //      ProtectedRoute never flashes the login screen at a signed-in user
 //   2. install the React Query cache
-//   3. install the router
+//   3. install the router (a data router, so a form can hold a navigation
+//      while it asks about unsaved changes — useBlocker needs one)
 //   4. install the toast/confirm portal
 //   5. initialise i18n
 //
@@ -23,7 +24,10 @@ import "@/lib/instrument";
 
 import { StrictMode }        from "react";
 import { createRoot }        from "react-dom/client";
-import { BrowserRouter }     from "react-router-dom";
+import {
+  createBrowserRouter,
+  RouterProvider,
+}                            from "react-router-dom";
 import {
   QueryClient,
   QueryClientProvider,
@@ -34,6 +38,7 @@ import App                   from "@/App";
 import DesktopServerGate from "./components/offline/DesktopServerGate";
 import { ToastProvider }     from "@/components/ui/Toast";
 import { useAuthStore }      from "@/store/auth.store";
+import { startConnectivityWatch } from "@/lib/offline/connectivityWatch";
 
 // Imported for the side effect of calling i18n.init(). It must run before the
 // first render, or useTranslation() on the very first paint returns raw keys.
@@ -53,11 +58,34 @@ useAuthStore.getState().initAuth();
 // mostly slow-moving data (classes, subjects, periods), so refetching on every
 // window focus produced a burst of requests each time an admin alt-tabbed
 // back. Mutations invalidate explicitly, which is more precise than polling.
+//
+// networkMode "always", in both builds, for different reasons.
+//
+// The default ("online") consults the browser's online flag and, while it says
+// offline, does not run the request at all: the query sits paused on its
+// spinner forever, and a mutation is held in memory — the button stays busy,
+// nothing is said, and a reload loses it.
+//
+//   Browser   the console is online-only by decision. A save made offline has
+//             to fail at once with the offline message (getErrorMessage) so the
+//             person knows it was not saved, rather than appear to be in
+//             progress. Queries likewise reach their error state instead of
+//             spinning; the offline banner says why, and refetchOnReconnect
+//             reloads them when the connection returns.
+//
+//   Desktop   most requests never touch the network — the offline adapter
+//             answers reads and queues writes locally. Pausing them because the
+//             OS reports no network would switch off exactly the screens that
+//             are meant to keep working offline. The ones that do go out fail
+//             with the needs-internet message.
 // ─────────────────────────────────────────────────────────────────────────────
+
+startConnectivityWatch();
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode:          "always",
       staleTime:            60_000,
       gcTime:               5 * 60_000,
       refetchOnWindowFocus: false,
@@ -71,9 +99,23 @@ const queryClient = new QueryClient({
       },
     },
     mutations: {
+      networkMode: "always",
       retry: false,
     },
   },
+});
+
+// One tab, one person's data. Signing out navigates without a reload, and the
+// cache kept the previous account's conversations and messages under keys
+// that do not name the user, so the next person to sign in on that tab was
+// served them until the refetch. Any change of who is signed in empties it.
+let cachedFor = useAuthStore.getState().user?._id ?? null;
+useAuthStore.subscribe((state) => {
+  const now = state.user?._id ?? null;
+  if (now !== cachedFor) {
+    cachedFor = now;
+    queryClient.clear();
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,25 +125,35 @@ const queryClient = new QueryClient({
 const container = document.getElementById("root");
 if (!container) throw new Error('index.html is missing <div id="root">');
 
+// One catch-all route: App keeps its own <Routes> as descendant routes, so
+// every page and link works as it did under <BrowserRouter>. The data router
+// is what makes useBlocker (hooks/useUnsavedChangesGuard) available.
+const router = createBrowserRouter([
+  {
+    path: "*",
+    element: (
+      /*
+        One notification system: components/ui/Toast, the in-house context
+        that also owns the confirm dialogs. react-hot-toast used to be
+        mounted alongside it for the exam hooks; those 19 call sites all
+        turned out to sit inside hooks or components, where useToast()
+        reaches fine, so they now go through the same provider as every
+        other page and the dependency is gone.
+      */
+      <ToastProvider>
+        {/* Desktop only: asks for the school's server once (a browser renders App as is). */}
+        <DesktopServerGate>
+          <App />
+        </DesktopServerGate>
+      </ToastProvider>
+    ),
+  },
+]);
+
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        {/*
-          One notification system: components/ui/Toast, the in-house context
-          that also owns the confirm dialogs. react-hot-toast used to be
-          mounted alongside it for the exam hooks; those 19 call sites all
-          turned out to sit inside hooks or components, where useToast()
-          reaches fine, so they now go through the same provider as every
-          other page and the dependency is gone.
-        */}
-        <ToastProvider>
-          {/* Desktop only: asks for the school's server once (a browser renders App as is). */}
-          <DesktopServerGate>
-            <App />
-          </DesktopServerGate>
-        </ToastProvider>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   </StrictMode>,
 );

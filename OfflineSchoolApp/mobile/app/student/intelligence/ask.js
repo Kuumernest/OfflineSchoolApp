@@ -29,6 +29,10 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { useSyncStatus } from "../../../src/hooks/useSyncStatus";
 import { askAboutMyProfile, MAX_QUESTION, citationId, describeCitation } from "../../../src/services/intelligence.service";
+import { COLORS, ACCENT, SEMANTIC, statusBadge, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
+
+const pill = (b) => ({ color: b.text, backgroundColor: b.bg, borderColor: b.border });
 
 const PROMPTS = ["profile", "changed", "evidence", "guidance", "plan", "explore"];
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
@@ -72,8 +76,9 @@ export default function StudentAskScreen() {
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("common.goBack")}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title} accessibilityRole="header">{t("intel.askTitle")}</Text>
       </View>
       <Text style={st.sub}>{t("intel.askSubtitle")}</Text>
@@ -81,7 +86,7 @@ export default function StudentAskScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: pad.paddingBottom + 16 }} keyboardShouldPersistTaps="handled">
         {offline && (
           <View style={st.offlineBox} accessibilityRole="alert">
-            <Ionicons name="cloud-offline-outline" size={16} color="#92400E" />
+            <Ionicons name="cloud-offline-outline" size={16} color={SEMANTIC.warning.icon} />
             <View style={{ flex: 1 }}>
               <Text style={st.offlineTitle}>{t("intel.aiOfflineTitle")}</Text>
               <Text style={st.offlineText}>{t("intel.aiOffline")}</Text>
@@ -109,7 +114,7 @@ export default function StudentAskScreen() {
           style={[st.btn, (offline || busy || !question.trim()) && st.btnDisabled]} onPress={ask} disabled={offline || busy || !question.trim()}
           accessibilityRole="button" accessibilityLabel={t("intel.askButton")} accessibilityState={{ disabled: offline || busy || !question.trim(), busy }}
         >
-          {busy ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="send-outline" size={16} color="#FFFFFF" />}
+          {busy ? <ActivityIndicator color={COLORS.onPrimary} /> : <Ionicons name="send-outline" size={16} color={COLORS.onPrimary} />}
           <Text style={st.btnText}>{busy ? t("intel.asking") : t("intel.askButton")}</Text>
         </TouchableOpacity>
         <Text style={st.agency}>{t("intel.agency")}</Text>
@@ -174,36 +179,36 @@ export default function StudentAskScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  sub: { fontSize: 13, color: "#6B7280", paddingHorizontal: 16, marginBottom: 8 },
-  label: { fontSize: 12, fontWeight: "600", color: "#4B5563", marginTop: 10, marginBottom: 6 },
+  title: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  sub: { fontSize: 13, color: COLORS.textSecondary, paddingHorizontal: 16, marginBottom: 8 },
+  label: { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary, marginTop: 10, marginBottom: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: "#EEF2FF", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  chipText: { fontSize: 12, color: "#3730A3" },
-  input: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, minHeight: 72, fontSize: 14, color: "#111827", textAlignVertical: "top" },
-  hint: { fontSize: 11, color: "#6B7280", marginTop: 4 },
-  btn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#4F46E5", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, marginTop: 10, alignSelf: "flex-start" },
-  btnDisabled: { backgroundColor: "#A5B4FC" },
-  btnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 14 },
-  agency: { fontSize: 12, color: "#4B5563", marginTop: 8, fontStyle: "italic" },
-  offlineBox: { flexDirection: "row", gap: 8, backgroundColor: "#FEF3C7", borderRadius: 10, padding: 12, marginBottom: 6 },
-  offlineTitle: { fontSize: 13, fontWeight: "700", color: "#92400E" },
-  offlineText: { fontSize: 12, color: "#92400E", marginTop: 2 },
-  linkText: { fontSize: 13, color: "#4F46E5", fontWeight: "600", marginTop: 6 },
-  problemBox: { backgroundColor: "#FEF2F2", borderRadius: 10, padding: 12, marginTop: 10 },
-  problemText: { fontSize: 13, color: "#991B1B" },
-  answerCard: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginTop: 14, borderWidth: 1, borderColor: "#E5E7EB" },
+  chip: { backgroundColor: ACCENT.violet.wash, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: accentBadge("violet").border },
+  chipText: { fontSize: 12, color: ACCENT.violet.deep },
+  input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, minHeight: 72, fontSize: 14, color: COLORS.text, textAlignVertical: "top" },
+  hint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
+  btn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: ACCENT.violet.solid, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, marginTop: 10, alignSelf: "flex-start" },
+  btnDisabled: { opacity: 0.5 },
+  btnText: { color: COLORS.onPrimary, fontWeight: "600", fontSize: 14 },
+  agency: { fontSize: 12, color: COLORS.textSecondary, marginTop: 8, fontStyle: "italic" },
+  offlineBox: { flexDirection: "row", gap: 8, backgroundColor: SEMANTIC.warning.bg, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: statusBadge("warning").border },
+  offlineTitle: { fontSize: 13, fontWeight: "700", color: SEMANTIC.warning.text },
+  offlineText: { fontSize: 12, color: SEMANTIC.warning.text, marginTop: 2 },
+  linkText: { fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "600", marginTop: 6, textDecorationLine: "underline" },
+  problemBox: { backgroundColor: SEMANTIC.error.bg, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: statusBadge("error").border },
+  problemText: { fontSize: 13, color: SEMANTIC.error.text },
+  answerCard: { backgroundColor: ACCENT.violet.wash, borderRadius: 12, padding: 14, marginTop: 14, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.violet.base },
   rowWrap: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  badge: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden", alignSelf: "flex-start" },
-  badgeGood: { color: "#065F46", backgroundColor: "#ECFDF5" },
-  badgeWarn: { color: "#92400E", backgroundColor: "#FEF3C7" },
-  badgeInfo: { color: "#3730A3", backgroundColor: "#EEF2FF" },
-  badgePurple: { color: "#6B21A8", backgroundColor: "#F3E8FF" },
-  badgeMuted: { color: "#374151", backgroundColor: "#F3F4F6" },
-  answer: { fontSize: 14, color: "#111827", marginTop: 10, lineHeight: 20 },
-  block: { marginTop: 12, borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 8 },
-  blockTitle: { fontSize: 12, fontWeight: "700", color: "#4B5563" },
+  badge: { fontSize: 11, fontWeight: "600", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden", alignSelf: "flex-start", borderWidth: 1 },
+  badgeGood: pill(statusBadge("success")),
+  badgeWarn: pill(statusBadge("warning")),
+  badgeInfo: pill(statusBadge("info")),
+  badgePurple: pill(accentBadge("violet")),
+  badgeMuted: pill(accentBadge("slate")),
+  answer: { fontSize: 14, color: COLORS.text, marginTop: 10, lineHeight: 20 },
+  block: { marginTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 8 },
+  blockTitle: { fontSize: 12, fontWeight: "700", color: ACCENT.violet.deep },
   claim: { marginTop: 8 },
-  claimText: { fontSize: 13, color: "#1F2937", marginTop: 4 },
-  sub2: { fontSize: 12, color: "#374151", marginTop: 4 },
+  claimText: { fontSize: 13, color: COLORS.text, marginTop: 4 },
+  sub2: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
 });

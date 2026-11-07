@@ -86,14 +86,14 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
     <div className="space-y-5">
       <Card>
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50">
-            <LayoutTemplate className="h-4 w-4 text-primary-600" aria-hidden="true" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-slate-solid text-white">
+            <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-ink">{t("reportLayout.title")}</h2>
             <p className="mt-1 text-sm text-ink-muted">{t("reportLayout.intro")}</p>
           </div>
-          <Badge variant={layout.source === "default" ? "default" : "primary"}>
+          <Badge variant={layout.source === "default" ? "info" : "primary"}>
             {layout.source === "default" ? t("reportLayout.defaultLayout") : t("reportLayout.version", { version: layout.version })}
           </Badge>
         </div>
@@ -102,7 +102,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
       <Card>
         <div className="space-y-2">
           {sectionsQ.data.map((s) => (
-            <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div key={s.id} className="rounded-xl border border-line bg-surface p-3">
               <Checkbox
                 checked={form[s.id] ?? true}
                 onChange={(e) => setDraft({ ...(draft ?? saved!), [s.id]: e.target.checked })}
@@ -110,7 +110,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
                 hint={t(`reportLayout.section.${s.id}.desc`)}
               />
               {notHidden.has(s.id) && !(form[s.id] ?? true) && (
-                <p className="mt-2 flex items-start gap-1.5 text-xs text-warning">
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-warning-text">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {t("reportLayout.templatePrintsIt")}
                 </p>
@@ -133,7 +133,7 @@ export default function ReportLayoutSection({ schoolId }: { schoolId: string }) 
 
       {(versionsQ.data?.length ?? 0) > 0 && (
         <Card>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{t("reportLayout.history")}</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("reportLayout.history")}</h3>
           <ul className="mt-3 space-y-1 text-sm">
             {versionsQ.data!.map((v) => (
               <li key={v.id ?? v.version} className="flex flex-wrap justify-between gap-2 text-ink-muted">

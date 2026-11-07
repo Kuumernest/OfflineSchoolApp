@@ -6,15 +6,20 @@ import {
   AlertTriangle, Megaphone, GraduationCap,
   ClipboardCheck, Settings, Clock,
   AlertCircle, ShieldAlert, MessageSquare,
+  ListTodo, ChevronRight,
 }                                                   from "lucide-react";
 import { cn }                                       from "@/utils/cn";
 import { useAuthStore }                             from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import { timeAgo }        from "@/i18n";
+import { useFormat }      from "@/i18n/format";
 import {
   fetchNotifications,
+  fetchActionItems,
   markAsRead,
   markAllAsRead,
   type Notification,
+  type ActionItem,
 }                                                   from "@/services/notification.service";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -42,7 +47,7 @@ const TYPE_CONFIG: Record<
   },
   message: {
     icon:  <MessageSquare  className="w-4 h-4" />,
-    color: "bg-indigo-100 text-indigo-600",
+    color: "bg-primary-100 text-primary-600",
   },
   alert: {
     icon:  <ShieldAlert    className="w-4 h-4" />,
@@ -65,25 +70,12 @@ const PRIORITY_CONFIG: Record<
 };
 
 // ─── Time ago helper ──────────────────────────────────────────────────────────
-function timeAgo(dateStr: string): string {
+// In the console's language: the hand-written "5m ago" / "2d ago" was English
+// on a French console, and its fallback date took the browser's locale.
+function whenOf(dateStr: string, justNow: string): string {
   if (!dateStr) return "";
-
-  const now     = Date.now();
-  const then    = new Date(dateStr).getTime();
-  const diff    = Math.max(0, now - then);
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours   = Math.floor(minutes / 60);
-  const days    = Math.floor(hours / 24);
-  const weeks   = Math.floor(days / 7);
-
-  if (seconds < 60) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours   < 24) return `${hours}h ago`;
-  if (days    < 7)  return `${days}d ago`;
-  if (weeks   < 4)  return `${weeks}w ago`;
-
-  return new Date(dateStr).toLocaleDateString();
+  if (Date.now() - new Date(dateStr).getTime() < 60_000) return justNow;
+  return timeAgo(dateStr);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -96,6 +88,8 @@ export default function NotificationPanel() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount,   setUnreadCount]   = useState(0);
   const [isLoading,     setIsLoading]     = useState(false);
+  const [actions,       setActions]       = useState<ActionItem[]>([]);
+  const fmt = useFormat();
   const [filter,        setFilter]        = useState<"all" | "unread" | "alerts">("all");
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -116,9 +110,13 @@ export default function NotificationPanel() {
     if (!schoolId) return;
     setIsLoading(true);
     try {
-      const data = await fetchNotifications(schoolId, 20, t);
+      const [data, todo] = await Promise.all([
+        fetchNotifications(schoolId, 20, t),
+        fetchActionItems(schoolId),
+      ]);
       setNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
+      setActions(todo);
     } catch (err) {
       console.warn("[NotificationPanel] Load failed:", err);
     } finally {
@@ -197,6 +195,11 @@ export default function NotificationPanel() {
       {/* ── Bell Button ────────────────────────────────────────────────────── */}
       <button
         onClick={() => setIsOpen((o) => !o)}
+        aria-label={
+          unreadCount > 0
+            ? `${t("notifications.title")} · ${t("portal.unreadCount", { count: unreadCount })}`
+            : t("notifications.title")
+        }
         className={cn(
           "relative p-2 rounded-lg transition-colors",
           isOpen
@@ -206,7 +209,11 @@ export default function NotificationPanel() {
       >
         <Bell className="w-5 h-5" />
 
-        {/* Unread badge */}
+        {/* Unread notifications only: the same count the panel's header
+            reads, so the badge is gone exactly when the panel says "All
+            read". It used to add the to-do items (C11), which reading cannot
+            clear — a bell showing "1" over a panel that said all read. The
+            to-dos are still listed at the top of the panel. */}
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -216,11 +223,16 @@ export default function NotificationPanel() {
 
       {/* ── Dropdown Panel ─────────────────────────────────────────────────── */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+        // On a phone the 384px panel, hung from the bell, started off the
+        // left edge of a 390px screen; there it spans the viewport instead.
+        <div className="fixed inset-x-2 top-14 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
 
           {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
+          {/* gap and min-w-0: the panel is a fixed w-96 with overflow-hidden, so
+              in French ("Tout marquer comme lu") the row used to run past the
+              edge and the button text was cut off. The summary wraps instead. */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <h3 className="text-sm font-semibold text-gray-800">
                 {t("notifications.title")}
               </h3>
@@ -235,11 +247,11 @@ export default function NotificationPanel() {
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={handleReadAll}
-                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1 whitespace-nowrap"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
                   {t("notifications.readAll")}
@@ -253,6 +265,35 @@ export default function NotificationPanel() {
               </button>
             </div>
           </div>
+
+          {/* To do (C11): live counts, gone once the work is done */}
+          {actions.length > 0 && (
+            <div className="border-b border-gray-100 bg-amber-50/40 px-4 py-2">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                <ListTodo className="h-3.5 w-3.5" aria-hidden />
+                {t("notifications.todo")}
+              </p>
+              <ul>
+                {actions.map((a) => (
+                  <li key={a.key}>
+                    <button
+                      onClick={() => { navigate(a.link); setIsOpen(false); }}
+                      className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left text-sm text-gray-700 hover:bg-amber-50"
+                    >
+                      <span>
+                        {t(`notifications.action.${a.key}`, {
+                          count: a.count,
+                          amount: a.amount != null ? fmt.money(a.amount) : "",
+                          families: t("notifications.families", { count: a.families ?? a.count }),
+                        })}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Filter tabs */}
           <div className="px-4 py-2 border-b border-gray-100 flex gap-2">
@@ -393,7 +434,7 @@ export default function NotificationPanel() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {timeAgo(n.createdAt)}
+                        {whenOf(n.createdAt, t("notifications.justNow"))}
                       </span>
 
                       {n.type === "alert" && (

@@ -81,11 +81,12 @@ const normalizeDocument = (
       ...d,
       id:    String(d.id    ?? `doc-${index}`),
       title: String(d.title ?? d.name ?? d.fileName ?? `Document ${index + 1}`),
+      // Not `path`: that was the file's location on the server's own disk,
+      // which no browser can open. The server sends `url`, a signed link.
       uri:
         (d.uri     as string) ||
         (d.url     as string) ||
         (d.fileUrl as string) ||
-        (d.path    as string) ||
         null,
       type: String(d.type ?? d.mimeType ?? "document"),
     };

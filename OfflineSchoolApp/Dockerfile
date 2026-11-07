@@ -58,6 +58,11 @@ COPY backend/middleware/ ./middleware/
 COPY backend/engine/ ./engine/
 COPY backend/scripts/calibration/ ./scripts/calibration/
 COPY shared/ /shared/
+# The index provisioner (docs/17), so it runs on the server from the image —
+# where Atlas's IP access list already admits the API — with no checkout or
+# npm install there: docker compose run --rm -e PROVISION_MONGODB_URI backend
+#   node scripts/provision-indexes.js [--apply]
+COPY backend/scripts/provision-indexes.js ./scripts/provision-indexes.js
 
 # No web build in this image. It was copied to ./public/web "for the backend
 # to serve", but nothing in the backend serves that path — and building the

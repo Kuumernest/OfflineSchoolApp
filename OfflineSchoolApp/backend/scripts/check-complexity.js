@@ -130,7 +130,11 @@ const check = (label, actual, expected) => {
   // dropped from the ranking — one read here, two when the year is current.
   // ≤ 13: the grade and school places (schoolRanking.service), reads of the
   // year's rows and their classes' levels, and one write of those that moved.
-  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 13, small.r.computed, large.r.computed], [true, true, 5, 40]);
+  // ≤ 20: the annual average is read from the year's marks (annual/4,
+  // periodMarks.service) — the exams, the CA settings, the scores, the exam
+  // subjects and the deleted pupils among them (+5) — and, when the roster
+  // does not decide, the pupils with a term result who are not deleted (+2).
+  check("a class of 40 takes the same number of queries as a class of 5", [small.n === large.n, small.n <= 20, small.r.computed, large.r.computed], [true, true, 5, 40]);
   if (small.n !== large.n) console.log("       small: " + small.cmds.map((c) => c.commandName).join(" ") + " | large: " + large.cmds.map((c) => c.commandName).join(" "));
   const fast = await M("AnnualResult").find({ schoolId: A, classId: "cls-l" }).sort({ studentId: 1 }).lean();
   await M("AnnualResult").deleteMany({ schoolId: A, classId: "cls-l" });
@@ -158,9 +162,17 @@ const check = (label, actual, expected) => {
   // ── 3. submissions: one grouped count ──
   console.log("\n--- submissions ---");
   const sub = await counted(() => get("/exams/ex-1/submissions", TEACHER));
-  check("twelve subjects, a constant number of queries (no count per subject)", [sub.r.status, sub.r.body.submissions.length, sub.n <= 6], [200, 12, true]);
+  // Eight: the five it had, plus one grouped read each for the enrolled
+  // pupils (A7), the class-subject assignments and their teachers (A8).
+  check("twelve subjects, a constant number of queries (no count per subject)", [sub.r.status, sub.r.body.submissions.length, sub.n <= 8], [200, 12, true]);
   check("and every subject counts its marks", sub.r.body.submissions.map((x) => x.totalScoresEntered).sort((a, b) => a - b), [5, 5, 5, 5, 5, 5, 40, 40, 40, 40, 40, 40]);
+  // A7: "2/0 entered" — the denominator is the class's enrolled pupils.
+  check("and each counts its class's enrolled pupils, out of which marks are entered",
+    sub.r.body.submissions.map((x) => [x.totalScoresEntered, x.totalStudents]).sort((a, b) => a[0] - b[0])
+      .every(([entered, total]) => total === entered), true);
   const sub2 = await counted(() => get("/exams/submissions/submissions?examId=ex-1", TEACHER));
+  check("the school-wide view carries the same denominators",
+    sub2.r.body.submissions.map((x) => x.totalStudents).sort((a, b) => a - b), [5, 5, 5, 5, 5, 5, 40, 40, 40, 40, 40, 40]);
   check("the school-wide view too", [sub2.r.body.total, sub2.n <= 6], [12, true]);
 
   // ── 4. rankings: the limit in the query ──

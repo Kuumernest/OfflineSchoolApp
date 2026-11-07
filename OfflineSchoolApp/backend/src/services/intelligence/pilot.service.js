@@ -657,7 +657,11 @@ const reportFor = async (pilot) => {
   const window = windowOf(pilot);
   const pkg = await reviewCases.reviewPackage(
     { schoolId: pilot.schoolId, classIds: pilot.classIds && pilot.classIds.length ? pilot.classIds : null },
-    { userId: null, role: "school_admin" }, window
+    { userId: null, role: "school_admin" },
+    // reviewPackage names the start reviewedSince; passing the window as it
+    // stands dropped the start, and the report counted reviews the snapshot
+    // (evidenceFor) excludes.
+    { pilotRunId: window.pilotRunId, reviewedSince: window.since, engineVersion: window.engineVersion }
   );
   const reviewed = pkg.cases.filter((c) => c.reviewCount > 0);
   const byOutcome = pkg.feedback.totals.byOutcome ?? {};

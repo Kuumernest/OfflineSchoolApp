@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 
 import { Card, CardHeader } from "@/components/ui/Card";
+import { type TileTone } from "@/config/sections";
+import { DASH_TINT, dashTint, type DashAccent } from "@/config/dashboardTint";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -73,6 +75,7 @@ export default function ReportsOverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <StatCard
           icon={Users}
+          tone="students"
           label={t("academic.student_other")}
           value={students.data?.total}
           detail={
@@ -85,6 +88,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={School}
+          tone="teachers"
           label={t("academic.teacher_other")}
           value={teachers.data?.total}
           detail={
@@ -97,6 +101,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
+          tone="classes"
           label={t("academic.class_other")}
           value={classes.data?.total}
           loading={classes.isLoading}
@@ -104,6 +109,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={BookMarked}
+          tone="subjects"
           label={t("academic.subject_other")}
           value={subjects.data?.total}
           loading={subjects.isLoading}
@@ -111,6 +117,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={FileText}
+          tone="exams"
           label={t("nav.exams")}
           value={exams.data?.total}
           detail={
@@ -123,6 +130,7 @@ export default function ReportsOverviewPage() {
         />
         <StatCard
           icon={ClipboardCheck}
+          tone="attendance"
           label={t("reports.presentToday")}
           value={attendance.data?.students.rate}
           suffix="%"
@@ -139,6 +147,8 @@ export default function ReportsOverviewPage() {
       {/* ── Tools ───────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
+          icon={FileText}
+          accent="slate"
           title={t("reports.produce")}
           subtitle={t("reports.builtFromTemplate")}
         />
@@ -146,24 +156,28 @@ export default function ReportsOverviewPage() {
         <div className="grid sm:grid-cols-2 gap-3">
           <ToolLink
             to="/reports/templates"
+            accent="teal"
             icon={LayoutTemplate}
             title={t("reports.cardTemplates")}
             description={t("reports.cardTemplatesBlurb")}
           />
           <ToolLink
             to="/reports/cards"
+            accent="slate"
             icon={FileText}
             title={t("reports.generateCards")}
             description={t("reports.generateCardsBlurb")}
           />
           <ToolLink
             to="/exams/results"
+            accent="amber"
             icon={TrendingUp}
             title={t("reports.examResults")}
             description={t("reports.examResultsBlurb")}
           />
           <ToolLink
             to="/attendance/reports"
+            accent="green"
             icon={ClipboardCheck}
             title={t("reports.attendance")}
             description={t("reports.attendanceBlurb")}
@@ -176,8 +190,13 @@ export default function ReportsOverviewPage() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * One school-wide figure on a white card; the icon box takes the accent of
+ * what it counts, as on the dashboard (config/sections.ts).
+ */
 function StatCard({
   icon: Icon,
+  tone,
   label,
   value,
   suffix,
@@ -186,75 +205,85 @@ function StatCard({
   failed,
 }: {
   icon:     React.ComponentType<{ className?: string }>;
+  tone:     TileTone;
   label:    string;
-  value?:   number;
+  /** null: nothing to report — "—" (C3: a day nobody marked). */
+  value?:   number | null;
   suffix?:  string;
   detail?:  string;
   loading:  boolean;
   failed:   boolean;
 }) {
   const { t } = useTranslation();
+  const tint = dashTint(tone);
   return (
-    <Card>
+    <div className={cn("min-w-0 p-5", tint.card)}>
       <div className="flex items-start justify-between gap-2">
-        <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
-          <Icon className="w-4 h-4 text-primary-600" />
+        <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tint.box)}>
+          <Icon className="w-[18px] h-[18px]" />
         </div>
         {/* A failed card says so rather than showing a confident zero — "0
             students" and "we couldn't ask" are very different facts. */}
-        {failed && <Badge label={t("common.unavailable")} variant="default" />}
+        {failed && <Badge label={t("common.unavailable")} variant="warning" />}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         {loading ? (
           <Spinner className="w-5 h-5" />
         ) : (
           <p className={cn(
-            "text-2xl font-semibold leading-none tabular-nums",
-            failed ? "text-gray-300" : "text-gray-900",
+            "text-[34px] font-bold leading-none tracking-tight tabular-nums",
+            // ink-placeholder is under AA on a wash.
+            failed ? "text-ink-muted" : tint.number,
           )}>
-            {failed || value === undefined ? "—" : value.toLocaleString()}
-            {!failed && value !== undefined && suffix}
+            {failed || value == null ? "—" : value.toLocaleString()}
+            {!failed && value != null && suffix}
           </p>
         )}
-        <p className="mt-1.5 text-xs text-gray-500">{label}</p>
+        <p className="mt-2 text-sm font-medium text-ink-muted">{label}</p>
         {detail && !failed && (
-          <p className="text-[11px] text-gray-400 mt-0.5">{detail}</p>
+          <p className="text-xs mt-0.5 text-ink-muted">{detail}</p>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
 function ToolLink({
   to,
+  accent,
   icon: Icon,
   title,
   description,
 }: {
   to:          string;
+  /** The tool's kind colour, as on the dashboard's quick actions. */
+  accent:      DashAccent;
   icon:        React.ComponentType<{ className?: string }>;
   title:       string;
   description: string;
 }) {
+  const tint = DASH_TINT[accent];
   return (
     <Link
       to={to}
       className={cn(
-        "group flex items-start gap-3 p-4 rounded-lg border border-gray-200",
-        "hover:border-primary-300 hover:bg-primary-50/40 transition-colors",
+        "group flex items-start gap-3 p-4",
+        tint.card,
+        // A tinted card keeps its coloured top edge on hover.
+        "hover:shadow-lift transition",
       )}
     >
-      <div className="w-9 h-9 rounded-lg bg-gray-50 group-hover:bg-white flex items-center justify-center shrink-0 transition-colors">
-        <Icon className="w-4 h-4 text-gray-500 group-hover:text-primary-600 transition-colors" />
+      <div className={cn("w-9 h-9 rounded-control flex items-center justify-center shrink-0", tint.box)}>
+        <Icon className="w-4 h-4" />
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-800 flex items-center gap-1">
+        <p className="text-sm font-medium text-ink flex items-center gap-1">
           {title}
-          <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-500 group-hover:translate-x-0.5 transition-all" />
+          <ArrowRight className={cn("w-3.5 h-3.5 group-hover:translate-x-0.5 transition-all", tint.glyph)} />
         </p>
-        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+        <p className="text-xs text-ink-muted mt-0.5">{description}</p>
       </div>
     </Link>
   );

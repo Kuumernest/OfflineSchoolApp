@@ -28,6 +28,9 @@
  *    those rows silently would lose data nobody knows about, and an import
  *    of new ids is unaffected. Not covered: writes through Model.collection
  *    (the raw driver), which bypass mongoose entirely.
+ *
+ * The entity is the model's DESKTOP COLLECTION name (config/syncFeed.js), as
+ * the desktop removes the row from the collection the tombstone names.
  */
 
 const tombstoneModel = () => require("../models/SyncTombstone");
@@ -43,7 +46,7 @@ async function candidates(query, single) {
   return query.model.find(filter).select("_id schoolId classId class").lean();
 }
 
-async function writeTombstones(entity, rows) {
+async function writeTombstones(entity, rows, reason = null) {
   if (!rows.length) return;
   const now = new Date();
   await tombstoneModel().bulkWrite(rows.map((r) => ({
@@ -53,6 +56,9 @@ async function writeTombstones(entity, rows) {
         schoolId: r.schoolId != null ? String(r.schoolId) : null,
         classId:  r.classId != null ? String(r.classId) : (r.class != null ? String(r.class) : null),
         deletedAt: now,
+        // A deletion always overwrites an earlier "unpublished" (the row is
+        // now gone for everybody, admins included).
+        reason,
       } },
       upsert: true,
     },
@@ -80,8 +86,36 @@ function refuse(entity, ids) {
   return err;
 }
 
-module.exports = function syncTombstones(schema, { entity }) {
+/** Is this update setting isPublished to false? */
+const unpublishes = (update) => {
+  if (!update || Array.isArray(update)) return false;
+  return update.isPublished === false || update.$set?.isPublished === false;
+};
+
+module.exports = function syncTombstones(schema, { entity, unpublishable = false }) {
   if (!entity) throw new Error("syncTombstones: entity is required");
+  // Read by the boot check in config/syncFeed.js: a mirrored model the code
+  // hard-deletes must carry this plugin, under its feed collection's name.
+  schema.syncTombstoneEntity = entity;
+
+  // 3. (unpublishable) A published row set back to unpublished leaves the
+  //    non-admin mirror, which reads published rows only; a tombstone with
+  //    reason "unpublished" removes the published copy those machines hold.
+  //    Written before the update, like a deletion's; syncFeed never sends one
+  //    while its row is published again, so a failed update costs nothing.
+  if (unpublishable) {
+    const unpublishHook = (single) => async function preUnpublish() {
+      if (!unpublishes(this.getUpdate())) return;
+      const filter = { ...this.getFilter(), isPublished: true };
+      const rows = single
+        ? [await this.model.findOne(filter).select("_id schoolId classId class").lean()].filter(Boolean)
+        : await this.model.find(filter).select("_id schoolId classId class").lean();
+      await writeTombstones(entity, rows, "unpublished");
+    };
+    schema.pre("updateMany", { query: true, document: false }, unpublishHook(false));
+    schema.pre("updateOne", { query: true, document: false }, unpublishHook(true));
+    schema.pre("findOneAndUpdate", { query: true, document: false }, unpublishHook(true));
+  }
 
   const queryHook = (single) => async function pre() {
     const rows = await candidates(this, single);

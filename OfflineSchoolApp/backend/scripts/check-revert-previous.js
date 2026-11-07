@@ -231,7 +231,7 @@ const phase = async ({ code, mode, uri, out }) => {
   if (mode === "issuecard") {
     // A card issued from the new figures (frozen at first issue).
     const h = http([["/api/results", "src/routes/results.routes"]]);
-    res.status = await h.call("GET", "/api/results/s1/student/ama/reportcard/html");
+    res.status = await h.call("GET", "/api/results/s1/student/ama/reportcard/html?issue=1");
     h.close();
     await new Promise((ok) => setTimeout(ok, 500));   // the archive is written after the answer
     res.issued = await issuedAverage();

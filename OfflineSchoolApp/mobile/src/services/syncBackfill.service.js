@@ -28,11 +28,15 @@
  */
 
 import { getDatabase } from "../db/database";
-import { MutationQueue, registerReconciler, mapId } from "./mutationQueue.service";
+import {
+  MutationQueue, registerReconciler, mapId, outboxRowsForTable, localIdsOf,
+} from "./mutationQueue.service";
 import { API } from "./apiEndpoints";
 import { getCurrentAuth, hasRole } from "../utils/authHelpers";
 import { canonicalDay, VALID_DAYS } from "../utils/timetableMappers";
 import { isServerGeneratedId } from "../utils/idHelpers";
+import { CREDENTIAL_ROW, credentialRowIds, repairCredentialRows } from "../db/credentialCache";
+import { repairPupilSyncFlags } from "../db/pupilSync";
 
 const isAdmin   = () => hasRole(["super_admin", "school_admin", "admin"]);
 const isTeacher = () => hasRole("teacher");
@@ -52,6 +56,92 @@ const safeParse = (raw, fallback) => {
 const STALE_MS = 24 * 60 * 60 * 1000;
 const isStale = (updatedAt) =>
   Date.now() - new Date(updatedAt || 0).getTime() > STALE_MS;
+
+/**
+ * Whether the server has this teacher, so a dirty row is an edit (PUT) and
+ * not a create (POST). The id alone cannot say: the server keeps the id a
+ * phone created a teacher under (POST /admin/teachers takes `id` as _id), so
+ * a teacher made here is still `local_…` after it is accepted. Proof is
+ * either of:
+ *   - a server-shaped id (a UUID or ObjectId — what the server mints; this
+ *     app's own ids are `local_…`);
+ *   - `_synced_at`, set only when the server accepted the row: by the pull,
+ *     the create's success (TeacherService.create or the reconciler), or a
+ *     settled send. A teacher created here and never accepted has none.
+ * When in doubt this says "known": a PUT for a teacher the server lacks is a
+ * visible 404; a POST for one it has is a 409, or restores a removed account.
+ */
+export const teacherKnownToServer = (row) =>
+  isServerGeneratedId(row?.id) || !!(row?._synced_at && String(row._synced_at).trim());
+
+/**
+ * Where a teacher's create stands, for deleting it (MutationQueue.createState
+ * vocabulary): "sent", "inflight", "unsent" or "none".
+ *
+ * A teacher the server is known to have is "sent" whatever the queue says.
+ * TeacherService.create() also POSTs directly while online, outside the
+ * queue; it stamps `_create_sent_at` before that request and clears it only
+ * on a refusal, so a direct send that got no answer reads as "inflight" —
+ * it may have landed — and not as "none".
+ */
+export const teacherCreateState = async (row) => {
+  if (teacherKnownToServer(row)) return "sent";
+  const state = await MutationQueue.createState(`teacher:${row.id}`);
+  if (state === "none" && row?._create_sent_at && String(row._create_sent_at).trim()) return "inflight";
+  return state;
+};
+
+/**
+ * Drop a teacher created on this phone that the server cannot have: the row,
+ * its queued create (and any edit or delete queued for it), and the teacher
+ * assignments that point at it — those were made against an id the server
+ * has never seen, and once the teacher is gone they could only fail for ever.
+ *
+ * Returns false, dropping nothing, when any of those assignments may have
+ * reached the server (synced, a server id, or a create attempted): the server
+ * checks the teacher exists before it accepts an assignment, so the teacher
+ * may have landed too, and its delete must go on the wire instead.
+ *
+ * The caller has already established the teacher's own create is "unsent" or
+ * "none" (teacherCreateState).
+ */
+export const dropUnsentTeacher = async (db, row) => {
+  const id = row?.id;
+  if (!id) return false;
+
+  let deps = [];
+  if (await tableExists(db, "teacher_assignments")) {
+    const cols = new Set(
+      ((await db.getAllAsync("PRAGMA table_info(teacher_assignments)").catch(() => [])) ?? []).map((c) => c.name)
+    );
+    const teacherCols = ["teacher_id", "teacherId"].filter((c) => cols.has(c));
+    if (teacherCols.length) {
+      deps = (await db.getAllAsync(
+        `SELECT * FROM teacher_assignments WHERE ${teacherCols.map((c) => `${c} = ?`).join(" OR ")}`,
+        teacherCols.map(() => id)
+      ).catch(() => null)) ?? null;
+      if (deps === null) return false;   // could not look: do not guess
+    }
+  }
+
+  for (const dep of deps) {
+    if (isServerGeneratedId(dep.id)) return false;
+    if (dep._synced_at && String(dep._synced_at).trim()) return false;
+    const s = await MutationQueue.createState(`assignment:${dep.id}`);
+    if (s === "sent" || s === "inflight") return false;
+  }
+
+  for (const dep of deps) {
+    await MutationQueue.cancelUnsent(`assignment:${dep.id}`);
+    await MutationQueue.cancelUnsent(`assignment-delete:${dep.id}`);
+    await db.runAsync("DELETE FROM teacher_assignments WHERE id = ?", [dep.id]).catch(() => {});
+  }
+  for (const k of [`teacher:${id}`, `teacher-update:${id}`, `teacher-delete:${id}`]) {
+    await MutationQueue.cancelUnsent(k);
+  }
+  await db.runAsync("DELETE FROM users WHERE id = ? AND LOWER(role) = 'teacher'", [id]);
+  return true;
+};
 
 const roleAllows = (spec) => {
   if (spec.adminOnly) return isAdmin();
@@ -164,6 +254,14 @@ const SPECS = [
     }),
   },
 
+  /**
+   * A dirty class nothing has queued — the safety net, since ClassService
+   * queues its own create, edit, toggle and delete. Classes keep the id the
+   * device chose, and POST /admin/classes answers a repeat with the row it
+   * already holds, so for a class the server has this is a harmless replay
+   * that settles the flag; for one it lacks, it is the create, carrying every
+   * field the form took (it used to send only id, name and level).
+   */
   {
     key: "class",
     table: "classes",
@@ -176,6 +274,8 @@ const SPECS = [
       id:       row.id,
       name:     row.name,
       level:    row.level || null,
+      section:  row.section || "",
+      ...(row.classTeacherId ? { classTeacherId: row.classTeacherId } : {}),
       schoolId: row.schoolId || row.school_id || schoolId,
     }),
   },
@@ -196,25 +296,48 @@ const SPECS = [
       code:     row.code || "",
       classId:  row.class_id || row.classId || null,
       schoolId: row.schoolId || row.school_id || schoolId,
+      ...(Number(row.coefficient) > 0 ? { coefficient: Number(row.coefficient) } : {}),
     }),
     skip: (row) => !(row.class_id || row.classId),
   },
 
+  /**
+   * A dirty teacher row: an edit of a teacher the server has (PUT), or a
+   * teacher created on this device and never accepted (POST). Never a
+   * sign-in's credential cache: that row is the server's own account (an
+   * online sign-in just answered for it), and POSTing it made the server
+   * answer 409 — parked for good — or, for a teacher the school had removed,
+   * RESTORE the account with a new password (db/credentialCache.js,
+   * check-credential-rows.js).
+   *
+   * Every dirty row used to be POSTed, so an edit made on the phone also went
+   * out as a create, with the same two outcomes (check-teacher-edits.js). The
+   * dirty flag says only that work exists; whether it is a create or an edit
+   * is teacherKnownToServer(). An edit is keyed like TeacherService.update()'s
+   * own PUT, so the two coalesce rather than both being sent.
+   */
   {
     key: "teacher",
     table: "users",
     adminOnly: true,
-    where: `role = 'teacher' AND ${IS_DIRTY} AND ${NOT_DELETED}`,
-    endpoint: () => API.admin.teachers.list,
-    method: "POST",
+    where: `role = 'teacher' AND ${IS_DIRTY} AND ${NOT_DELETED} AND NOT ${CREDENTIAL_ROW}`,
+    entityKey: (row) => (teacherKnownToServer(row) ? `teacher-update:${row.id}` : `teacher:${row.id}`),
+    method:    (row) => (teacherKnownToServer(row) ? "PUT" : "POST"),
+    endpoint:  (row) =>
+      teacherKnownToServer(row) ? API.admin.teachers.detail(row.id) : API.admin.teachers.list,
+    guardEdits: true,
     reconcile: "teacher",
-    payload: (row, { schoolId }) => ({
-      id:       row.id,
-      name:     row.name,
-      email:    row.email,
-      role:     "teacher",
-      schoolId: row.schoolId || row.school_id || schoolId,
-    }),
+    payload: (row, { schoolId }) => (teacherKnownToServer(row)
+      // PUT /admin/teachers/:id updates name and email and nothing else: it
+      // never reactivates a teacher the school has removed.
+      ? { name: row.name, email: row.email }
+      : {
+          id:       row.id,
+          name:     row.name,
+          email:    row.email,
+          role:     "teacher",
+          schoolId: row.schoolId || row.school_id || schoolId,
+        }),
   },
 
   {
@@ -226,7 +349,11 @@ const SPECS = [
     method: "POST",
     reconcile: "assignment",
     resolve: ["teacherId", "classId", "subjectId"],
+    // The device's id goes with it: POST /admin/teacher-assignments keeps it
+    // and answers a repeat with the row it already made, so a retry after a
+    // lost answer is a replay, not a second assignment.
     payload: (row, { schoolId }) => ({
+      id:        row.id,
       teacherId: row.teacherId || row.teacher_id,
       classId:   row.classId   || row.class_id,
       subjectId: row.subjectId || row.subject_id,
@@ -235,6 +362,13 @@ const SPECS = [
     skip: (row) => !(row.subjectId || row.subject_id),
   },
 
+  /**
+   * periods.service records what a dirty row needs in `operation`: 'create'
+   * for one this device made (the server has never seen it), otherwise an
+   * edit of one it has. This always POSTed, so every offline edit of an
+   * existing period created a second period instead. POST /admin/periods
+   * mints its own id; the reconciler adopts it.
+   */
   {
     key: "period",
     table: "periods",
@@ -244,8 +378,10 @@ const SPECS = [
     // generic flag-clearing is skipped and its reconciler does it.
     noLocalFlag: true,
     where: "dirty = 1 AND (deletedat IS NULL OR deletedat = '')",
-    endpoint: () => API.admin.periods.list,
-    method: "POST",
+    method:   (row) => (row.operation === "create" ? "POST" : "PUT"),
+    endpoint: (row) =>
+      row.operation === "create" ? API.admin.periods.list : API.admin.periods.detail(row.id),
+    guardEdits: true,
     reconcile: "period",
     payload: (row, { schoolId }) => ({
       id:        row.id,
@@ -335,12 +471,24 @@ const SPECS = [
     skip: (row) => !row.teacherId,
   },
 
+  /**
+   * Questions and quizzes are ObjectId-keyed on the server, which keeps the
+   * device's id only as client_id; the reconciler swaps the local id for the
+   * server's. So the id says which request a dirty row needs: a local id has
+   * never been created (POST), a server id has, and is being edited (PUT).
+   *
+   * Both used to be POSTed whatever the row was. An edit to a synced quiz
+   * went out as a create carrying id=<server id>; the server, matching
+   * client_id, found nothing and made a SECOND quiz, and the original never
+   * changed. Publishing was an edit like any other, so it never landed.
+   */
   {
     key: "question",
     table: "questions",
     where: `${IS_DIRTY} AND ${NOT_DELETED}`,
-    endpoint: () => API.quiz.questions,
-    method: "POST",
+    method:   (row) => (isServerId(row.id) ? "PUT" : "POST"),
+    endpoint: (row) => (isServerId(row.id) ? API.quiz.question(row.id) : API.quiz.questions),
+    guardEdits: true,
     reconcile: "question",
     payload: (row, { schoolId }) => ({
       id:            row.id,
@@ -378,10 +526,20 @@ const SPECS = [
     key: "quiz",
     table: "quizzes",
     where: `${IS_DIRTY} AND ${NOT_DELETED}`,
-    endpoint: () => API.quiz.list,
-    method: "POST",
+    method:   (row) => (isServerId(row.id) ? "PUT" : "POST"),
+    endpoint: (row) => (isServerId(row.id) ? API.quiz.detail(row.id) : API.quiz.list),
+    guardEdits: true,
     reconcile: "quiz",
-    resolve: ["class_id", "subject_id"],
+    // questions[].question_id: a question written offline is queued (and
+    // re-id'd) ahead of the quiz that uses it.
+    resolve: ["class_id", "subject_id", "questions[].question_id"],
+    // POST /quiz/quizzes always creates a draft. A quiz published before it
+    // was ever sent is published by a PUT queued right behind its create;
+    // the id map points it at the id the create is given.
+    followUp: (row) =>
+      !isServerId(row.id) && row.is_published === 1
+        ? { key: "quiz-publish", method: "PUT", endpoint: API.quiz.detail(row.id), payload: { is_published: true } }
+        : null,
     payload: (row, { schoolId }) => ({
       id: row.id, schoolId: row.schoolId || schoolId,
       title: row.title, description: row.description || null,
@@ -424,6 +582,7 @@ const SPECS = [
       row._operation === "create" ? "POST" : row._operation === "update" ? "PUT" : "DELETE",
     endpoint: (row) =>
       row._operation === "create" ? "/announcements" : `/announcements/${row.id}`,
+    guardEdits: true,
     reconcile: "announcement",
     payload: (row) => ({
       id:            row.id,
@@ -512,16 +671,18 @@ const SPECS = [
     // The reconciler owns the flag here because it must also write back the
     // enrolment number the server minted.
     noLocalFlag: true,
-    // `_operation = 'create'` rows belong to the spec above. Without this
-    // guard a locally-enrolled student (status 'approved', unsynced) would be
-    // PUT to /admin/students/<id>/approve — an id the server has never
-    // seen — and fail forever.
+    // Only a decision made ON THIS PHONE: `_local_decision` is written by the
+    // applications screen when it approves or rejects offline (db/pupilSync).
+    // Status alone said nothing — every pulled pupil is 'approved', and with
+    // a stray dirty flag each one was PUT to /approve on every admin sync.
+    // `_operation = 'create'` rows belong to the spec above: a pupil enrolled
+    // here has no application on the server to decide.
     where:
-      `${IS_DIRTY} AND status IN ('approved', 'rejected') ` +
+      `${IS_DIRTY} AND _local_decision IN ('approved', 'rejected') ` +
       `AND (_operation IS NULL OR _operation != 'create')`,
     method: "PUT",
     endpoint: (row) =>
-      row.status === "approved"
+      row._local_decision === "approved"
         ? API.admin.students.approve(row.id)
         : API.admin.students.reject(row.id),
     reconcile: "studentDecision",
@@ -529,11 +690,14 @@ const SPECS = [
       classId: row.class_id || row.classId || null,
       reason:  row.rejection_reason || row.reject_reason || null,
       __endpoints:
-        row.status === "approved"
+        row._local_decision === "approved"
           ? API.admin.students.approveFallbackChain(row.id)
           : API.admin.students.rejectFallbackChain(row.id),
     }),
-    skip: (row) => row.status === "approved" && !(row.class_id || row.classId),
+    // The server refuses an approval without a class (400 "classId is
+    // required"). The offline approve cannot be made without one, so this
+    // only holds a row whose class was lost since; it goes once it has one.
+    skip: (row) => row._local_decision === "approved" && !(row.class_id || row.classId),
   },
 
   {
@@ -569,10 +733,39 @@ const SPECS = [
 const DELETE_SPECS = [
   { key: "class",      table: "classes",             endpoint: API.admin.classes.list,     adminOnly: true },
   { key: "subject",    table: "subjects",            endpoint: API.admin.subjects.list,    adminOnly: true },
-  { key: "teacher",    table: "users",               endpoint: API.admin.teachers.list,    adminOnly: true, extraWhere: "role = 'teacher'" },
+  // A teacher made on this phone and never sent is dropped with its queued
+  // create, not created and then deactivated (TeacherService.delete does the
+  // same when the delete is made; this catches rows older builds left).
+  { key: "teacher",    table: "users",               endpoint: API.admin.teachers.list,    adminOnly: true, extraWhere: "role = 'teacher'",
+    dropUnsent: async (db, row) => {
+      const state = await teacherCreateState(row);
+      if (state !== "unsent" && state !== "none") return false;
+      return dropUnsentTeacher(db, row);
+    } },
   { key: "assignment", table: "teacher_assignments", endpoint: API.admin.assignments.list, adminOnly: true },
-  { key: "quiz",       table: "quizzes",             endpoint: API.quiz.list },
-  { key: "question",   table: "questions",           endpoint: API.quiz.questions },
+  // A quiz or question still under its local id was never created upstream
+  // (the create's reconciler swaps in the server id). Deleting it used to
+  // send DELETE /quiz/quizzes/<uuid>, which the ObjectId-keyed route cannot
+  // even look up; now it is simply removed here.
+  { key: "quiz",       table: "quizzes",             endpoint: API.quiz.list,
+    dropUnsent: async (db, row) => {
+      if (isServerId(row.id)) return false;
+      await MutationQueue.cancelUnsent(`quiz-publish:${row.id}`);
+      for (const t of ["quiz_questions", "quiz_analytics"]) {
+        await db.runAsync(`DELETE FROM ${t} WHERE quiz_id = ?`, [row.id]).catch(() => {});
+      }
+      await db.runAsync("DELETE FROM quizzes WHERE id = ?", [row.id]);
+      return true;
+    } },
+  { key: "question",   table: "questions",           endpoint: API.quiz.questions,
+    dropUnsent: async (db, row) => {
+      if (isServerId(row.id)) return false;
+      for (const t of ["question_options", "quiz_questions", "question_analytics"]) {
+        await db.runAsync(`DELETE FROM ${t} WHERE question_id = ?`, [row.id]).catch(() => {});
+      }
+      await db.runAsync("DELETE FROM questions WHERE id = ?", [row.id]);
+      return true;
+    } },
   { key: "exam",       table: "exams",               endpoint: "/exams",                   adminOnly: true },
 ];
 
@@ -596,9 +789,36 @@ const serverIdFrom = (response, ...paths) => {
 
 let _registered = false;
 
+/**
+ * A period still dirty after its send settled was edited while the send was
+ * in flight. The server now holds what it answered with, so that becomes the
+ * copy a discard of the later edit goes back to (periods.service
+ * discardLocal). No answer body: the copy is dropped and a discard asks for a
+ * full pull instead. Its own statement — an older table without the column
+ * must not undo the settle.
+ */
+const keepSentPeriodImage = async (db, id, doc) => {
+  const image = doc && typeof doc === "object" && doc.name
+    ? JSON.stringify({
+        name: doc.name, starttime: doc.startTime, endtime: doc.endTime,
+        sortorder: doc.sortOrder ?? 0, isbreak: doc.isBreak ? 1 : 0,
+        isactive: doc.isActive !== false ? 1 : 0, version: doc.version ?? 1,
+        updated_at: doc.updatedAt ?? null,
+      })
+    : null;
+  await db.runAsync(
+    "UPDATE periods SET server_image = ? WHERE id = ? AND dirty = 1", [image, id]
+  ).catch(() => {});
+};
+
 export const registerReconcilers = () => {
   if (_registered) return;
   _registered = true;
+
+  // Clean only if nothing was edited since the request was built (args.since,
+  // see guardEdits). An edit made while the create was in flight leaves the
+  // row dirty under its new server id, and the next sweep PUTs it.
+  const CLEAN_IF_UNEDITED = "CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END";
 
   registerReconciler("class", async ({ response, args }) => {
     const serverId = serverIdFrom(response, "class", "data");
@@ -639,10 +859,39 @@ export const registerReconcilers = () => {
       const { SyncManager } = require("./syncManager");
       await SyncManager._replaceTeacherId(db, localId, String(serverId));
     } else if (localId) {
+      // _synced_at is set either way: the server has the row now, so a later
+      // sweep of it is an edit (teacherKnownToServer). The flag clears only
+      // if nothing was edited since the request was built (args.since).
+      const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
       await db.runAsync(
-        "UPDATE users SET _synced = 1, _synced_at = ? WHERE id = ?",
-        [new Date().toISOString(), localId]
+        `UPDATE users SET _synced = ${clean}, _synced_at = ? WHERE id = ?`,
+        [...(args.since === undefined ? [] : [args.since]), new Date().toISOString(), localId]
       ).catch(() => {});
+    }
+    // Deleted on this phone while the create was in flight. Its DELETE was
+    // queued behind the create, but a create backing off between retries can
+    // be overtaken: the DELETE meets a 404 and settles, then the create lands.
+    // If no DELETE is still waiting, one goes now, behind this create.
+    const id = serverId ? String(serverId) : localId;
+    // The staff number the server issued with the create: a teacher made
+    // offline shows "pending" until here, then the school's number.
+    const staffNo = String(raw?.staffNo ?? "").trim();
+    if (id && staffNo) {
+      await db.runAsync("UPDATE users SET staff_no = ? WHERE id = ?", [staffNo, id]).catch(() => {});
+    }
+    const gone = id && await db.getFirstAsync(
+      "SELECT 1 AS d FROM users WHERE id = ? AND deleted_at IS NOT NULL AND deleted_at != ''", [id]
+    ).catch(() => null);
+    if (gone && !(await MutationQueue.hasPending(`teacher-delete:${id}`))) {
+      await MutationQueue.enqueue({
+        entityKey: `teacher-delete:${id}`,
+        method:    "DELETE",
+        endpoint:  API.admin.teachers.detail(id),
+        payload:   {
+          __local:     { table: "users", ids: [id] },
+          __reconcile: { kind: "softDelete", table: "users", localId: id },
+        },
+      });
     }
   });
 
@@ -668,12 +917,60 @@ export const registerReconcilers = () => {
     }
   });
 
-  registerReconciler("period", async ({ args }) => {
+  registerReconciler("period", async ({ response, args }) => {
+    const db = await getDatabase();
+    const localId = args.localId;
+    if (!localId) return;
+    // Edited while this was in flight: still dirty, and no longer a create —
+    // the server has the row now — so the next sweep PUTs the edit.
+    const guarded = args.since !== undefined;
+    const settle = guarded
+      ? `dirty = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 0 ELSE 1 END,
+         operation = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN NULL ELSE 'update' END`
+      : "dirty = 0, operation = NULL";
+    const settleParams = guarded ? [args.since, args.since] : [];
+
+    // POST /admin/periods answers { data: period } under an id it chose.
+    const created  = response?.data?.data;
+    const serverId = created?._id || created?.id ? String(created._id || created.id) : null;
+
+    if (serverId && serverId !== String(localId)) {
+      await mapId(localId, serverId, "periods");
+      const pulled = await db.getFirstAsync("SELECT id FROM periods WHERE id = ?", [serverId]).catch(() => null);
+      if (pulled) {
+        // The server's copy already arrived by a pull: keep it, drop ours.
+        await db.runAsync("DELETE FROM periods WHERE id = ?", [localId]).catch(() => {});
+      } else {
+        await db.runAsync(
+          `UPDATE periods SET id = ?, ${settle} WHERE id = ?`, [serverId, ...settleParams, localId]
+        ).catch(() => {});
+      }
+      // Slots placed in this period while it only had the local id.
+      await db.runAsync("UPDATE timetable SET period_id = ? WHERE period_id = ?", [serverId, localId]).catch(() => {});
+      await db.runAsync("UPDATE timetable_slots SET periodId = ? WHERE periodId = ?", [serverId, localId]).catch(() => {});
+      await keepSentPeriodImage(db, serverId, created);
+      return;
+    }
+
+    await db.runAsync(`UPDATE periods SET ${settle} WHERE id = ?`, [...settleParams, localId]).catch(() => {});
+    await keepSentPeriodImage(db, localId, created);
+  });
+
+  registerReconciler("periodDelete", async ({ args }) => {
     const db = await getDatabase();
     await db.runAsync(
       "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [args.localId]
     ).catch(() => {});
   });
+
+  // A discarded period change is undone from the server's copy the period
+  // row keeps (periods.service discardLocal). Lazily required, as the queue
+  // and the periods service both are from here.
+  require("./mutationQueue.service").registerDiscardHandler(
+    "periods",
+    async ({ localId }) => require("./periods.service").PeriodsService.discardLocal(localId),
+    { kinds: ["period", "periodDelete"] }
+  );
 
   registerReconciler("timetable", async ({ response, args }) => {
     const db = await getDatabase();
@@ -705,20 +1002,24 @@ export const registerReconcilers = () => {
     if (!localId) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
+    // Without a snapshot (a row queued by an older build) it is marked clean,
+    // as before.
+    const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
+    const cleanParams = args.since === undefined ? [] : [args.since];
 
     if (serverId && serverId !== localId) {
       await mapId(localId, serverId, "questions");
       const { withFkOff, withTransaction } = require("../db/dbHelpers");
       await withFkOff(db, async () => {
         await withTransaction(db, async () => {
-          await db.runAsync("UPDATE questions SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [serverId, ts, localId]);
+          await db.runAsync(`UPDATE questions SET id = ?, _synced = ${clean}, _synced_at = ? WHERE id = ?`, [serverId, ...cleanParams, ts, localId]);
           for (const t of ["question_options", "quiz_questions", "attempt_answers", "question_analytics"]) {
             await db.runAsync(`UPDATE ${t} SET question_id = ? WHERE question_id = ?`, [serverId, localId]).catch(() => {});
           }
         });
       }).catch((err) => console.warn("[backfill] question reconcile:", err.message));
     } else {
-      await db.runAsync("UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]).catch(() => {});
+      await db.runAsync(`UPDATE questions SET _synced = ${clean}, _synced_at = ? WHERE id = ?`, [...cleanParams, ts, localId]).catch(() => {});
     }
   });
 
@@ -728,28 +1029,46 @@ export const registerReconcilers = () => {
     if (!localId) return;
     const db = await getDatabase();
     const ts = new Date().toISOString();
+    const clean = args.since === undefined ? "1" : CLEAN_IF_UNEDITED;
+    const cleanParams = args.since === undefined ? [] : [args.since];
 
     if (serverId && serverId !== localId) {
       await mapId(localId, serverId, "quizzes");
       const { withFkOff, withTransaction } = require("../db/dbHelpers");
       await withFkOff(db, async () => {
         await withTransaction(db, async () => {
-          await db.runAsync("UPDATE quizzes SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [serverId, ts, localId]);
+          await db.runAsync(`UPDATE quizzes SET id = ?, _synced = ${clean}, _synced_at = ? WHERE id = ?`, [serverId, ...cleanParams, ts, localId]);
           for (const t of ["quiz_questions", "quiz_attempts", "quiz_analytics"]) {
             await db.runAsync(`UPDATE ${t} SET quiz_id = ? WHERE quiz_id = ?`, [serverId, localId]).catch(() => {});
           }
         });
       }).catch((err) => console.warn("[backfill] quiz reconcile:", err.message));
     } else {
-      await db.runAsync("UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]).catch(() => {});
+      await db.runAsync(`UPDATE quizzes SET _synced = ${clean}, _synced_at = ? WHERE id = ?`, [...cleanParams, ts, localId]).catch(() => {});
     }
   });
 
   registerReconciler("announcement", async ({ args }) => {
     const db = await getDatabase();
+    const ts = new Date().toISOString();
+    if (args.since === undefined) {
+      await db.runAsync(
+        `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
+        [ts, args.localId]
+      ).catch(() => {});
+      return;
+    }
+    // Edited while this was in flight: the server now HAS the row (whatever
+    // this was), so what is left is an update — or the delete, if that was
+    // the edit — and the row stays dirty for the next sweep.
     await db.runAsync(
-      `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
-      [new Date().toISOString(), args.localId]
+      `UPDATE announcements
+          SET _synced_at = ?,
+              _operation = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN NULL
+                                WHEN _operation = 'delete' THEN 'delete' ELSE 'update' END,
+              _synced    = CASE WHEN COALESCE(updated_at, '') = COALESCE(?, '') THEN 1 ELSE 0 END
+        WHERE id = ?`,
+      [ts, args.since, args.since, args.localId]
     ).catch(() => {});
   });
 
@@ -937,6 +1256,11 @@ export const registerReconcilers = () => {
     );
   });
 
+  // Suspend / restore / move / delete / correct, queued by student.service.
+  try { require("./student.service").registerStudentReconcilers?.(); } catch (err) {
+    console.warn("[backfill] student change handlers unavailable:", err?.message);
+  }
+
   registerReconciler("studentDecision", async ({ response, args }) => {
     const db = await getDatabase();
     const ts = new Date().toISOString();
@@ -949,8 +1273,10 @@ export const registerReconcilers = () => {
       response?.data?.student?.enrollmentNo ||
       null;
 
+    // The decision is the server's now: the marker goes with the flag, so it
+    // is never sent again.
     await db.runAsync(
-      `UPDATE students SET _synced = 1, updated_at = ? WHERE id = ?`,
+      `UPDATE students SET _synced = 1, _local_decision = NULL, updated_at = ? WHERE id = ?`,
       [ts, args.localId]
     ).catch(() => {});
 
@@ -993,6 +1319,52 @@ const tableExists = async (db, table) => {
   return !!row;
 };
 
+/** Ids of `table` rows that an unsent outbox mutation names in __local. */
+const coveredIds = async (table) => {
+  let entries = [];
+  try { entries = await outboxRowsForTable(table); } catch { entries = []; }
+  const ids = new Set();
+  for (const e of entries) {
+    for (const id of localIdsOf(e.payload?.__local)) ids.add(String(id));
+  }
+  return ids;
+};
+
+/**
+ * The rows each spec would send, as data: what the per-user migration counts
+ * as a real unsent change (docs/40 §1 caution — `_synced = 0` alone is not
+ * one). Same `where` and `skip` as the sweep below; role filters are left to
+ * the caller.
+ */
+export const dirtySelectors = () => [
+  ...SPECS.map((s) => ({
+    key: s.key, table: s.table, where: s.where, skip: s.skip ?? null, idColumn: s.idColumn || "id",
+  })),
+  ...DELETE_SPECS.map((s) => ({
+    key: `${s.key}-delete`, table: s.table, idColumn: "id", skip: null,
+    where: ["(deleted_at IS NOT NULL AND deleted_at != '')", IS_DIRTY, ...(s.extraWhere ? [s.extraWhere] : [])].join(" AND "),
+  })),
+  { key: "timetable-delete", table: "timetable", idColumn: "_id", skip: null,
+    where: `(deleted_at IS NOT NULL AND deleted_at != '') AND ${IS_DIRTY}` },
+  { key: "period-delete", table: "periods", idColumn: "id", skip: null,
+    where: "dirty = 1 AND deletedat IS NOT NULL AND deletedat != ''" },
+];
+
+/**
+ * Per-user local data (docs/40): once the migration has started on this
+ * phone, an account on the shared file sends only its own rows — never a held
+ * one, never one already placed in somebody's store. Null (no gate, exactly
+ * the old behaviour) on a phone where it has not started.
+ */
+const ownerGate = async (db) => {
+  try {
+    return await require("./perUserData.service").legacyBackfillGate(db);
+  } catch (err) {
+    console.warn("[backfill] owner gate unavailable — sending nothing from the shared file:", err?.message);
+    return () => false;
+  }
+};
+
 const enqueueSpec = async (db, spec, ctx) => {
   if (!roleAllows(spec)) return 0;
   if (!(await tableExists(db, spec.table))) return 0;
@@ -1004,19 +1376,34 @@ const enqueueSpec = async (db, spec, ctx) => {
   if (!rows?.length) return 0;
 
   // One query instead of one per row.
-  const queued = await MutationQueue.pendingKeys(`${spec.key}:`);
+  // Prefix without the colon: a spec may key a row under a sibling name
+  // (teacher edits as teacher-update:<id>); membership is exact below.
+  const queued = await MutationQueue.pendingKeys(spec.key);
+  // Rows a queued mutation already carries, whatever its key. The services
+  // enqueue under their own keys — attendance:class:<school>:<class>:…, a
+  // class edit as class-update:<id> — and name the rows they cover in
+  // __local.ids. Matching only `${spec.key}:${id}` missed every one of them,
+  // so the sweep queued a second copy: each register was POSTed twice.
+  // Receipts are separate mutations on the same rows and are not covered.
+  const covered = spec.silent ? new Set() : await coveredIds(spec.table);
 
   let n = 0;
   for (const row of rows) {
     const localId = row[idCol];
     if (!localId) continue;
     if (spec.skip?.(row)) continue;
+    if (ctx.gate && !ctx.gate(spec.table, row, idCol)) continue;
 
-    const entityKey = `${spec.key}:${localId}`;
+    const entityKey = spec.entityKey ? spec.entityKey(row) : `${spec.key}:${localId}`;
     if (queued.has(entityKey)) continue;   // already waiting its turn
+    if (covered.has(String(localId))) continue;
 
     try {
       const extra = spec.hydrate ? await spec.hydrate(db, row) : {};
+      // guardEdits: the row's updated_at as sent. An edit made while this
+      // mutation waits (or is in flight) changes it, and then the success
+      // must not mark the row clean — the later edit is still unsent.
+      const since = spec.guardEdits ? { since: row.updated_at ?? null } : {};
       const payload = {
         ...spec.payload(row, ctx),
         ...extra,
@@ -1024,10 +1411,10 @@ const enqueueSpec = async (db, spec, ctx) => {
         // specs whose reconciler owns the flag (periods uses `dirty`) opt out.
         ...(spec.silent || spec.noLocalFlag
           ? {}
-          : { __local: { table: spec.table, ids: [localId], idColumn: idCol } }),
+          : { __local: { table: spec.table, ids: [localId], idColumn: idCol, ...since } }),
         ...(spec.resolve ? { __resolve: spec.resolve } : {}),
         ...(spec.reconcile
-          ? { __reconcile: { kind: spec.reconcile, localId, table: spec.table, ...(spec.reconcileArgs ?? {}) } }
+          ? { __reconcile: { kind: spec.reconcile, localId, table: spec.table, ...since, ...(spec.reconcileArgs ?? {}) } }
           : {}),
       };
 
@@ -1039,6 +1426,19 @@ const enqueueSpec = async (db, spec, ctx) => {
         silent:   !!spec.silent,
       });
       n++;
+
+      // A second request the first one cannot carry, queued right behind it
+      // so the same drain sends both, in order.
+      const follow = spec.followUp?.(row);
+      if (follow) {
+        await MutationQueue.enqueue({
+          entityKey: `${follow.key}:${localId}`,
+          method:    follow.method,
+          endpoint:  follow.endpoint,
+          payload:   follow.payload,
+        });
+        n++;
+      }
     } catch (err) {
       console.warn(`[backfill] ${spec.key} ${localId}:`, err.message);
     }
@@ -1046,7 +1446,7 @@ const enqueueSpec = async (db, spec, ctx) => {
   return n;
 };
 
-const enqueueDeletes = async (db, spec) => {
+const enqueueDeletes = async (db, spec, gate = null) => {
   if (!roleAllows(spec)) return 0;
   if (!(await tableExists(db, spec.table))) return 0;
 
@@ -1056,15 +1456,25 @@ const enqueueDeletes = async (db, spec) => {
     ...(spec.extraWhere ? [spec.extraWhere] : []),
   ].join(" AND ");
 
-  const rows = await db.getAllAsync(`SELECT id FROM ${spec.table} WHERE ${where}`).catch(() => []);
+  const rows = await db.getAllAsync(`SELECT * FROM ${spec.table} WHERE ${where}`).catch(() => []);
   if (!rows?.length) return 0;
 
   const queued = await MutationQueue.pendingKeys(`${spec.key}-delete:`);
   let n = 0;
 
   for (const row of rows) {
+    if (gate && !gate(spec.table, row, "id")) continue;
     const entityKey = `${spec.key}-delete:${row.id}`;
     if (queued.has(entityKey)) continue;
+    // Created on this phone and never sent: there is nothing upstream to
+    // delete. The create is cancelled and the row dropped, nothing sent.
+    if (spec.dropUnsent) {
+      const state = await MutationQueue.createState(`${spec.key}:${row.id}`);
+      if ((state === "unsent" || state === "none") && (await spec.dropUnsent(db, row))) {
+        await MutationQueue.cancelUnsent(`${spec.key}:${row.id}`);
+        continue;
+      }
+    }
     await MutationQueue.enqueue({
       entityKey,
       method: "DELETE",
@@ -1084,12 +1494,12 @@ const enqueueDeletes = async (db, spec) => {
  * slot the server never saw is simply dropped locally, because there is
  * nothing upstream to delete.
  */
-const enqueueTimetableDeletes = async (db) => {
+const enqueueTimetableDeletes = async (db, gate = null) => {
   if (!isAdmin()) return 0;
   if (!(await tableExists(db, "timetable"))) return 0;
 
   const rows = await db.getAllAsync(
-    `SELECT _id FROM timetable
+    `SELECT * FROM timetable
      WHERE (deleted_at IS NOT NULL AND deleted_at != '') AND ${IS_DIRTY}`
   ).catch(() => []);
   if (!rows?.length) return 0;
@@ -1100,6 +1510,7 @@ const enqueueTimetableDeletes = async (db) => {
   for (const row of rows) {
     const id = row._id;
     if (!id) continue;
+    if (gate && !gate("timetable", row, "_id")) continue;
 
     if (!isServerGeneratedId(id)) {
       await db.runAsync("DELETE FROM timetable WHERE _id = ?", [id]).catch(() => {});
@@ -1114,6 +1525,51 @@ const enqueueTimetableDeletes = async (db) => {
       method: "DELETE",
       endpoint: API.admin.timetable.detail(id),
       payload: { __reconcile: { kind: "timetableDelete", localId: id } },
+    });
+    n++;
+  }
+  return n;
+};
+
+/**
+ * Period deletes. periods marks pending work with `dirty` and the delete with
+ * `deletedat`, so the generic sweep (deleted_at + _synced) never saw them,
+ * and the period spec filters deleted rows out: a period deleted offline was
+ * never deleted upstream. A period this device created and never sent is
+ * dropped locally instead — periods.service does that at delete time; this
+ * catches one whose create is still only queued.
+ */
+const enqueuePeriodDeletes = async (db, gate = null) => {
+  if (!isAdmin()) return 0;
+  if (!(await tableExists(db, "periods"))) return 0;
+
+  const rows = await db.getAllAsync(
+    `SELECT * FROM periods
+     WHERE dirty = 1 AND deletedat IS NOT NULL AND deletedat != ''`
+  ).catch(() => []);
+  if (!rows?.length) return 0;
+
+  const queued = await MutationQueue.pendingKeys("period-delete:");
+  let n = 0;
+
+  for (const row of rows) {
+    if (!row.id) continue;
+    if (gate && !gate("periods", row, "id")) continue;
+    const state = await MutationQueue.createState(`period:${row.id}`);
+    if (row.operation === "create" && (state === "unsent" || state === "none")) {
+      await MutationQueue.cancelUnsent(`period:${row.id}`);
+      await db.runAsync("DELETE FROM periods WHERE id = ?", [row.id]).catch(() => {});
+      continue;
+    }
+
+    const entityKey = `period-delete:${row.id}`;
+    if (queued.has(entityKey)) continue;
+
+    await MutationQueue.enqueue({
+      entityKey,
+      method: "DELETE",
+      endpoint: API.admin.periods.detail(row.id),
+      payload: { __reconcile: { kind: "periodDelete", localId: row.id } },
     });
     n++;
   }
@@ -1156,15 +1612,110 @@ const adoptQueuedContentDeletes = async (db) => {
  * Sweeps every entity and returns how many mutations were queued.
  * Purely local — safe to run offline, and cheap when nothing is dirty.
  */
+/**
+ * What older builds left on a phone whose sign-in cache rows were dirty: a
+ * queued or parked POST /admin/teachers (`teacher:<id>`) for an account that
+ * signed in here — the server has it, an online sign-in proved so; sending it
+ * can only 409 or restore a removed account — and the dirty flag itself. Both
+ * go, for credential rows only (repairCredentialRows says which); a genuine
+ * offline create carries no credential and is untouched. Idempotent; cheap
+ * when there is nothing to do.
+ */
+const repairCredentialCache = async (db) => {
+  const ids = await credentialRowIds(db);
+  if (!ids.size) return;
+  let dropped = 0;
+  for (const id of ids) dropped += await MutationQueue.cancelUnsent(`teacher:${id}`);
+  const keep = new Set();
+  for (const k of await MutationQueue.pendingKeys("teacher-")) {
+    const m = /^teacher-(?:update|delete):(.+)$/.exec(k);
+    if (m) keep.add(m[1]);
+  }
+  const cleared = await repairCredentialRows(db, keep);
+  if (dropped || cleared.length) {
+    console.log(`[backfill] credential cache: dropped ${dropped} queued teacher create(s), cleared ${cleared.length} flag(s)`);
+  }
+};
+
+/**
+ * What older builds left behind for teacher EDITS: every dirty teacher row
+ * was POSTed as a create, and TeacherService.update()'s own PUT named its row
+ * as `__local.id`, which nothing read — so the flag never cleared and each
+ * sync POSTed the edit again. On a phone like that sit `teacher:<id>` POSTs
+ * (parked on the server's 409, or still queued) for teachers the server has.
+ * Sending one can only 409, or RESTORE a teacher the school removed.
+ *
+ * Each such POST, for a teacher teacherKnownToServer() says the server has,
+ * is removed — never the edit it carried:
+ *   - a PUT for the teacher is still queued → it carries the edit (it was
+ *     queued first and coalesced every later edit); the POST was a copy;
+ *   - the row is still dirty → the sweep below PUTs it from the row, which
+ *     is the latest;
+ *   - the row is clean but holds other values (a pull overwrote it) → the
+ *     POST is the only copy of the edit, so it is re-queued as the PUT,
+ *     under the account that queued it.
+ * A POST for a teacher never accepted (a genuine offline create) is left
+ * alone. Idempotent; one indexed query when there is nothing to do.
+ */
+const repairTeacherEditCreates = async (db) => {
+  const posts = await db.getAllAsync(
+    `SELECT entity_key, payload, owner_id FROM mutation_outbox
+      WHERE entity_key LIKE 'teacher:%' AND status != 'synced' AND UPPER(method) = 'POST'`
+  ).catch(() => []);
+  if (!posts?.length) return;
+
+  const queued = await MutationQueue.pendingKeys("teacher-update:");
+  let dropped = 0, requeued = 0;
+  for (const post of posts) {
+    const id = String(post.entity_key).slice("teacher:".length);
+    const row = await db.getFirstAsync(
+      "SELECT id, name, email, _synced, _synced_at FROM users WHERE id = ? AND LOWER(role) = 'teacher'", [id]
+    ).catch(() => null);
+    if (!row || !teacherKnownToServer(row)) continue;   // a genuine create, or nothing to judge by
+
+    const sent = safeParse(post.payload, {});
+    const dirty = row._synced === 0 || row._synced === null;
+    const differs = (sent.name && sent.name !== row.name) ||
+      (sent.email && String(sent.email).toLowerCase() !== String(row.email ?? "").toLowerCase());
+    const editElsewhere = queued.has(`teacher-update:${id}`) || dirty;
+
+    dropped += await MutationQueue.cancelUnsent(post.entity_key);
+    if (!editElsewhere && differs) {
+      await MutationQueue.enqueue({
+        entityKey: `teacher-update:${id}`,
+        method:    "PUT",
+        endpoint:  API.admin.teachers.detail(id),
+        ownerId:   post.owner_id ?? null,
+        payload:   {
+          ...(sent.name ? { name: sent.name } : {}),
+          ...(sent.email ? { email: sent.email } : {}),
+          __local: { table: "users", ids: [id], idColumn: "id" },
+        },
+      });
+      requeued++;
+    }
+  }
+  if (dropped || requeued) {
+    console.log(`[backfill] teacher edits: dropped ${dropped} create(s) for known teachers, re-queued ${requeued} as edits`);
+  }
+};
+
 export const backfillOutbox = async () => {
   registerReconcilers();
 
   const db = await getDatabase();
   const { schoolId } = getCurrentAuth();
-  const ctx = { schoolId, student: isStudent() };
+  const gate = await ownerGate(db);
+  const ctx = { schoolId, student: isStudent(), gate };
 
   let total = 0;
   const byKey = {};
+
+  await repairCredentialCache(db).catch((err) => console.warn("[backfill] credential rows:", err?.message));
+  await repairTeacherEditCreates(db).catch((err) => console.warn("[backfill] teacher edits:", err?.message));
+  // Before the specs read students._synced: pulled pupils the old pull left
+  // "unsent" are settled, so the decision sweep never sees them.
+  await repairPupilSyncFlags(db).catch((err) => console.warn("[backfill] pupil flags:", err?.message));
 
   const adopted = await adoptQueuedContentDeletes(db).catch(() => 0);
   if (adopted) { byKey["content-delete"] = adopted; total += adopted; }
@@ -1182,15 +1733,18 @@ export const backfillOutbox = async () => {
   // Deletes last: removing a parent before its children are pushed would
   // strand them.
   for (const spec of DELETE_SPECS) {
-    const n = await enqueueDeletes(db, spec).catch(() => 0);
+    const n = await enqueueDeletes(db, spec, gate).catch(() => 0);
     if (n) { byKey[`${spec.key}-delete`] = n; total += n; }
   }
 
-  const ttDeletes = await enqueueTimetableDeletes(db).catch(() => 0);
+  const ttDeletes = await enqueueTimetableDeletes(db, gate).catch(() => 0);
   if (ttDeletes) { byKey["timetable-delete"] = ttDeletes; total += ttDeletes; }
+
+  const periodDeletes = await enqueuePeriodDeletes(db, gate).catch(() => 0);
+  if (periodDeletes) { byKey["period-delete"] = periodDeletes; total += periodDeletes; }
 
   if (total) console.log(`[backfill] Queued ${total} mutation(s):`, byKey);
   return { total, byKey };
 };
 
-export default { backfillOutbox, registerReconcilers };
+export default { backfillOutbox, registerReconcilers, dirtySelectors };

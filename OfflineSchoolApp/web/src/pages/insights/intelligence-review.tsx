@@ -44,6 +44,7 @@ import { useTranslation }                          from "react-i18next";
 import { ClipboardCheck, EyeOff, Users, ChevronRight, Info, FlaskConical } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
+import { useFormat }    from "@/i18n/format";
 import { PageHeader }   from "@/components/ui/PageHeader";
 import { Card }         from "@/components/ui/Card";
 import { Select }       from "@/components/ui/Select";
@@ -53,14 +54,16 @@ import { Modal }        from "@/components/ui/Modal";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useToast }     from "@/components/ui/Toast";
 import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/FormField";
+import { DASH_TINT, categoryAccent } from "@/config/dashboardTint";
+import { cn }           from "@/utils/cn";
 import {
   fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration, fetchStaffClasses,
   fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary, fetchPilotReport,
   AnalysisPendingError, apiErrorCode, pollWhileAnalysisPending,
   ENGINE_KEYS, ATTESTATION_KEYS,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
-  type RecordedReview, type ReviewStatus,
-  type Pilot, type LeanPilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence, type PilotFinding, type PilotReport, type Preflight,
+  type RecordedReview, type ReviewStatus, type ReviewStatusBlock,
+  type Pilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence, type PilotFinding, type PilotReport, type Preflight,
   type EngineVersions, type Attestations, type AttestationKey, type ReadinessStatus,
   type ConcernGroup, type FindingCategory, type FindingSeverity, type FindingStatus, type FindingSource,
 } from "@/services/insights.service";
@@ -125,7 +128,9 @@ export default function IntelligenceReviewPage() {
   const pilotQ = useQuery({
     queryKey: ["pilot", schoolId ?? "own"],
     queryFn:  () => fetchPilot(schoolId),
-    enabled:  !blocked,
+    // C4: the pilot is the platform's tuning exercise, not a school's tool —
+    // only a Super Admin sees it, so nobody else asks for it.
+    enabled:  !blocked && isOperator,
     staleTime: 30_000,
   });
 
@@ -188,8 +193,8 @@ export default function IntelligenceReviewPage() {
           </div>
           {sheet && (
             <div className="flex flex-wrap gap-2 text-xs text-ink-muted">
-              <Badge variant="default" label={t("intelReview.engine", { v: sheet.engineVersion })} />
-              <Badge variant="default" label={t("intelReview.status.UNREVIEWED_n", { n: sheet.reviewStatus.unreviewed })} />
+              <Badge accent="violet" label={t("intelReview.engine", { v: sheet.engineVersion })} />
+              <Badge variant="warning" label={t("intelReview.status.UNREVIEWED_n", { n: sheet.reviewStatus.unreviewed })} />
               <Badge variant="info"    label={t("intelReview.status.ONE_REVIEW_n", { n: sheet.reviewStatus.oneReview })} />
               <Badge variant="success" label={t("intelReview.status.MULTIPLE_REVIEWS_n", { n: sheet.reviewStatus.multipleReviews })} />
             </div>
@@ -204,7 +209,7 @@ export default function IntelligenceReviewPage() {
         <Card className="ring-warning-line">
           {apiErrorCode(sheetQ.error) === "ANALYSIS_FAILED" || sheetQ.error instanceof AnalysisPendingError
             ? <AnalysisState query={sheetQ} />
-            : <p className="text-sm text-warning">{t("intelReview.stale")}</p>}
+            : <p className="text-sm text-warning-text">{t("intelReview.stale")}</p>}
         </Card>
       )}
       {sheetQ.isLoading && <PageSpinner />}
@@ -212,9 +217,8 @@ export default function IntelligenceReviewPage() {
       {/* The briefing comes before the queue, every time — what the system is,
           what it is not, and that disagreement is the point. */}
       <Briefing />
-      {!isAdmin && pilotQ.data?.open && pilotQ.data.pilot && <PilotBanner pilot={pilotQ.data.pilot} />}
-
-      {isAdmin && (
+      {/* C4: Super Admin only. */}
+      {isOperator && (
         <PilotPanel
           pilot={(pilotQ.data?.pilot as Pilot | null) ?? null}
           open={Boolean(pilotQ.data?.open)}
@@ -259,7 +263,7 @@ function CaseCard({ c, onOpen }: { c: ReviewCase; onOpen: () => void }) {
             {c.subjectName && <span className="font-normal text-ink-muted"> · {c.subjectName}</span>}
           </p>
           <p className="text-xs text-ink-muted">
-            {c.className ?? ""}{c.enrollmentNo ? ` · ${c.enrollmentNo}` : ""}
+            {c.className ?? ""} · {c.enrollmentNo ?? t("intelReview.noRegNo")}
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={onOpen}>
@@ -267,6 +271,7 @@ function CaseCard({ c, onOpen }: { c: ReviewCase; onOpen: () => void }) {
         </Button>
       </div>
       <p className="text-sm text-ink">{t(`intelReview.category.${c.category}`, { defaultValue: c.category })}</p>
+      <CaseNotes c={c} />
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUS_VARIANT[c.reviewStatus]} label={t(`intelReview.status.${c.reviewStatus}`)} />
         {c.myReview && <Badge variant="success" label={t("intelReview.youReviewed")} />}
@@ -284,6 +289,40 @@ function CaseCard({ c, onOpen }: { c: ReviewCase; onOpen: () => void }) {
 }
 
 /**
+ * What a reviewer needs to read a case beside the others on the sheet: which
+ * answer a borderline case turns on, the subjects a pupil-wide case rests on,
+ * the other categories the same pupil and subject are listed under, and a
+ * subject split across records by a class change.
+ */
+function CaseNotes({ c }: { c: ReviewCase }) {
+  const { t } = useTranslation();
+  const code = (k: string) => t(`intelReview.code.${k}`, { defaultValue: k });
+  const notes: string[] = [];
+  for (const b of c.borderline ?? []) {
+    notes.push(t(b.claimed ? "intelReview.borderline.drop" : "intelReview.borderline.add",
+      { code: code(b.code), moves: b.flipsUnder.join(", ") }));
+  }
+  if (c.subjects?.length) {
+    notes.push(t("intelReview.restsOn", { subjects: c.subjects.map((s) => s.subjectName).join(", ") }));
+  }
+  if (c.related?.length) {
+    notes.push(t(c.subjectName ? "intelReview.related.subject" : "intelReview.related.student", {
+      subject: c.subjectName,
+      categories: c.related.map((k) => t(`intelReview.category.${k}`, { defaultValue: k })).join(", "),
+    }));
+  }
+  if ((c.subjectRecords ?? 0) > 1) {
+    notes.push(t("intelReview.subjectRecords", { subject: c.subjectName, n: c.subjectRecords }));
+  }
+  if (!notes.length) return null;
+  return (
+    <ul className="space-y-0.5 text-xs text-ink-muted">
+      {notes.map((n) => <li key={n}>{n}</li>)}
+    </ul>
+  );
+}
+
+/**
  * One case, in three sections, then the form, then — if this viewer may see
  * them — what the other reviewers said.
  */
@@ -295,6 +334,7 @@ function CasePanel({
   toast: ReturnType<typeof useToast>["toast"];
 }) {
   const { t } = useTranslation();
+  const fmt = useFormat();
   const [form, setForm] = useState<ReviewForm>(() =>
     c.myReview ? { ...emptyForm(contract, c), ...c.myReview.review } : emptyForm(contract, c));
 
@@ -334,6 +374,7 @@ function CasePanel({
         <p className="text-sm text-ink-muted">
           {t(`intelReview.category.${c.category}`, { defaultValue: c.category })} — {t(`intelReview.reason.${c.category}`, { defaultValue: c.selectedBecause })}
         </p>
+        <CaseNotes c={c} />
 
         {/* ── 1. Observed evidence ─────────────────────────────────────── */}
         <Section heading={t("intelReview.evidenceHeading")} hint={t("intelReview.evidenceHint")}>
@@ -365,7 +406,7 @@ function CasePanel({
             {c.classifications.map((k) => (
               <li key={k.code} className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium text-ink">{t(`intelReview.code.${k.code}`, { defaultValue: k.code })}</span>
-                <Badge variant="default" label={t(`confidence.${k.confidence}`, { defaultValue: k.confidence })} />
+                <Badge variant="info" label={t(`confidence.${k.confidence}`, { defaultValue: k.confidence })} />
               </li>
             ))}
           </ul>
@@ -447,8 +488,8 @@ function CasePanel({
 
           {c.myReview && (
             <p className="mt-2 text-xs text-ink-muted">
-              {t("intelReview.yoursOn", { when: new Date(c.myReview.reviewedAt).toLocaleString(), v: c.myReview.engineVersion })}
-              {c.myReview.revisedAt && ` · ${t("intelReview.revisedOn", { when: new Date(c.myReview.revisedAt).toLocaleString() })}`}
+              {t("intelReview.yoursOn", { when: fmt.dateTimeShort(c.myReview.reviewedAt), v: c.myReview.engineVersion })}
+              {c.myReview.revisedAt && ` · ${t("intelReview.revisedOn", { when: fmt.dateTimeShort(c.myReview.revisedAt) })}`}
             </p>
           )}
         </Section>
@@ -482,12 +523,14 @@ function CasePanel({
 
 function OtherReview({ r }: { r: RecordedReview }) {
   const { t } = useTranslation();
+  const fmt = useFormat();
   const f = r.review;
   return (
     <div className="rounded-md border border-line p-3 text-sm">
       <p className="flex items-center gap-2 font-medium text-ink">
-        <Users className="h-4 w-4 text-ink-faint" /> {r.reviewedByName ?? r.reviewedBy}
-        <span className="text-xs font-normal text-ink-muted">{new Date(r.reviewedAt).toLocaleDateString()} · v{r.engineVersion}</span>
+        <Users className={cn("h-4 w-4", DASH_TINT.violet.glyph)} /> {r.reviewedByName ?? r.reviewedBy}
+        {r.operator && <Badge variant="warning" label={t("intelReview.operatorReview")} />}
+        <span className="text-xs font-normal text-ink-muted">{fmt.dateShort(r.reviewedAt)} · v{r.engineVersion}</span>
       </p>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
         {(["observedPattern", "classificationAppropriate", "evidenceSufficient", "guidanceAppropriate"] as const).map((k) => (
@@ -514,14 +557,15 @@ function Monitoring({ sheet }: { sheet: ReviewPackage }) {
   const fb = sheet.feedback;
   return (
     <Card className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{t("intelReview.monitoring")}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{t("intelReview.monitoring")}</h3>
       <div className="flex flex-wrap gap-2 text-xs">
-        <Badge variant="default" label={t("intelReview.mon.cases", { n: s.cases })} />
-        <Badge variant="default" label={t("intelReview.mon.reviewsRecorded", { n: s.reviewsRecorded })} />
-        <Badge variant="default" label={t("intelReview.mon.reviewers", { n: s.reviewers })} />
+        <Badge variant="info" label={t("intelReview.mon.cases", { n: s.cases })} />
+        <Badge variant="info" label={t("intelReview.mon.reviewsRecorded", { n: s.reviewsRecorded })} />
+        <Badge variant="info" label={t("intelReview.mon.reviewers", { n: s.reviewers })} />
         <Badge variant="success" label={t("intelReview.mon.agree", { n: s.agreement.agree })} />
         <Badge variant="warning" label={t("intelReview.mon.differ", { n: s.agreement.differ })} />
       </div>
+      {s.breakdown && <ReviewLedger b={s.breakdown} />}
       {s.repeatedDisagreements.length > 0 && (
         <p className="text-xs text-ink-muted">
           {t("intelReview.repeatedDisagreements")}: {s.repeatedDisagreements.map((k) => t(`intelReview.category.${k}`, { defaultValue: k })).join(", ")}
@@ -529,7 +573,7 @@ function Monitoring({ sheet }: { sheet: ReviewPackage }) {
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-ink-faint">{t("intelReview.mon.byCategory")}</p>
+          <p className="text-xs font-medium text-ink-faint">{t("intelReview.mon.byCategory", { n: sheet.maxPerCategory ?? 3 })}</p>
           <ul className="mt-1 space-y-0.5 text-sm">
             {Object.entries(s.byCategory).map(([k, v]) => (
               <li key={k} className="flex justify-between gap-2">
@@ -596,6 +640,36 @@ function Monitoring({ sheet }: { sheet: ReviewPackage }) {
   );
 }
 
+/**
+ * Where the recorded reviews are. The cross-school row counts every review the
+ * school holds; this page counts the ones on pupils in scope. The ledger says
+ * how the two meet, and which reviews are not teacher evidence.
+ */
+function ReviewLedger({ b }: { b: ReviewStatusBlock["breakdown"] }) {
+  const { t } = useTranslation();
+  const where = [
+    t("intelReview.ledger.onSheet", { n: b.onSheet }),
+    b.offSheet > 0 && t("intelReview.ledger.offSheet", { n: b.offSheet }),
+    b.offRoll && t("intelReview.ledger.offRoll", { n: b.offRoll }),
+  ].filter(Boolean);
+  return (
+    <div className="space-y-0.5 text-xs text-ink-muted">
+      <p>{where.join(" · ")}</p>
+      <p><KindCounts byKind={b.byKind} operator={b.operator} /></p>
+    </div>
+  );
+}
+
+/** Reviews by the exercise they were made in, and the operator's own. Zeroes are left out. */
+function KindCounts({ byKind, operator }: { byKind: Record<string, number>; operator: number }) {
+  const { t } = useTranslation();
+  const parts = (["real", "synthetic", "development", "none"] as const)
+    .filter((k) => (byKind?.[k] ?? 0) > 0)
+    .map((k) => t(`intelReview.ledger.kind.${k}`, { n: byKind[k] }));
+  if (operator > 0) parts.push(t("intelReview.ledger.operator", { n: operator }));
+  return <>{parts.join(" · ")}</>;
+}
+
 /** The office's exploration counts: areas, completion, skips, declines, evidence volume. No pupil, no reflection. */
 function ExplorationAcrossSchool({ schoolId, classId }: { schoolId?: string; classId: string }) {
   const { t } = useTranslation();
@@ -604,11 +678,11 @@ function ExplorationAcrossSchool({ schoolId, classId }: { schoolId?: string; cla
   if (!d) return null;
   return (
     <Card className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{t("explore.summaryHeading")}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{t("explore.summaryHeading")}</h3>
       <div className="flex flex-wrap gap-2 text-xs">
-        <Badge variant="default" label={t("explore.summary.students", { n: d.students })} />
-        <Badge variant="default" label={t("explore.summary.explorations", { n: d.explorations })} />
-        <Badge variant="default" label={t("explore.summary.evidence", { n: d.evidenceRows })} />
+        <Badge variant="info" label={t("explore.summary.students", { n: d.students })} />
+        <Badge variant="info" label={t("explore.summary.explorations", { n: d.explorations })} />
+        <Badge variant="info" label={t("explore.summary.evidence", { n: d.evidenceRows })} />
       </div>
       <ul className="space-y-0.5 text-sm">
         {Object.entries(d.byArea).map(([k, v]) => (
@@ -631,7 +705,7 @@ function AcrossSchools() {
   const rows = q.data?.schools ?? [];
   return (
     <Card className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{t("intelReview.acrossSchools")}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{t("intelReview.acrossSchools")}</h3>
       {q.isLoading && <PageSpinner />}
       {!q.isLoading && !rows.length && <p className="text-sm text-ink-muted">{t("intelReview.noSchools")}</p>}
       <ul className="divide-y divide-line text-sm">
@@ -641,6 +715,7 @@ function AcrossSchools() {
             <span className="text-ink-muted">
               {t("intelReview.mon.reviewsRecorded", { n: r.reviews })} · {t("intelReview.mon.reviewers", { n: r.reviewers })}
               {r.engineVersions.length > 0 && ` · v${r.engineVersions.join(", v")}`}
+              {r.reviews > 0 && r.byKind && <> · <KindCounts byKind={r.byKind} operator={r.operatorReviews ?? 0} /></>}
             </span>
           </li>
         ))}
@@ -656,8 +731,8 @@ function Briefing() {
   return (
     <Card className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-          <Info className="h-3.5 w-3.5" /> {t("intelReview.instructions.heading")}
+        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          <span aria-hidden="true" className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)}><Info className="h-3.5 w-3.5" /></span> {t("intelReview.instructions.heading")}
         </h3>
         <Button variant="ghost" size="sm" onClick={() => setOpen((o) => !o)}>
           {t(open ? "intelReview.instructions.hide" : "intelReview.instructions.show")}
@@ -668,21 +743,6 @@ function Briefing() {
           {(["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as const).map((k) => <li key={k}>{t(`intelReview.instructions.${k}`)}</li>)}
         </ol>
       )}
-    </Card>
-  );
-}
-
-/** What a teacher sees of the pilot: that it is on, its kind, its state. */
-function PilotBanner({ pilot }: { pilot: Pilot | LeanPilot }) {
-  const { t } = useTranslation();
-  return (
-    <Card className="flex items-center gap-2 text-sm text-ink">
-      <FlaskConical className="h-4 w-4 text-ink-faint" />
-      {t("intelReview.pilot.teacherBanner", {
-        kind: t(`intelReview.pilot.kind.${pilot.kind}`).toLowerCase(),
-        status: t(`intelReview.pilot.status.${pilot.status}`).toLowerCase(),
-        v: pilot.engineVersion,
-      })}
     </Card>
   );
 }
@@ -710,6 +770,7 @@ function PilotPanel({
   toast: ReturnType<typeof useToast>["toast"]; onChanged: () => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const fmt = useFormat();
   const [kind, setKind]   = useState<PilotKind>("development");
   const [label, setLabel] = useState("");
   const [scope, setScope] = useState<string[]>([]);
@@ -796,8 +857,8 @@ function PilotPanel({
 
   return (
     <Card className="space-y-3">
-      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-        <FlaskConical className="h-3.5 w-3.5" /> {t("intelReview.pilot.heading")}
+      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        <span aria-hidden="true" className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)}><FlaskConical className="h-3.5 w-3.5" /></span> {t("intelReview.pilot.heading")}
       </h3>
 
       {!open && (
@@ -839,9 +900,9 @@ function PilotPanel({
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-xs font-medium text-ink-faint">{t("intelReview.pilot.lastPilot")}</span>
                 <Badge variant={PILOT_STATUS_VARIANT[pilot.status]} label={t(`intelReview.pilot.status.${pilot.status}`)} />
-                <Badge variant="default" label={t(`intelReview.pilot.kind.${pilot.kind}`)} />
+                <Badge accent={categoryAccent(pilot.kind)} label={t(`intelReview.pilot.kind.${pilot.kind}`)} />
                 {pilot.label && <span className="text-ink">{pilot.label}</span>}
-                {pilot.endedAt && <span className="text-xs text-ink-muted">{t("intelReview.pilot.ended")} {new Date(pilot.endedAt).toLocaleDateString()}</span>}
+                {pilot.endedAt && <span className="text-xs text-ink-muted">{t("intelReview.pilot.ended")} {fmt.dateShort(pilot.endedAt)}</span>}
               </div>
               {pilot.decision && <p className="text-sm text-ink">{t("intelReview.pilot.decisionHeading")}: {t(`intelReview.pilot.outcome.${pilot.decision.outcome}`)} — {pilot.decision.summary}</p>}
               {reportToggle}
@@ -854,8 +915,8 @@ function PilotPanel({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant={PILOT_STATUS_VARIANT[pilot.status]} label={t(`intelReview.pilot.status.${pilot.status}`)} />
-            <Badge variant="default" label={t(`intelReview.pilot.kind.${pilot.kind}`)} />
-            <Badge variant="default" label={t("intelReview.pilot.engine", { v: pilot.engineVersion })} />
+            <Badge accent={categoryAccent(pilot.kind)} label={t(`intelReview.pilot.kind.${pilot.kind}`)} />
+            <Badge accent="violet" label={t("intelReview.pilot.engine", { v: pilot.engineVersion })} />
             {pilot.label && <span className="text-ink">{pilot.label}</span>}
             <span className="text-xs text-ink-muted">
               {t("intelReview.pilot.scope")}: {pilot.classIds?.length
@@ -869,7 +930,7 @@ function PilotPanel({
             <p className="mt-1">{engineList(pilot.engineVersions)}</p>
           </details>
           {pilot.engineDrift.length > 0 && (
-            <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
+            <p className="text-xs text-warning-text">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
           )}
 
           {!pilot.evidence && <AnalysisState query={evidenceQ} />}
@@ -903,7 +964,7 @@ function PilotPanel({
             <div className="rounded-md border border-line p-3 text-sm">
               <p className="font-medium text-ink">{t("intelReview.pilot.decisionHeading")}: {t(`intelReview.pilot.outcome.${pilot.decision.outcome}`)}</p>
               <p className="mt-1 text-ink">{pilot.decision.summary}</p>
-              <p className="mt-1 text-xs text-ink-muted">{new Date(pilot.decision.recordedAt).toLocaleString()} · {t("intelReview.pilot.by", { who: pilot.decision.recordedBy })}</p>
+              <p className="mt-1 text-xs text-ink-muted">{fmt.dateTimeShort(pilot.decision.recordedAt)} · {t("intelReview.pilot.by", { who: pilot.decision.recordedBy })}</p>
             </div>
           )}
 
@@ -943,7 +1004,7 @@ function PilotPanel({
               <div key={f.findingId} className="rounded-md border border-line p-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={f.severity === "high" ? "danger" : f.severity === "medium" ? "warning" : "default"} label={t(`intelReview.finding.severity.${f.severity}`)} />
-                  <Badge variant="default" label={t(`intelReview.finding.category.${f.category}`)} />
+                  <Badge accent={categoryAccent(f.category)} label={t(`intelReview.finding.category.${f.category}`)} />
                   <Badge variant="info" label={t(`intelReview.finding.status.${f.status}`)} />
                   <span className="font-medium text-ink">{f.summary}</span>
                   <span className="text-xs text-ink-muted">v{f.engineVersion} · {f.affectedCases} {t("intelReview.finding.cases")}</span>
@@ -974,7 +1035,7 @@ function PilotPanel({
                     <summary className="cursor-pointer">{t("intelReview.finding.amendments")} ({f.amendments.length})</summary>
                     <ul className="mt-1 space-y-0.5">
                       {f.amendments.map((a, i) => (
-                        <li key={i}>{new Date(a.at).toLocaleString()} · {t("intelReview.pilot.by", { who: a.by })} · {a.changes.map((c) => `${c.field}: ${String(c.from ?? "—")} → ${String(c.to ?? "—")}`).join("; ")} · {a.reason}{a.pilotClosed ? ` · ${t("intelReview.finding.afterClosure")}` : ""}</li>
+                        <li key={i}>{fmt.dateTimeShort(a.at)} · {t("intelReview.pilot.by", { who: a.by })} · {a.changes.map((c) => `${c.field}: ${String(c.from ?? "—")} → ${String(c.to ?? "—")}`).join("; ")} · {a.reason}{a.pilotClosed ? ` · ${t("intelReview.finding.afterClosure")}` : ""}</li>
                       ))}
                     </ul>
                   </details>
@@ -1023,7 +1084,7 @@ function PilotPanel({
             <summary className="cursor-pointer">{t("intelReview.pilot.trail")}</summary>
             <ul className="mt-1 space-y-0.5">
               {pilot.transitions.map((x, i) => (
-                <li key={i}>{new Date(x.at).toLocaleString()} · {x.from ?? "—"} → {t(`intelReview.pilot.status.${x.to}`)} · {t("intelReview.pilot.by", { who: x.by })}{x.note ? ` · ${x.note}` : ""}</li>
+                <li key={i}>{fmt.dateTimeShort(x.at)} · {x.from ?? "—"} → {t(`intelReview.pilot.status.${x.to}`)} · {t("intelReview.pilot.by", { who: x.by })}{x.note ? ` · ${x.note}` : ""}</li>
               ))}
             </ul>
           </details>
@@ -1059,7 +1120,7 @@ function Readiness({ pre, attest, setAttest }: { pre: Preflight; attest: Attesta
                   <Checkbox label={t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })} checked={attest[c.key as AttestationKey] ?? false}
                             onChange={(e) => setAttest((a) => ({ ...a, [c.key]: e.target.checked }))} />
                 ) : (
-                  <span className={c.ok ? "text-ink" : "text-warning"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
+                  <span className={c.ok ? "text-ink" : "text-warning-text"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
                 )}
                 <span className="text-right text-xs text-ink-muted">{c.kind === "manual" && g === "privacy" ? t("intelReview.readiness.confirmNote") : c.detail}</span>
               </li>
@@ -1067,7 +1128,7 @@ function Readiness({ pre, attest, setAttest }: { pre: Preflight; attest: Attesta
           </ul>
         </div>
       ))}
-      <p className={pre.ready ? "text-xs text-ink-muted" : "text-xs font-medium text-warning"}>
+      <p className={pre.ready ? "text-xs text-ink-muted" : "text-xs font-medium text-warning-text"}>
         {pre.ready ? t("intelReview.readiness.awaiting") : t("intelReview.readiness.blocked", { missing: pre.missing.join(", ") })}
       </p>
       <p className="text-xs text-ink-muted">{t("intelReview.readiness.note")}</p>
@@ -1131,7 +1192,8 @@ const ReportSection = ({ title, children }: { title: string; children: React.Rea
  */
 function PilotReport({ report, classes }: { report: PilotReport; classes: Array<{ _id: string; name: string }> }) {
   const { t } = useTranslation();
-  const day = (d: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const fmt = useFormat();
+  const day = (d: string | null) => (d ? fmt.dateShort(d) : "—");
   const cov = report.evidenceCoverage, adv = report.advancedIntelligence, fb = report.studentFeedback;
   return (
     <div className="space-y-3 rounded-md border border-line p-3 text-sm">
@@ -1145,7 +1207,7 @@ function PilotReport({ report, classes }: { report: PilotReport; classes: Array<
         </p>
         <p className="text-xs text-ink-muted">{t("intelReview.report.casesReviewers", { cases: report.scope.cases, reviewers: report.scope.reviewers, students: report.scope.students })}</p>
         <p className="text-xs text-ink-muted">{report.scope.engineVersions ? ENGINE_KEYS.map((k) => `${t(`intelReview.pilot.engineName.${k}`)} ${report.scope.engineVersions![k]}`).join(" · ") : "—"}</p>
-        {report.scope.engineDrift.length > 0 && <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: report.scope.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>}
+        {report.scope.engineDrift.length > 0 && <p className="text-xs text-warning-text">{t("intelReview.pilot.drift", { list: report.scope.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>}
       </ReportSection>
 
       <ReportSection title={t("intelReview.report.coverage")}>
@@ -1232,7 +1294,7 @@ function ConsistencyCheck({ studentId, schoolId }: { studentId: string; schoolId
     <div className="mt-3 space-y-1">
       <Button variant="ghost" size="sm" disabled={q.isFetching} onClick={() => q.refetch()}>{t("intelReview.consistency.check")}</Button>
       {q.data && (
-        <p className={q.data.identical ? "text-xs text-ink-muted" : "text-xs text-warning"}>
+        <p className={q.data.identical ? "text-xs text-ink-muted" : "text-xs text-warning-text"}>
           {q.data.identical
             ? t("intelReview.consistency.identical", { v: q.data.engineVersion.live })
             : t("intelReview.consistency.differs", { n: q.data.differences.length })}
@@ -1250,8 +1312,8 @@ function ConsistencyCheck({ studentId, schoolId }: { studentId: string; schoolId
 function Section({ heading, hint, children }: { heading: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-        <ClipboardCheck className="h-3.5 w-3.5" /> {heading}
+      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        <span aria-hidden="true" className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)}><ClipboardCheck className="h-3.5 w-3.5" /></span> {heading}
       </h3>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       {children}
@@ -1270,7 +1332,7 @@ function AnalysisState({ query }: { query: { failureReason: unknown; error: unkn
   const timedOut = query.isError && query.error instanceof AnalysisPendingError;
   const failed = query.isError && apiErrorCode(query.error) === "ANALYSIS_FAILED";
   if (pending) return <p className="text-sm text-ink-muted">{t("intelReview.analysis.pending")}</p>;
-  if (timedOut) return <p className="text-sm text-warning">{t("intelReview.analysis.stillPending")}</p>;
-  if (failed) return <p className="text-sm text-warning">{t("intelReview.analysis.failed")}</p>;
+  if (timedOut) return <p className="text-sm text-warning-text">{t("intelReview.analysis.stillPending")}</p>;
+  if (failed) return <p className="text-sm text-warning-text">{t("intelReview.analysis.failed")}</p>;
   return null;
 }

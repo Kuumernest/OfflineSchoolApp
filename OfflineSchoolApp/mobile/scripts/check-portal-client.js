@@ -38,6 +38,12 @@ const fs    = require("fs");
 const babel = require("@babel/core");
 
 const MOBILE  = path.join(__dirname, "..");
+
+// The portal as a parent sees it: the shell (app/portal/index.js), which owns
+// the tab-tagged load, then the Messages screen it hands each list to. The
+// assertions below read expressions that live in one or the other.
+const portalSource = () => ["app/portal/index.js", "src/components/portal/MessagesScreen.js"]
+  .map((rel) => fs.readFileSync(path.join(MOBILE, rel), "utf8")).join("\n");
 const BACKEND = path.join(MOBILE, "..", "backend");
 const BSRC    = path.join(BACKEND, "src");
 
@@ -441,7 +447,7 @@ const loadMobileModule = (relPath, stubs) => {
   // returned, so this is not a claim about what the render probably does.
   console.log("\n--- and what the screen does with it ---");
   {
-    const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
+    const screen = portalSource();
 
     const dataLine = /const\s+data\s*=\s*([^;]+);/.exec(screen);
     note(`screen reads: const data = ${dataLine?.[1]}`);
@@ -498,7 +504,7 @@ const loadMobileModule = (relPath, stubs) => {
   // payload, rather than by reading it and hoping.
   console.log("\n--- a tab cannot render another tab's data ---");
   {
-    const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
+    const screen = portalSource();
 
     const decl = /const\s+forThisTab\s*=\s*([^;]+);/.exec(screen);
     if (decl && /section\?\.tab\s*===\s*tab/.test(decl[1])) {
@@ -600,7 +606,7 @@ const loadMobileModule = (relPath, stubs) => {
     // an empty list from before, served silently while the link is down. The
     // screen has to say it is showing an old copy, or "no conversations yet"
     // is indistinguishable from "we could not ask".
-    const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
+    const screen = portalSource();
     const banner = /const stale = ([^;]+);/.exec(screen);
     if (banner && /(?:section|forThisTab)\?\.stale/.test(banner[1]) && /\{stale && \(/.test(screen)) {
       ok("and the screen shows an offline banner whenever the copy is cached");
@@ -670,7 +676,7 @@ const loadMobileModule = (relPath, stubs) => {
     // The question the report asks directly: does the client drop a notice the
     // server correctly returned? The news tab is the only place these are
     // rendered, so its map is the only place that could.
-    const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
+    const screen = portalSource();
     const start  = screen.indexOf('{tab === "news" &&');
     const news   = start === -1 ? "" : screen.slice(start, start + 1600);
 

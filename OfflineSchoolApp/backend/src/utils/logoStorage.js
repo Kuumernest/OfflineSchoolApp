@@ -9,22 +9,24 @@
  * image: fetching one document from the remote cluster took ~5 s, and the
  * mobile client polls school info, so a static picture was re-read constantly.
  *
- * Now the bytes live on disk under uploads/logos and the document holds only
- * a short public path. Reading a school is back to a few hundred bytes, and
- * the image is served by the existing static handler, which supports range
- * requests and lets clients cache it.
+ * Now the bytes live in the file store (storage/fileStore.js: the uploads
+ * directory locally, a bucket in production) under logos/, and the document
+ * holds only a short public path, /uploads/logos/…, which server.js answers
+ * from the store. Reading a school is back to a few hundred bytes.
  */
 
 const fs     = require("fs");
 const path   = require("path");
 const crypto = require("crypto");
+const { getStore } = require("../storage/fileStore");
+const { shrinkImage, MAX_IMAGE_BYTES } = require("../storage/imageResize");
 
 const UPLOADS_ROOT = path.resolve(__dirname, "..", "uploads");
 const LOGO_DIR     = path.join(UPLOADS_ROOT, "logos");
 const PUBLIC_PREFIX = "/uploads/logos";
 
-/** Max decoded logo size we will accept (2 MB). */
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+/** Max decoded logo size we will accept (5 MB) — shrunk to 512 px before it is stored. */
+const MAX_LOGO_BYTES = MAX_IMAGE_BYTES;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORMAT SNIFFING
@@ -140,7 +142,10 @@ const resolveLogoFile = (publicPath) => {
 };
 
 /**
- * Writes a base64 logo to disk and returns its public path.
+ * Writes a base64 logo to the file store and returns its public path.
+ *
+ * Shrunk first (storage/imageResize.js): at most 512 px, WebP, metadata
+ * stripped — what is stored is a few tens of KB, not the upload.
  *
  * The filename embeds a content hash, so re-uploading the same image is a
  * no-op and a changed image gets a new URL — which is what lets clients and
@@ -148,10 +153,10 @@ const resolveLogoFile = (publicPath) => {
  *
  * @param {string} schoolId
  * @param {string} base64      raw base64, with or without a data: prefix
- * @returns {{ publicPath: string, bytes: number, mime: string, filename: string }}
+ * @returns {Promise<{ publicPath: string, bytes: number, mime: string, filename: string }>}
  * @throws {Error} when the payload is not a recognised image or is too large
  */
-const saveLogoFromBase64 = (schoolId, base64) => {
+const saveLogoFromBase64 = async (schoolId, base64) => {
   const clean = stripDataUri(base64);
   if (!clean) throw new Error("Logo payload is empty");
 
@@ -169,25 +174,23 @@ const saveLogoFromBase64 = (schoolId, base64) => {
     );
   }
 
-  const kind = sniffImage(buf);
-  if (!kind) throw new Error("Logo is not a JPEG, PNG, GIF or WebP image");
+  if (!sniffImage(buf)) throw new Error("Logo is not a JPEG, PNG, GIF or WebP image");
+  const image = await shrinkImage(buf, "logo", "Logo");
 
-  ensureLogoDir();
-
-  const hash     = crypto.createHash("md5").update(buf).digest("hex").slice(0, 12);
+  const hash     = crypto.createHash("md5").update(image.buffer).digest("hex").slice(0, 12);
   const safeId   = String(schoolId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "school";
-  const filename = `${safeId}-${hash}.${kind.ext}`;
-  const abs      = path.join(LOGO_DIR, filename);
+  const filename = `${safeId}-${hash}.${image.ext}`;
+  const store    = getStore();
 
   // Content-addressed: identical bytes mean the file is already correct.
-  if (!fs.existsSync(abs)) {
-    fs.writeFileSync(abs, buf);
+  if (!(await store.stat(`logos/${filename}`))) {
+    await store.put(`logos/${filename}`, image.buffer, { contentType: image.mime, schoolId });
   }
 
   return {
     publicPath: `${PUBLIC_PREFIX}/${filename}`,
-    bytes:      buf.length,
-    mime:       kind.mime,
+    bytes:      image.buffer.length,
+    mime:       image.mime,
     filename,
   };
 };
@@ -196,26 +199,16 @@ const saveLogoFromBase64 = (schoolId, base64) => {
  * Deletes a logo file previously written by saveLogoFromBase64.
  * Never throws — a missing or unexpected path is simply ignored.
  */
-const deleteLogoFile = (publicPath) => {
-  try {
-    const abs = resolveLogoFile(publicPath);
-    if (abs && fs.existsSync(abs)) {
-      fs.unlinkSync(abs);
-      return true;
-    }
-  } catch (err) {
-    console.warn("[logoStorage] delete failed:", err.message);
-  }
-  return false;
+const deleteLogoFile = async (publicPath) => {
+  if (!resolveLogoFile(publicPath)) return false;
+  return getStore().removeUrl(publicPath);
 };
 
 /** Byte size of a stored logo file, or null when it cannot be read. */
-const logoFileSize = (publicPath) => {
-  try {
-    const abs = resolveLogoFile(publicPath);
-    if (abs && fs.existsSync(abs)) return fs.statSync(abs).size;
-  } catch { /* ignore */ }
-  return null;
+const logoFileSize = async (publicPath) => {
+  if (!resolveLogoFile(publicPath)) return null;
+  try { return (await getStore().stat(`logos/${path.basename(publicPath.trim())}`))?.size ?? null; }
+  catch { return null; }
 };
 
 module.exports = {

@@ -27,9 +27,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   getSubjectContentForStudent,
   resolveTypeFromItem,
-} from "../../../src/services/student.content.service";
+} from "../../../src/services/student.content.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS as THEME, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+import { authHeaders, openStoredFile } from "../../../src/utils/storedFile";
 
 let IntentLauncher = null;
 try {
@@ -114,13 +118,13 @@ const formatFileSize = (bytes) => {
 
 const getContentVisuals = (type) => {
   switch (type) {
-    case "syllabus":  return { icon: "list",          color: "#7C3AED", bg: "#EDE9FE" };
-    case "notes":     return { icon: "document-text", color: "#4F46E5", bg: "#EEF2FF" };
-    case "video":     return { icon: "videocam",       color: "#DC2626", bg: "#FEE2E2" };
-    case "audio":     return { icon: "musical-notes",  color: "#D97706", bg: "#FEF3C7" };
-    case "image":     return { icon: "image",          color: "#0284C7", bg: "#F0F9FF" };
-    case "document":  return { icon: "document",       color: "#059669", bg: "#ECFDF5" };
-    default:          return { icon: "document-text",  color: "#6B7280", bg: "#F3F4F6" };
+    case "syllabus":  return { icon: "list",          accent: "violet", color: ACCENT.violet.solid, bg: ACCENT.violet.wash };
+    case "notes":     return { icon: "document-text", accent: "indigo", color: ACCENT.indigo.solid, bg: ACCENT.indigo.wash };
+    case "video":     return { icon: "videocam",       accent: "blue",   color: ACCENT.blue.solid,   bg: ACCENT.blue.wash   };
+    case "audio":     return { icon: "musical-notes",  accent: "amber",  color: ACCENT.amber.solid,  bg: ACCENT.amber.wash  };
+    case "image":     return { icon: "image",          accent: "sky",    color: ACCENT.sky.solid,    bg: ACCENT.sky.wash    };
+    case "document":  return { icon: "document",       accent: "green",  color: ACCENT.green.solid,  bg: ACCENT.green.wash  };
+    default:          return { icon: "document-text",  accent: "slate",  color: ACCENT.slate.solid,  bg: ACCENT.slate.wash  };
   }
 };
 
@@ -194,8 +198,9 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone, t) => {
     }
 
     console.log("[downloadAndOpen] downloading →", url);
+    // Teacher content needs the signed-in user's token.
     const downloadResumable = FileSystem.createDownloadResumable(
-      url, localUri, {},
+      url, localUri, { headers: await authHeaders() },
       (progress) => {
         if (onProgress && progress.totalBytesExpectedToWrite > 0) {
           onProgress(Math.round(
@@ -218,7 +223,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone, t) => {
       errorText(t, err),
       [
         { text: t("common.cancel"), style: "cancel" },
-        { text: t("studentSubj.openBrowser"), onPress: () => Linking.openURL(url).catch(() => {}) },
+        { text: t("studentSubj.openBrowser"), onPress: () => openStoredFile(url).catch(() => {}) },
       ]
     );
   }
@@ -263,8 +268,8 @@ const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
     >
       <View style={[mc.circle, { backgroundColor: color }]}>
         {isDownloading
-          ? <ActivityIndicator size="small" color="#FFF" />
-          : <Ionicons name={isVid ? "play" : "headset"} size={20} color="#FFF" />
+          ? <ActivityIndicator size="small" color={THEME.onPrimary} />
+          : <Ionicons name={isVid ? "play" : "headset"} size={20} color={THEME.onPrimary} />
         }
       </View>
 
@@ -294,7 +299,7 @@ const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
         <Ionicons
           name={isCached ? "checkmark-circle-outline" : "arrow-forward-circle-outline"}
           size={20}
-          color={isCached ? "#059669" : color}
+          color={isCached ? ACCENT.green.solid : color}
         />
       )}
     </TouchableOpacity>
@@ -311,27 +316,32 @@ const mc = StyleSheet.create({
     width: 44, height: 44, borderRadius: 22,
     alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  label:    { fontSize: 13, fontWeight: "700", color: "#111827" },
-  sublabel: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  label:    { fontSize: 13, fontWeight: "700", color: THEME.text },
+  sublabel: { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
   progressTrack: {
-    height: 4, backgroundColor: "#E5E7EB",
+    height: 4, backgroundColor: THEME.border,
     borderRadius: 2, marginTop: 6, overflow: "hidden",
   },
   progressFill: { height: "100%", borderRadius: 2 },
 });
 
+const toneColors = (tone) => {
+  const b = statusBadge(tone);
+  return { color: b.text, bg: b.bg, border: b.border };
+};
+
 const SourceBadge = ({ source }) => {
   const { t } = useTranslation();
   if (!source || source === "api") return null;
   const map = {
-    "api-alt": { labelKey: "studentSubj.live",    color: "#059669", bg: "#ECFDF5" },
-    "sqlite":  { labelKey: "studentSubj.cached",  color: "#D97706", bg: "#FEF3C7" },
-    "none":    { labelKey: "studentSubj.offline", color: "#DC2626", bg: "#FEE2E2" },
+    "api-alt": { labelKey: "studentSubj.live",    ...toneColors("success") },
+    "sqlite":  { labelKey: "studentSubj.cached",  ...toneColors("warning") },
+    "none":    { labelKey: "studentSubj.offline", ...toneColors("error") },
   };
   const v = map[source];
   if (!v) return null;
   return (
-    <View style={[sbx.badge, { backgroundColor: v.bg }]}>
+    <View style={[sbx.badge, { backgroundColor: v.bg, borderColor: v.border }]}>
       <Ionicons
         name={source === "sqlite" ? "cloud-offline-outline" : "cloud-done-outline"}
         size={11} color={v.color}
@@ -344,7 +354,7 @@ const SourceBadge = ({ source }) => {
 const sbx = StyleSheet.create({
   badge: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
   },
   text: { fontSize: 10, fontWeight: "700" },
 });
@@ -355,7 +365,9 @@ const ContentCard = React.memo(({ item }) => {
   const [progress, setProgress] = useState(null);
 
   const type                = item.type || resolveTypeFromItem(item);
-  const { icon, color, bg } = getContentVisuals(type);
+  const { icon, color, bg, accent } = getContentVisuals(type);
+  const badge               = accentBadge(accent);
+  const greyChip            = accentBadge("slate");
   const ext                 = getFileExtension(item);
   const fileSize            = formatFileSize(item.fileSize);
   const hasUrl              = !!item.fileUrl;
@@ -390,10 +402,10 @@ const ContentCard = React.memo(({ item }) => {
   }, [item.fileUrl, item.mimeType, progress, t]);
 
   return (
-    <View style={cc.card}>
+    <View style={[cc.card, { backgroundColor: ACCENT[accent].wash, borderLeftColor: ACCENT[accent].base }]}>
       <View style={cc.topRow}>
-        <View style={[cc.iconBg, { backgroundColor: bg }]}>
-          <Ionicons name={icon} size={22} color={color} />
+        <View style={[cc.iconBg, { backgroundColor: color }]}>
+          <Ionicons name={icon} size={22} color={THEME.onPrimary} />
         </View>
 
         <View style={cc.titleArea}>
@@ -402,19 +414,19 @@ const ContentCard = React.memo(({ item }) => {
           </Text>
           <View style={cc.metaRow}>
             {!!ext && (
-              <View style={[cc.chip, { backgroundColor: color + "18" }]}>
-                <Text style={[cc.chipText, { color, fontWeight: "800" }]}>{ext}</Text>
+              <View style={[cc.chip, { backgroundColor: THEME.surface, borderColor: badge.border }]}>
+                <Text style={[cc.chipText, { color: badge.text, fontWeight: "800" }]}>{ext}</Text>
               </View>
             )}
             {!!fileSize && (
-              <View style={cc.chip}>
-                <Ionicons name="server-outline" size={9} color="#9CA3AF" />
+              <View style={[cc.chip, { borderColor: greyChip.border }]}>
+                <Ionicons name="server-outline" size={9} color={ACCENT.slate.solid} />
                 <Text style={cc.chipText}>{fileSize}</Text>
               </View>
             )}
             {!!item.uploaderName && (
-              <View style={cc.chip}>
-                <Ionicons name="person-outline" size={9} color="#9CA3AF" />
+              <View style={[cc.chip, { borderColor: accentBadge("violet").border }]}>
+                <Ionicons name="person-outline" size={9} color={ACCENT.violet.solid} />
                 <Text style={cc.chipText} numberOfLines={1}>{item.uploaderName}</Text>
               </View>
             )}
@@ -431,7 +443,7 @@ const ContentCard = React.memo(({ item }) => {
           >
             <Ionicons
               name={expanded ? "chevron-up" : "chevron-down"}
-              size={18} color="#9CA3AF"
+              size={18} color={THEME.textSecondary}
             />
           </TouchableOpacity>
         )}
@@ -481,8 +493,9 @@ const ContentCard = React.memo(({ item }) => {
 
 const cc = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF", borderRadius: 14,
+    backgroundColor: THEME.surface, borderRadius: 14,
     padding: 14, marginBottom: 10, gap: 10,
+    borderWidth: 1, borderColor: THEME.border, borderLeftWidth: 3,
     shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
   },
   topRow:    { flexDirection: "row", alignItems: "flex-start", gap: 10 },
@@ -491,17 +504,17 @@ const cc = StyleSheet.create({
     alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   titleArea: { flex: 1, gap: 5 },
-  title:     { fontSize: 14, fontWeight: "700", color: "#111827", lineHeight: 20 },
+  title:     { fontSize: 14, fontWeight: "700", color: THEME.text, lineHeight: 20 },
   metaRow:   { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 5 },
   chip: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: "#F3F4F6", paddingHorizontal: 6,
-    paddingVertical: 2, borderRadius: 5,
+    backgroundColor: THEME.surface, paddingHorizontal: 6,
+    paddingVertical: 2, borderRadius: 5, borderWidth: 1, borderColor: THEME.border,
   },
-  chipText:    { fontSize: 10, color: "#6B7280" },
-  dateText:    { fontSize: 10, color: "#9CA3AF" },
-  notePreview: { fontSize: 13, color: "#6B7280", lineHeight: 19 },
-  description: { fontSize: 13, color: "#374151", lineHeight: 20 },
+  chipText:    { fontSize: 10, color: THEME.textSecondary },
+  dateText:    { fontSize: 10, color: THEME.textSecondary },
+  notePreview: { fontSize: 13, color: THEME.textSecondary, lineHeight: 19 },
+  description: { fontSize: 13, color: THEME.text, lineHeight: 20 },
   openBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 6, borderRadius: 10, paddingVertical: 9,
@@ -522,11 +535,11 @@ const SummaryRow = ({ summary }) => {
       contentContainerStyle={sum.row}
     >
       {chips.map(([key, count]) => {
-        const { color, bg } = getContentVisuals(key);
+        const b = accentBadge(getContentVisuals(key).accent);
         return (
-          <View key={key} style={[sum.chip, { backgroundColor: bg }]}>
-            <Text style={[sum.count, { color }]}>{count}</Text>
-            <Text style={[sum.label, { color }]}>
+          <View key={key} style={[sum.chip, { backgroundColor: b.bg, borderColor: b.border }]}>
+            <Text style={[sum.count, { color: b.text }]}>{count}</Text>
+            <Text style={[sum.label, { color: b.text }]}>
               {key.charAt(0).toUpperCase() + key.slice(1)}
             </Text>
           </View>
@@ -540,7 +553,7 @@ const sum = StyleSheet.create({
   row: { paddingHorizontal: 16, paddingBottom: 8, gap: 8, flexDirection: "row" },
   chip: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1,
   },
   count: { fontSize: 13, fontWeight: "800" },
   label: { fontSize: 11, fontWeight: "600" },
@@ -633,30 +646,28 @@ export default function SubjectDetailScreen() {
     <View style={sd.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
 
-      <View style={[sd.header, { borderBottomColor: theme.color + "30" }]}>
+      <View style={sd.header}>
         <TouchableOpacity
           style={sd.backBtn}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={THEME.text} />
         </TouchableOpacity>
 
-        <View style={[sd.subjectIconBg, { backgroundColor: theme.bg }]}>
-          <Ionicons name={theme.icon} size={20} color={theme.color} />
-        </View>
+        <HeaderIcon icon={theme.icon} style={{ marginRight: 0 }} />
 
         <View style={{ flex: 1 }}>
           <Text style={sd.subjectName} numberOfLines={1}>{subjectName}</Text>
           <View style={sd.subHeaderRow}>
             {!!subjectCode && (
-              <View style={[sd.codeBadge, { backgroundColor: theme.color + "18" }]}>
-                <Text style={[sd.codeText, { color: theme.color }]}>{subjectCode}</Text>
+              <View style={sd.codeBadge}>
+                <Text style={sd.codeText}>{subjectCode}</Text>
               </View>
             )}
             {!!teacherName && (
               <Text style={sd.teacherLabel} numberOfLines={1}>
-                <Ionicons name="person-outline" size={11} color="#9CA3AF" />{" "}
+                <Ionicons name="person-outline" size={11} color={ACCENT.violet.solid} />{" "}
                 {teacherName}
               </Text>
             )}
@@ -665,8 +676,8 @@ export default function SubjectDetailScreen() {
 
         <View style={sd.headerRight}>
           <SourceBadge source={source} />
-          <View style={[sd.countBadge, { backgroundColor: theme.bg }]}>
-            <Text style={[sd.countText, { color: theme.color }]}>
+          <View style={sd.countBadge}>
+            <Text style={sd.countText}>
               {content.length}
             </Text>
           </View>
@@ -720,12 +731,13 @@ export default function SubjectDetailScreen() {
           >
             {visibleFilters.map((f) => {
               const isActive = activeFilter === f.key;
+              const fa = ACCENT[getContentVisuals(f.key).accent];
               return (
                 <TouchableOpacity
                   key={f.key}
                   style={[
                     sd.filterChip,
-                    isActive && { backgroundColor: theme.color, borderColor: theme.color },
+                    isActive && { backgroundColor: fa.wash, borderColor: fa.base },
                   ]}
                   onPress={() => setActiveFilter(f.key)}
                   activeOpacity={0.7}
@@ -733,13 +745,13 @@ export default function SubjectDetailScreen() {
                   <Ionicons
                     name={f.icon}
                     size={13}
-                    color={isActive ? "#FFF" : "#6B7280"}
+                    color={isActive ? fa.deep : THEME.textSecondary}
                   />
-                  <Text style={[sd.filterChipText, isActive && { color: "#FFF" }]}>
+                  <Text style={[sd.filterChipText, isActive && { color: fa.deep }]}>
                     {t(f.labelKey)}
                   </Text>
                   {summary[f.key] > 0 && (
-                    <Text style={[sd.filterCount, isActive && { color: "rgba(255,255,255,0.8)" }]}>
+                    <Text style={[sd.filterCount, isActive && { color: fa.deep }]}>
                       {f.key === "all" ? content.length : summary[f.key]}
                     </Text>
                   )}
@@ -751,7 +763,7 @@ export default function SubjectDetailScreen() {
 
         {!!error && content.length === 0 && (
           <View style={sd.errorBox}>
-            <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
+            <Ionicons name="alert-circle-outline" size={20} color={SEMANTIC.error.icon} />
             <Text style={sd.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => load(true)} activeOpacity={0.7}>
               <Text style={sd.retryText}>{t("common.retry")}</Text>
@@ -760,31 +772,29 @@ export default function SubjectDetailScreen() {
         )}
 
         {filteredContent.length === 0 ? (
-          <View style={sd.emptyState}>
-            <Ionicons name="folder-open-outline" size={56} color="#D1D5DB" />
-            <Text style={sd.emptyTitle}>
-              {search
-                ? t("studentSubj.noMatch")
-                : content.length === 0
-                  ? t("studentSubj.emptyNone")
-                  : t("studentSubj.noneInCategory")}
-            </Text>
-            <Text style={sd.emptySub}>
-              {content.length === 0
-                ? t("studentSubj.emptySub")
-                : t("studentSubj.noMatchSub")}
-            </Text>
-            {(search || activeFilter !== "all") && (
+          <EmptyState
+            icon="folder-open-outline"
+            accent="slate"
+            style={sd.emptyState}
+            title={search
+              ? t("studentSubj.noMatch")
+              : content.length === 0
+                ? t("studentSubj.emptyNone")
+                : t("studentSubj.noneInCategory")}
+            message={content.length === 0
+              ? t("studentSubj.emptySub")
+              : t("studentSubj.noMatchSub")}
+            action={(search || activeFilter !== "all") ? (
               <TouchableOpacity
-                style={[sd.resetBtn, { backgroundColor: theme.bg }]}
+                style={sd.resetBtn}
                 onPress={() => { setSearch(""); setActiveFilter("all"); }}
               >
-                <Text style={[sd.resetBtnText, { color: theme.color }]}>
+                <Text style={sd.resetBtnText}>
                   {t("studentSubj.clearFilters")}
                 </Text>
               </TouchableOpacity>
-            )}
-          </View>
+            ) : null}
+          />
         ) : (
           filteredContent.map((item) => (
             <ContentCard
@@ -808,27 +818,29 @@ const sd = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: "#FFF", borderBottomWidth: 1, gap: 10,
+    backgroundColor: THEME.surface, borderBottomWidth: 1, borderBottomColor: THEME.border, gap: 10,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
+    backgroundColor: THEME.page, alignItems: "center", justifyContent: "center",
   },
-  subjectIconBg: {
-    width: 40, height: 40, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
-  },
-  subjectName:  { fontSize: 17, fontWeight: "700", color: "#111827" },
+  subjectName:  { fontSize: 17, fontWeight: "700", color: THEME.text },
   subHeaderRow: {
     flexDirection: "row", alignItems: "center",
     gap: 6, marginTop: 2, flexWrap: "wrap",
   },
-  codeBadge:    { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  codeText:     { fontSize: 10, fontWeight: "800" },
-  teacherLabel: { fontSize: 12, color: "#9CA3AF" },
+  codeBadge:    {
+    borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1,
+    backgroundColor: accentBadge("slate").bg, borderColor: accentBadge("slate").border,
+  },
+  codeText:     { fontSize: 10, fontWeight: "800", color: accentBadge("slate").text },
+  teacherLabel: { fontSize: 12, color: THEME.textSecondary },
   headerRight:  { flexDirection: "row", alignItems: "center", gap: 6 },
-  countBadge:   { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  countText:    { fontSize: 13, fontWeight: "700" },
+  countBadge:   {
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1,
+    backgroundColor: accentBadge("slate").bg, borderColor: accentBadge("slate").border,
+  },
+  countText:    { fontSize: 13, fontWeight: "700", color: accentBadge("slate").text },
 
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -844,27 +856,29 @@ const sd = StyleSheet.create({
   filterRow: { paddingBottom: 10, gap: 8, flexDirection: "row" },
   filterChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "#FFF", borderRadius: 20,
+    backgroundColor: THEME.surface, borderRadius: 20,
     paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1, borderColor: THEME.border,
   },
-  filterChipText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  filterCount:    { fontSize: 11, fontWeight: "700", color: "#9CA3AF" },
+  filterChipText: { fontSize: 12, fontWeight: "600", color: THEME.textSecondary },
+  filterCount:    { fontSize: 11, fontWeight: "700", color: THEME.textSecondary },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FEE2E2", borderRadius: 10,
+    backgroundColor: SEMANTIC.error.bg, borderRadius: 10,
+    borderWidth: 1, borderColor: statusBadge("error").border,
     padding: 12, marginBottom: 10, flexWrap: "wrap",
   },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
-  retryText: { fontSize: 13, fontWeight: "700", color: "#4F46E5" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
+  retryText: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
 
   emptyState: {
     alignItems: "center", paddingVertical: 60,
     paddingHorizontal: 32, gap: 10,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: "#374151", textAlign: "center" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
-  resetBtn:   { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, marginTop: 4 },
-  resetBtnText: { fontSize: 13, fontWeight: "700" },
+  resetBtn:   {
+    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, marginTop: 4,
+    backgroundColor: ACCENT.slate.wash, borderWidth: 1, borderColor: THEME.border,
+  },
+  resetBtnText: { fontSize: 13, fontWeight: "700", color: ACCENT.slate.deep },
 });

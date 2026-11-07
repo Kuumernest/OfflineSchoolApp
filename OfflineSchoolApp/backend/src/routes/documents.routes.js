@@ -11,9 +11,12 @@ const Student       = require("../db/models/Student");
 const Class         = require("../db/models/Class");
 const Enrollment    = require("../db/models/Enrollment");
 const ResultSummary = require("../db/models/ResultSummary");
+const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
+const { averageOutOf20 } = require("../../../shared/reportCard");
 
 const { buildClassListHtml }  = require("../print/classList");
-const { buildTranscriptHtml } = require("../print/transcript");
+const { buildTranscriptHtml, dayOf } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
 const QRCode                  = require("qrcode");
 const gate                    = require("../services/gate.service");
@@ -55,11 +58,9 @@ const bad = (res, message, code) =>
  * has no base URL of its own — a print blob in the browser, or a PDF engine on
  * a phone. Behind a proxy, x-forwarded-* is the only honest source.
  */
-const originOf = (req) => {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
-  const host  = req.headers["x-forwarded-host"]  || req.get("host");
-  return host ? `${proto}://${host}` : null;
-};
+// The first value of each forwarded header, as the report cards read them.
+const { getStore } = require("../storage/fileStore");
+const { originOf } = require("../print/imageSource");
 
 /**
  * Answers either the data or the finished sheet, from one route.
@@ -68,12 +69,26 @@ const originOf = (req) => {
  * puts this string in an iframe, the phone hands it to expo-print. Keeping the
  * template here rather than in each client is what stops the two drifting.
  */
-const respond = (req, res, { data, html }) => {
+const respond = async (req, res, { data, html }) => {
   if (String(req.query.format || "").toLowerCase() === "html") {
+    // The sheet embeds its logo and photos; with a bucket they are fetched
+    // first (print/imageSource.js).
+    await getStore().warmImages(imagesIn(data));
     res.type("html");
     return res.send(html());
   }
   return res.json({ success: true, data });
+};
+
+/** The logos and photos a document's data names. */
+const imagesIn = (value, depth = 0, out = []) => {
+  if (!value || typeof value !== "object" || depth > 3) return out;
+  if (Array.isArray(value)) { value.forEach((v) => imagesIn(v, depth + 1, out)); return out; }
+  for (const [k, v] of Object.entries(value)) {
+    if ((k === "logo" || k === "photoUrl") && typeof v === "string") out.push(v);
+    else if (v && typeof v === "object") imagesIn(v, depth + 1, out);
+  }
+  return out;
 };
 
 /** The heading every printed document carries. */
@@ -336,13 +351,16 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Student not found" });
   }
 
-  const [enrollments, summaries] = await Promise.all([
+  const [enrollments, allSummaries] = await Promise.all([
     Enrollment.find({ schoolId, studentId: req.params.studentId, deletedAt: null })
       .sort({ academicYear: 1 }).lean(),
     ResultSummary.find({
       schoolId, studentId: req.params.studentId, isPublished: true, deletedAt: null,
     }).sort({ academicYear: 1, term: 1 }).lean(),
   ]);
+  // A deleted exam's result is not on the record: its summary stays live when
+  // the exam is deleted, and a transcript is the last place to print it.
+  const summaries = await withoutDeletedExams(schoolId, allSummaries);
 
   // Group results under the year they belong to. Years come from BOTH sources:
   // a year with enrollment but no published results still belongs on the record
@@ -363,15 +381,25 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     y.outcome   = e.outcome ?? null;
   }
 
+  // Which sequence each result is: a year has one row per sequence, and the
+  // stored term alone printed "Term 1" twice.
+  const examsById = new Map((await Exam.find({
+    _id: { $in: [...new Set(summaries.map((s) => String(s.examId)))] }, schoolId,
+  }).select("_id sequenceNumber term").lean()).map((e) => [String(e._id), e]));
+
   for (const s of summaries) {
     const year = s.academicYear ?? "—";
     const y = ensureYear(year);
     // Falls back to the result's own class for years the history predates.
     if (!y.className) y.className = s.className ?? null;
+    const exam = examsById.get(String(s.examId));
     y.terms.push({
-      term:          s.term ?? null,
+      term:          s.term ?? exam?.term ?? null,
+      sequenceNumber: exam?.sequenceNumber ?? null,
       examId:        s.examId,
-      average:       s.average ?? null,
+      // Out of twenty, as printed: an older sequence result stores GPA points
+      // (shared/reportCard averageOutOf20), and "/20" now follows the figure.
+      average:       averageOutOf20(s.average, "sequence", s.calcVersion),
       percentage:    s.percentage ?? null,
       overallGrade:  s.overallGrade ?? null,
       classPosition: s.classPosition ?? null,
@@ -425,6 +453,9 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
    * paper, nothing the paper does not already say.
    */
   const isHtml = String(req.query.format || "").toLowerCase() === "html";
+  // ?preview=1 is a look, not a print: it shows the code the transcript
+  // already has, and issues none.
+  const preview = req.query.preview === "1" || req.query.preview === "true";
   let verify = null;
   if (isHtml) {
     const round1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : null);
@@ -433,7 +464,8 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
       kind: "transcript",
       studentId: String(student._id),
       examId: null,
-      origin: originOf(req),
+      req,
+      count: !preview,
       snapshot: {
         facts: [
           { label: { en: "Student", fr: "Élève" },          value: data.student.name },
@@ -441,7 +473,7 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
           { label: { en: "Years on record", fr: "Années enregistrées" },
             value: String(data.overall.yearsOnRecord) },
           { label: { en: "Overall average", fr: "Moyenne générale" },
-            value: data.overall.average != null ? String(data.overall.average) : "—" },
+            value: data.overall.average != null ? `${data.overall.average}/20` : "—" },
           ...record.map((y) => {
             const last = y.terms[y.terms.length - 1];
             return {
@@ -464,7 +496,8 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     html: () => buildTranscriptHtml({
       data,
       labels:    labelsFor(lang),
-      printedOn: formatPrintDate(new Date(), lang),
+      // DD/MM/YYYY, like every other date on the transcript.
+      printedOn: dayOf(new Date()),
       origin:    originOf(req),
       verify,
     }),
@@ -499,7 +532,7 @@ router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res
 
   let saved;
   try {
-    saved = photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64);
+    saved = await photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64, { schoolId });
   } catch (err) {
     return bad(res, err.message, "BAD_PHOTO");
   }
@@ -509,7 +542,7 @@ router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res
   // Old file removed only after the new path is stored, so a failure cannot
   // leave the student with neither.
   if (student.photoUrl && student.photoUrl !== saved.publicPath) {
-    photoStorage.deletePhotoFile(student.photoUrl);
+    await photoStorage.deletePhotoFile(student.photoUrl);
   }
 
   return res.json({ success: true, photoUrl: saved.publicPath, bytes: saved.bytes });
@@ -526,7 +559,7 @@ router.delete("/student-photo/:studentId", officeOnly, asyncHandler(async (req, 
     return res.status(404).json({ success: false, message: "Student not found" });
   }
 
-  if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+  if (student.photoUrl) await photoStorage.deletePhotoFile(student.photoUrl);
   await Student.updateOne({ _id: req.params.studentId }, { photoUrl: null });
 
   return res.json({ success: true, photoUrl: null });
@@ -553,7 +586,6 @@ router.get("/verifications", officeOnly, asyncHandler(async (req, res) => {
     schoolId, studentId: String(req.query.studentId),
   });
 
-  const Exam = require("../db/models/Exam");
   const examIds = [...new Set(rows.map((r) => r.examId).filter((v) => v && v !== "-"))];
   const exams = examIds.length
     ? await Exam.find({ _id: { $in: examIds } }).select("name term academicYear").lean()
@@ -639,8 +671,14 @@ router.get("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
 
   const ids = [...new Set(rows.flatMap((r) => r.studentIds ?? []))];
   const students = await Student.find({ _id: { $in: ids }, schoolId, deletedAt: null })
-    .select("studentName name firstName lastName enrollmentNo").lean();
+    .select("studentName name firstName lastName enrollmentNo guardianName").lean();
   const byId = new Map(students.map((s) => [String(s._id), s]));
+
+  // C8: a code whose children have all left the roster (or that never had any)
+  // opens nothing — the office should see that, not a row with an empty cell.
+  const childrenOf = (r) => (r.studentIds ?? [])
+    .map((id) => byId.get(String(id)))
+    .filter(Boolean);
 
   return res.json({
     success: true,
@@ -653,14 +691,17 @@ router.get("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
       issuedAt:  r.codeSetAt ?? null,
       revokedAt: r.revokedAt ?? null,
       lastSeenAt: r.lastSeenAt ?? null,
-      children: (r.studentIds ?? [])
-        .map((id) => byId.get(String(id)))
-        .filter(Boolean)
-        .map((s) => ({
-          _id: String(s._id),
-          name: displayName(s) || null,
-          enrollmentNo: s.enrollmentNo ?? null,
-        })),
+      children: childrenOf(r).map((s) => ({
+        _id: String(s._id),
+        name: displayName(s) || null,
+        enrollmentNo: s.enrollmentNo ?? null,
+      })),
+      // The guardian as the children's records name them — distinct, in the
+      // children's order — for the many codes issued with no label.
+      guardianNames: [...new Set(childrenOf(r)
+        .map((s) => (s.guardianName ?? "").trim())
+        .filter(Boolean))],
+      linkedToNoStudent: childrenOf(r).length === 0,
     })),
   });
 }));

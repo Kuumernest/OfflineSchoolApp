@@ -23,6 +23,15 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
 const { processExam, computeGrade } = require("../services/examProcess.service");
+const { coefficientOf, weightFor } = require("../services/subjectCoefficient.service");
+const { scopedPassRate, withAverage20 } = require("../services/classStats.service");
+const { countExamsByStatus } = require("../services/examStatusCounts.service");
+const { withAssignedTeachers } = require("../services/classSubjectTeacher.service");
+const { currentYearOf } = require("../services/fees.service");
+const { calendarAcademicYear } = require("../../../shared/academicYear");
+
+/** The school's current year: its setting, else the calendar's. */
+const schoolYearOf = async (schoolId) => (await currentYearOf(schoolId)) || calendarAcademicYear();
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -210,18 +219,11 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const [
-    total, draft, scheduled, ongoing,
-    completed, published, archived,
+    examCounts,
     publishedResults, pendingResults,
     studentsWithMissingGrades,
   ] = await Promise.all([
-    Exam.countDocuments({ schoolId, deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "draft",     deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "scheduled", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "ongoing",   deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "completed", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "published", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "archived",  deletedAt: null }),
+    countExamsByStatus({ schoolId: String(schoolId), deletedAt: null }),
     ResultSummary.countDocuments({ schoolId, isPublished: true  }),
     ResultSummary.countDocuments({ schoolId, isPublished: false }),
     StudentScore.countDocuments({
@@ -238,18 +240,6 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
     .limit(5)
     .lean();
 
-  const avgResult = await ResultSummary.aggregate([
-    { $match: { schoolId, isPublished: true } },
-    {
-      $group: {
-        _id:       null,
-        avg:       { $avg: "$percentage" },
-        passCount: { $sum: { $cond: ["$isPassing", 1, 0] } },
-        total:     { $sum: 1 },
-      },
-    },
-  ]);
-
   const [dashMissingExams, dashPendingExams] = await Promise.all([
     StudentScore.distinct("examId", {
       schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
@@ -257,21 +247,26 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
     ResultSummary.distinct("examId", { schoolId, isPublished: false }),
   ]);
 
-  const averagePerformance = avgResult[0]?.avg
-    ? Math.round(avgResult[0].avg) : 0;
-  const passRate = avgResult[0]?.total > 0
-    ? Math.round((avgResult[0].passCount / avgResult[0].total) * 100) : 0;
+  // The one pass rate (shared/passRate.js), over a stated scope: this school
+  // year's published sequence results. It was every published summary the
+  // school ever had, read by a stored flag one writer set against a fixed 10.
+  const passScope = await scopedPassRate({ schoolId, academicYear: await schoolYearOf(schoolId) });
+  const passRate = passScope.rate ?? 0;
+  // The average over the same pupils, on /20 — it was a mean percentage.
+  const averagePerformance = passScope.average;
 
   return res.json({
     success: true,
     dashboard: {
-      exams:   { total, draft, scheduled, ongoing, completed, published, archived },
+      exams:   examCounts,
       results: {
         published:          publishedResults,
         pending:            pendingResults,
         missingGrades:      studentsWithMissingGrades,
         averagePerformance,
         passRate,
+        passRateScope:      { academicYear: passScope.academicYear, withResults: passScope.withResults,
+                              passed: passScope.passed, passMark: passScope.passMark },
         // WHICH exams the two actionable counts are about.
         //
         // The results strip on the exams page turns each count into a link, and
@@ -302,26 +297,16 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
 
   const { term, academicYear, classId } = req.query;
 
-  const base = { schoolId, deletedAt: null };
+  const base = { schoolId: String(schoolId), deletedAt: null };
   if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
   if (term)         base.term         = Number(term);
-  if (academicYear) base.academicYear = academicYear;
+  if (academicYear) base.academicYear = String(academicYear);
   if (classId) {
-    base.$or = [{ classId }, { classIds: classId }];
+    base.$or = [{ classId: String(classId) }, { classIds: String(classId) }];
   }
 
-  const [
-    total, draft, scheduled, ongoing,
-    completed, published, archived,
-  ] = await Promise.all([
-    Exam.countDocuments(base),
-    Exam.countDocuments({ ...base, status: "draft"     }),
-    Exam.countDocuments({ ...base, status: "scheduled" }),
-    Exam.countDocuments({ ...base, status: "ongoing"   }),
-    Exam.countDocuments({ ...base, status: "completed" }),
-    Exam.countDocuments({ ...base, status: "published" }),
-    Exam.countDocuments({ ...base, status: "archived"  }),
-  ]);
+  const examCounts = await countExamsByStatus(base);
+  const { total, draft, scheduled, ongoing, completed, published, archived } = examCounts;
 
   const todayStr   = new Date().toISOString().split("T")[0];
   const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -333,26 +318,8 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
     startDate: { $gte: todayStr, $lte: in7DaysStr },
   });
 
-  const resultFilter = {
-    schoolId,
-    isPublished: true,
-    ...(term         ? { term }         : {}),
-    ...(academicYear ? { academicYear } : {}),
-  };
-
-  const [passAgg, publishedResults, pendingResults, missingGrades] =
+  const [publishedResults, pendingResults, missingGrades] =
     await Promise.all([
-      ResultSummary.aggregate([
-        { $match: resultFilter },
-        {
-          $group: {
-            _id:       null,
-            passCount: { $sum: { $cond: ["$isPassing", 1, 0] } },
-            total:     { $sum: 1 },
-            avgPct:    { $avg: "$percentage" },
-          },
-        },
-      ]),
       ResultSummary.countDocuments({ schoolId, isPublished: true  }),
       ResultSummary.countDocuments({ schoolId, isPublished: false }),
       StudentScore.countDocuments({
@@ -364,13 +331,16 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
       }),
     ]);
 
-  const passRate = passAgg[0]?.total > 0
-    ? Math.round((passAgg[0].passCount / passAgg[0].total) * 100)
-    : 0;
+  // The one pass rate (shared/passRate.js) over the scope asked for — the
+  // school's current year when none is.
+  const passScope = await scopedPassRate({
+    schoolId, academicYear: academicYear || await schoolYearOf(schoolId),
+    term: term || null, classId: classId || null,
+  });
+  const passRate = passScope.rate ?? 0;
 
-  const averagePerformance = passAgg[0]?.avgPct != null
-    ? Math.round(passAgg[0].avgPct)
-    : 0;
+  // The average over the same pupils, on /20 — it was a mean percentage.
+  const averagePerformance = passScope.average;
 
   const completedExamIds = await Exam.distinct("_id", {
     ...base,
@@ -424,6 +394,9 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
         missingGrades,
         averagePerformance,
         passRate,
+        passRateScope:      { academicYear: passScope.academicYear, term: passScope.term,
+                              withResults: passScope.withResults, passed: passScope.passed,
+                              passMark: passScope.passMark },
         // The exams behind the two actionable counts, so the strip can link to
         // the screen where the work is done rather than to a page about
         // something else.
@@ -582,6 +555,44 @@ const enteredCountsFor = async (match) => {
   return (es) => counts.get(`${es.examId}|${es.classId}|${es.subjectId}`) ?? 0;
 };
 
+/**
+ * Pupils enrolled per class — the denominator of "entered / total" (A7,
+ * decided 2026-10-27). Nothing wrote ExamSubject.totalStudents, so every
+ * subject read "2/0 entered". Enrolled is the register's roster: approved,
+ * active, not deleted — the pupils whose marks the teacher has to enter.
+ */
+const enrolledCountsFor = async (schoolId, classIds) => {
+  const ids = [...new Set(classIds.filter(Boolean).map(String))];
+  if (!ids.length) return () => 0;
+  const Student = require("../db/models/Student");
+  const rows = await Student.aggregate([
+    { $match: { schoolId: String(schoolId), classId: { $in: ids }, status: "approved", isActive: { $ne: false }, deletedAt: null } },
+    { $group: { _id: "$classId", n: { $sum: 1 } } },
+  ]);
+  const counts = new Map(rows.map((r) => [String(r._id), r.n]));
+  return (es) => counts.get(String(es.classId)) ?? 0;
+};
+
+/**
+ * Pupils on the class roster with no mark for this exam subject: no score,
+ * and not marked absent or exempt. A draft may leave them blank; submitting
+ * for approval and approving may not.
+ */
+const unmarkedFor = async (es, schoolId) => {
+  const Student = require("../db/models/Student");
+  const [roster, marked] = await Promise.all([
+    Student.find({ schoolId: String(schoolId), classId: String(es.classId), status: "approved",
+      isActive: { $ne: false }, deletedAt: null }).select("_id").lean(),
+    StudentScore.distinct("studentId", {
+      examId: String(es.examId), classId: String(es.classId), subjectId: String(es.subjectId),
+      schoolId: String(schoolId), deletedAt: null,
+      $or: [{ score: { $ne: null } }, { isAbsent: true }, { isExempt: true }],
+    }),
+  ]);
+  const has = new Set(marked.map(String));
+  return roster.map((r) => String(r._id)).filter((id) => !has.has(id));
+};
+
 router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
@@ -590,9 +601,11 @@ router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) 
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
-  const subjects = await ExamSubject.find(query).lean();
+  // The teacher is the class-subject assignment's (A8), not the exam's copy.
+  const subjects = await withAssignedTeachers(await ExamSubject.find(query).lean(), schoolId);
   const entered  = await enteredCountsFor({ schoolId, ...(examId ? { examId } : {}), ...(classId ? { classId } : {}) });
-  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
+  const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));
   return res.json({
     success:     true,
     submissions: enriched,
@@ -762,7 +775,11 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
         // these; this path did not.
         maxScore:         s.maxScore    ?? totalMarks ?? 100,
         passMark:         s.passMark    ?? passMark   ?? 50,
-        weight:           s.weight      ?? 100,
+        // The subject's own coefficient unless this request weights the paper
+        // itself — as POST /:examId/subjects does. A literal 100 here counted
+        // every subject on an exam created in one request as coefficient 1,
+        // whatever the school had set, and nothing on screen said so.
+        weight:           s.weight      ?? Math.round(weightFor(coefficientOf(subjectDoc))),
         isPractical:      s.isPractical ?? false,
         isTheory:         s.isTheory    ?? true,
         isOral:           s.isOral      ?? false,
@@ -980,7 +997,7 @@ router.get("/:examId/subjects", staffOnly, asyncHandler(async (req, res) => {
     schoolId,
     deletedAt: null,
   }).lean();
-  return res.json({ success: true, subjects });
+  return res.json({ success: true, subjects: await withAssignedTeachers(subjects, schoolId) });
 }));
 
 router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
@@ -1212,7 +1229,16 @@ router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
 router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
-  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId, scores } = req.body;
+  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId } = req.body;
+  // A draft: the teacher's sheet so far. Blank rows are left alone rather
+  // than refused, and the subject is not submitted for approval — that is
+  // the plain save's job, which still wants every present pupil marked.
+  const draft = req.body.draft === true || req.body.draft === "true";
+  const isBlank = (s) => s && !s.isAbsent && !s.isExempt &&
+    (s.score === null || s.score === undefined || s.score === "");
+  const scores = Array.isArray(req.body.scores) && draft
+    ? req.body.scores.filter((s) => !isBlank(s))
+    : req.body.scores;
 
   if (!bodyClassId || !bodySubjectId || !Array.isArray(scores)) {
     return res.status(400).json({
@@ -1495,7 +1521,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
 
   await logResultChange(audit, changes);
 
-  if (examSubject) {
+  if (examSubject && !draft) {
     await ExamSubject.findByIdAndUpdate(examSubject._id, {
       submissionStatus: "submitted",
       submittedBy:      req.user?._id,
@@ -1521,6 +1547,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
     saved:         savedCount,
     failed:        failed.length,
     failedRecords: failed,
+    draft,
   });
 }));
 
@@ -1557,7 +1584,8 @@ router.get("/:examId/results", staffOnly, asyncHandler(async (req, res) => {
 
   await backfillResultNames(results, schoolId);
 
-  return res.json({ success: true, results });
+  // Each pupil's average on /20, the school's remark and pass/fail.
+  return res.json({ success: true, results: await withAverage20(results, schoolId) });
 }));
 
 // ─────────────────────────────────────────────────────────
@@ -1573,11 +1601,14 @@ router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
     schoolId,
     deletedAt: null,
   };
-  if (teacherId) query.teacherId = teacherId;
-
-  const subjects = await ExamSubject.find(query).lean();
+  // The teacher is the class-subject assignment's (A8), not the one copied
+  // onto the exam when it was made — so "a teacher's subjects" is filtered
+  // after the assignment is read, not on the copy.
+  const subjects = (await withAssignedTeachers(await ExamSubject.find(query).lean(), schoolId))
+    .filter((es) => !teacherId || es.teacherIds.includes(String(teacherId)));
   const entered  = await enteredCountsFor({ examId: req.params.examId, schoolId });
-  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
+  const enrolled = await enrolledCountsFor(schoolId, subjects.map((es) => es.classId));
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es), totalStudents: enrolled(es) }));
 
   return res.json({ success: true, submissions: enriched });
 }));
@@ -1626,6 +1657,22 @@ router.patch(
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     const now      = new Date();
+
+    // Every pupil marked — a score, or absent, or exempt — before the marks
+    // are approved. A draft may have blanks; an approved sheet may not.
+    const target = await ExamSubject.findOne({
+      _id: req.params.examSubjectId, examId: req.params.examId, schoolId,
+    }).lean();
+    if (!target) return res.status(404).json({ message: "Exam subject not found" });
+    const unmarked = await unmarkedFor(target, schoolId);
+    if (unmarked.length) {
+      return res.status(409).json({
+        success: false,
+        code:    "MARKS_INCOMPLETE",
+        message: `${unmarked.length} student(s) have no mark yet: enter a score or mark them absent before approving.`,
+        unmarked,
+      });
+    }
 
     const es = await ExamSubject.findOneAndUpdate(
       {

@@ -26,12 +26,16 @@ import {
 import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { openStoredFile } from "../../../src/utils/storedFile";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 import {
   getTeacherContent,
   getTeacherSubjectsForContent,
   deleteContent,
   updateContentStatus,
-} from "../../../src/services/content.service";
+} from "../../../src/services/content.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
@@ -39,13 +43,13 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 // ─────────────────────────────────────────────────────────────
 
 const CONTENT_TABS = [
-  { id: "all",      labelKey: "teacherContent.tabAll",      icon: "grid-outline",          color: "#4F46E5" },
-  { id: "syllabus", labelKey: "studentSubj.tabSyllabus", icon: "list-outline",          color: "#7C3AED" },
-  { id: "notes",    labelKey: "studentSubj.tabNotes",    icon: "document-text-outline", color: "#2563EB" },
-  { id: "video",    labelKey: "teacherContent.tabVideos",   icon: "videocam-outline",      color: "#DC2626" },
-  { id: "audio",    labelKey: "studentSubj.tabAudio",    icon: "musical-notes-outline", color: "#D97706" },
-  { id: "document", labelKey: "studentSubj.tabDocs",     icon: "attach-outline",        color: "#059669" },
-  { id: "image",    labelKey: "studentSubj.tabImages",   icon: "image-outline",         color: "#DB2777" },
+  { id: "all",      labelKey: "teacherContent.tabAll",      icon: "grid-outline",          color: ACCENT.indigo.solid, accent: ACCENT.indigo },
+  { id: "syllabus", labelKey: "studentSubj.tabSyllabus", icon: "list-outline",          color: ACCENT.violet.solid, accent: ACCENT.violet },
+  { id: "notes",    labelKey: "studentSubj.tabNotes",    icon: "document-text-outline", color: ACCENT.blue.solid, accent: ACCENT.blue },
+  { id: "video",    labelKey: "teacherContent.tabVideos",   icon: "videocam-outline",      color: ACCENT.red.solid, accent: ACCENT.red },
+  { id: "audio",    labelKey: "studentSubj.tabAudio",    icon: "musical-notes-outline", color: ACCENT.amber.solid, accent: ACCENT.amber },
+  { id: "document", labelKey: "studentSubj.tabDocs",     icon: "attach-outline",        color: ACCENT.green.solid, accent: ACCENT.green },
+  { id: "image",    labelKey: "studentSubj.tabImages",   icon: "image-outline",         color: ACCENT.violet.solid, accent: ACCENT.violet },
 ];
 
 const SORT_OPTIONS = [
@@ -58,18 +62,18 @@ const SORT_OPTIONS = [
 ];
 
 const STATUS_COLORS = {
-  active:   { bg: "#ECFDF5", text: "#059669", dot: "#059669" },
-  draft:    { bg: "#F3F4F6", text: "#6B7280", dot: "#9CA3AF" },
-  archived: { bg: "#FEF3C7", text: "#D97706", dot: "#D97706" },
+  active:   { bg: SEMANTIC.success.bg, text: SEMANTIC.success.text, dot: SEMANTIC.success.icon },
+  draft:    { bg: SEMANTIC.info.bg,    text: SEMANTIC.info.text,    dot: SEMANTIC.info.icon    },
+  archived: { bg: SEMANTIC.warning.bg, text: SEMANTIC.warning.text, dot: SEMANTIC.warning.icon },
 };
 
 const SUMMARY_TYPES = [
-  { id: "syllabus", icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
-  { id: "notes",    icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
-  { id: "video",    icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "teacherContent.tabVideos"   },
-  { id: "audio",    icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
-  { id: "document", icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "studentSubj.tabDocs"     },
-  { id: "image",    icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "studentSubj.tabImages"   },
+  { id: "syllabus", icon: "list",          accent: ACCENT.violet, labelKey: "studentSubj.tabSyllabus" },
+  { id: "notes",    icon: "document-text", accent: ACCENT.blue,   labelKey: "studentSubj.tabNotes"    },
+  { id: "video",    icon: "videocam",      accent: ACCENT.red,    labelKey: "teacherContent.tabVideos"   },
+  { id: "audio",    icon: "musical-notes", accent: ACCENT.amber,  labelKey: "studentSubj.tabAudio"    },
+  { id: "document", icon: "attach",        accent: ACCENT.green,  labelKey: "studentSubj.tabDocs"     },
+  { id: "image",    icon: "image",         accent: ACCENT.violet, labelKey: "studentSubj.tabImages"   },
 ];
 
 const UPLOAD_ENTRY_ROUTE = "/teacher/content/select-subject";
@@ -103,18 +107,20 @@ const formatCount = (n) => {
 
 const getTypeConfig = (type = "", t) => {
   const map = {
-    syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
-    notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
-    video:    { icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "studentSubj.tabVideo"    },
-    audio:    { icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
-    document: { icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "teacherContent.kDocument" },
-    image:    { icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "teacherContent.kImage"    },
+    syllabus: { icon: "list",          accent: ACCENT.violet, color: ACCENT.violet.deep, bg: accentBadge("violet").bg, labelKey: "studentSubj.tabSyllabus", solid: ACCENT.violet.solid },
+    notes:    { icon: "document-text", accent: ACCENT.blue,   color: ACCENT.blue.deep,   bg: accentBadge("blue").bg,   labelKey: "studentSubj.tabNotes", solid: ACCENT.blue.solid    },
+    video:    { icon: "videocam",      accent: ACCENT.red,    color: ACCENT.red.deep,    bg: accentBadge("red").bg,    labelKey: "studentSubj.tabVideo", solid: ACCENT.red.solid    },
+    audio:    { icon: "musical-notes", accent: ACCENT.amber,  color: ACCENT.amber.deep,  bg: accentBadge("amber").bg,  labelKey: "studentSubj.tabAudio", solid: ACCENT.amber.solid    },
+    document: { icon: "attach",        accent: ACCENT.green,  color: ACCENT.green.deep,  bg: accentBadge("green").bg,  labelKey: "teacherContent.kDocument", solid: ACCENT.green.solid },
+    image:    { icon: "image",         accent: ACCENT.violet, color: ACCENT.violet.deep, bg: accentBadge("violet").bg, labelKey: "teacherContent.kImage", solid: ACCENT.violet.solid    },
   };
   return (
     map[type?.toLowerCase()] || {
       icon:  "document-outline",
-      color: "#6B7280",
-      bg:    "#F3F4F6",
+      accent: ACCENT.indigo,
+      color: ACCENT.indigo.deep,
+      bg:    ACCENT.indigo.wash,
+      solid: ACCENT.indigo.solid,
       label: type || t("teacherContent.kFile"),
     }
   );
@@ -124,20 +130,21 @@ const getTypeConfig = (type = "", t) => {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon, color, bg, count, label, onPress, active }) {
+function SummaryCard({ icon, accent, count, label, onPress, active }) {
   return (
     <TouchableOpacity
       style={[
         summaryStyles.card,
-        active && { borderColor: color, borderWidth: 1.5 },
+        { backgroundColor: accent.wash, borderTopWidth: 3, borderTopColor: accent.base },
+        active && { borderColor: accent.solid, borderWidth: 1.5, borderTopWidth: 3 },
       ]}
       onPress={onPress}
       activeOpacity={0.75}
     >
-      <View style={[summaryStyles.iconBox, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={18} color={color} />
+      <View style={[summaryStyles.iconBox, { backgroundColor: accent.solid }]}>
+        <Ionicons name={icon} size={18} color={COLORS.onPrimary} />
       </View>
-      <Text style={[summaryStyles.count, active && { color }]}>{count}</Text>
+      <Text style={[summaryStyles.count, { color: accent.deep }]}>{count}</Text>
       <Text style={summaryStyles.label}>{label}</Text>
     </TouchableOpacity>
   );
@@ -148,16 +155,16 @@ function TypeTab({ tab, active, count, onPress }) {
 
   return (
     <TouchableOpacity
-      style={[tabStyles.tab, active && { backgroundColor: tab.color }]}
+      style={[tabStyles.tab, { backgroundColor: tab.accent.wash, borderColor: tab.accent.base + "4D" }, active && { backgroundColor: tab.color, borderColor: tab.color }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <Ionicons
         name={tab.icon}
         size={14}
-        color={active ? "#FFF" : tab.color}
+        color={active ? COLORS.onPrimary : tab.color}
       />
-      <Text style={[tabStyles.label, active && tabStyles.labelActive]}>
+      <Text style={[tabStyles.label, { color: tab.accent.deep }, active && tabStyles.labelActive]}>
         {t(tab.labelKey)}
       </Text>
       {count > 0 && (
@@ -166,10 +173,10 @@ function TypeTab({ tab, active, count, onPress }) {
             tabStyles.badge,
             active
               ? { backgroundColor: "rgba(255,255,255,0.3)" }
-              : { backgroundColor: tab.color + "22" },
+              : { backgroundColor: COLORS.surface },
           ]}
         >
-          <Text style={[tabStyles.badgeText, active && { color: "#FFF" }]}>
+          <Text style={[tabStyles.badgeText, { color: tab.accent.deep }, active && { color: COLORS.onPrimary }]}>
             {count}
           </Text>
         </View>
@@ -185,12 +192,12 @@ function ContentCard({ item, onPress, onOptions }) {
 
   return (
     <TouchableOpacity
-      style={cardStyles.card}
+      style={[cardStyles.card, { backgroundColor: cfg.accent.wash, borderLeftColor: cfg.accent.base }]}
       onPress={() => onPress(item)}
       activeOpacity={0.75}
     >
-      <View style={[cardStyles.iconBox, { backgroundColor: cfg.bg }]}>
-        <Ionicons name={cfg.icon} size={22} color={cfg.color} />
+      <View style={[cardStyles.iconBox, { backgroundColor: cfg.solid }]}>
+        <Ionicons name={cfg.icon} size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={cardStyles.info}>
@@ -215,7 +222,7 @@ function ContentCard({ item, onPress, onOptions }) {
         </Text>
 
         <View style={cardStyles.metaRow}>
-          <View style={[cardStyles.typeBadge, { backgroundColor: cfg.bg }]}>
+          <View style={[cardStyles.typeBadge, { backgroundColor: COLORS.surface, borderColor: cfg.accent.base + "4D" }]}>
             <Text style={[cardStyles.typeText, { color: cfg.color }]}>
               {t(cfg.labelKey)}
             </Text>
@@ -228,7 +235,7 @@ function ContentCard({ item, onPress, onOptions }) {
           <View style={cardStyles.statsRow}>
             {item.viewCount > 0 && (
               <View style={cardStyles.statItem}>
-                <Ionicons name="eye-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="eye-outline" size={11} color={ACCENT.indigo.solid} />
                 <Text style={cardStyles.statText}>
                   {formatCount(item.viewCount)}
                 </Text>
@@ -236,7 +243,7 @@ function ContentCard({ item, onPress, onOptions }) {
             )}
             {item.downloadCount > 0 && (
               <View style={cardStyles.statItem}>
-                <Ionicons name="download-outline" size={11} color="#9CA3AF" />
+                <Ionicons name="download-outline" size={11} color={ACCENT.indigo.solid} />
                 <Text style={cardStyles.statText}>
                   {formatCount(item.downloadCount)}
                 </Text>
@@ -251,7 +258,7 @@ function ContentCard({ item, onPress, onOptions }) {
         onPress={() => onOptions(item)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
+        <Ionicons name="ellipsis-vertical" size={18} color={COLORS.textSecondary} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -262,11 +269,11 @@ function EmptyState({ activeTab, onUpload }) {
   const cfg = getTypeConfig(activeTab === "all" ? "document" : activeTab, t);
   return (
     <View style={emptyStyles.container}>
-      <View style={[emptyStyles.iconBox, { backgroundColor: cfg.bg }]}>
+      <View style={[emptyStyles.iconBox, { backgroundColor: cfg.solid }]}>
         <Ionicons
           name={cfg.icon + "-outline"}
           size={40}
-          color={cfg.color}
+          color={COLORS.onPrimary}
         />
       </View>
       <Text style={emptyStyles.title}>
@@ -278,11 +285,11 @@ function EmptyState({ activeTab, onUpload }) {
           : t("teacherContent.emptyTypeSub", { type: t(cfg.labelKey).toLowerCase() })}
       </Text>
       <TouchableOpacity
-        style={[emptyStyles.btn, { backgroundColor: cfg.color }]}
+        style={[emptyStyles.btn, { backgroundColor: cfg.solid }]}
         onPress={onUpload}
         activeOpacity={0.8}
       >
-        <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
+        <Ionicons name="cloud-upload-outline" size={16} color={COLORS.onPrimary} />
         <Text style={emptyStyles.btnText}>{t("teacherContent.uploadNow")}</Text>
       </TouchableOpacity>
     </View>
@@ -301,28 +308,28 @@ function OptionsSheet({
       id:      "open",
       icon:    "open-outline",
       labelKey:   "teacherContent.openPreview",
-      color:   "#111827",
+      color:   COLORS.text,
       onPress: onOpen,
     },
     {
       id:      "share",
       icon:    "share-outline",
       labelKey:   "teacherContent.shareLink",
-      color:   "#4F46E5",
+      color:   ACCENT.indigo.solid,
       onPress: onShare,
     },
     {
       id:      "archive",
       icon:    item.status === "archived" ? "eye-outline" : "archive-outline",
       label:   item.status === "archived" ? t("teacherContent.restoreActive") : t("teacherContent.archive"),
-      color:   "#D97706",
+      color:   ACCENT.amber.solid,
       onPress: onArchive,
     },
     {
       id:      "delete",
       icon:    "trash-outline",
       labelKey:   "common.delete",
-      color:   "#DC2626",
+      color:   ACCENT.red.solid,
       onPress: onDelete,
     },
   ];
@@ -340,9 +347,9 @@ function OptionsSheet({
 
           <View style={sheetStyles.fileHeader}>
             <View
-              style={[sheetStyles.fileHeaderIcon, { backgroundColor: cfg.bg }]}
+              style={[sheetStyles.fileHeaderIcon, { backgroundColor: cfg.solid }]}
             >
-              <Ionicons name={cfg.icon} size={20} color={cfg.color} />
+              <Ionicons name={cfg.icon} size={20} color={COLORS.onPrimary} />
             </View>
             <View style={sheetStyles.fileHeaderInfo}>
               <Text style={sheetStyles.fileHeaderTitle} numberOfLines={1}>
@@ -374,7 +381,7 @@ function OptionsSheet({
               <Text style={[sheetStyles.optionLabel, { color: opt.color }]}>
                 {t(opt.labelKey)}
               </Text>
-              <Ionicons name="chevron-forward" size={16} color="#E5E7EB" />
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
             </TouchableOpacity>
           ))}
 
@@ -422,14 +429,14 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
                   <Text
                     style={[
                       sheetStyles.optionLabel,
-                      { color: isSelected ? "#4F46E5" : "#111827" },
+                      { color: isSelected ? ACCENT.indigo.deep : COLORS.text },
                       isSelected && { fontWeight: "700" },
                     ]}
                   >
                     {label}
                   </Text>
                   {isSelected && (
-                    <Ionicons name="checkmark" size={18} color="#4F46E5" />
+                    <Ionicons name="checkmark" size={18} color={ACCENT.indigo.solid} />
                   )}
                 </TouchableOpacity>
               </React.Fragment>
@@ -594,7 +601,7 @@ function ContentLibraryPage() {
 
   const handleOpenItem = useCallback((item) => {
     if (item.fileUrl) {
-      Linking.openURL(item.fileUrl).catch(() => {
+      openStoredFile(item.fileUrl).catch(() => {
                                             return Alert.alert(t("teacherContent.errTitle"), t("teacherContent.openFailedBody"));
                                           }
       );
@@ -721,7 +728,7 @@ function ContentLibraryPage() {
   // ─────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -730,9 +737,10 @@ function ContentLibraryPage() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color="#111827" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("teacherContent.title")}</Text>
           {summary?.total > 0 && (
@@ -751,7 +759,7 @@ function ContentLibraryPage() {
             <Ionicons
               name={searchOpen ? "close" : "search-outline"}
               size={20}
-              color="#374151"
+              color={COLORS.text}
             />
           </TouchableOpacity>
 
@@ -837,12 +845,12 @@ function ContentLibraryPage() {
             <Ionicons
               name="funnel-outline"
               size={13}
-              color={filterSubject ? "#4F46E5" : "#6B7280"}
+              color={filterSubject ? ACCENT.indigo.solid : COLORS.textSecondary}
             />
             <Text
               style={[
                 styles.filterChipText,
-                filterSubject && { color: "#4F46E5" },
+                filterSubject && { color: ACCENT.indigo.deep },
               ]}
             >
               {activeFilterSubjectLabel}
@@ -854,7 +862,7 @@ function ContentLibraryPage() {
             onPress={() => setShowSortModal(true)}
             activeOpacity={0.7}
           >
-            <Ionicons name="swap-vertical-outline" size={13} color="#6B7280" />
+            <Ionicons name="swap-vertical-outline" size={13} color={COLORS.textSecondary} />
             <Text style={styles.filterChipText}>{activeSortLabel}</Text>
           </TouchableOpacity>
         </View>
@@ -872,8 +880,7 @@ function ContentLibraryPage() {
             <SummaryCard
               key={s.id}
               icon={s.icon}
-              color={s.color}
-              bg={s.bg}
+              accent={s.accent}
               label={t(s.labelKey)}
               count={summary[s.id] || 0}
               active={activeTab === s.id}
@@ -976,7 +983,7 @@ export default ContentLibraryPage;
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     alignItems:      "center",
@@ -991,9 +998,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backBtn: {
@@ -1004,9 +1011,10 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:    { marginRight: 0 },
   headerCenter:  { flex: 1 },
-  headerTitle:   { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle:   { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:     { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: {
     width:           34,
@@ -1073,7 +1081,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  resultCount:   { fontSize: 12, color: "#9CA3AF", fontWeight: "500" },
+  resultCount:   { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
   filterActions: { flexDirection: "row", gap: 8 },
   filterChip: {
     flexDirection:     "row",
@@ -1083,11 +1091,11 @@ const styles = StyleSheet.create({
     paddingVertical:   5,
     borderRadius:      20,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
-    backgroundColor:   "#F9FAFB",
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
-  filterChipActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
-  filterChipText:   { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  filterChipActive: { borderColor: ACCENT.indigo.base, backgroundColor: ACCENT.indigo.wash },
+  filterChipText:   { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
 
   summaryScroll: {
     backgroundColor:   "#FFF",
@@ -1128,7 +1136,7 @@ const summaryStyles = StyleSheet.create({
     gap:             5,
     minWidth:        76,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    3,
@@ -1141,8 +1149,8 @@ const summaryStyles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
-  count: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  label: { fontSize: 10, color: "#9CA3AF", fontWeight: "500" },
+  count: { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  label: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
 });
 
 const tabStyles = StyleSheet.create({
@@ -1153,9 +1161,10 @@ const tabStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    borderWidth:       1,
+    backgroundColor:   COLORS.surface,
   },
-  label:       { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  label:       { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
   labelActive: { color: "#FFF" },
   badge: {
     borderRadius:      10,
@@ -1164,17 +1173,20 @@ const tabStyles = StyleSheet.create({
     minWidth:          18,
     alignItems:        "center",
   },
-  badgeText: { fontSize: 10, color: "#374151", fontWeight: "700" },
+  badgeText: { fontSize: 10, color: COLORS.text, fontWeight: "700" },
 });
 
 const cardStyles = StyleSheet.create({
   card: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         14,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    4,
     elevation:       2,
@@ -1190,16 +1202,16 @@ const cardStyles = StyleSheet.create({
   },
   info:     { flex: 1, gap: 4 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  title:    { flex: 1, fontSize: 14, fontWeight: "700", color: "#111827" },
+  title:    { flex: 1, fontSize: 14, fontWeight: "700", color: COLORS.text },
   statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-  subject:   { fontSize: 12, color: "#6B7280" },
+  subject:   { fontSize: 12, color: COLORS.textSecondary },
   metaRow:   { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   typeText:  { fontSize: 10, fontWeight: "700" },
-  meta:      { fontSize: 11, color: "#9CA3AF" },
+  meta:      { fontSize: 11, color: COLORS.textSecondary },
   statsRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
   statItem:  { flexDirection: "row", alignItems: "center", gap: 3 },
-  statText:  { fontSize: 11, color: "#9CA3AF" },
+  statText:  { fontSize: 11, color: COLORS.textSecondary },
   optionsBtn: { padding: 6, marginLeft: 4, marginTop: -4 },
 });
 
@@ -1219,8 +1231,8 @@ const emptyStyles = StyleSheet.create({
     justifyContent: "center",
     marginBottom:   8,
   },
-  title: { fontSize: 18, fontWeight: "700", color: "#374151" },
-  sub:   { fontSize: 14, color: "#9CA3AF", textAlign: "center", lineHeight: 22 },
+  title: { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  sub:   { fontSize: 14, color: COLORS.textSecondary, textAlign: "center", lineHeight: 22 },
   btn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -1272,7 +1284,7 @@ const sheetStyles = StyleSheet.create({
   },
   fileHeaderInfo:  { flex: 1 },
   fileHeaderTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  fileHeaderSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  fileHeaderSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   divider:         { height: 1, backgroundColor: "#F3F4F6", marginVertical: 8 },
   option: {
     flexDirection:   "row",

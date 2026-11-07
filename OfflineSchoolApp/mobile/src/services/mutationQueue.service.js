@@ -48,10 +48,12 @@
  *   local→server, and the subject's send substitutes it.
  */
 import api from "./api";
+import NetInfo from "@react-native-community/netinfo";
 import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID } from "../utils/idHelpers";
 import { remapPayload } from "./idMap";
+import { localIdsOf } from "./syncState";
 import { getCurrentAuth } from "../utils/authHelpers";
 
 const TABLE = "mutation_outbox";
@@ -59,6 +61,9 @@ const ID_MAP = "sync_id_map";
 const MAX_RETRIES = 8;
 const BASE_BACKOFF_MS = 5_000;
 const MAX_BACKOFF_MS = 30 * 60_000;
+// A send that got no answer at all is the network's fault, not the row's: it
+// is rescheduled on a short leash and never spends the retry budget.
+const MAX_UNREACHABLE_BACKOFF_MS = 5 * 60_000;
 
 const ensureSchema = (db) => ensureTableSchema(TABLE, async (database) => {
   await database.execAsync(`CREATE TABLE IF NOT EXISTS ${TABLE} (
@@ -105,6 +110,12 @@ const ensureSchema = (db) => ensureTableSchema(TABLE, async (database) => {
   await database.execAsync(
     `ALTER TABLE ${TABLE} ADD COLUMN idem_key TEXT`
   ).catch(() => {});
+  // Sends that got no answer (offline, DNS, timeout). Counted apart from
+  // retry_count so a phone that spends a week offline does not burn the
+  // budget meant for a server that keeps answering 500.
+  await database.execAsync(
+    `ALTER TABLE ${TABLE} ADD COLUMN unreachable_count INTEGER NOT NULL DEFAULT 0`
+  ).catch(() => {});
 
   await database.execAsync(`CREATE TABLE IF NOT EXISTS ${ID_MAP} (
     local_id   TEXT PRIMARY KEY,
@@ -142,6 +153,10 @@ const wireBody = (payload) => {
   return rest;
 };
 
+// localIdsOf lives with the pure classifier so screens and checks can use it
+// without a database; re-exported for the services that already import here.
+export { localIdsOf };
+
 /**
  * Tables whose dirty flag this queue may clear via `payload.__local`.
  *
@@ -160,7 +175,7 @@ const SYNCABLE_LOCAL_TABLES = new Set([
   "classes", "subjects", "users", "teacher_assignments",
   "timetable", "students", "announcements",
   "questions", "quizzes", "quiz_attempts",
-  "fee_structures",
+  "fee_structures", "interventions",
 ]);
 
 /** Cache of "does this table have a _synced_at column?" — probed once each. */
@@ -227,6 +242,66 @@ const notifyFailed = async (row, payload, message) => {
   } catch (err) {
     console.warn(`[MutationQueue] failure handler "${spec.kind}" failed:`, err.message);
   }
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DISCARD — undoing a change the user abandons
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** @type {Map<string, (ctx: { db: object, localId: string, rows: object[] }) => Promise<{deleted?: boolean, refresh?: boolean}>>} */
+const discardHandlers = new Map();
+/** Reconciler kinds whose payload names its row only by `localId`, by table. */
+const discardKinds = new Map();
+
+/**
+ * Registers how to undo a discarded change to one local table — for a table
+ * that knows more than the generic rule (periods keeps the server's copy and
+ * says "create" in its own column). The handler receives the discarded rows
+ * (payloads parsed) and the local id, and answers { deleted, refresh }:
+ * whether it removed the row, and whether only a full pull can restore it.
+ * `kinds` names reconciler kinds whose payload carries no table.
+ */
+export const registerDiscardHandler = (table, handler, { kinds = [] } = {}) => {
+  if (typeof handler !== "function") throw new Error(`Discard handler "${table}" must be a function`);
+  discardHandlers.set(table, handler);
+  for (const k of kinds) discardKinds.set(k, table);
+};
+
+/** Tables the generic discard may write (interpolated into SQL). */
+const REVERTIBLE_TABLES = new Set([
+  ...SYNCABLE_LOCAL_TABLES, "fee_payments", "expenses", "gate_events",
+]);
+
+/** The local record a queued change is about: { table, ids, idColumn }, or null. */
+const targetOf = (payload) => {
+  const meta = payload?.__local;
+  const ids = localIdsOf(meta);
+  if (meta?.table && ids.length) return { table: meta.table, ids: ids.map(String), idColumn: meta.idColumn };
+  const rec = payload?.__reconcile;
+  const table = rec?.table || discardKinds.get(rec?.kind);
+  if (table && rec?.localId) return { table, ids: [String(rec.localId)], idColumn: rec.idColumn };
+  return null;
+};
+
+/**
+ * True when the discarded rows hold the record's create and nothing says the
+ * server ever took it: no row under that key was accepted, and no server id
+ * was adopted for it.
+ */
+const neverReachedServer = async (db, rows, localId) => {
+  const creates = rows.filter((r) =>
+    String(r.method).toUpperCase() === "POST" && String(r.entity_key).endsWith(`:${localId}`));
+  if (!creates.length) return false;
+  for (const c of creates) {
+    const accepted = await db.getFirstAsync(
+      `SELECT 1 AS x FROM ${TABLE} WHERE entity_key = ? AND status = 'synced' LIMIT 1`, [c.entity_key]
+    ).catch(() => null);
+    if (accepted) return false;
+  }
+  const mapped = await db.getFirstAsync(
+    `SELECT 1 AS x FROM ${ID_MAP} WHERE local_id = ?`, [String(localId)]
+  ).catch(() => null);
+  return !mapped;
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -307,6 +382,14 @@ const sendWithFallback = async ({ method, endpoint, fallbacks, data, headers }) 
     err.response = { status: 400, data: { code: "NO_ENDPOINT", message: err.message } };
     throw err;
   }
+  // Likewise a method no server serves. It failed without a response, and a
+  // failure without a response is now the network's (it never spends the
+  // retry budget), so it would be retried for ever. Refused here instead.
+  if (!/^(GET|POST|PUT|PATCH|DELETE)$/.test(String(method).toUpperCase())) {
+    const err = new Error(`Mutation has an unknown method "${method}"`);
+    err.response = { status: 400, data: { code: "BAD_METHOD", message: err.message } };
+    throw err;
+  }
 
   let lastError;
   for (const url of candidates) {
@@ -323,6 +406,67 @@ const sendWithFallback = async ({ method, endpoint, fallbacks, data, headers }) 
 const backoffFor = (retryCount) =>
   Math.min(BASE_BACKOFF_MS * Math.pow(2, Math.max(0, retryCount - 1)), MAX_BACKOFF_MS);
 
+const unreachableBackoffFor = (count) =>
+  Math.min(BASE_BACKOFF_MS * Math.pow(2, Math.max(0, count - 1)), MAX_UNREACHABLE_BACKOFF_MS);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CONNECTIVITY
+//
+// api.js tracks NetInfo for its own offline guard but exports nothing, so the
+// queue asks NetInfo itself — the same `isConnected === false` test the
+// SyncManager uses. An unknown state (null) counts as online: refusing to send
+// on a radio NetInfo has not characterised yet would strand work, and a send
+// that then gets no answer costs nothing (see processPending).
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** null until the first answer; false after any offline report. */
+let _lastOnline = null;
+let _netUnsubscribe = null;
+
+const watchConnectivity = () => {
+  if (_netUnsubscribe) return;
+  try {
+    _netUnsubscribe = NetInfo.addEventListener?.((state) => {
+      if (state?.isConnected === false) _lastOnline = false;
+    }) || (() => {});
+  } catch {
+    _netUnsubscribe = () => {};
+  }
+};
+
+const isOnline = async () => {
+  watchConnectivity();
+  try {
+    const state = await NetInfo.fetch();
+    return state?.isConnected !== false;
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * HTTP statuses that say "try again later" rather than "no". A row parked as
+ * failed with one of these (or with none: no answer at all) ran out of
+ * patience, not of permission, and is re-armed when connectivity returns.
+ */
+//
+// 409 is here for IDEMPOTENCY_IN_PROGRESS alone: a 409 that reports a real
+// clash parks the row as 'conflict', never 'failed', so a failed row whose
+// last answer was 409 ran out of retries while the server was still working
+// on (or holding a dead lock for) the same key — older builds parked those.
+const TRANSIENT_FAILED =
+  "(last_status IS NULL OR last_status >= 500 OR last_status IN (408, 409, 425, 429))";
+
+/** The server is already handling this very key: it will answer, given time. */
+const isInProgress = (error) =>
+  error?.response?.status === 409 && error?.response?.data?.code === "IDEMPOTENCY_IN_PROGRESS";
+
+// Single flight. Every screen that wants its work sent calls drain(); without
+// this, two drains running at once both selected the same pending row and
+// sent it twice (the Idempotency-Key saved the server, not the retry budget).
+let _drainRunning = null;
+let _drainQueued  = null;
+
 /**
  * Decides how to treat a failed attempt.
  * @returns {"transient" | "conflict" | "permanent" | "resolved"}
@@ -338,14 +482,14 @@ const backoffFor = (retryCount) =>
  * Entries already marked synced are excluded: they have settled their rows.
  *
  * @param {string} table  e.g. "exam_scores"
- * @returns {Promise<Array<{status: string, payload: object}>>}
+ * @returns {Promise<Array<{id: string, status: string, payload: object, error: string|null, lastStatus: number|null}>>}
 */
 export const outboxRowsForTable = async (table) => {
   const db = await getDatabase();
   await ensureSchema(db);
 
   const rows = await db.getAllAsync(
-    `SELECT status, payload FROM ${TABLE} WHERE status != 'synced'`
+    `SELECT id, status, payload, error, last_status FROM ${TABLE} WHERE status != 'synced'`
   ).catch(() => []);
 
   const out = [];
@@ -353,7 +497,9 @@ export const outboxRowsForTable = async (table) => {
     let payload = null;
     try { payload = JSON.parse(r.payload || "{}"); } catch { continue; }
     if (payload?.__local?.table !== table) continue;
-    out.push({ status: r.status, payload });
+    // error / lastStatus: why a stuck entry stopped, so a screen can say so
+    // next to the rows it carries rather than only on the pending list.
+    out.push({ id: r.id, status: r.status, payload, error: r.error ?? null, lastStatus: r.last_status ?? null });
   }
   return out;
 };
@@ -401,8 +547,13 @@ export class MutationQueue {
    *                               excluded from the pending-changes UI and
    *                               its counts, so a failed read-receipt never
    *                               reads as "your work didn't save"
+   * @param {boolean} [m.merge]    coalesce by merging fields into the pending
+   *                               payload instead of replacing it — for
+   *                               partial updates (a PUT that names only what
+   *                               changed), where a second edit must not
+   *                               drop the first one's fields
    */
-  static async enqueue({ entityKey, method, endpoint, payload, baseVersion = null, silent = false, ownerId }) {
+  static async enqueue({ entityKey, method, endpoint, payload, baseVersion = null, silent = false, ownerId, merge = false }) {
     if (!entityKey || !method || !endpoint) throw new Error("Mutation requires entityKey, method and endpoint");
     const db = await getDatabase();
     await ensureSchema(db);
@@ -424,17 +575,18 @@ export class MutationQueue {
     // instead, queued behind it: the first attempt settles from memory, then
     // the correction lands as its own operation.
     const existing = await db.getFirstAsync(
-      `SELECT id FROM ${TABLE}
+      `SELECT id, payload FROM ${TABLE}
         WHERE entity_key = ? AND status IN ('pending', 'retrying')
           AND retry_count = 0 AND last_attempt_at IS NULL
         ORDER BY created_at ASC LIMIT 1`,
       [entityKey]
     );
     if (existing?.id) {
+      const next = merge ? { ...parse(existing.payload), ...(payload ?? {}) } : payload;
       await db.runAsync(
         `UPDATE ${TABLE} SET method = ?, endpoint = ?, payload = ?, base_version = ?,
                 status = 'pending', next_attempt_at = NULL, error = NULL WHERE id = ?`,
-        [method.toUpperCase(), endpoint, json(payload), baseVersion, existing.id]
+        [method.toUpperCase(), endpoint, json(next), baseVersion, existing.id]
       );
       return existing.id;
     }
@@ -521,7 +673,15 @@ export class MutationQueue {
         summary.synced++;
       } catch (error) {
         const kind    = classifyError(error, row.method);
-        const message = error?.message ?? String(error);
+        // The server's own reason first ("You are not a participant", "This
+        // school has disabled student messages to administrators"). axios's
+        // "Request failed with status code 403" told the person nothing, and
+        // it is what the failed bubble and the pending-changes screen showed.
+        const said    = error?.response?.data;
+        const message =
+          (typeof said?.error   === "string" && said.error)   ||
+          (typeof said?.message === "string" && said.message) ||
+          error?.message || String(error);
 
         if (kind === "unauthenticated") {
           // Back to pending, untouched, and the drain stops: every row after
@@ -561,16 +721,41 @@ export class MutationQueue {
           continue;
         }
 
+        // No answer at all — offline, DNS, a timeout, api.js's own offline
+        // guard. That says nothing about this row, so it must not spend the
+        // retry budget: eight of these used to park a register as failed for
+        // ever after one bad afternoon. Rescheduled on its own short backoff,
+        // which the next return of connectivity clears (rearm below).
+        if (!error?.response) {
+          const misses = (row.unreachable_count || 0) + 1;
+          await db.runAsync(
+            `UPDATE ${TABLE} SET status = 'retrying', unreachable_count = ?, error = ?,
+                    next_attempt_at = ? WHERE id = ?`,
+            [misses, message, new Date(Date.now() + unreachableBackoffFor(misses)).toISOString(), row.id]
+          );
+          summary.retried++;
+          summary.unreachable = (summary.unreachable || 0) + 1;
+          continue;
+        }
+
         // transient — back off and try again later
         const retries = (row.retry_count || 0) + 1;
-        const exhausted = retries >= MAX_RETRIES;
+        // "In progress" never parks the row. The answer is about the KEY, not
+        // the request: the server holds that key's lock and gives it up (or
+        // completes) within minutes — a stale lock is taken over after 11
+        // (backend middleware/idempotency.js). Parking it as failed left a
+        // register waiting for somebody to press retry. It backs off to the
+        // ceiling instead, keeping its key, until the server answers for real.
+        const exhausted = retries >= MAX_RETRIES && !isInProgress(error);
         const nextAt = exhausted
           ? null
           : new Date(Date.now() + backoffFor(retries)).toISOString();
 
+        // last_status kept so a row parked here can be told apart from a
+        // refusal, and re-armed when the network comes back.
         await db.runAsync(
-          `UPDATE ${TABLE} SET status = ?, retry_count = ?, error = ?, next_attempt_at = ? WHERE id = ?`,
-          [exhausted ? "failed" : "retrying", retries, message, nextAt, row.id]
+          `UPDATE ${TABLE} SET status = ?, retry_count = ?, error = ?, next_attempt_at = ?, last_status = ? WHERE id = ?`,
+          [exhausted ? "failed" : "retrying", retries, message, nextAt, error?.response?.status ?? null, row.id]
         );
         if (exhausted) { summary.failed++; await notifyFailed(row, payload, message); }
         else summary.retried++;
@@ -643,7 +828,8 @@ export class MutationQueue {
    */
   static async _clearLocalFlag(db, payload) {
     const meta = payload?.__local;
-    if (!meta?.table || !meta?.ids?.length) return;
+    const ids  = localIdsOf(meta);
+    if (!meta?.table || !ids.length) return;
 
     if (!SYNCABLE_LOCAL_TABLES.has(meta.table)) {
       console.warn(
@@ -654,14 +840,19 @@ export class MutationQueue {
 
     const hasSyncedAt = await tableHasSyncedAt(db, meta.table);
     const idCol = meta.idColumn === "_id" ? "_id" : "id";
-    const placeholders = meta.ids.map(() => "?").join(",");
+    const placeholders = ids.map(() => "?").join(",");
 
+    // `since`: the row's updated_at when this was queued. Edited after that,
+    // the row stays dirty — what was just sent is not what it now holds.
+    const guard = meta.since !== undefined ? " AND COALESCE(updated_at, '') = COALESCE(?, '')" : "";
     const sql = hasSyncedAt
-      ? `UPDATE ${meta.table} SET _synced = 1, _synced_at = ? WHERE ${idCol} IN (${placeholders})`
-      : `UPDATE ${meta.table} SET _synced = 1 WHERE ${idCol} IN (${placeholders})`;
-    const params = hasSyncedAt
-      ? [new Date().toISOString(), ...meta.ids]
-      : [...meta.ids];
+      ? `UPDATE ${meta.table} SET _synced = 1, _synced_at = ? WHERE ${idCol} IN (${placeholders})${guard}`
+      : `UPDATE ${meta.table} SET _synced = 1 WHERE ${idCol} IN (${placeholders})${guard}`;
+    const params = [
+      ...(hasSyncedAt ? [new Date().toISOString()] : []),
+      ...ids,
+      ...(guard ? [meta.since] : []),
+    ];
 
     await db.runAsync(sql, params).catch((err) =>
       console.warn(`[MutationQueue] could not clear _synced on ${meta.table}:`, err.message)
@@ -744,7 +935,84 @@ export class MutationQueue {
    * them, so a homework row never lands pointing at a file the server has
    * not received.
    */
-  static async drain({ limit = 50, onSuccess, onProgress, includeUploads = true } = {}) {
+  /** A drain is running or waiting (perUserData.service waits for it before switching files). */
+  static isDraining() {
+    return !!(_drainRunning || _drainQueued);
+  }
+
+  static drain(options = {}) {
+    // One run at a time, and at most one waiting behind it. A caller that
+    // arrives mid-run may have just queued a row the running pass already
+    // selected past, so it is answered by the NEXT pass rather than the
+    // current one; everyone arriving meanwhile shares that same next pass.
+    if (!_drainRunning) {
+      _drainRunning = this._drainOnce(options).finally(() => { _drainRunning = null; });
+      return _drainRunning;
+    }
+    if (!_drainQueued) {
+      _drainQueued = _drainRunning.catch(() => {}).then(() => {
+        _drainQueued = null;
+        return this.drain(options);
+      });
+    }
+    return _drainQueued;
+  }
+
+  /**
+   * Puts rows that stopped for want of an answer back in line.
+   *
+   * Two kinds: rows waiting out an unreachable backoff (the network is back,
+   * there is nothing to wait for), and rows parked as failed after running
+   * out of retries on transient errors — no answer, 5xx, 408/425/429, and
+   * 409 IDEMPOTENCY_IN_PROGRESS (older builds parked those; the transient
+   * branch of processPending no longer does). Those
+   * never meant "no"; a phone that was offline for a week before this fix
+   * holds a queue of them. A 4xx refusal stays parked for a person.
+   *
+   * The Idempotency-Key is kept: an unanswered send may have landed, and the
+   * key is what makes the resend a replay rather than a second write.
+   */
+  static async rearmTransient() {
+    const db = await getDatabase();
+    await ensureSchema(db);
+    const failed = await db.runAsync(
+      `UPDATE ${TABLE} SET status = 'pending', retry_count = 0, unreachable_count = 0,
+              next_attempt_at = NULL, error = NULL
+        WHERE status = 'failed' AND ${TRANSIENT_FAILED}`
+    ).catch(() => ({ changes: 0 }));
+    const waiting = await db.runAsync(
+      `UPDATE ${TABLE} SET next_attempt_at = NULL
+        WHERE status = 'retrying' AND COALESCE(unreachable_count, 0) > 0`
+    ).catch(() => ({ changes: 0 }));
+    return (failed?.changes ?? 0) + (waiting?.changes ?? 0);
+  }
+
+  static async _drainOnce({ limit = 50, onSuccess, onProgress, includeUploads = true } = {}) {
+    // Offline, nothing is sent at all — not even attempted. Every caller
+    // (a gate scan, a register, the explorations screen) drains straight
+    // after writing, and each attempt used to be a failed send.
+    if (!(await isOnline())) {
+      _lastOnline = false;
+      return {
+        synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0, unauthenticated: 0,
+        heldForOtherUser: 0, heldOwnerless: 0, stopped: "offline", uploads: 0, uploadsFailed: 0,
+      };
+    }
+    // The first drain after connectivity returns (or after the app starts:
+    // the queue cannot know what happened while it was closed) re-arms what
+    // only the network had stopped.
+    if (_lastOnline !== true) {
+      _lastOnline = true;
+      const rearmed = await this.rearmTransient().catch(() => 0);
+      if (rearmed) console.log(`[MutationQueue] Connectivity back — ${rearmed} row(s) re-armed`);
+    }
+
+    // Services enqueue with a reconciler named (a class adopting its id, a
+    // quiz swapping a local id for the server's), but the handlers register
+    // when the backfill module first runs. A screen that drains before any
+    // sync has would settle those rows with nobody to reconcile them.
+    try { require("./syncBackfill.service").registerReconcilers?.(); } catch { /* not available */ }
+
     let uploads = null;
     if (includeUploads) {
       try {
@@ -952,7 +1220,7 @@ export class MutationQueue {
    *
    * A row the server REFUSED (a 4xx: forbidden, invalid, a conflict) is sent
    * under a NEW Idempotency-Key. The server stores a 4xx answer against the key
-   * and replays it for 14 days, so retrying under the old one got the same
+   * and replays it for 45 days, so retrying under the old one got the same
    * refusal back without the request being looked at again — after the
    * permission was granted or the conflict resolved, the change still never
    * landed. A refused request changed nothing, so a new key cannot apply it
@@ -964,8 +1232,8 @@ export class MutationQueue {
     const db = await getDatabase();
     await ensureSchema(db);
     await db.runAsync(
-      `UPDATE ${TABLE} SET status = 'pending', retry_count = 0, next_attempt_at = NULL,
-              error = NULL, conflict = NULL,
+      `UPDATE ${TABLE} SET status = 'pending', retry_count = 0, unreachable_count = 0,
+              next_attempt_at = NULL, error = NULL, conflict = NULL,
               idem_key = CASE WHEN last_status BETWEEN 400 AND 499 THEN ? ELSE idem_key END,
               last_status = NULL
        WHERE id = ?`,
@@ -984,11 +1252,100 @@ export class MutationQueue {
     return (rows ?? []).length;
   }
 
-  /** Permanently drops a mutation the user has chosen to abandon. */
+  /**
+   * Abandons a change: drops it from the queue AND undoes it on this device.
+   *
+   * Deleting the outbox row alone (what this did) left the local row dirty, so
+   * the next backfill sweep queued it again — the discard never stuck — and
+   * the phone went on showing a value the server never got.
+   *
+   * The unit is the RECORD the change was about (`__local` / `__reconcile`):
+   * every unsent row for it goes, and the record goes back to what the server
+   * holds:
+   *   - a record this device created and the server never accepted is removed;
+   *   - a table that keeps the server's copy (periods: `server_image`) is put
+   *     back from it at once, offline or not;
+   *   - otherwise the row is marked clean and the pull cursor reset, so the
+   *     next sync (a full pull) writes the server's copy over it. A clean row
+   *     is never sent, and a pull overwrites only clean rows.
+   * Nothing is deleted on the server and no server value is lost: at worst a
+   * create that did land comes back down with the next pull.
+   *
+   * @returns {Promise<{removed: number, reverted: string[], deleted: string[], refresh: boolean}>}
+   */
   static async discard(id) {
     const db = await getDatabase();
     await ensureSchema(db);
-    await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+    const out = { removed: 0, reverted: [], deleted: [], refresh: false };
+    const row = await db.getFirstAsync(`SELECT * FROM ${TABLE} WHERE id = ?`, [id]).catch(() => null);
+    if (!row) return out;
+
+    const target = targetOf(parse(row.payload));
+    // Every unsent row for the same record, this account's: undoing one edit
+    // while a second waits would send the second over a value no longer shown.
+    const unsent = await db.getAllAsync(
+      `SELECT * FROM ${TABLE} WHERE status != 'synced' AND COALESCE(owner_id, '') = COALESCE(?, '')`,
+      [row.owner_id ?? null]
+    ).catch(() => []);
+    const mine = (unsent ?? []).filter((r) => {
+      if (r.id === row.id || r.entity_key === row.entity_key) return true;
+      const t = target && targetOf(parse(r.payload));
+      return !!t && t.table === target.table && t.ids.some((x) => target.ids.includes(x));
+    });
+    if (!mine.some((r) => r.id === row.id)) mine.push(row);
+    for (const r of mine) {
+      const res = await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [r.id]).catch(() => null);
+      out.removed += res?.changes ?? 0;
+    }
+    if (!target) return out;
+
+    // Handlers register with the reconcilers (syncBackfill.service).
+    try { require("./syncBackfill.service").registerReconcilers?.(); } catch { /* not available */ }
+    const rows = mine.map((r) => ({ ...r, payload: parse(r.payload) }));
+    const handler = discardHandlers.get(target.table);
+    if (handler) {
+      for (const localId of target.ids) {
+        try {
+          const res = await handler({ db, localId, rows });
+          if (res?.deleted) out.deleted.push(localId); else out.reverted.push(localId);
+          if (res?.refresh) out.refresh = true;
+        } catch (err) {
+          console.warn(`[MutationQueue] discard handler for "${target.table}" failed:`, err.message);
+        }
+      }
+    } else if (REVERTIBLE_TABLES.has(target.table)) {
+      const idCol = target.idColumn === "_id" ? "_id" : "id";
+      for (const localId of target.ids) {
+        if (await neverReachedServer(db, rows, localId)) {
+          await db.runAsync(`DELETE FROM ${target.table} WHERE ${idCol} = ?`, [localId])
+            .catch((err) => console.warn(`[MutationQueue] discard: could not remove ${target.table} ${localId}:`, err.message));
+          out.deleted.push(localId);
+        } else {
+          await db.runAsync(`UPDATE ${target.table} SET _synced = 1 WHERE ${idCol} = ?`, [localId])
+            .catch((err) => console.warn(`[MutationQueue] discard: could not settle ${target.table} ${localId}:`, err.message));
+          // A delete undone: the server still has the record, so it shows
+          // again (tables without the column simply refuse this statement).
+          if (rows.some((r) => String(r.method).toUpperCase() === "DELETE")) {
+            await db.runAsync(`UPDATE ${target.table} SET deleted_at = NULL WHERE ${idCol} = ?`, [localId]).catch(() => {});
+          }
+          out.reverted.push(localId);
+        }
+      }
+      // Even a removed create: inferred from the queue, not known — if the
+      // server did have it, a full pull brings it back.
+      out.refresh = true;
+    }
+
+    if (out.refresh) {
+      // The server's copy of a reverted row is older than the cursor, so an
+      // incremental pull would never send it again. The next pull is full.
+      try {
+        await require("./syncManager").SyncManager?.resetLastSync?.();
+      } catch (err) {
+        console.warn("[MutationQueue] discard: could not reset the pull cursor:", err.message);
+      }
+    }
+    return out;
   }
 
   /**
@@ -1012,6 +1369,32 @@ export class MutationQueue {
       [entityKey]
     ).catch(() => null);
     return result?.changes ?? 0;
+  }
+
+  /**
+   * Where the queued work for one entity stands, for undoing a create.
+   *
+   *   "sent"      a row for it was accepted — the server has it
+   *   "inflight"  attempted with no answer — it may have landed
+   *   "unsent"    queued, never attempted — the server cannot have it
+   *   "none"      nothing queued (or long pruned); the caller's own flags
+   *               decide
+   *
+   * Deleting something created offline is only free while it is "unsent"
+   * (or "none" for a row its own flags say never left the phone): the
+   * create is cancelled and nothing goes on the wire. Otherwise the delete
+   * is queued behind it and the id map points it at the right row.
+   */
+  static async createState(entityKey) {
+    const db = await getDatabase();
+    await ensureSchema(db);
+    const rows = await db.getAllAsync(
+      `SELECT status, last_attempt_at FROM ${TABLE} WHERE entity_key = ?`, [entityKey]
+    ).catch(() => []);
+    if (!rows?.length) return "none";
+    if (rows.some((r) => r.status === "synced")) return "sent";
+    if (rows.some((r) => r.last_attempt_at)) return "inflight";
+    return "unsent";
   }
 
   /** Housekeeping — clears synced rows older than the given age. */

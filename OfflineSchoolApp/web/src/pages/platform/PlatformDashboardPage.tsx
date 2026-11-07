@@ -75,21 +75,21 @@ export default function PlatformDashboardPage() {
       </Card>
 
       {statsQ.isError && (
-        <div role="alert" className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
+        <div role="alert" className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{d("loadFailed")}</span>
         </div>
       )}
 
       <MetricGrid>
-        <MetricTile tone="schools" icon={Building2} loading={loading} href="/platform/schools"
+        <MetricTile tinted tone="schools" icon={Building2} loading={loading} href="/platform/schools"
           label={d("schools")} value={n(totals?.schools)}
           hint={totals ? pair("activeSchools", n(totals.activeSchools)) : undefined} />
-        <MetricTile tone="students" icon={GraduationCap} loading={loading}
+        <MetricTile tinted tone="students" icon={GraduationCap} loading={loading}
           label={d("students")} value={n(totals?.students)} hint={d("studentsHint")} />
-        <MetricTile tone="teachers" icon={Users} loading={loading}
+        <MetricTile tinted tone="teachers" icon={Users} loading={loading}
           label={d("teachers")} value={n(totals?.teachers)} hint={d("teachersHint")} />
-        <MetricTile tone="attendance" icon={CalendarCheck} loading={loading}
+        <MetricTile tinted tone="attendance" icon={CalendarCheck} loading={loading}
           label={d("attendance")} value={pctText(totals?.attendance.rate)}
           hint={totals ? join(
             pair("present", n(totals.attendance.present)),
@@ -97,16 +97,16 @@ export default function PlatformDashboardPage() {
             pair("absent",  n(totals.attendance.absent)),
             pair("excused", n(totals.attendance.excused)),
           ) : undefined} />
-        <MetricTile tone="academic" icon={ClipboardList} loading={loading}
+        <MetricTile tinted tone="reports" icon={ClipboardList} loading={loading}
           label={d("results")} value={n(totals?.academics.results)}
           hint={totals ? pair("published", n(totals.academics.published)) : undefined} />
-        <MetricTile tone="academic" icon={BarChart3} loading={loading}
+        <MetricTile tinted tone="reports" icon={BarChart3} loading={loading}
           label={d("average")}
           value={totals?.academics.average == null ? "—" : fmt.decimal(totals.academics.average, 1)}
           hint={d("academicsHint")} />
-        <MetricTile tone="reports" icon={Award} loading={loading}
+        <MetricTile tinted tone="reports" icon={Award} loading={loading}
           label={d("passRate")} value={pctText(totals?.academics.passRate)} />
-        <MetricTile tone="exams" icon={TrendingUp} loading={loading}
+        <MetricTile tinted tone="exams" icon={TrendingUp} loading={loading}
           label={d("promotionRate")} value={pctText(totals?.promotion.rate)}
           hint={totals ? join(
             pair("decided",  n(totals.promotion.decided)),
@@ -114,17 +114,17 @@ export default function PlatformDashboardPage() {
             pair("repeated", n(totals.promotion.repeated)),
             pair("pending",  n(totals.promotion.pending)),
           ) : undefined} />
-        <MetricTile tone="finance" icon={Banknote} loading={loading}
+        <MetricTile tinted tone="finance" icon={Banknote} loading={loading}
           label={d("billed")} value={money(totals?.fees.billed)}
           hint={totals ? join(
             pair("charged", money(totals.fees.charged)),
             pair("waived",  money(totals.fees.waived)),
           ) : undefined} />
-        <MetricTile tone="attendance" icon={Wallet} loading={loading}
+        <MetricTile tinted tone="finance" icon={Wallet} loading={loading}
           label={d("paid")} value={money(totals?.fees.paid)} />
-        <MetricTile tone="reports" icon={CircleDollarSign} loading={loading}
+        <MetricTile tinted tone="finance" icon={CircleDollarSign} loading={loading}
           label={d("balance")} value={money(totals?.fees.balance)} />
-        <MetricTile tone="schools" icon={Percent} loading={loading}
+        <MetricTile tinted tone="finance" icon={Percent} loading={loading}
           label={d("collectionRate")} value={pctText(totals?.fees.collectionRate)} />
       </MetricGrid>
 
@@ -137,7 +137,7 @@ export default function PlatformDashboardPage() {
           <CardHeader title={d("bySchool")} />
         </div>
         {!statsQ.isLoading && rows.length === 0 ? (
-          <EmptyTable icon={<Building2 className="h-8 w-8" />} title={d("noData")} />
+          <EmptyTable icon={<Building2 className="h-8 w-8 text-accent-indigo-solid" />} title={d("noData")} />
         ) : (
           <Table>
             <THead>

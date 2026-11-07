@@ -10,13 +10,15 @@ import { useState, useMemo }              from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                 from "react-i18next";
-import { ArrowLeft, Receipt, Undo2, Printer } from "lucide-react";
+import { ArrowLeft, Receipt, Undo2, Printer, FileText } from "lucide-react";
 
 import { useUser }        from "@/store/auth.store";
 import { PageHeader }     from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button }         from "@/components/ui/Button";
 import { Badge }          from "@/components/ui/Badge";
+import { DASH_TINT }      from "@/config/dashboardTint";
+import { cn }             from "@/utils/cn";
 import { Modal }          from "@/components/ui/Modal";
 import { PageSpinner }    from "@/components/ui/Spinner";
 import { FormField, Input, SelectField, Textarea } from "@/components/ui/FormField";
@@ -31,8 +33,11 @@ import {
   recordPayment,
   reversePayment,
   fetchReceiptHtml,
+  fetchUnconfirmedPaymentIds,
 } from "@/services/fee.service";
+import { isDesktop } from "@/lib/offline/bridge";
 import { printHtml } from "@/print/document";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 import type { PaymentMethod } from "@/types/fees.types";
 import PaymentPlanPanel from "@/pages/fees/PaymentPlanPanel";
 import { useAttemptId } from "@/hooks/useAttemptId";
@@ -53,7 +58,9 @@ export default function StudentFeeAccountPage() {
   const year         = params.get("year") ?? "";
 
   const [payOpen, setPayOpen] = useState(false);
-  const [printing, setPrinting] = useState<string | null>(null);
+  // One receipt at a time, and "Preparing…" on its row until the print
+  // dialog has it.
+  const receipts = useSingleFlight();
   const [form, setForm] = useState({
     amount:    "",
     method:    "cash" as PaymentMethod,
@@ -66,6 +73,18 @@ export default function StudentFeeAccountPage() {
     queryFn:  () => fetchStudentAccount(studentId, schoolId, year || undefined),
     enabled:  !!schoolId && !!studentId,
   });
+
+  // On the desktop, the payments the server has not confirmed yet: their
+  // receipt prints PROVISIONAL, and the row says so before anyone presses
+  // Print. Polled, because the sync that confirms them happens in the
+  // background; in a browser this is always empty and never runs.
+  const unconfirmedQ = useQuery({
+    queryKey: ["fees", "unconfirmed", studentId],
+    queryFn:  fetchUnconfirmedPaymentIds,
+    enabled:  isDesktop(),
+    refetchInterval: 5000,
+  });
+  const unconfirmed = useMemo(() => new Set(unconfirmedQ.data ?? []), [unconfirmedQ.data]);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["fees"] });
@@ -90,11 +109,18 @@ export default function StudentFeeAccountPage() {
       };
       return recordPayment({ _id: attemptId(payload), ...payload });
     },
-    onSuccess: ({ payment }) => {
+    onSuccess: async ({ payment }) => {
+      // Recorded on this desktop and not yet on the server: the receipt that
+      // can be printed now is provisional, and the bursar should know before
+      // handing it over.
+      const pending = isDesktop()
+        && (await fetchUnconfirmedPaymentIds().catch(() => [] as string[])).includes(payment._id);
       toast({
         kind:    "success",
         title:   t("fees.recorded"),
-        message: payment.receiptNo ?? undefined,
+        message: pending
+          ? t("fees.recordedProvisional", { receiptNo: payment.receiptNo ?? "" })
+          : payment.receiptNo ?? undefined,
       });
       setPayOpen(false);
       setForm({ amount: "", method: "cash", reference: "", note: "" });
@@ -115,18 +141,15 @@ export default function StudentFeeAccountPage() {
       toast({ kind: "error", title: t("fees.reverseFailed"), message: getErrorMessage(err) }),
   });
 
-  const printReceipt = async (paymentId: string) => {
-    setPrinting(paymentId);
+  const printReceipt = (paymentId: string) => receipts.run(paymentId, async () => {
     try {
       const lang = i18n?.language?.startsWith("fr") ? "fr" : "en";
       const html = await fetchReceiptHtml(paymentId, schoolId, lang);
-      printHtml(html);
+      await printHtml(html);
     } catch (err) {
       toast({ kind: "error", title: t("fees.receipt"), message: getErrorMessage(err) });
-    } finally {
-      setPrinting(null);
     }
-  };
+  });
 
   // Whole francs only. The server rejects anything else, but catching it here
   // means the bursar is told before the request rather than after.
@@ -160,8 +183,12 @@ export default function StudentFeeAccountPage() {
 
   return (
     <div className="space-y-5">
+      {/* C1: the pupil's name and class, not just "Fee account". */}
       <PageHeader
-        title={t("fees.account")}
+        title={account?.student?.name ?? t("fees.account")}
+        description={account?.student
+          ? [t("fees.account"), account.student.className, account.student.admissionNo].filter(Boolean).join(" · ")
+          : undefined}
         meta={year ? <span>{year}</span> : undefined}
         actions={
           <>
@@ -199,23 +226,23 @@ export default function StudentFeeAccountPage() {
           { label: t("fees.waived"),  value: totals?.waived  ?? 0 },
           { label: t("fees.paid"),    value: totals?.paid    ?? 0 },
         ].map((s) => (
-          <Card key={s.label}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          <Card key={s.label} className={DASH_TINT.teal.card}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {s.label}
             </p>
-            <p className="mt-1.5 font-display text-[22px] leading-none text-ink tabular">
+            <p className={cn("mt-1.5 font-display text-[22px] leading-none tabular", DASH_TINT.teal.number)}>
               {fmt.money(s.value)}
             </p>
           </Card>
         ))}
 
-        <Card>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+        <Card className={DASH_TINT[balance > 0 ? "red" : "teal"].card}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             {t("fees.balance")}
           </p>
           <p
             className={`mt-1.5 font-display text-[22px] leading-none tabular ${
-              balance > 0 ? "text-danger" : "text-success"
+              balance > 0 ? "text-danger-text" : "text-success-text"
             }`}
           >
             {fmt.money(balance)}
@@ -229,7 +256,7 @@ export default function StudentFeeAccountPage() {
       {/* Charges */}
       <Card padding={false}>
         <div className="p-5 pb-0">
-          <CardHeader title={t("fees.charges")} />
+          <CardHeader title={t("fees.charges")} icon={FileText} accent="teal" />
         </div>
         {(account?.charges.length ?? 0) === 0 ? (
           <EmptyTable title={t("fees.noCharges")} subtitle={t("fees.noChargesHint")} />
@@ -249,7 +276,7 @@ export default function StudentFeeAccountPage() {
                   <Td className="font-medium text-ink">
                     {c.label}
                     {c.voidedAt && (
-                      <Badge variant="default" className="ml-2">
+                      <Badge variant="danger" className="ml-2">
                         {t("fees.reversed")}
                       </Badge>
                     )}
@@ -271,7 +298,7 @@ export default function StudentFeeAccountPage() {
       {/* Payments */}
       <Card padding={false}>
         <div className="p-5 pb-0">
-          <CardHeader title={t("fees.payments")} />
+          <CardHeader title={t("fees.payments")} icon={Receipt} accent="teal" />
         </div>
         {(account?.payments.length ?? 0) === 0 ? (
           <EmptyTable title={t("fees.noPayments")} />
@@ -291,9 +318,17 @@ export default function StudentFeeAccountPage() {
               {account?.payments.map((p) => {
                 const isReversal = Boolean(p.reversesId);
                 const isReversed = Boolean(p.reversedById);
+                const provisional = unconfirmed.has(p._id);
                 return (
                   <Tr key={p._id}>
-                    <Td className="font-medium text-ink">{p.receiptNo ?? "—"}</Td>
+                    <Td className="font-medium text-ink">
+                      {p.receiptNo ?? "—"}
+                      {provisional && (
+                        <span className="ml-2 align-middle" title={t("fees.provisionalHint")}>
+                          <Badge variant="warning">{t("fees.provisional")}</Badge>
+                        </span>
+                      )}
+                    </Td>
                     <Td className="text-ink-muted">{fmt.dateShort(p.receivedAt)}</Td>
                     <Td className="text-ink-muted">{t(`method.${p.method}`)}</Td>
                     <Td className="text-ink-muted">{p.reference ?? "—"}</Td>
@@ -301,7 +336,7 @@ export default function StudentFeeAccountPage() {
                       numeric
                       className={
                         isReversal
-                          ? "text-danger"
+                          ? "text-danger-text"
                           : isReversed
                             ? "text-ink-faint line-through"
                             : "font-medium text-ink"
@@ -314,23 +349,25 @@ export default function StudentFeeAccountPage() {
                         {!isReversal && !isReversed && p.receiptNo && (
                           <button
                             type="button"
-                            disabled={printing === p._id}
+                            disabled={receipts.busy}
                             onClick={() => printReceipt(p._id)}
-                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-indigo-700 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-primary-700 disabled:opacity-50"
                           >
                             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-                            {printing === p._id ? "…" : t("common.print")}
+                            {receipts.busyKey === p._id
+                              ? t("common.preparing")
+                              : provisional ? t("fees.printProvisional") : t("common.print")}
                           </button>
                         )}
                         {isReversal ? (
                           <Badge variant="danger">{t("fees.reversalOf")}</Badge>
                         ) : isReversed ? (
-                          <Badge variant="default">{t("fees.reversed")}</Badge>
+                          <Badge variant="danger">{t("fees.reversed")}</Badge>
                         ) : (
                           <button
                             type="button"
                             onClick={() => askReverse(p._id, p.amount)}
-                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger-text"
                           >
                             <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
                             {t("fees.reverse")}

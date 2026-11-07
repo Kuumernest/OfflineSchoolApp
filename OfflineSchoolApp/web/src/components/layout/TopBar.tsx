@@ -6,7 +6,8 @@ import {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
-import { useAuthStore, useUser, useActiveSchool }   from "@/store/auth.store";
+import { useUser, useActiveSchool }                 from "@/store/auth.store";
+import { useSignOut }                               from "@/hooks/useSignOut";
 import { cn }                                       from "@/utils/cn";
 import { roleLabel }                                from "@/utils/roleLabel";
 import {
@@ -81,7 +82,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
         part.toLowerCase() === query.toLowerCase() ? (
           <mark
             key={i}
-            className="rounded-[3px] bg-warning-soft px-0.5 font-semibold text-warning not-italic"
+            className="rounded-[3px] bg-warning-soft px-0.5 font-semibold text-warning-text not-italic"
           >
             {part}
           </mark>
@@ -98,7 +99,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const { t }      = useTranslation();
   const user       = useUser();
   const activeSchool = useActiveSchool();
-  const { logout } = useAuthStore();
+  const signOut    = useSignOut();
   const navigate   = useNavigate();
 
   // Search state
@@ -252,9 +253,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   };
 
   // ── Logout ──────────────────────────────────────────────────────────────────
-  const handleLogout = () => {
+  // Through useSignOut, which asks first on a desktop holding unsent changes.
+  const handleLogout = async () => {
+    if (!(await signOut())) return;
     clearSearchCache();
-    logout();
     navigate("/login", { replace: true });
   };
 
@@ -274,7 +276,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const totalResults = results.length;
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-strong bg-surface px-4 lg:px-6">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-header-line bg-header-bg px-4 lg:px-6">
 
       {/* ── Left ─────────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 items-center gap-2">
@@ -295,7 +297,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         {/* This is the only thing on screen that says which page you are on
             once you have scrolled past the header, and it was set at the same
             weight and colour as the placeholder text in the search box. */}
-        <span className="truncate text-sm font-semibold text-ink">
+        <span className="truncate text-sm font-semibold text-header-text">
           {title}
         </span>
       </div>
@@ -309,7 +311,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
             {isLoading ? (
               <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
             ) : (
-              <Search className="h-4 w-4 text-ink-faint" />
+              <Search className="h-4 w-4 text-header-text-secondary" />
             )}
           </div>
 
@@ -327,11 +329,11 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
             }}
             placeholder={t("common.searchPlaceholder")}
             className="
-              h-10 w-full rounded-control border border-line bg-canvas
-              pl-9 pr-9 text-sm text-ink-body placeholder:text-ink-faint
+              h-10 w-full rounded-control border border-header-search-line bg-header-search
+              pl-9 pr-9 text-sm text-header-text placeholder:text-header-text-secondary
               transition-colors
               hover:border-line-strong
-              focus:border-primary-500 focus:bg-surface focus:outline-none
+              focus:border-focus focus:bg-surface focus:outline-none focus:ring-1 focus:ring-focus
             "
           />
 
@@ -357,7 +359,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               {/* Error */}
               {error && (
                 <div className="px-4 py-4 text-center">
-                  <p className="text-sm text-danger">{error}</p>
+                  <p className="text-sm text-danger-text">{error}</p>
                 </div>
               )}
 
@@ -572,8 +574,8 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               <button
                 type="button"
                 role="menuitem"
-                onClick={handleLogout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-danger hover:bg-danger-soft"
+                onClick={() => { setDropdownOpen(false); void handleLogout(); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-danger-text hover:bg-danger-soft"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
                 {t("common.signOut")}

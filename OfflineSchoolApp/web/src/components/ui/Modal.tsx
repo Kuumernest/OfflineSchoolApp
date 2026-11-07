@@ -92,7 +92,9 @@ export function Modal({
         if (e.target === ref.current) onClose();
       }}
       className={cn(
-        "w-[calc(100%-2rem)] rounded-card border border-line bg-surface p-0 shadow-raise",
+        // m-auto: the UA centres a modal <dialog> with margin:auto, and
+        // Tailwind's reset sets every margin to 0 — which pinned it top-left.
+        "m-auto w-[calc(100%-2rem)] rounded-card border border-line bg-surface p-0 shadow-raise",
         "backdrop:bg-ink/40 backdrop:backdrop-blur-[2px]",
         // <dialog> is display:block when open and centred by the UA; these keep
         // it from growing past the viewport on a small screen.

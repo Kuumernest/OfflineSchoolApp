@@ -178,7 +178,7 @@ const check = (label, actual, expected) => {
     return [r.status, (String(html).match(/<html[^>]*lang="(\w+)"/) || [])[1] ?? null];
   };
   const urls = (l) => [
-    `/results/s1/student/ama/reportcard/html?lang=${l}`,
+    `/results/s1/student/ama/reportcard/html?lang=${l}&issue=1`,
     `/term-results/ama/report-card?academicYear=${encodeURIComponent(YEAR)}&term=1&classId=f1&lang=${l}`,
     `/annual-results/ama/report-card?academicYear=${encodeURIComponent(YEAR)}&classId=f1&lang=${l}`,
   ];

@@ -13,6 +13,8 @@
 // account, so it is shown prominently and copyably rather than in a toast that
 // vanishes after four seconds.
 
+import { dobError, normalisePhone, ageWarning } from "@/utils/studentValidation";
+import { useStudentAgeRanges } from "@/hooks/useSchoolYear";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -26,7 +28,10 @@ import {
   MailWarning,
   KeyRound,
   IdCard,
+  Users,
 } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT } from "@/config/dashboardTint";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -39,6 +44,7 @@ import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -113,7 +119,17 @@ export default function AddStudentPage() {
   const emailValid =
     form.email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
 
+  // B3: phones as +237 and nine digits, no future birth date, and a word when
+  // the age is unusual for the class (a warning only — the server saves it).
+  const ageRanges     = useStudentAgeRanges();
+  const birthError    = dobError(form.dateOfBirth);
+  const phoneError    = normalisePhone(form.phone).error ? t("students.phoneInvalid") : undefined;
+  const guardianError = normalisePhone(form.guardianPhone).error ? t("students.phoneInvalid") : undefined;
+  const chosenClass   = classes.find((c) => c._id === form.classId);
+  const ageHint       = ageWarning(form.dateOfBirth, chosenClass?.name, ageRanges);
+
   const canSubmit =
+    !birthError && !phoneError && !guardianError &&
     form.firstName.trim().length > 0 &&
     form.lastName.trim().length > 0 &&
     !!form.classId &&
@@ -130,12 +146,12 @@ export default function AddStudentPage() {
         // stored as "" and then collide with the next student who also has no
         // email, since the server dedupes on that field.
         ...(form.email.trim()         ? { email:         form.email.trim() }         : {}),
-        ...(form.phone.trim()         ? { phone:         form.phone.trim() }         : {}),
+        ...(form.phone.trim()         ? { phone:         normalisePhone(form.phone).value ?? form.phone.trim() } : {}),
         ...(form.gender               ? { gender:        form.gender }               : {}),
         ...(form.dateOfBirth          ? { dateOfBirth:   form.dateOfBirth }          : {}),
         ...(form.address.trim()       ? { address:       form.address.trim() }       : {}),
         ...(form.guardianName.trim()  ? { guardianName:  form.guardianName.trim() }  : {}),
-        ...(form.guardianPhone.trim() ? { guardianPhone: form.guardianPhone.trim() } : {}),
+        ...(form.guardianPhone.trim() ? { guardianPhone: normalisePhone(form.guardianPhone).value ?? form.guardianPhone.trim() } : {}),
       }),
     onSuccess: (data) => {
       setResult({
@@ -149,6 +165,11 @@ export default function AddStudentPage() {
     onError: (err) =>
       toast({ title: t("students.errEnroll"), message: getErrorMessage(err), kind: "error" }),
   });
+
+  // Typed but not enrolled: leaving asks first. Once enrolled, the form is
+  // the credentials screen and there is nothing left to lose.
+  const typed = (Object.keys(EMPTY) as (keyof FormState)[]).some((k) => form[k] !== EMPTY[k]);
+  useUnsavedChangesGuard(typed && !result && !mutation.isPending);
 
   const set = <K extends keyof FormState>(key: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -165,10 +186,10 @@ export default function AddStudentPage() {
             <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
               <Check className="w-6 h-6 text-emerald-600" />
             </div>
-            <h2 className="mt-4 text-base font-semibold text-gray-900">
+            <h2 className="mt-4 text-base font-semibold text-ink">
               {t("students.isEnrolled", { name: result.name })}
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {result.emailSent
                 ? t("students.emailedThem")
                 : t("students.noEmailSent")}
@@ -247,15 +268,18 @@ export default function AddStudentPage() {
         {t("academic.student_other")}
       </Link>
 
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">{t("students.enroll")}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+      <div className="flex items-start gap-3">
+        <PageIcon />
+        <div>
+        <h1 className="text-lg font-semibold text-ink">{t("students.enroll")}</h1>
+        <p className="text-sm text-ink-muted mt-0.5">
           {t("students.directJoinHint")}{" "}
           <Link to="/students/admissions" className="text-primary-600 hover:underline">
             {t("admissions.title")}
           </Link>
           .
         </p>
+        </div>
       </div>
 
       {classOptions.length === 0 && (
@@ -274,7 +298,7 @@ export default function AddStudentPage() {
         className="space-y-4"
       >
         <Card>
-          <CardHeader title={t("students.theStudent")} />
+          <CardHeader title={t("students.theStudent")} icon={UserPlus} accent="blue" />
           <div className="grid sm:grid-cols-2 gap-3">
             <FormField label={t("common.firstName")} required>
               <Input value={form.firstName} onChange={set("firstName")} autoFocus />
@@ -294,14 +318,20 @@ export default function AddStudentPage() {
             <FormField label={t("common.gender")}>
               <SelectField
                 options={GENDERS.map((g) => ({ value: g.value, label: t(g.labelKey) }))}
-                placeholder={t("common.preferNotToSay")}
+                // Nothing stored when left alone; read everywhere as this.
+                placeholder={t("common.notSpecified")}
                 value={form.gender}
                 onChange={set("gender")}
               />
             </FormField>
 
-            <FormField label={t("common.dateOfBirth")}>
-              <Input type="date" value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+            <FormField
+              label={t("common.dateOfBirth")}
+              error={birthError ? t("students.dobFuture") : undefined}
+              hint={ageHint ? t("students.ageUnusual", { age: ageHint.age, min: ageHint.min, max: ageHint.max, className: chosenClass?.name ?? "" }) : undefined}
+            >
+              <Input type="date" value={form.dateOfBirth} onChange={set("dateOfBirth")} invalid={!!birthError}
+                     max={new Date().toISOString().slice(0, 10)} />
             </FormField>
             <FormField
               label={t("common.email")}
@@ -317,8 +347,8 @@ export default function AddStudentPage() {
               />
             </FormField>
 
-            <FormField label={t("common.phone")}>
-              <Input value={form.phone} onChange={set("phone")} />
+            <FormField label={t("common.phone")} error={phoneError} hint={t("students.phoneHint")}>
+              <Input value={form.phone} onChange={set("phone")} invalid={!!phoneError} placeholder="677 12 34 56" />
             </FormField>
             <FormField label={t("common.address")} className="sm:col-span-1">
               <Input value={form.address} onChange={set("address")} />
@@ -328,6 +358,8 @@ export default function AddStudentPage() {
 
         <Card>
           <CardHeader
+            icon={Users}
+            accent="blue"
             title={t("students.guardianLabel")}
             subtitle={t("common.optionalContact")}
           />
@@ -335,8 +367,8 @@ export default function AddStudentPage() {
             <FormField label={t("common.name")}>
               <Input value={form.guardianName} onChange={set("guardianName")} />
             </FormField>
-            <FormField label={t("common.phone")}>
-              <Input value={form.guardianPhone} onChange={set("guardianPhone")} />
+            <FormField label={t("common.phone")} error={guardianError} hint={t("students.phoneHint")}>
+              <Input value={form.guardianPhone} onChange={set("guardianPhone")} invalid={!!guardianError} placeholder="677 12 34 56" />
             </FormField>
           </div>
         </Card>
@@ -392,14 +424,14 @@ function Credential({
   };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
-      <Icon className="w-4 h-4 text-gray-400 shrink-0" />
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-accent-blue-soft border border-line">
+      <Icon className={cn("w-4 h-4 shrink-0", DASH_TINT.blue.glyph)} />
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-semibold text-gray-900 font-mono break-all">
+        <p className="text-xs text-ink-muted">{label}</p>
+        <p className="text-sm font-semibold text-ink font-mono break-all">
           {value}
         </p>
-        <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>
+        <p className="text-[11px] text-ink-muted mt-0.5">{hint}</p>
       </div>
       <button
         type="button"

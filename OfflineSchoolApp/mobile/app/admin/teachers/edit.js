@@ -23,6 +23,9 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
+import { staffNoStatus, staffNoText } from "../../../src/utils/staffNumber";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -97,14 +100,15 @@ const SubjectRow = React.memo(({ subject, actionIcon, actionColor, onAction, dis
       <Ionicons
         name={actionIcon}
         size={22}
-        color={actionColor ?? "#DC2626"}
+        color={actionColor ?? ACCENT.red.solid}
       />
     </TouchableOpacity>
   </View>
 ));
 
-const SectionHeader = React.memo(({ title, count }) => (
+const SectionHeader = React.memo(({ title, count, icon }) => (
   <View style={styles.sectionHeader}>
+    <IconSquare icon={icon ?? "book"} accent="slate" size={28} />
     <Text style={styles.sectionTitle}>{title}</Text>
     {count != null && (
       <View style={styles.sectionBadge}>
@@ -123,7 +127,7 @@ const FieldInput = React.memo(
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={COLORS.textMuted}
         keyboardType={keyboardType ?? "default"}
         autoCapitalize={autoCapitalize ?? "words"}
         autoCorrect={false}
@@ -137,7 +141,7 @@ const ErrorBanner = React.memo(({ message, onRetry }) => {
                                  const { t } = useTranslation();
                                  return (
   <View style={styles.errorBanner}>
-    <Ionicons name="alert-circle" size={16} color="#DC2626" />
+    <Ionicons name="alert-circle" size={16} color={SEMANTIC.error.icon} />
     <Text style={styles.errorText}>{message}</Text>
     {onRetry && (
       <TouchableOpacity
@@ -435,8 +439,10 @@ export default function EditTeacher() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={styles.headerIcon} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -477,6 +483,17 @@ export default function EditTeacher() {
       >
         {/* ── PROFILE FIELDS ── */}
         <View style={styles.card}>
+          {/* The school's staff number: read-only here. It is issued by the
+              server, and an administrator changes it on the web console. */}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>{t("staffNo.labelLong")}</Text>
+            <Text
+              testID="teacher-staff-no"
+              style={[styles.staffNoValue, staffNoStatus(teacher).kind !== "assigned" && styles.staffNoMuted]}
+            >
+              {staffNoText(t, staffNoStatus(teacher))}
+            </Text>
+          </View>
           <FieldInput
             label={t("teachersEdit.nameLabel")}
             value={name}
@@ -500,6 +517,7 @@ export default function EditTeacher() {
           <SectionHeader
             title={t("teachersEdit.assigned")}
             count={assignedSubjects.length}
+            icon="book"
           />
 
           {assignedSubjects.length === 0 ? (
@@ -511,7 +529,7 @@ export default function EditTeacher() {
                 key={subject.id ?? subject.assignmentId ?? subject.subjectId}
                 subject={subject}
                 actionIcon="close-circle"
-                actionColor="#DC2626"
+                actionColor={ACCENT.red.solid}
                 onAction={handleUnassign}
                 disabled={actioningIds.has(subject.subjectId ?? subject.id)}
               />
@@ -524,6 +542,7 @@ export default function EditTeacher() {
           <SectionHeader
             title={t("teachersEdit.available")}
             count={availableSubjects.length}
+            icon="add-circle-outline"
           />
 
           {availableSubjects.length === 0 ? (
@@ -534,7 +553,7 @@ export default function EditTeacher() {
                 key={subject.id ?? subject.subjectId}
                 subject={subject}
                 actionIcon="add-circle"
-                actionColor="#059669"
+                actionColor={ACCENT.green.solid}
                 onAction={handleAssign}
                 disabled={actioningIds.has(subject.subjectId ?? subject.id)}
               />
@@ -572,22 +591,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   backButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:     { marginRight: 0 },
   headerCenter:   { flex: 1 },
-  headerTitle:    { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   saveButton: {
     backgroundColor:  "#4F46E5",
     paddingHorizontal: 16,
@@ -603,11 +623,11 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, gap: 12 },
 
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     gap:             12,
     shadowColor:     "#000",
     shadowOpacity:   0.03,
@@ -616,19 +636,21 @@ const styles = StyleSheet.create({
   },
 
   fieldWrap:  { gap: 6 },
-  fieldLabel: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  staffNoValue: { fontSize: 15, fontWeight: "700", color: COLORS.text, paddingVertical: 4 },
+  staffNoMuted: { fontSize: 13, fontWeight: "400", fontStyle: "italic", color: COLORS.textSecondary },
   fieldInput: {
     borderWidth:       1,
-    borderColor:       "#D1D5DB",
+    borderColor:       COLORS.border,
     borderRadius:      10,
     paddingHorizontal: 14,
     paddingVertical:   11,
     fontSize:          15,
-    color:             "#111827",
-    backgroundColor:   "#F9FAFB",
+    color:             COLORS.text,
+    backgroundColor:   COLORS.surface,
   },
-  fieldInputError: { borderColor: "#DC2626" },
-  fieldError:      { fontSize: 11, color: "#DC2626", marginTop: 2 },
+  fieldInputError: { borderColor: COLORS.danger },
+  fieldError:      { fontSize: 11, color: SEMANTIC.error.text, marginTop: 2 },
 
   sectionHeader: {
     flexDirection: "row",
@@ -636,28 +658,30 @@ const styles = StyleSheet.create({
     gap:           8,
     marginBottom:  4,
   },
-  sectionTitle: { fontSize: 14, fontWeight: "700", color: "#374151", flex: 1 },
+  sectionTitle: { fontSize: 14, fontWeight: "700", color: COLORS.text, flex: 1 },
   sectionBadge: {
-    backgroundColor:  "#EEF2FF",
+    backgroundColor:  accentBadge("slate").bg,
+    borderColor:      accentBadge("slate").border,
+    borderWidth:      1,
     borderRadius:     10,
     paddingHorizontal: 8,
     paddingVertical:  3,
   },
-  sectionBadgeText: { fontSize: 11, fontWeight: "700", color: "#4F46E5" },
+  sectionBadgeText: { fontSize: 11, fontWeight: "700", color: accentBadge("slate").text },
 
   subjectRow: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingVertical:   10,
     borderTopWidth:    1,
-    borderTopColor:    "#F3F4F6",
+    borderTopColor:    COLORS.border,
   },
   subjectInfo:  { flex: 1 },
-  subjectName:  { fontSize: 14, fontWeight: "600", color: "#111827" },
-  subjectClass: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  subjectName:  { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  subjectClass: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   subjectAction:{ padding: 4 },
 
-  emptyText: { fontSize: 13, color: "#9CA3AF", fontStyle: "italic", textAlign: "center", paddingVertical: 8 },
+  emptyText: { fontSize: 13, color: COLORS.textSubtle, fontStyle: "italic", textAlign: "center", paddingVertical: 8 },
 
   errorBanner: {
     flexDirection:   "row",

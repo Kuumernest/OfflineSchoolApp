@@ -22,6 +22,7 @@ import {
 import { useRouter }            from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
+import { useSafeLogout }        from "../../src/hooks/useSafeLogout";
 import { getTeacherStats }      from "../../src/services/teacherStats.service";
 import { getSchoolInfo }        from "../../src/services/school.service";
 import { isTeacherProfileComplete } from "./profile/setup";
@@ -29,43 +30,49 @@ import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { toDisplayUri }        from "../../src/utils/logoUri";
 import { useTranslation }      from "../../src/i18n/useTranslation";
 import { reminderMessageKey, reminderRoute } from "../../src/utils/attendanceReminders";
+import { StatTile, ActionTile, TileIcon } from "../../src/components/Tiles";
+import { COLORS, SEMANTIC, ACCENT } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The one primary action is taking attendance: the task every teacher does
+// every day: it is highlighted (blue border, ringed icon), not filled. Every
+// shortcut is a tinted tile in its kind's colour.
 const buildQuickActions = (t) => [
-  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams"                     },
-  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        color: "#DC2626", route: "/teacher/exams?filter=pending-marks" },
-  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", color: "#7C3AED", route: "/teacher/content/upload-notes"       },
-  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes/create"             },
-  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     color: "#D97706", route: "/teacher/homework/create"            },
-  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      color: "#DB2777", route: "/teacher/attendance"                 },
-  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements/create"       },
-  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                           },
+  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        route: "/teacher/exams", kind: "exams" },
+  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        route: "/teacher/exams?filter=pending-marks", kind: "marks" },
+  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", route: "/teacher/content/upload-notes", kind: "content" },
+  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   route: "/teacher/quizzes/create", kind: "quizzes" },
+  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     route: "/teacher/homework/create", kind: "homework" },
+  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      route: "/teacher/attendance", primary: true, kind: "attendance" },
+  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     route: "/teacher/announcements/create", kind: "announcements" },
+  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   route: "/messages", kind: "messages" },
 ];
 
 const buildModules = (t) => [
-  { id: "exams",         title: t("teacherHome.modExamsTitle"),         icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams",         description: t("teacherHome.modExamsDesc"),         badge: "marks"         },
-  { id: "subjects",      title: t("teacherHome.modSubjectsTitle"),      icon: "book-outline",          color: "#7C3AED", route: "/teacher/subjects",      description: t("teacherHome.modSubjectsDesc")                              },
-  { id: "content",       title: t("teacherHome.modContentTitle"),       icon: "folder-outline",        color: "#059669", route: "/teacher/content",       description: t("teacherHome.modContentDesc")                               },
-  { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
-  { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        color: "#D97706", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
-  { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     color: "#059669", route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
+  { id: "exams",         title: t("teacherHome.modExamsTitle"),         icon: "trophy-outline",        kind: "exams",    route: "/teacher/exams",         description: t("teacherHome.modExamsDesc"),         badge: "marks"         },
+  { id: "subjects",      title: t("teacherHome.modSubjectsTitle"),      icon: "book-outline",          kind: "subjects", route: "/teacher/subjects",      description: t("teacherHome.modSubjectsDesc")                              },
+  { id: "content",       title: t("teacherHome.modContentTitle"),       icon: "folder-outline",        kind: "content",  route: "/teacher/content",       description: t("teacherHome.modContentDesc")                               },
+  { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   kind: "quizzes",  route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
+  { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        kind: "homework", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
+  { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     kind: "results",  route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
   // Reading the guidance needs a connection; recording what you decided to do
   // about it does not — the writer goes through the outbox like every other
   // mutation on this handset.
-  { id: "intelligence",  title: t("teacherHome.modIntelligenceTitle"),  icon: "bulb-outline",          color: "#4F46E5", route: "/teacher/intelligence",  description: t("teacherHome.modIntelligenceDesc")                          },
-  { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      color: "#DB2777", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
-  { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          color: "#2563EB", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
-  { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
+  { id: "intelligence",  title: t("teacherHome.modIntelligenceTitle"),  icon: "bulb-outline",          kind: "intelligence", route: "/teacher/intelligence",  description: t("teacherHome.modIntelligenceDesc")                          },
+  { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      kind: "attendance", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
+  { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          kind: "timetable", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
+  { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     kind: "announcements", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
 ];
 
 const ALERT_STYLES = {
-  danger:  { bg: "#FEE2E2", icon: "#DC2626", text: "#991B1B" },
-  warning: { bg: "#FEF3C7", icon: "#D97706", text: "#92400E" },
-  info:    { bg: "#DBEAFE", icon: "#2563EB", text: "#1E40AF" },
-  success: { bg: "#ECFDF5", icon: "#059669", text: "#064E3B" },
+  danger:  { bg: SEMANTIC.error.box, icon: COLORS.danger, text: SEMANTIC.error.text },
+  warning: { bg: SEMANTIC.warning.box, icon: COLORS.warning, text: SEMANTIC.warning.text },
+  info:    { bg: SEMANTIC.info.box, icon: COLORS.info, text: SEMANTIC.info.text },
+  success: { bg: SEMANTIC.success.bg, icon: COLORS.success, text: SEMANTIC.success.text },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,14 +132,14 @@ const SchoolBanner = React.memo(({ school }) => {
         <Image source={{ uri: logoUri }} style={sb.logo} resizeMode="contain" />
       ) : (
         <View style={sb.logoFallback}>
-          <Ionicons name="school" size={20} color="#4F46E5" />
+          <Ionicons name="school" size={20} color={COLORS.contextIcon} />
         </View>
       )}
       <View style={{ flex: 1 }}>
         <Text style={sb.schoolName} numberOfLines={1}>{school.name}</Text>
         {!!location && (
           <Text style={sb.location} numberOfLines={1}>
-            <Ionicons name="location-outline" size={11} color="#6B7280" />
+            <Ionicons name="location-outline" size={11} color={COLORS.contextText} />
             {" "}{location}
           </Text>
         )}
@@ -144,11 +151,12 @@ const SchoolBanner = React.memo(({ school }) => {
   );
 });
 
+// The school context bar: a light blue band, the same on every dashboard.
 const sb = StyleSheet.create({
   banner: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   COLORS.contextBg,
     marginHorizontal:  16,
     marginTop:         12,
     marginBottom:      4,
@@ -157,22 +165,22 @@ const sb = StyleSheet.create({
     paddingVertical:   12,
     gap:               12,
     borderWidth:       1,
-    borderColor:       "#C7D2FE",
+    borderColor:       COLORS.contextBorder,
   },
-  logo:        { width: 44, height: 44, borderRadius: 10, backgroundColor: "#fff" },
+  logo:        { width: 44, height: 44, borderRadius: 10, backgroundColor: COLORS.surface },
   logoFallback: {
     width:           44,
     height:          44,
     borderRadius:    10,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.surface,
     alignItems:      "center",
     justifyContent:  "center",
     borderWidth:     1,
-    borderColor:     "#C7D2FE",
+    borderColor:     COLORS.contextBorder,
   },
-  schoolName: { fontSize: 14, fontWeight: "700", color: "#1E1B4B" },
-  location:   { fontSize: 11, color: "#6B7280", marginTop: 2 },
-  motto:      { fontSize: 11, color: "#4F46E5", fontStyle: "italic", marginTop: 2, fontWeight: "500" },
+  schoolName: { fontSize: 14, fontWeight: "700", color: COLORS.contextText },
+  location:   { fontSize: 11, color: COLORS.contextText, marginTop: 2 },
+  motto:      { fontSize: 11, color: COLORS.contextText, fontStyle: "italic", marginTop: 2, fontWeight: "500" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +191,7 @@ export default function TeacherDashboard() {
   const router = useRouter();
   const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
 
   // ✅ Primitive string deps — prevents infinite loop from object ref changes
   const teacherId = useAuthStore((s) =>
@@ -371,6 +379,7 @@ export default function TeacherDashboard() {
   }, [stats, isProfileIncomplete, announcementUnread, urgentUnack, t]);
 
   const quickActions = useMemo(() => buildQuickActions(t), [t]);
+  const annTone = SEMANTIC[urgentUnack > 0 ? "error" : "info"];
   const modules      = useMemo(() => buildModules(t),      [t]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -379,10 +388,8 @@ export default function TeacherDashboard() {
     catch (err) { console.error(`Nav error ${route}:`, err); }
   }, [router]);
 
-  const handleLogout = useCallback(async () => {
-    try { await logout(); router.replace("/auth/login"); }
-    catch { router.replace("/auth/login"); }
-  }, [logout, router]);
+  // Warns first when this account has changes not yet sent.
+  const handleLogout = useCallback(() => safeLogout(), [safeLogout]);
 
   // ✅ FIX: Use userRef so onRefresh is stable and does NOT re-create when
   //    the user object reference changes — which was causing extra renders.
@@ -396,7 +403,7 @@ export default function TeacherDashboard() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>{t("teacherHome.loading")}</Text>
       </View>
     );
@@ -412,10 +419,11 @@ export default function TeacherDashboard() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
+        <HeaderIcon />
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>{getGreeting(t)},</Text>
           <Text style={styles.userName} numberOfLines={1}>{user?.name || t("teacherHome.teacherFallback")}</Text>
@@ -431,7 +439,7 @@ export default function TeacherDashboard() {
               onPress={() => handleNav("/teacher/profile/setup")}
               activeOpacity={0.7}
             >
-              <Ionicons name="alert-circle" size={16} color="#D97706" />
+              <Ionicons name="alert-circle" size={16} color={COLORS.warning} />
             </TouchableOpacity>
           )}
 
@@ -440,7 +448,7 @@ export default function TeacherDashboard() {
             onPress={() => handleNav("/teacher/announcements")}
             activeOpacity={0.7}
           >
-            <Ionicons name="megaphone-outline" size={20} color="#7C3AED" />
+            <Ionicons name="megaphone-outline" size={20} color={SEMANTIC.info.icon} />
             {announcementUnread > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -455,7 +463,7 @@ export default function TeacherDashboard() {
             onPress={() => handleNav("/teacher/settings")}
             activeOpacity={0.7}
           >
-            <Ionicons name="settings-outline" size={22} color="#4F46E5" />
+            <Ionicons name="settings-outline" size={22} color={COLORS.primary} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -482,8 +490,8 @@ export default function TeacherDashboard() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
           />
         }
       >
@@ -491,7 +499,7 @@ export default function TeacherDashboard() {
 
         {error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle-outline" size={18} color={COLORS.danger} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => loadStats()}>
               <Text style={styles.retryText}>{t("teacherHome.retry")}</Text>
@@ -507,7 +515,7 @@ export default function TeacherDashboard() {
             activeOpacity={0.8}
           >
             <View style={styles.profileSetupIcon}>
-              <Ionicons name="person-add-outline" size={22} color="#FFF" />
+              <Ionicons name="person-add-outline" size={22} color={SEMANTIC.warning.icon} />
             </View>
             <View style={styles.profileSetupText}>
               <Text style={styles.profileSetupTitle}>{t("teacherHome.profileBannerTitle")}</Text>
@@ -515,7 +523,7 @@ export default function TeacherDashboard() {
                 {t("teacherHome.profileBannerSub")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFF" />
+            <Ionicons name="chevron-forward" size={20} color={SEMANTIC.warning.icon} />
           </TouchableOpacity>
         )}
 
@@ -523,31 +531,31 @@ export default function TeacherDashboard() {
           <TouchableOpacity
             style={[
               styles.announcementBanner,
-              urgentUnack > 0 && styles.announcementBannerUrgent,
+              { backgroundColor: annTone.bg, borderColor: annTone.box },
             ]}
             onPress={() => handleNav("/teacher/announcements")}
             activeOpacity={0.8}
           >
-            <View style={styles.announcementBannerIcon}>
+            <View style={[styles.announcementBannerIcon, { backgroundColor: annTone.box }]}>
               <Ionicons
                 name={urgentUnack > 0 ? "warning" : "megaphone"}
                 size={24}
-                color="#FFF"
+                color={annTone.icon}
               />
             </View>
             <View style={styles.announcementBannerText}>
-              <Text style={styles.announcementBannerTitle}>
+              <Text style={[styles.announcementBannerTitle, { color: annTone.text }]}>
                 {urgentUnack > 0
                   ? t("teacherHome.annBannerUrgentTitle")
                   : t("teacherHome.annBannerNewTitle")}
               </Text>
-              <Text style={styles.announcementBannerSub}>
+              <Text style={[styles.announcementBannerSub, { color: annTone.text }]}>
                 {urgentUnack > 0
                   ? t("teacherHome.annBannerUrgentSub", { count: urgentUnack })
                   : t("teacherHome.annBannerUnreadSub", { count: announcementUnread })}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFF" />
+            <Ionicons name="chevron-forward" size={20} color={annTone.icon} />
           </TouchableOpacity>
         )}
 
@@ -558,7 +566,7 @@ export default function TeacherDashboard() {
             activeOpacity={0.8}
           >
             <View style={styles.marksBannerIcon}>
-              <Ionicons name="create" size={24} color="#FFF" />
+              <Ionicons name="create" size={24} color={SEMANTIC.error.icon} />
             </View>
             <View style={styles.marksBannerText}>
               <Text style={styles.marksBannerTitle}>{t("teacherHome.marksBannerTitle")}</Text>
@@ -571,7 +579,7 @@ export default function TeacherDashboard() {
                   : ""}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFF" />
+            <Ionicons name="chevron-forward" size={20} color={SEMANTIC.error.icon} />
           </TouchableOpacity>
         )}
 
@@ -580,91 +588,35 @@ export default function TeacherDashboard() {
           <Text style={styles.sectionTitle}>{t("teacherHome.sectionOverview")}</Text>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
-              <Ionicons name="book"   size={20} color="#4F46E5" />
-              <Text style={styles.statNumber}>{stats?.assignedSubjects ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statSubjects")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#EDE9FE" }]}>
-              <Ionicons name="school" size={20} color="#7C3AED" />
-              <Text style={styles.statNumber}>{stats?.assignedClasses  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statClasses")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
-              <Ionicons name="people" size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.totalStudents    ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statStudents")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="time"   size={20} color="#D97706" />
-              <Text style={styles.statNumber}>{stats?.todayClassCount  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statToday")}</Text>
-            </View>
+            <StatTile kind="subjects"  icon="book"   value={stats?.assignedSubjects ?? 0} label={t("teacherHome.statSubjects")} />
+            <StatTile kind="classes"   icon="school" value={stats?.assignedClasses  ?? 0} label={t("teacherHome.statClasses")} />
+            <StatTile kind="students"  icon="people" value={stats?.totalStudents    ?? 0} label={t("teacherHome.statStudents")} />
+            <StatTile kind="timetable" icon="time"   value={stats?.todayClassCount  ?? 0} label={t("teacherHome.statToday")} />
           </View>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
-              <Ionicons name="trophy" size={20} color="#4F46E5" />
-              <Text style={styles.statNumber}>{stats?.activeExams      ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statActiveExams")}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.statCard,
-                { backgroundColor: (stats?.pendingMarksEntry ?? 0) > 0 ? "#FEE2E2" : "#F0FDF4" },
-              ]}
+            <StatTile kind="exams" icon="trophy" value={stats?.activeExams ?? 0} label={t("teacherHome.statActiveExams")} />
+            <StatTile
+              kind="marks"
+              icon="create"
+              value={stats?.pendingMarksEntry ?? 0}
+              label={t("teacherHome.statPendingMarks")}
+              tone={(stats?.pendingMarksEntry ?? 0) > 0 ? "warning" : undefined}
               onPress={() =>
                 (stats?.pendingMarksEntry ?? 0) > 0 &&
                 handleNav("/teacher/exams?filter=pending-marks")
               }
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="create"
-                size={20}
-                color={(stats?.pendingMarksEntry ?? 0) > 0 ? "#DC2626" : "#059669"}
-              />
-              <Text style={[
-                styles.statNumber,
-                { color: (stats?.pendingMarksEntry ?? 0) > 0 ? "#DC2626" : "#111827" },
-              ]}>
-                {stats?.pendingMarksEntry ?? 0}
-              </Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statPendingMarks")}</Text>
-            </TouchableOpacity>
-            <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="time"             size={20} color="#D97706" />
-              <Text style={styles.statNumber}>{stats?.submittedMarks   ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statSubmitted")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
-              <Ionicons name="checkmark-circle" size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.approvedMarks    ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statApproved")}</Text>
-            </View>
+            />
+            <StatTile kind="marks" icon="time"             value={stats?.submittedMarks ?? 0} label={t("teacherHome.statSubmitted")} />
+            <StatTile kind="marks" icon="checkmark-circle" value={stats?.approvedMarks  ?? 0} label={t("teacherHome.statApproved")} />
           </View>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#F0FDF4" }]}>
-              <Ionicons name="folder"       size={20} color="#059669" />
-              <Text style={styles.statNumber}>{stats?.contentUploads  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statContent")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#DBEAFE" }]}>
-              <Ionicons name="help-circle"  size={20} color="#2563EB" />
-              <Text style={styles.statNumber}>{stats?.activeQuizzes   ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statQuizzes")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FFF1F2" }]}>
-              <Ionicons name="create"       size={20} color="#DB2777" />
-              <Text style={styles.statNumber}>{stats?.activeHomework  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statHomework")}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#FEE2E2" }]}>
-              <Ionicons name="alert-circle" size={20} color="#DC2626" />
-              <Text style={styles.statNumber}>{stats?.pendingGrading  ?? 0}</Text>
-              <Text style={styles.statLabel}>{t("teacherHome.statToGrade")}</Text>
-            </View>
+            <StatTile kind="content"  icon="folder"       value={stats?.contentUploads ?? 0} label={t("teacherHome.statContent")} />
+            <StatTile kind="quizzes"  icon="help-circle"  value={stats?.activeQuizzes  ?? 0} label={t("teacherHome.statQuizzes")} />
+            <StatTile kind="homework" icon="create"       value={stats?.activeHomework ?? 0} label={t("teacherHome.statHomework")} />
+            <StatTile kind="homework" icon="alert-circle" value={stats?.pendingGrading ?? 0} label={t("teacherHome.statToGrade")}
+              tone={(stats?.pendingGrading ?? 0) > 0 ? "warning" : undefined} />
           </View>
 
           <TouchableOpacity
@@ -674,7 +626,7 @@ export default function TeacherDashboard() {
           >
             <View style={styles.announcementStatLeft}>
               <View style={styles.announcementStatIcon}>
-                <Ionicons name="megaphone-outline" size={20} color="#7C3AED" />
+                <Ionicons name="megaphone-outline" size={20} color={SEMANTIC.info.icon} />
               </View>
               <View>
                 <Text style={styles.announcementStatTitle}>{t("teacherHome.annCardTitle")}</Text>
@@ -691,7 +643,7 @@ export default function TeacherDashboard() {
               )}
               {urgentUnack > 0 && (
                 <View style={styles.announcementUrgentBadge}>
-                  <Ionicons name="warning" size={11} color="#FFF" />
+                  <Ionicons name="warning" size={11} color={COLORS.onPrimary} />
                   <Text style={styles.announcementUrgentText}>
                     {t("teacherHome.annUrgentBadge", { count: urgentUnack })}
                   </Text>
@@ -700,7 +652,7 @@ export default function TeacherDashboard() {
               {announcementUnread === 0 && urgentUnack === 0 && (
                 <Text style={styles.announcementAllClear}>{t("teacherHome.annAllRead")}</Text>
               )}
-              <Ionicons name="chevron-forward" size={16} color="#7C3AED" />
+              <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
             </View>
           </TouchableOpacity>
         </View>
@@ -709,9 +661,7 @@ export default function TeacherDashboard() {
         {alerts.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#FEE2E2" }]}>
-                <Ionicons name="notifications" size={18} color="#DC2626" />
-              </View>
+              <IconSquare icon="notifications" accent="red" size={32} />
               <Text style={styles.sectionTitle}>{t("teacherHome.sectionNotifications")}</Text>
               <View style={styles.alertCountBadge}>
                 <Text style={styles.alertCountText}>{alerts.length}</Text>
@@ -740,9 +690,7 @@ export default function TeacherDashboard() {
         {/* ── TODAY'S SCHEDULE ── */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
-            <View style={[styles.sectionIcon, { backgroundColor: "#DBEAFE" }]}>
-              <Ionicons name="calendar" size={18} color="#2563EB" />
-            </View>
+            <IconSquare icon="calendar" accent="teal" size={32} />
             <Text style={styles.sectionTitle}>{t("teacherHome.sectionTodayClasses")}</Text>
             {todayClasses.length > 0 && (
               <Text style={styles.scheduleSummary}>
@@ -754,11 +702,13 @@ export default function TeacherDashboard() {
           </View>
 
           {todayClasses.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="cafe-outline" size={32} color="#9CA3AF" />
-              <Text style={styles.emptyText}>{t("teacherHome.emptyClassesTitle")}</Text>
-              <Text style={styles.emptySubtext}>{t("teacherHome.emptyClassesSub")}</Text>
-            </View>
+            <EmptyState
+              icon="cafe-outline"
+              accent="teal"
+              title={t("teacherHome.emptyClassesTitle")}
+              message={t("teacherHome.emptyClassesSub")}
+              style={styles.emptyState}
+            />
           ) : (
             todayClasses.map((cls, index) => {
               const status    = cls.status || computeSlotStatus(cls.startTime, cls.endTime);
@@ -807,7 +757,7 @@ export default function TeacherDashboard() {
                         </View>
                       )}
                       {isPast && (
-                        <Ionicons name="checkmark-circle" size={14} color="#9CA3AF" />
+                        <Ionicons name="checkmark-circle" size={14} color={ACCENT.teal.solid} />
                       )}
                     </View>
                     <Text style={[styles.scheduleClass, isPast && styles.scheduleTextPast]}>
@@ -818,7 +768,7 @@ export default function TeacherDashboard() {
                   <Ionicons
                     name="chevron-forward"
                     size={16}
-                    color={isPast ? "#E5E7EB" : "#D1D5DB"}
+                    color={COLORS.textSecondary}
                   />
                 </TouchableOpacity>
               );
@@ -831,17 +781,15 @@ export default function TeacherDashboard() {
           <Text style={styles.sectionTitle}>{t("teacherHome.sectionQuickActions")}</Text>
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
-              <TouchableOpacity
+              <ActionTile
                 key={action.id}
+                primary={action.primary}
+                kind={action.kind}
+                icon={action.icon}
+                label={action.title}
                 style={styles.actionButton}
                 onPress={() => handleNav(action.route)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconContainer, { backgroundColor: action.color + "18" }]}>
-                  <Ionicons name={action.icon} size={22} color={action.color} />
-                </View>
-                <Text style={styles.actionTitle}>{action.title}</Text>
-              </TouchableOpacity>
+              />
             ))}
           </View>
         </View>
@@ -868,8 +816,8 @@ export default function TeacherDashboard() {
                 activeOpacity={0.7}
                 onPress={() => handleNav(mod.route)}
               >
-                <View style={[styles.moduleIcon, { backgroundColor: mod.color + "18" }]}>
-                  <Ionicons name={mod.icon} size={20} color={mod.color} />
+                <View style={styles.moduleIcon}>
+                  <TileIcon kind={mod.kind} icon={mod.icon} />
                 </View>
                 <View style={styles.moduleInfo}>
                   <Text style={styles.moduleTitle}>{mod.title}</Text>
@@ -881,14 +829,14 @@ export default function TeacherDashboard() {
                   <TouchableOpacity
                     style={[
                       styles.moduleBadge,
-                      mod.badge === "announcements" && { backgroundColor: "#7C3AED" },
+                      mod.badge === "announcements" && { backgroundColor: COLORS.primary },
                     ]}
                     onPress={(e) => { e.stopPropagation?.(); handleNav(badgeRoute); }}
                   >
                     <Text style={styles.moduleBadgeText}>{badgeValue}</Text>
                   </TouchableOpacity>
                 )}
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
             );
           })}
@@ -899,9 +847,9 @@ export default function TeacherDashboard() {
           onPress={() => handleNav("/teacher/settings")}
           activeOpacity={0.7}
         >
-          <Ionicons name="settings-outline" size={18} color="#4F46E5" />
+          <Ionicons name="settings-outline" size={18} color={COLORS.primary} />
           <Text style={styles.settingsShortcutText}>{t("teacherHome.settingsShortcut")}</Text>
-          <Ionicons name="chevron-forward" size={16} color="#4F46E5" />
+          <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -909,7 +857,7 @@ export default function TeacherDashboard() {
           onPress={handleLogout}
           activeOpacity={0.7}
         >
-          <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+          <Ionicons name="log-out-outline" size={18} color={COLORS.danger} />
           <Text style={styles.logoutText}>{t("teacherHome.logout")}</Text>
         </TouchableOpacity>
 
@@ -924,9 +872,9 @@ export default function TeacherDashboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:      { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
-  loadingText:   { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  container:     { flex: 1, backgroundColor: COLORS.page },
+  centered:      { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.page },
+  loadingText:   { marginTop: 12, fontSize: 14, color: COLORS.textSubtle, fontWeight: "500" },
   scrollContent: { paddingTop: 8 },
 
   header: {
@@ -935,21 +883,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
-  greeting:  { fontSize: 14, color: "#6B7280", fontWeight: "500" },
-  userName:  { fontSize: 24, fontWeight: "700", color: "#111827", marginTop: 2 },
-  subtitle:  { fontSize: 13, color: "#4F46E5", fontWeight: "600", marginTop: 2 },
+  greeting:  { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
+  userName:  { fontSize: 24, fontWeight: "700", color: COLORS.text, marginTop: 2 },
+  subtitle:  { fontSize: 13, color: COLORS.primary, fontWeight: "600", marginTop: 2 },
   headerActions:        { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 12 },
-  profileIncompleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center" },
-  headerIconBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center" },
+  profileIncompleteBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: SEMANTIC.warning.box, alignItems: "center", justifyContent: "center" },
+  headerIconBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.primaryLight, alignItems: "center", justifyContent: "center" },
   bellBadge: {
     position:          "absolute",
     top:               -4,
     right:             -4,
-    backgroundColor:   "#DC2626",
+    backgroundColor:   COLORS.danger,
     borderRadius:      8,
     minWidth:          16,
     height:            16,
@@ -957,19 +905,19 @@ const styles = StyleSheet.create({
     alignItems:        "center",
     justifyContent:    "center",
     borderWidth:       1.5,
-    borderColor:       "#FFF",
+    borderColor:       COLORS.surface,
   },
-  bellBadgeText:  { color: "#FFF", fontSize: 9, fontWeight: "800" },
+  bellBadgeText:  { color: COLORS.onPrimary, fontSize: 9, fontWeight: "800" },
   profileButton:  { marginLeft: 4 },
   avatarCircle: {
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: "#4F46E5",
+    backgroundColor: COLORS.primary,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  avatarText: { fontSize: 15, fontWeight: "800", color: "#FFF" },
+  avatarText: { fontSize: 15, fontWeight: "800", color: COLORS.onPrimary },
   avatarDot: {
     position:        "absolute",
     bottom:          1,
@@ -977,110 +925,107 @@ const styles = StyleSheet.create({
     width:           10,
     height:          10,
     borderRadius:    5,
-    backgroundColor: "#059669",
+    backgroundColor: COLORS.success,
     borderWidth:     2,
-    borderColor:     "#FFF",
+    borderColor:     COLORS.surface,
   },
 
+  // Attention banners are light tints of their meaning, never solid fills:
+  // a new announcement is info (error when one is urgent), an unfinished
+  // profile a warning, marks waiting an error.
   announcementBanner: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#7C3AED",
+    flexDirection: "row", alignItems: "center", borderWidth: 1,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderRadius: 14, padding: 14, gap: 12,
   },
-  announcementBannerUrgent: { backgroundColor: "#DC2626" },
-  announcementBannerIcon:   { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  announcementBannerIcon:   { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   announcementBannerText:   { flex: 1 },
-  announcementBannerTitle:  { fontSize: 14, fontWeight: "700", color: "#FFF" },
-  announcementBannerSub:    { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2 },
+  announcementBannerTitle:  { fontSize: 14, fontWeight: "700" },
+  announcementBannerSub:    { fontSize: 12, marginTop: 2 },
 
   profileSetupBanner: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#D97706",
+    flexDirection: "row", alignItems: "center", backgroundColor: SEMANTIC.warning.bg,
+    borderWidth: 1, borderColor: SEMANTIC.warning.box,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderRadius: 14, padding: 14, gap: 12,
   },
-  profileSetupIcon:  { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  profileSetupIcon:  { width: 40, height: 40, borderRadius: 10, backgroundColor: SEMANTIC.warning.box, alignItems: "center", justifyContent: "center" },
   profileSetupText:  { flex: 1 },
-  profileSetupTitle: { fontSize: 14, fontWeight: "700", color: "#FFF" },
-  profileSetupSub:   { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2 },
+  profileSetupTitle: { fontSize: 14, fontWeight: "700", color: SEMANTIC.warning.text },
+  profileSetupSub:   { fontSize: 12, color: SEMANTIC.warning.text, marginTop: 2 },
 
   marksBanner: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#DC2626",
+    flexDirection: "row", alignItems: "center", backgroundColor: SEMANTIC.error.bg,
+    borderWidth: 1, borderColor: SEMANTIC.error.box,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderRadius: 14, padding: 14, gap: 12,
   },
-  marksBannerIcon:  { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  marksBannerIcon:  { width: 40, height: 40, borderRadius: 10, backgroundColor: SEMANTIC.error.box, alignItems: "center", justifyContent: "center" },
   marksBannerText:  { flex: 1 },
-  marksBannerTitle: { fontSize: 14, fontWeight: "700", color: "#FFF" },
-  marksBannerSub:   { fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 2 },
+  marksBannerTitle: { fontSize: 14, fontWeight: "700", color: SEMANTIC.error.text },
+  marksBannerSub:   { fontSize: 12, color: SEMANTIC.error.text, marginTop: 2 },
 
-  errorBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#FEE2E2", marginHorizontal: 20, marginBottom: 16, padding: 12, borderRadius: 10, gap: 8 },
-  errorText:   { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText:   { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  errorBanner: { flexDirection: "row", alignItems: "center", backgroundColor: SEMANTIC.error.box, marginHorizontal: 20, marginBottom: 16, padding: 12, borderRadius: 10, gap: 8 },
+  errorText:   { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText:   { fontSize: 13, color: COLORS.danger, fontWeight: "700" },
 
   section:         { paddingHorizontal: 20, marginBottom: 24, marginTop: 12 },
-  sectionTitle:    { fontSize: 18, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  sectionTitle:    { fontSize: 18, fontWeight: "700", color: COLORS.text, marginBottom: 12 },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  sectionIcon:     { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  scheduleSummary: { flex: 1, fontSize: 11, color: "#9CA3AF", textAlign: "right", fontWeight: "500" },
+  scheduleSummary: { flex: 1, fontSize: 11, color: COLORS.textSecondary, textAlign: "right", fontWeight: "500" },
 
-  announcementStatCard:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#F5F3FF", borderRadius: 14, padding: 14, marginTop: 8, borderWidth: 1, borderColor: "#EDE9FE" },
+  announcementStatCard:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: SEMANTIC.info.bg, borderRadius: 14, padding: 14, marginTop: 8, borderWidth: 1, borderColor: SEMANTIC.info.box },
   announcementStatLeft:    { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  announcementStatIcon:    { width: 40, height: 40, borderRadius: 10, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" },
-  announcementStatTitle:   { fontSize: 14, fontWeight: "700", color: "#4C1D95" },
-  announcementStatSub:     { fontSize: 11, color: "#7C3AED", marginTop: 1 },
+  announcementStatIcon:    { width: 40, height: 40, borderRadius: 10, backgroundColor: SEMANTIC.info.box, alignItems: "center", justifyContent: "center" },
+  announcementStatTitle:   { fontSize: 14, fontWeight: "700", color: SEMANTIC.info.text },
+  announcementStatSub:     { fontSize: 11, color: SEMANTIC.info.text, marginTop: 1 },
   announcementStatRight:   { flexDirection: "row", alignItems: "center", gap: 6 },
-  announcementUnreadBadge: { backgroundColor: "#7C3AED", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  announcementUnreadText:  { color: "#FFF", fontSize: 11, fontWeight: "700" },
-  announcementUrgentBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#DC2626", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  announcementUrgentText:  { color: "#FFF", fontSize: 11, fontWeight: "700" },
-  announcementAllClear:    { fontSize: 12, color: "#059669", fontWeight: "600" },
+  announcementUnreadBadge: { backgroundColor: COLORS.primary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  announcementUnreadText:  { color: COLORS.onPrimary, fontSize: 11, fontWeight: "700" },
+  announcementUrgentBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: COLORS.danger, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
+  announcementUrgentText:  { color: COLORS.onPrimary, fontSize: 11, fontWeight: "700" },
+  announcementAllClear:    { fontSize: 12, color: COLORS.success, fontWeight: "600" },
 
   statsRow:   { flexDirection: "row", gap: 8, marginBottom: 8 },
-  statCard:   { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 6, alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 6 },
-  statLabel:  { fontSize: 10, color: "#6B7280", marginTop: 2, fontWeight: "500", textAlign: "center" },
 
-  alertCountBadge: { backgroundColor: "#DC2626", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1, minWidth: 20, alignItems: "center" },
-  alertCountText:  { color: "#FFF", fontSize: 11, fontWeight: "700" },
+  alertCountBadge: { backgroundColor: COLORS.danger, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1, minWidth: 20, alignItems: "center" },
+  alertCountText:  { color: COLORS.onPrimary, fontSize: 11, fontWeight: "700" },
   alertCard:       { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 10, marginBottom: 8, gap: 10 },
   alertText:       { flex: 1, fontSize: 13, fontWeight: "500" },
 
-  emptyState:   { backgroundColor: "#FFF", borderRadius: 14, padding: 24, alignItems: "center", gap: 6 },
-  emptyText:    { fontSize: 14, fontWeight: "600", color: "#6B7280", marginTop: 8 },
-  emptySubtext: { fontSize: 12, color: "#9CA3AF" },
+  emptyState:   { backgroundColor: ACCENT.teal.wash, borderRadius: 14, padding: 24, borderWidth: 1, borderColor: COLORS.border },
 
   scheduleCard: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#FFF",
+    flexDirection: "row", alignItems: "center", backgroundColor: ACCENT.teal.wash,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base,
     borderRadius: 12, padding: 14, marginBottom: 8, gap: 12,
-    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 2,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 2,
   },
-  scheduleCardPast:    { opacity: 0.55, backgroundColor: "#F9FAFB" },
-  scheduleCardCurrent: { borderWidth: 1.5, borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
-  scheduleTimeBlock:   { alignItems: "center", paddingRight: 12, borderRightWidth: 1, borderRightColor: "#E5E7EB", minWidth: 64 },
-  scheduleTime:        { fontSize: 12, fontWeight: "600", color: "#4F46E5" },
-  scheduleTextPast:    { color: "#9CA3AF" },
-  scheduleTextCurrent: { color: "#4338CA", fontWeight: "700" },
-  scheduleDash:        { fontSize: 10, color: "#9CA3AF" },
+  scheduleCardPast:    { opacity: 0.55 },
+  scheduleCardCurrent: { borderWidth: 1.5, borderColor: ACCENT.teal.base, borderLeftWidth: 3 },
+  scheduleTimeBlock:   { alignItems: "center", paddingRight: 12, borderRightWidth: 1, borderRightColor: COLORS.border, minWidth: 64 },
+  scheduleTime:        { fontSize: 12, fontWeight: "600", color: ACCENT.teal.deep },
+  scheduleTextPast:    { color: COLORS.textSecondary },
+  scheduleTextCurrent: { color: ACCENT.teal.deep, fontWeight: "700" },
+  scheduleDash:        { fontSize: 10, color: COLORS.textSecondary },
   scheduleInfo:        { flex: 1 },
   scheduleTitleRow:    { flexDirection: "row", alignItems: "center", gap: 6 },
-  scheduleSubject:     { fontSize: 14, fontWeight: "700", color: "#111827", flexShrink: 1 },
-  scheduleClass:       { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  currentBadge:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#4F46E5", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  currentDot:          { width: 6, height: 6, borderRadius: 3, backgroundColor: "#FFF" },
-  currentBadgeText:    { color: "#FFF", fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  scheduleSubject:     { fontSize: 14, fontWeight: "700", color: COLORS.text, flexShrink: 1 },
+  scheduleClass:       { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  currentBadge:        { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: ACCENT.teal.solid, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  currentDot:          { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.surface },
+  currentBadgeText:    { color: COLORS.onPrimary, fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
 
   actionsGrid:   { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  actionButton:  { width: "31.5%", backgroundColor: "#FFF", borderRadius: 14, paddingVertical: 14, alignItems: "center", shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 2 },
-  iconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  actionTitle:   { fontSize: 11, fontWeight: "600", color: "#374151", textAlign: "center", paddingHorizontal: 4 },
+  actionButton:  { width: "31.5%" },
 
-  moduleCard:      { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 12, padding: 14, marginBottom: 8, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
-  moduleIcon:      { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  moduleCard:      { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 8, shadowColor: COLORS.shadow, shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  moduleIcon:      { marginRight: 12 },
   moduleInfo:      { flex: 1 },
-  moduleTitle:     { fontSize: 15, fontWeight: "600", color: "#111827" },
-  moduleDesc:      { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  moduleBadge:     { backgroundColor: "#DC2626", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, minWidth: 22, alignItems: "center" },
-  moduleBadgeText: { color: "#FFF", fontSize: 11, fontWeight: "700" },
+  moduleTitle:     { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  moduleDesc:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  moduleBadge:     { backgroundColor: COLORS.danger, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, minWidth: 22, alignItems: "center" },
+  moduleBadgeText: { color: COLORS.onPrimary, fontSize: 11, fontWeight: "700" },
 
-  settingsShortcut:     { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginBottom: 12, backgroundColor: "#EEF2FF", paddingVertical: 12, borderRadius: 12, gap: 8 },
-  settingsShortcutText: { color: "#4F46E5", fontWeight: "600", fontSize: 14, flex: 1, textAlign: "center" },
-  logoutButton:         { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, backgroundColor: "#FEE2E2", paddingVertical: 14, borderRadius: 12, gap: 8 },
-  logoutText:           { color: "#DC2626", fontWeight: "600", fontSize: 15 },
+  settingsShortcut:     { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, marginBottom: 12, backgroundColor: COLORS.primaryLight, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  settingsShortcutText: { color: COLORS.primary, fontWeight: "600", fontSize: 14, flex: 1, textAlign: "center" },
+  logoutButton:         { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 20, backgroundColor: SEMANTIC.error.box, paddingVertical: 14, borderRadius: 12, gap: 8 },
+  logoutText:           { color: COLORS.danger, fontWeight: "600", fontSize: 15 },
 });

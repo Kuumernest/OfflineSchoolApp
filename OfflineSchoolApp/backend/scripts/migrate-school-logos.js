@@ -99,7 +99,7 @@ const main = async () => {
         continue;
       }
 
-      const saved = logoStorage.saveLogoFromBase64(String(_id), logo);
+      const saved = await logoStorage.saveLogoFromBase64(String(_id), logo);
 
       if (KEEP) {
         console.log(

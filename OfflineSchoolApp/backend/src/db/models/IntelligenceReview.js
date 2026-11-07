@@ -122,6 +122,12 @@ const intelligenceReviewSchema = new mongoose.Schema(
     // ── Who, and when ──────────────────────────────────────────────────────
     // Named, and it stays named. See the header.
     reviewedBy: { type: String, required: true, index: true },
+    // The reviewer's role when they wrote it. A platform operator may review
+    // (to try the workflow, or to check a school's sheet), but an operator does
+    // not know the child: the review is kept and shown, marked, and never
+    // counted as a pilot's teacher evidence. Rows from before this field read
+    // the role off the user (reviewCases.reviewsFor).
+    reviewerRole: { type: String, default: null, maxlength: 40 },
     reviewedAt: { type: Date, default: Date.now },
 
     // ── Revision, without erasure ──────────────────────────────────────────

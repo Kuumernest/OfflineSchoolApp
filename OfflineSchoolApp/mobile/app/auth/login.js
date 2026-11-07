@@ -19,9 +19,12 @@ import {
   ScrollView, ActivityIndicator, ImageBackground,
 } from "react-native";
 import { useRouter }    from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
+import PortalService from "../../src/services/portal.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../src/theme/colors";
 
 // The scrim across the screen — the same shape as before at about half the
 // weight, so the building and the sign read as a photograph rather than as a
@@ -126,6 +129,9 @@ export default function LoginScreen() {
   const router    = useRouter();
   const login     = useAuthStore((s) => s.login);
   const error     = useAuthStore((s) => s.error);
+  // A refusal the phone itself makes (e.g. full of other accounts' unsent
+  // work, docs/40 D6) carries a key, said in the reader's language.
+  const errorKey  = useAuthStore((s) => s.errorKey);
   const isLoading = useAuthStore((s) => s.isLoading);
   const { t }     = useTranslation();
   const screenPad = useScreenInsets({ top: 28, bottom: 24 });
@@ -133,22 +139,46 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState("");
   const [password,   setPassword]   = useState("");
   const [showPass,   setShowPass]   = useState(false);
+  const [portalError, setPortalError] = useState(null);
 
   const looksLikeEmail = identifier.includes("@");
 
   const handleLogin = async () => {
     const clean = identifier.trim();
-    if (!clean || !password.trim()) return;
+    const secret = password.trim();
+    if (!clean || !secret) return;
+    setPortalError(null);
 
-    const payload = clean.includes("@")
-      ? { email:        clean.toLowerCase(), password: password.trim() }
-      : { enrollmentNo: clean.toUpperCase(), password: password.trim() };
+    const ok = (r) => r === true || r?.success === true;
 
-    const result  = await login(payload);
-    const success = result === true || result?.success === true;
-    if (!success) return;
+    // Staff sign in with an email, and only ever as staff.
+    if (clean.includes("@")) {
+      const staff = await login({ email: clean.toLowerCase(), password: secret });
+      if (ok(staff)) router.replace("/");
+      return;
+    }
 
-    router.replace("/");
+    // Anyone else: a student (enrolment number + password) or a parent
+    // (admission number + access code). A parent's code is eight letters
+    // and digits, so only a password of that shape is tried on the portal;
+    // an ordinary password is never sent there.
+    const codeShaped = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(secret);
+
+    if (codeShaped) {
+      try {
+        await PortalService.login({ admissionNo: clean.toUpperCase(), code: secret });
+        router.replace("/portal");
+        return;
+      } catch (err) {
+        if (err?.response?.status === 429) {
+          setPortalError(t("portal.locked"));
+          return;
+        }
+      }
+    }
+
+    const student = await login({ enrollmentNo: clean.toUpperCase(), password: secret });
+    if (ok(student)) router.replace("/");
   };
 
   return (
@@ -171,16 +201,18 @@ export default function LoginScreen() {
         >
         {/* ── Header ── */}
         <View style={styles.header}>
-          <Text style={styles.emoji}>🏫</Text>
+          <View style={styles.logoTile}>
+            <Ionicons name="school" size={32} color={COLORS.onPrimary} />
+          </View>
           <Text style={styles.title}>{t("login.appName")}</Text>
           <Text style={styles.subtitle}>{t("login.signInToAccount")}</Text>
         </View>
 
         {/* ── Form ── */}
         <View style={styles.card}>
-          {error ? (
+          {(portalError || error) ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {error}</Text>
+              <Text style={styles.errorText}>⚠️ {portalError || (errorKey ? t(errorKey) : error)}</Text>
             </View>
           ) : null}
 
@@ -191,7 +223,7 @@ export default function LoginScreen() {
             value={identifier}
             onChangeText={setIdentifier}
             placeholder={t("login.identifierPh")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -212,7 +244,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
               secureTextEntry={!showPass}
               autoCapitalize="none"
             />
@@ -236,43 +268,17 @@ export default function LoginScreen() {
             disabled={isLoading}
           >
             {isLoading
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={COLORS.onPrimary} />
               : <Text style={styles.loginBtnText}>{t("login.submit")}</Text>
             }
           </TouchableOpacity>
         </View>
 
-        {/* ── Divider ── */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>{t("login.or")}</Text>
-          <View style={styles.dividerLine} />
-        </View>
 
-        {/* ── Apply CTA ── */}
-        <View style={styles.applyCard}>
-          <Text style={styles.applyTitle}>{t("login.newStudent")}</Text>
-          <Text style={styles.applySubtitle}>
-            {t("login.applyBlurb")}
+          {/* Footer */}
+          <Text style={styles.footer}>
+            {t("login.copyright", { year: new Date().getFullYear() })}
           </Text>
-          <TouchableOpacity
-            style={styles.applyBtn}
-            onPress={() => router.push("/auth/select-school")}
-          >
-            <Text style={styles.applyBtnText}>{t("login.applyCta")} →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Parent portal ──
-            A guardian has no account here — they sign in with their child's
-            admission number and a code from the school office, so this is a
-            separate door rather than another way through this form. */}
-        <TouchableOpacity
-          style={styles.portalLink}
-          onPress={() => router.push("/portal")}
-        >
-          <Text style={styles.portalLinkText}>{t("login.parentPortal")}</Text>
-        </TouchableOpacity>
         </ScrollView>
       </ImageBackground>
     </KeyboardAvoidingView>
@@ -327,7 +333,18 @@ const styles = StyleSheet.create({
   },
 
   header:    { alignItems: "center", marginBottom: 32 },
-  emoji:     { fontSize: 48, marginBottom: 8 },
+  logoTile: {
+    width: 64, height: 64, borderRadius: 16,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.blue.solid,
+    marginBottom: 16,
+  },
+  footer: {
+    textAlign: "center", color: "#C7D2FE", fontSize: 13, marginTop: 8,
+    textShadowColor: "rgba(12, 10, 40, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
 
   // The shadow is not decoration. These two lines sit on the photograph, and
   // a shadow keeps them readable against whatever image is dropped in next —
@@ -348,8 +365,10 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.blue.base,
     padding:         24,
     shadowColor:     "#000",
     shadowOpacity:   0.06,
@@ -359,34 +378,36 @@ const styles = StyleSheet.create({
   },
 
   errorBox: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.error.box,
     borderRadius:    8,
     padding:         12,
     marginBottom:    16,
   },
-  errorText: { color: "#DC2626", fontSize: 13 },
+  errorText: { color: SEMANTIC.error.text, fontSize: 13 },
 
   label: {
     fontSize:     13,
     fontWeight:   "600",
-    color:        "#374151",
+    color:        COLORS.text,
     marginBottom: 6,
   },
 
   input: {
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     borderRadius:    10,
     padding:         12,
     fontSize:        15,
-    color:           "#111827",
-    backgroundColor: "#F9FAFB",
+    color:           COLORS.text,
+    backgroundColor: COLORS.surface,
     marginBottom:    8,
   },
 
   hint: {
     fontSize:     12,
-    color:        "#6B7280",
+    color:        ACCENT.blue.deep,
     marginBottom: 18,
     lineHeight:   18,
   },
@@ -397,14 +418,14 @@ const styles = StyleSheet.create({
 
   forgotNote: {
     fontSize:     12,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     marginBottom: 20,
     lineHeight:   18,
   },
 
-  loginBtn:         { backgroundColor: "#4F46E5", borderRadius: 12, padding: 14, alignItems: "center" },
+  loginBtn:         { backgroundColor: COLORS.primary, borderRadius: 12, padding: 14, alignItems: "center" },
   loginBtnDisabled: { opacity: 0.6 },
-  loginBtnText:     { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  loginBtnText:     { color: COLORS.onPrimary, fontSize: 16, fontWeight: "700" },
 
   dividerRow:  { flexDirection: "row", alignItems: "center", marginBottom: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },

@@ -16,6 +16,7 @@ import { isAuthenticated, getCurrentAuth } from "../utils/authHelpers";
 import { fetchWithFallback }               from "../utils/syncHelpers";
 import { API }                             from "./apiEndpoints";
 import api                                 from "./api";
+import { MutationQueue }                   from "./mutationQueue.service";
 
 const TABLE = "subjects";
 
@@ -50,6 +51,8 @@ const ensureSchema = async (db) => {
   await safeAddColumn(db, TABLE, "deleted_at",   "TEXT");
   await safeAddColumn(db, TABLE, "created_at",   "TEXT");
   await safeAddColumn(db, TABLE, "updated_at",   "TEXT");
+  // NULL = no coefficient held, which reads as 1 (as SyncManager's migration).
+  await safeAddColumn(db, TABLE, "coefficient",  "REAL DEFAULT NULL");
 
   await db.runAsync("PRAGMA foreign_keys = ON").catch(() => {});
 };
@@ -85,6 +88,7 @@ const normaliseServerSubject = (raw, schoolId) => {
     class_name:   className,
     name:         String(raw.name || "").trim(),
     code:         String(raw.code || "").trim() || null,
+    coefficient:  Number(raw.coefficient) > 0 ? Number(raw.coefficient) : null,
     _synced:      1,
     _synced_at:   new Date().toISOString(),
     deleted_at:   raw.deletedAt  || raw.deleted_at  || null,
@@ -97,11 +101,29 @@ const persistSubjectsLocally = async (db, subjects) => {
   if (!subjects?.length) return;
 
   for (const s of subjects) {
+    // A row from the server never replaces one with an unsent local change
+    // (_synced != 1): the list may have left the server before the change was
+    // made. The same rule as SyncManager.syncSubjects. A local write (a
+    // create, _synced 0) replaces as before.
+    const fromServer = (s._synced ?? 1) === 1;
     await db.runAsync(
-      `INSERT OR REPLACE INTO ${TABLE}
-       (id, school_id, class_id, teacher_id, teacher_name, class_name,
-        name, code, _synced, _synced_at, deleted_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      fromServer
+        ? `INSERT INTO ${TABLE}
+           (id, school_id, class_id, teacher_id, teacher_name, class_name,
+            name, code, _synced, _synced_at, deleted_at, created_at, updated_at, coefficient)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             school_id = excluded.school_id, class_id = excluded.class_id,
+             teacher_id = excluded.teacher_id, teacher_name = excluded.teacher_name,
+             class_name = excluded.class_name, name = excluded.name, code = excluded.code,
+             _synced = 1, _synced_at = excluded._synced_at, deleted_at = excluded.deleted_at,
+             updated_at = excluded.updated_at,
+             coefficient = COALESCE(excluded.coefficient, ${TABLE}.coefficient)
+           WHERE ${TABLE}._synced = 1`
+        : `INSERT OR REPLACE INTO ${TABLE}
+           (id, school_id, class_id, teacher_id, teacher_name, class_name,
+            name, code, _synced, _synced_at, deleted_at, created_at, updated_at, coefficient)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         s.id,
         s.school_id    ?? null,
@@ -116,6 +138,7 @@ const persistSubjectsLocally = async (db, subjects) => {
         s.deleted_at   ?? null,
         s.created_at   ?? new Date().toISOString(),
         s.updated_at   ?? new Date().toISOString(),
+        s.coefficient  ?? null,
       ]
     ).catch((err) => {
       console.warn(`[subjects] Failed to persist "${s.name ?? s.id}":`, err.message);
@@ -236,16 +259,15 @@ export const getSubjects = async (filterClassId) => {
         ? raw.map((s) => normaliseServerSubject(s, schoolId)).filter(Boolean)
         : [];
 
-      return { data: raw, normalized: normalised, count: normalised.length };
-    },
-
-    persistLocal: async (raw) => {
-      const normalised = Array.isArray(raw)
-        ? raw.map((s) => normaliseServerSubject(s, schoolId)).filter(Boolean)
-        : [];
-      persistSubjectsLocally(db, normalised).catch((err) =>
-        console.warn("⚠️ [subjects] Background persist error:", err.message)
+      // Answered from the phone's table after the server's rows are written
+      // into it: a subject created or edited here and still queued is shown
+      // as the phone holds it (the write above leaves those rows alone), not
+      // as the server held it a moment before the change went out.
+      await persistSubjectsLocally(db, normalised).catch((err) =>
+        console.warn("⚠️ [subjects] persist error:", err.message)
       );
+      const merged = await getLocalSubjects(db, schoolId, filterClassId);
+      return { data: raw, normalized: merged, count: merged.length };
     },
 
     localFetch: () => getLocalSubjects(db, schoolId, filterClassId),
@@ -275,7 +297,26 @@ export const getSubjectsForClasses = async (classIds) => {
   return rows ?? [];
 };
 
-export const createSubject = async ({ name, classId, code, schoolId }) => {
+/**
+ * Written locally and queued, online or not.
+ *
+ * This used to POST first without an id and fall back to a local row when
+ * the request failed. Offline that local row was only marked dirty, and the
+ * sync cleared every dirty subject flag (markOrphanedRecordsAsSynced) before
+ * the backfill could queue it — the subject never reached the server. And a
+ * POST that landed but lost its answer left a second, local copy behind.
+ * Now the subject carries the id this device chose (POST /admin/subjects
+ * keeps a client id and answers a repeat with the row it holds), and the
+ * outbox sends it once its class exists upstream: the class is queued
+ * first, and the id map rewrites classId if it was ever re-issued.
+ */
+const cleanCoefficient = (value) => {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export const createSubject = async ({ name, classId, code, schoolId, coefficient }) => {
   if (!name?.trim()) throw new Error("[subjects] name is required");
   if (!classId)      throw new Error("[subjects] classId is required");
 
@@ -283,26 +324,6 @@ export const createSubject = async ({ name, classId, code, schoolId }) => {
   await ensureSchema(db);
   const auth           = getCurrentAuth();
   const resolvedSchool = schoolId ?? auth.schoolId;
-
-  if (isAuthenticated()) {
-    try {
-      const response = await api.post(API.admin.subjects.list, {
-        name: name.trim(), classId,
-        code: code?.trim() || null,
-        schoolId: resolvedSchool,
-      });
-
-      const raw        = response.data?.subject || response.data?.data || response.data;
-      const normalised = normaliseServerSubject(raw, resolvedSchool);
-
-      if (normalised) {
-        await persistSubjectsLocally(db, [normalised]);
-        return normalised;
-      }
-    } catch (err) {
-      console.warn("[subjects] Server create failed, creating locally:", err.message);
-    }
-  }
 
   const localId = generateLocalId();
   const now     = new Date().toISOString();
@@ -315,6 +336,7 @@ export const createSubject = async ({ name, classId, code, schoolId }) => {
     class_name:   null,
     name:         name.trim(),
     code:         code?.trim() || null,
+    coefficient:  cleanCoefficient(coefficient),
     _synced:      0,
     _synced_at:   null,
     deleted_at:   null,
@@ -323,29 +345,141 @@ export const createSubject = async ({ name, classId, code, schoolId }) => {
   };
 
   await persistSubjectsLocally(db, [subject]);
+  await queueCreate(subject, classId, resolvedSchool);
+
   return subject;
 };
 
+/** The create for a subject made here — re-queued under the same key on an edit before it is sent. */
+const queueCreate = async (subject, classId, schoolId) => {
+  await MutationQueue.enqueue({
+    entityKey: `subject:${subject.id}`,
+    method:    "POST",
+    endpoint:  API.admin.subjects.list,
+    payload:   {
+      id:       subject.id,
+      name:     subject.name,
+      code:     subject.code || "",
+      classId,
+      schoolId,
+      ...(subject.coefficient ? { coefficient: subject.coefficient } : {}),
+      __resolve:   ["classId"],
+      __local:     { table: TABLE, ids: [subject.id] },
+      __reconcile: { kind: "subject", localId: subject.id, table: TABLE },
+    },
+  });
+};
+
+/**
+ * Renamed / re-coded / re-weighted locally and queued.
+ *
+ * This used to be a PUT from the screen, online only. Now the row changes
+ * here at once and PUT /admin/subjects/:id waits in the outbox; a second
+ * edit before it is sent is merged into it. A subject created on this phone
+ * and not sent yet has no server row to PUT: its queued create is rewritten
+ * with the new values instead, so the server hears of it once.
+ *
+ * A blank coefficient leaves the stored one alone, as the server does.
+ */
+export const updateSubject = async (id, { name, code, coefficient } = {}) => {
+  if (!id) throw new Error("[subjects] id is required");
+  if (name !== undefined && !String(name).trim()) throw new Error("[subjects] name is required");
+
+  const db  = await getDatabase();
+  await ensureSchema(db);
+  const row = await db.getFirstAsync(`SELECT * FROM ${TABLE} WHERE id = ?`, [String(id)]).catch(() => null);
+  if (!row) throw new Error("[subjects] subject not found");
+
+  const now   = new Date().toISOString();
+  const coeff = cleanCoefficient(coefficient);
+  const next  = {
+    name: name !== undefined ? String(name).trim() : row.name,
+    code: code !== undefined ? (String(code ?? "").trim() || null) : row.code,
+    coefficient: coeff ?? row.coefficient ?? null,
+  };
+
+  await db.runAsync(
+    `UPDATE ${TABLE} SET name = ?, code = ?, coefficient = ?, _synced = 0, updated_at = ? WHERE id = ?`,
+    [next.name, next.code, next.coefficient, now, String(id)]
+  );
+
+  if ((await MutationQueue.createState(`subject:${id}`)) === "unsent") {
+    await queueCreate(
+      { ...row, ...next, id: String(id) },
+      row.class_id ?? row.classId,
+      row.school_id ?? row.schoolId ?? getCurrentAuth().schoolId
+    );
+    return { ...row, ...next, updated_at: now, _synced: 0 };
+  }
+
+  await MutationQueue.enqueue({
+    entityKey: `subject-update:${id}`,
+    method:    "PUT",
+    endpoint:  API.admin.subjects.detail(id),
+    merge:     true,
+    payload:   {
+      ...(name !== undefined ? { name: next.name } : {}),
+      ...(code !== undefined ? { code: next.code || "" } : {}),
+      ...(coeff ? { coefficient: coeff } : {}),
+      // `since`: an edit made while this is in flight keeps the row dirty.
+      __local: { table: TABLE, ids: [String(id)], since: now },
+    },
+  });
+
+  return { ...row, ...next, updated_at: now, _synced: 0 };
+};
+
+/**
+ * Removed locally and queued.
+ *
+ * A subject this phone created and never sent is undone instead: its queued
+ * create is cancelled and the row goes, with nothing sent. Otherwise the
+ * DELETE goes through the outbox. This used to call the server directly
+ * when signed in (offline: a failed request and a warning) and then mark the
+ * row dirty either way, so a delete the server had already taken was sent a
+ * second time, and an offline one was lost when the sync cleared the flag.
+ */
 export const deleteSubject = async (id) => {
   if (!id) throw new Error("[subjects] id is required");
 
   const db  = await getDatabase();
+  await ensureSchema(db);
   const now = new Date().toISOString();
 
-  if (isAuthenticated() && !id.startsWith("local_")) {
-    try {
-      await api.delete(API.admin.subjects.detail(id));
-    } catch (err) {
-      console.warn("[subjects] Server delete failed:", err.message);
+  if ((await MutationQueue.createState(`subject:${id}`)) === "unsent") {
+    await MutationQueue.cancelUnsent(`subject:${id}`);
+    await MutationQueue.cancelUnsent(`subject-update:${id}`);
+    // Assignments made to it on this phone and not sent either go with it:
+    // they name a subject the server will never have.
+    const deps = (await db.getAllAsync(
+      `SELECT id FROM teacher_assignments WHERE subject_id = ? OR subjectId = ?`, [id, id]
+    ).catch(() => [])) ?? [];
+    for (const dep of deps) {
+      if ((await MutationQueue.createState(`assignment:${dep.id}`)) !== "unsent") continue;
+      await MutationQueue.cancelUnsent(`assignment:${dep.id}`);
+      await db.runAsync(`DELETE FROM teacher_assignments WHERE id = ?`, [dep.id]).catch(() => {});
     }
+    const result = await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+    return (result?.changes ?? 0) > 0;
   }
 
   const result = await db.runAsync(
     `UPDATE ${TABLE} SET deleted_at = ?, _synced = 0, updated_at = ? WHERE id = ? AND ${NOT_DELETED}`,
     [now, now, id]
   );
+  if ((result?.changes ?? 0) === 0) return false;
 
-  return (result?.changes ?? 0) > 0;
+  await MutationQueue.enqueue({
+    entityKey: `subject-delete:${id}`,
+    method:    "DELETE",
+    endpoint:  API.admin.subjects.detail(id),
+    payload:   {
+      __local:     { table: TABLE, ids: [id] },
+      __reconcile: { kind: "softDelete", table: TABLE, localId: id },
+    },
+  });
+
+  return true;
 };
 
 export const SubjectService = {
@@ -373,8 +507,10 @@ export const SubjectService = {
     }
   },
 
-  create: ({ name, classId, code, schoolId }) =>
-    createSubject({ name, classId, code, schoolId }),
+  create: ({ name, classId, code, schoolId, coefficient }) =>
+    createSubject({ name, classId, code, schoolId, coefficient }),
+
+  update: (id, changes) => updateSubject(id, changes),
 
   delete: (id) => deleteSubject(id),
 };

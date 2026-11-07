@@ -16,31 +16,35 @@ import * as Sharing     from "expo-sharing";
 
 import { tableExists as _tableExists } from "../../../../src/db/dbHelpers";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
-import { errorText } from "../../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../../src/hooks/useNeedsInternet";
 import { ProgressBar } from "../../../../src/components/ProgressBar";
+import { COLORS, ACCENT, SEMANTIC, statusBadge } from "../../../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#2563EB",
-  primaryBg: "#EFF6FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   COLORS.primary,
+  primaryBg: COLORS.primaryLight,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text,
+  errorBg:   SEMANTIC.error.bg,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   COLORS.border,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textSubtle,
+  gray500:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
 const TERMS       = ["First Term", "Second Term", "Third Term"];
@@ -350,7 +354,8 @@ const fetchReportCardHtml = async (studentId, examId, schoolId, schoolName) => {
   try {
     const res  = await api.get(
       `/results/${examId}/student/${studentId}/reportcard/html`,
-      { params: { schoolId, schoolName } }
+      // Fetched only to print or share the PDF, so it issues (archives) the card.
+      { params: { schoolId, schoolName, issue: 1 } }
     );
     const body = res?.data;
     const html = typeof res === "string"
@@ -429,7 +434,7 @@ export default function ReportGeneratorScreen() {
         }
       } catch (err) {
         console.error("[ReportGenerator] load error:", err.message);
-        if (mounted) Alert.alert(t("reportGen.loadError"), errorText(t, err));
+        if (mounted) Alert.alert(t("reportGen.loadError"), needsInternetErrorText(t, err));
       } finally {
         if (mounted) setDataLoading(false);
       }
@@ -538,7 +543,7 @@ export default function ReportGeneratorScreen() {
             const { uri } = await Print.printToFileAsync({ html });
             successful.push({ studentName: student.name, uri });
           } catch (err) {
-            errors.push({ studentName: student.name, error: errorText(t, err) });
+            errors.push({ studentName: student.name, error: needsInternetErrorText(t, err) });
           }
           setProgress(i + 1);
         }
@@ -573,7 +578,7 @@ export default function ReportGeneratorScreen() {
         }
       }
     } catch (err) {
-      Alert.alert(t("reportGen.errTitle"), errorText(t, err));
+      Alert.alert(t("reportGen.errTitle"), needsInternetErrorText(t, err));
     } finally {
       setGenerating(false);
     }
@@ -601,7 +606,7 @@ export default function ReportGeneratorScreen() {
 
       await generateAndPrintPdf(html);
     } catch (err) {
-      Alert.alert(t("reportGen.printError"), errorText(t, err));
+      Alert.alert(t("reportGen.printError"), needsInternetErrorText(t, err));
     }
   }, [selectedStudent, selectedClass, selectedExam, user]);
 
@@ -617,6 +622,7 @@ export default function ReportGeneratorScreen() {
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={24} color={C.gray900} />
           </TouchableOpacity>
+          <HeaderIcon style={s.headerIcon} />
           <View style={s.headerCenter}>
             <Text style={s.headerTitle}>{t("reportGen.headerTitle")}</Text>
             <Text style={s.headerSub}>{t("reportGen.headerSub")}</Text>
@@ -642,6 +648,7 @@ export default function ReportGeneratorScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={s.headerIcon} />
         <View style={s.headerCenter}>
           <Text style={s.headerTitle}>{t("reportGen.headerTitle")}</Text>
           <Text style={s.headerSub}>{t("reportGen.headerSub")}</Text>
@@ -1001,10 +1008,12 @@ function PickerModal({ visible, title, items, onSelect, onClose, emptyText }) {
           </View>
 
           {items.length === 0 ? (
-            <View style={pm.empty}>
-              <Ionicons name="folder-open-outline" size={36} color={C.gray300} />
-              <Text style={pm.emptyText}>{emptyText || t("reportGen.noItems")}</Text>
-            </View>
+            <EmptyState
+              icon="folder-open-outline"
+              kind="reports"
+              message={emptyText || t("reportGen.noItems")}
+              style={pm.empty}
+            />
           ) : (
             <FlatList
               data={items}
@@ -1018,9 +1027,7 @@ function PickerModal({ visible, title, items, onSelect, onClose, emptyText }) {
                 >
                   <Text style={pm.itemText}>{item.name}</Text>
                   {item.is_default ? (
-                    <View style={pm.defaultBadge}>
-                      <Text style={pm.defaultBadgeText}>{t("reportGen.default")}</Text>
-                    </View>
+                    <Badge label={t("reportGen.default")} accent="teal" />
                   ) : null}
                 </TouchableOpacity>
               )}
@@ -1063,6 +1070,7 @@ const s = StyleSheet.create({
     justifyContent:  "center",
   },
   printBtn:     { padding: 8 },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
@@ -1077,15 +1085,17 @@ const s = StyleSheet.create({
     borderWidth:     1,
     borderColor:     C.primary + "30",
   },
-  examBannerText: { flex: 1, fontSize: 13, fontWeight: "600", color: C.primary },
+  examBannerText: { flex: 1, fontSize: 13, fontWeight: "600", color: ACCENT.blue.deep },
   stepCard: {
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    14,
     padding:         16,
     gap:             12,
     borderWidth:     1,
-    borderColor:     C.gray200,
-    shadowColor:     "#000",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.03,
     shadowRadius:    4,
     elevation:       1,
@@ -1095,7 +1105,7 @@ const s = StyleSheet.create({
     width:           26,
     height:          26,
     borderRadius:    13,
-    backgroundColor: C.primary,
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -1110,20 +1120,22 @@ const s = StyleSheet.create({
     borderRadius:      10,
     paddingHorizontal: 12,
     paddingVertical:   12,
-    backgroundColor:   C.gray50,
+    backgroundColor:   COLORS.surface,
   },
-  selectorActive:     { borderColor: C.primary, backgroundColor: C.primaryBg },
-  selectorText:       { fontSize: 14, color: C.gray400, flex: 1 },
-  selectorTextActive: { color: C.primary, fontWeight: "600" },
+  selectorActive:     { borderColor: ACCENT.blue.base, backgroundColor: ACCENT.blue.wash },
+  selectorText:       { fontSize: 14, color: COLORS.textSubtle, flex: 1 },
+  selectorTextActive: { color: ACCENT.blue.deep, fontWeight: "600" },
   row:      { flexDirection: "row", alignItems: "center" },
   clearBtn: { padding: 8, marginLeft: 4 },
-  hint:     { fontSize: 11, color: C.gray400, fontStyle: "italic" },
+  hint:     { fontSize: 11, color: COLORS.textSecondary, fontStyle: "italic" },
   warnText: { fontSize: 12, color: C.warning, marginTop: 4, fontStyle: "italic" },
   studentCountBadge: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               6,
     backgroundColor:   C.successBg,
+    borderWidth:       1,
+    borderColor:       statusBadge("success").border,
     borderRadius:      6,
     paddingVertical:   4,
     paddingHorizontal: 10,
@@ -1131,7 +1143,7 @@ const s = StyleSheet.create({
   },
   studentCountText: { fontSize: 11, color: C.success, fontWeight: "600" },
   designerLink:     { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  designerLinkText: { fontSize: 12, color: C.primary, fontWeight: "600" },
+  designerLinkText: { fontSize: 12, color: ACCENT.blue.deep, fontWeight: "600" },
   progressCard: {
     backgroundColor: C.primaryBg,
     borderRadius:    12,
@@ -1141,7 +1153,7 @@ const s = StyleSheet.create({
     borderWidth:     1,
     borderColor:     C.primary + "30",
   },
-  progressText: { fontSize: 14, color: C.primary, fontWeight: "600" },
+  progressText: { fontSize: 14, color: ACCENT.blue.deep, fontWeight: "600" },
   progressBar: {
     width:           "100%",
     height:          6,
@@ -1156,9 +1168,9 @@ const s = StyleSheet.create({
     padding:         16,
     gap:             10,
     borderWidth:     1.5,
-    borderColor:     C.success,
+    borderColor:     ACCENT.green.base,
     borderLeftWidth: 4,
-    borderLeftColor: C.success,
+    borderLeftColor: ACCENT.green.base,
   },
   resultHeader:  { flexDirection: "row", alignItems: "center", gap: 10 },
   resultTitle:   { fontSize: 14, fontWeight: "700", color: C.gray900, flex: 1 },
@@ -1174,7 +1186,7 @@ const s = StyleSheet.create({
     borderColor:       C.primary,
     backgroundColor:   C.primaryBg,
   },
-  resultBtnText: { fontSize: 13, fontWeight: "700", color: C.primary },
+  resultBtnText: { fontSize: 13, fontWeight: "700", color: ACCENT.blue.deep },
   resultInfo:    { fontSize: 11, color: C.gray500, fontStyle: "italic", lineHeight: 16 },
   errorBox:      { backgroundColor: C.errorBg, borderRadius: 8, padding: 10, gap: 4 },
   errorBoxTitle: { fontSize: 12, fontWeight: "700", color: C.error },
@@ -1219,7 +1231,7 @@ const pm = StyleSheet.create({
   },
   title:            { fontSize: 16, fontWeight: "700", color: C.gray900 },
   empty:            { alignItems: "center", paddingVertical: 40, paddingHorizontal: 32, gap: 10 },
-  emptyText:        { fontSize: 14, color: C.gray400, textAlign: "center" },
+  emptyText:        { fontSize: 14, color: COLORS.textSecondary, textAlign: "center" },
   item: {
     flexDirection:     "row",
     alignItems:        "center",

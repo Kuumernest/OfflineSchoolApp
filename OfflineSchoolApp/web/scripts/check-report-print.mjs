@@ -83,7 +83,9 @@ check("selection changes invalidate the active generation",
       page.indexOf("const closePreview"))));
 check("a stale reply is checked before progress, cards and result state",
   /if \(stale\(\)\) return;[\s\S]{0,160}setProgress/.test(generate)
-    && /await cardRequest\(sid\);[\s\S]{0,80}if \(stale\(\)\) return;/.test(generate)
+    // A single card in its own tab is fetched as issued (cardRequest's
+    // second argument), so the call may carry it.
+    && /await cardRequest\(sid(?:,\s*singleInTab)?\);[\s\S]{0,80}if \(stale\(\)\) return;/.test(generate)
     && /if \(stale\(\)\) return;[\s\S]{0,80}setGenerating\(false\)/.test(generate)
     && /if \(stale\(\)\) return;[\s\S]{0,1200}setPreviewCards\(collected\)/.test(generate));
 
@@ -91,11 +93,14 @@ console.log("--- the class preview ---");
 check("no window is opened inside the per-student loop",
   loopAt >= 0 && !/openPreviewWindow\s*\(/.test(loop));
 check("batch HTML is collected for the in-app preview",
-  /collected\.push\(\{\s*id:\s*sid,\s*name,\s*html\s*\}\)/.test(generate));
+  // Each card also carries `issued`, the fetch for its coded, printable copy.
+  /collected\.push\(\{\s*id:\s*sid,\s*name,\s*html(?:,\s*issued:\s*issuedHtml\(sid\))?\s*\}\)/.test(generate));
 check("the in-app preview renders the selected card in an iframe",
   /<iframe[\s\S]{0,220}srcDoc=\{previewCard\.html\}/.test(page));
 check("Print is an explicit action in the preview, through the shared helper",
-  /const handlePrintPreview[\s\S]{0,420}await printHtml\(previewCard\.html\)/.test(page));
+  // It prints the issued card (it carries the verification code), not the
+  // preview's HTML — but still only from this handler, via printHtml.
+  /const handlePrintPreview[\s\S]{0,600}const html = await previewCard\.issued\(\)[\s\S]{0,300}await printHtml\(html\)/.test(page));
 
 console.log("--- what is counted and said ---");
 check("no card is counted before its HTML was written",
@@ -115,8 +120,15 @@ check("the preview helper refuses a closed window",
   /export const showInPreviewWindow =[\s\S]{0,260}if \(!win \|\| win\.closed\) return false;/.test(printer));
 check("printing is requested without claiming it completed",
   /win\.print\(\)/.test(printer) && /browser does not tell us/.test(printer));
-check("the preview fallback waits for a complete document",
-  /4000/.test(printer) && /readyState === "complete"/.test(printer));
+// The preview used to add a `load` listener before document.open(), which the
+// open erases, and fall back on a fixed 4-second timer — so a slow logo or
+// photo printed as a blank box. It now waits for the images themselves.
+check("the preview waits for its images, not a fixed timer",
+  /imagesSettled\(win\.document\)\.then\(requestPrint\)/.test(printer)
+    && !/addEventListener\("load", requestPrint/.test(printer)
+    && !/\b4000\b/.test(printer));
+check("and the print frame waits for them too",
+  /imagesSettled\(frame\.contentDocument/.test(printer));
 
 console.log("--- the modal lifecycle ---");
 check("closing the preview clears the retained card",
@@ -143,9 +155,16 @@ const { showInPreviewWindow } = await import("../src/print/document.ts");
 const fakeWindow = ({ closed = false, document = true, writeThrows = false } = {}) => {
   const calls = { opened: 0, written: "", ended: 0, focused: 0, printed: 0 };
   let load = null;
+  // One image still loading — the school's logo, say.
+  const logo = {
+    complete: false,
+    listeners: {},
+    addEventListener(type, fn) { this.listeners[type] = fn; },
+  };
   const win = {
     closed,
     document: document ? {
+      images: [logo],
       open:  () => { calls.opened++; },
       write: (html) => {
         if (writeThrows) throw new Error("write failed");
@@ -157,16 +176,27 @@ const fakeWindow = ({ closed = false, document = true, writeThrows = false } = {
     focus: () => { calls.focused++; },
     print: () => { calls.printed++; },
   };
-  return { win, calls, fireLoad: () => load?.() };
+  return { win, calls, fireLoad: () => load?.(), logo };
 };
+const tick = () => new Promise((r) => setTimeout(r, 0));
 
 console.log("--- the preview helper at runtime ---");
 {
-  const { win, calls, fireLoad } = fakeWindow();
+  const { win, calls, logo } = fakeWindow();
   check("writes the fetched card into an open window",
     showInPreviewWindow(win, "<p>card</p>") === true && calls.written === "<p>card</p>");
-  check("asks for print only once the document has loaded",
-    calls.printed === 0 && (fireLoad(), calls.printed === 1));
+  await tick();
+  check("does not ask for print while an image is still loading", calls.printed === 0);
+  logo.complete = true; logo.listeners.load?.();
+  await tick();
+  check("asks for print once it has arrived", calls.printed === 1);
+}
+{
+  const { win, calls, logo } = fakeWindow();
+  showInPreviewWindow(win, "<p>card</p>");
+  logo.listeners.error?.();
+  await tick();
+  check("a photo that fails to load does not hold the dialog back", calls.printed === 1);
 }
 {
   const { win } = fakeWindow({ closed: true });

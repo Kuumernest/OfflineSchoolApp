@@ -26,6 +26,12 @@ import { API_URL }         from "../../src/services/api";
 import { useTranslation }  from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { errorText } from "../../src/utils/appError";
+import {
+  COLORS, ACCENT, SEMANTIC, accentBadge, categoryAccent, levelAccent,
+} from "../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
+
+const SCHOOL_BADGE = accentBadge("indigo");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -137,13 +143,12 @@ const DocumentRow = ({ doc, index, onRemove, onChangeType }) => {
 
   return (
   <View style={docStyles.row}>
-    <View style={docStyles.iconBox}>
-      <Ionicons
-        name={doc.mimeType?.startsWith("image/") ? "image-outline" : "document-outline"}
-        size={22}
-        color="#4F46E5"
-      />
-    </View>
+    <IconSquare
+      icon={doc.mimeType?.startsWith("image/") ? "image-outline" : "document-outline"}
+      accent="indigo"
+      size={40}
+      radius={10}
+    />
 
     <View style={docStyles.info}>
       <Text style={docStyles.fileName} numberOfLines={1}>{doc.name}</Text>
@@ -155,14 +160,14 @@ const DocumentRow = ({ doc, index, onRemove, onChangeType }) => {
           const next = DOCUMENT_TYPES[(cur + 1) % DOCUMENT_TYPES.length];
           onChangeType(index, next.value);
         }}
-        style={docStyles.typeChip}
+        style={[docStyles.typeChip, typeChipColours(doc.docType)]}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={t("applyForm.changeDocType", {
           label: docTypeLabel(t, doc.docType),
         })}
       >
-        <Text style={docStyles.typeChipText}>
+        <Text style={[docStyles.typeChipText, { color: accentBadge(categoryAccent(doc.docType)).text }]}>
           {docTypeLabel(t, doc.docType)} ↺
         </Text>
       </TouchableOpacity>
@@ -175,44 +180,44 @@ const DocumentRow = ({ doc, index, onRemove, onChangeType }) => {
       accessibilityRole="button"
       accessibilityLabel={t("applyForm.removeDoc", { name: doc.name })}
     >
-      <Ionicons name="close-circle" size={22} color="#DC2626" />
+      <Ionicons name="close-circle" size={22} color={SEMANTIC.error.icon} />
     </TouchableOpacity>
   </View>
   );
+};
+
+/** A document type's chip: its category colour, never grey. */
+const typeChipColours = (docType) => {
+  const b = accentBadge(categoryAccent(docType));
+  return { backgroundColor: b.bg, borderColor: b.border };
 };
 
 const docStyles = StyleSheet.create({
   row: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    12,
     padding:         12,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.indigo.base,
     gap:             10,
   },
-  iconBox: {
-    width:           40,
-    height:          40,
-    borderRadius:    10,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
   info:         { flex: 1 },
-  fileName:     { fontSize: 13, fontWeight: "600", color: "#111827" },
-  fileSize:     { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  fileName:     { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  fileSize:     { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   typeChip: {
     marginTop:         4,
     alignSelf:         "flex-start",
-    backgroundColor:   "#EEF2FF",
+    borderWidth:       1,
     borderRadius:      20,
     paddingVertical:   3,
     paddingHorizontal: 10,
   },
-  typeChipText: { fontSize: 11, color: "#4F46E5", fontWeight: "600" },
+  typeChipText: { fontSize: 11, fontWeight: "600" },
   removeBtn:    { padding: 4 },
 });
 
@@ -540,7 +545,7 @@ export default function ApplyScreen() {
     return (
       <View style={styles.successContainer}>
         <View style={styles.successCard}>
-          <Text style={styles.successEmoji}>🎉</Text>
+          <IconSquare icon="checkmark-circle" accent="green" size={64} radius={18} style={styles.successIcon} />
           <Text style={styles.successTitle}>{t("applyForm.successTitle")}</Text>
           <Text style={styles.successMessage}>
             {t("applyForm.successThanksPre")}
@@ -599,8 +604,10 @@ export default function ApplyScreen() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={styles.emoji}>📋</Text>
-          <Text style={styles.title}>{t("applyForm.heading")}</Text>
+          <View style={styles.titleRow}>
+            <HeaderIcon icon="document-text" />
+            <Text style={styles.title}>{t("applyForm.heading")}</Text>
+          </View>
           {schoolName ? (
             <View style={styles.schoolBadge}>
               <Text style={styles.schoolBadgeText}>🏫 {schoolName}</Text>
@@ -622,14 +629,16 @@ export default function ApplyScreen() {
         ) : null}
 
         <View style={styles.card}>
-
-          <Text style={styles.label}>{t("applyForm.labelStudentName")} *</Text>
+          <View style={styles.sectionHead}>
+            <IconSquare icon="person" accent="blue" size={28} />
+            <Text style={[styles.label, styles.labelInHead]}>{t("applyForm.labelStudentName")} *</Text>
+          </View>
           <TextInput
             style={[styles.input, fieldErrors.studentName && styles.inputError]}
             value={form.studentName}
             onChangeText={(v) => updateField("studentName", v)}
             placeholder={t("applyForm.phStudentName")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             autoCapitalize="words"
             returnKeyType="next"
             accessibilityLabel={t("applyForm.a11yStudentName")}
@@ -642,7 +651,7 @@ export default function ApplyScreen() {
             value={form.guardianName}
             onChangeText={(v) => updateField("guardianName", v)}
             placeholder={t("applyForm.phGuardian")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             autoCapitalize="words"
             returnKeyType="next"
             accessibilityLabel={t("applyForm.a11yGuardian")}
@@ -655,7 +664,7 @@ export default function ApplyScreen() {
             value={form.email}
             onChangeText={(v) => updateField("email", v)}
             placeholder="student@example.com"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -673,14 +682,17 @@ export default function ApplyScreen() {
             value={form.phone}
             onChangeText={(v) => updateField("phone", v)}
             placeholder={t("applyForm.phPhone")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             keyboardType="phone-pad"
             returnKeyType="next"
             accessibilityLabel={t("applyForm.a11yPhone")}
           />
           <FieldError message={fieldErrors.phone} />
 
-          <Text style={styles.label}>{t("applyForm.labelClass")} *</Text>
+          <View style={styles.sectionHead}>
+            <IconSquare icon="school" accent="indigo" size={28} />
+            <Text style={[styles.label, styles.labelInHead]}>{t("applyForm.labelClass")} *</Text>
+          </View>
           <FieldError message={fieldErrors.class} />
 
           {availableClasses.length > 0 ? (
@@ -688,12 +700,13 @@ export default function ApplyScreen() {
               <View style={styles.classGrid}>
                 {availableClasses.map((cls) => {
                   const isSelected = selectedClass?.id === cls.id;
+                  const ca = ACCENT[levelAccent(cls.level)];
                   return (
                     <TouchableOpacity
                       key={cls.id}
                       style={[
                         styles.classChip,
-                        isSelected && styles.classChipSelected,
+                        isSelected && { backgroundColor: ca.wash, borderColor: ca.base },
                         fieldErrors.class && styles.classChipError,
                       ]}
                       onPress={() => {
@@ -708,10 +721,10 @@ export default function ApplyScreen() {
                       accessibilityState={{ checked: isSelected }}
                       accessibilityLabel={t("applyForm.a11ySelectClass", { name: cls.name })}
                     >
-                      <Text style={[styles.classChipText, isSelected && styles.classChipTextSelected]}>
+                      <Text style={[styles.classChipText, isSelected && { color: ca.deep, fontWeight: "700" }]}>
                         {cls.name}
                       </Text>
-                      {isSelected && <Text style={styles.checkmark}> ✓</Text>}
+                      {isSelected && <Text style={[styles.checkmark, { color: ca.deep }]}> ✓</Text>}
                     </TouchableOpacity>
                   );
                 })}
@@ -729,7 +742,7 @@ export default function ApplyScreen() {
             </>
           ) : (
             <View style={styles.noClassesBox}>
-              <Text style={styles.noClassesEmoji}>⚠️</Text>
+              <IconSquare icon="warning" accent="amber" size={40} radius={12} style={styles.noClassesIcon} />
               <Text style={styles.noClassesText}>{t("applyForm.noClasses")}</Text>
               <TouchableOpacity
                 style={styles.goBackBtn}
@@ -747,6 +760,7 @@ export default function ApplyScreen() {
           <View style={styles.sectionDivider} />
 
           <View style={styles.documentHeader}>
+            <IconSquare icon="attach" accent="indigo" size={28} style={styles.docHeadIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>{t("applyForm.labelDocuments")}</Text>
               <Text style={styles.hint2}>
@@ -781,7 +795,7 @@ export default function ApplyScreen() {
                   : t("applyForm.a11yAttachAnother")
               }
             >
-              <Ionicons name="attach-outline" size={20} color="#4F46E5" />
+              <Ionicons name="attach-outline" size={20} color={ACCENT.indigo.solid} />
               <Text style={styles.addDocBtnText}>
                 {documents.length === 0
                   ? t("applyForm.attachDocs")
@@ -805,7 +819,7 @@ export default function ApplyScreen() {
             value={form.notes}
             onChangeText={(v) => updateField("notes", v)}
             placeholder={t("applyForm.phNotes")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
@@ -826,7 +840,7 @@ export default function ApplyScreen() {
             >
               {loading ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#FFF" />
+                  <ActivityIndicator color={COLORS.onPrimary} />
                   {uploadStage ? (
                     <Text style={styles.uploadStageText}>{uploadStage}</Text>
                   ) : null}
@@ -851,65 +865,69 @@ export default function ApplyScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   scroll:    { paddingHorizontal: 24 },
 
   backArrow:     { marginBottom: 16 },
-  backArrowText: { color: "#4F46E5", fontSize: 15, fontWeight: "600" },
+  backArrowText: { color: COLORS.primary, fontSize: 15, fontWeight: "600" },
 
   header:   { alignItems: "center", marginBottom: 24 },
-  emoji:    { fontSize: 40, marginBottom: 8 },
-  title:    { fontSize: 26, fontWeight: "800", color: "#111827", textAlign: "center" },
-  subtitle: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 20, marginTop: 8 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  title:    { fontSize: 26, fontWeight: "800", color: COLORS.text, textAlign: "center", flexShrink: 1 },
+  subtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 20, marginTop: 8 },
 
   schoolBadge: {
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   SCHOOL_BADGE.bg,
     borderRadius:      20,
     paddingVertical:   6,
     paddingHorizontal: 14,
     marginTop:         10,
     borderWidth:       1,
-    borderColor:       "#C7D2FE",
+    borderColor:       SCHOOL_BADGE.border,
   },
-  schoolBadgeText: { color: "#4338CA", fontWeight: "700", fontSize: 13 },
+  schoolBadgeText: { color: SCHOOL_BADGE.text, fontWeight: "700", fontSize: 13 },
 
   errorBox: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    10,
     padding:         14,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#FECACA",
+    borderColor:     SEMANTIC.error.box,
   },
-  errorText: { color: "#DC2626", fontSize: 13, lineHeight: 18 },
+  errorText: { color: SEMANTIC.error.text, fontSize: 13, lineHeight: 18 },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.blue.base,
     padding:         24,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.06,
     shadowRadius:    12,
     elevation:       3,
     marginBottom:    20,
   },
 
-  label:      { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6, marginTop: 4 },
-  hint:       { fontSize: 11, color: "#9CA3AF", marginTop: -2, marginBottom: 14 },
-  hint2:      { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
-  fieldError: { color: "#DC2626", fontSize: 11, marginTop: 0, marginBottom: 12 },
+  label:      { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 6, marginTop: 4 },
+  sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6, marginTop: 4 },
+  labelInHead: { flex: 1, marginBottom: 0, marginTop: 0 },
+  hint:       { fontSize: 11, color: COLORS.textSecondary, marginTop: -2, marginBottom: 14 },
+  hint2:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  fieldError: { color: SEMANTIC.error.text, fontSize: 11, marginTop: 0, marginBottom: 12 },
 
   input: {
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     borderRadius:    10,
     padding:         12,
     fontSize:        15,
-    color:           "#111827",
-    backgroundColor: "#F9FAFB",
+    color:           COLORS.text,
+    backgroundColor: COLORS.surface,
     marginBottom:    6,
   },
-  inputError: { borderColor: "#FCA5A5", backgroundColor: "#FFF5F5" },
+  inputError: { borderColor: SEMANTIC.error.icon, backgroundColor: SEMANTIC.error.bg },
   textarea:   { height: 100, marginBottom: 6 },
 
   classGrid: {
@@ -926,126 +944,129 @@ const styles = StyleSheet.create({
     paddingVertical:   10,
     borderRadius:      24,
     borderWidth:       1.5,
-    borderColor:       "#D1D5DB",
-    backgroundColor:   "#FFF",
+    borderColor:       COLORS.border,
+    backgroundColor:   COLORS.surface,
   },
-  classChipSelected:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  classChipError:        { borderColor: "#FCA5A5" },
-  classChipText:         { fontSize: 14, color: "#374151", fontWeight: "500" },
-  classChipTextSelected: { color: "#FFF", fontWeight: "700" },
-  checkmark:             { color: "#FFF", fontSize: 14, fontWeight: "800" },
+  classChipError:        { borderColor: SEMANTIC.error.icon },
+  classChipText:         { fontSize: 14, color: COLORS.text, fontWeight: "500" },
+  checkmark:             { fontSize: 14, fontWeight: "800" },
 
   selectedConfirm: {
-    backgroundColor: "#F0FDF4",
+    backgroundColor: SEMANTIC.success.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#BBF7D0",
+    borderColor:     SEMANTIC.success.box,
   },
-  selectedConfirmText: { fontSize: 13, color: "#166534" },
+  selectedConfirmText: { fontSize: 13, color: SEMANTIC.success.text },
 
   noClassesBox: {
-    backgroundColor: "#FFFBEB",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    12,
     padding:         20,
     alignItems:      "center",
     borderWidth:     1,
-    borderColor:     "#FDE68A",
+    borderColor:     SEMANTIC.warning.box,
     marginBottom:    16,
   },
-  noClassesEmoji: { fontSize: 32, marginBottom: 8 },
+  noClassesIcon: { marginBottom: 8 },
   noClassesText: {
     fontSize:     13,
-    color:        "#92400E",
+    color:        SEMANTIC.warning.text,
     textAlign:    "center",
     lineHeight:   20,
     marginBottom: 12,
   },
   goBackBtn: {
-    backgroundColor:   "#F59E0B",
+    backgroundColor:   ACCENT.amber.solid,
     borderRadius:      8,
     paddingVertical:   10,
     paddingHorizontal: 20,
   },
-  goBackBtnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  goBackBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 13 },
 
-  sectionDivider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 16 },
+  sectionDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 16 },
   documentHeader: {
     flexDirection:  "row",
     justifyContent: "space-between",
     alignItems:     "flex-start",
     marginBottom:   12,
   },
-  docCount:   { fontSize: 12, color: "#6B7280", fontWeight: "600", marginTop: 4 },
+  docHeadIcon: { marginRight: 8 },
+  docCount:   { fontSize: 12, color: ACCENT.indigo.deep, fontWeight: "600", marginTop: 4 },
   addDocBtn: {
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
     gap:             8,
     borderWidth:     1.5,
-    borderColor:     "#C7D2FE",
+    borderColor:     ACCENT.indigo.base,
     borderStyle:     "dashed",
     borderRadius:    12,
     paddingVertical: 14,
-    backgroundColor: "#F5F7FF",
+    backgroundColor: ACCENT.indigo.wash,
     marginBottom:    8,
   },
-  addDocBtnText: { color: "#4F46E5", fontSize: 14, fontWeight: "600" },
+  addDocBtnText: { color: ACCENT.indigo.deep, fontSize: 14, fontWeight: "600" },
   legendBox: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    8,
     padding:         10,
     marginTop:       4,
     marginBottom:    4,
     borderWidth:     1,
-    borderColor:     "#FED7AA",
+    borderColor:     SEMANTIC.warning.box,
   },
-  legendText: { fontSize: 11, color: "#92400E", lineHeight: 16 },
+  legendText: { fontSize: 11, color: SEMANTIC.warning.text, lineHeight: 16 },
 
   submitBtn: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: COLORS.primary,
     borderRadius:    14,
     padding:         16,
     alignItems:      "center",
     marginBottom:    16,
-    shadowColor:     "#4F46E5",
+    shadowColor:     COLORS.primary,
     shadowOpacity:   0.3,
     shadowRadius:    8,
     elevation:       4,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText:     { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  submitBtnText:     { color: COLORS.onPrimary, fontSize: 16, fontWeight: "700" },
   loadingRow:        { flexDirection: "row", alignItems: "center", gap: 10 },
-  uploadStageText:   { color: "#FFF", fontSize: 13, fontWeight: "600" },
+  uploadStageText:   { color: COLORS.onPrimary, fontSize: 13, fontWeight: "600" },
 
-  disclaimer: { fontSize: 12, color: "#9CA3AF", textAlign: "center", lineHeight: 18 },
+  disclaimer: { fontSize: 12, color: COLORS.textSecondary, textAlign: "center", lineHeight: 18 },
 
   successContainer: {
     flex:            1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
     justifyContent:  "center",
     padding:         24,
   },
   successCard: {
-    backgroundColor: "#FFF",
+    backgroundColor: SEMANTIC.success.bg,
     borderRadius:    24,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.green.base,
     padding:         32,
     alignItems:      "center",
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.08,
     shadowRadius:    16,
     elevation:       4,
   },
-  successEmoji:   { fontSize: 64, marginBottom: 16 },
-  successTitle:   { fontSize: 24, fontWeight: "800", color: "#111827", marginBottom: 16, textAlign: "center" },
-  successMessage: { fontSize: 15, color: "#374151", textAlign: "center", lineHeight: 24, marginBottom: 24 },
-  successEmail:   { color: "#4F46E5", fontWeight: "700" },
+  successIcon:    { marginBottom: 16 },
+  successTitle:   { fontSize: 24, fontWeight: "800", color: COLORS.text, marginBottom: 16, textAlign: "center" },
+  successMessage: { fontSize: 15, color: COLORS.text, textAlign: "center", lineHeight: 24, marginBottom: 24 },
+  successEmail:   { color: ACCENT.green.deep, fontWeight: "700" },
   backBtn: {
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   COLORS.primary,
     borderRadius:      12,
     paddingVertical:   14,
     paddingHorizontal: 32,
   },
-  backBtnText: { color: "#FFF", fontSize: 15, fontWeight: "700" },
+  backBtnText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "700" },
 });

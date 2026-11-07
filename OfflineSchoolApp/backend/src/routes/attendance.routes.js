@@ -95,6 +95,8 @@ const {
   todayStr,
   dateStr,
   lastSevenDays,
+  schoolDaysOnly,
+  dayRate,
   attendanceId,
   teacherAttendanceId,
 } = require("../../../shared/attendance");
@@ -180,6 +182,28 @@ const { requirePermission } = require("../../middleware/permissions");
 const { resolveSchoolId } = require("../utils/tenant");
 
 const isStudentRole = (req) => req.user?.role === "student";
+
+/**
+ * The classId filter for the pupil ROSTER, narrowed for a teacher to their
+ * roster classes — the classes a teacher's phone holds pupils of
+ * (config/syncFeed.js teacherRosterClassIds: an active assignment, or form
+ * master). The phone falls back to /students/roster for a teacher's pupil list
+ * (mobile studentFetch.service.js), so it answers by the same rule as the sync
+ * (owner decision, 2026-11). Every other role: the class asked for, or none
+ * (undefined = no class filter). Registers (/students/today, /students) stay
+ * school-wide reads, as docs/20 §7b/§11.7 record.
+ *
+ * A class outside the roster yields a filter that matches nothing — an empty
+ * roster, as /teacher/my-students answers, not a 403 a cached screen would
+ * have to explain.
+ */
+const pupilClassFilter = async (req, classId) => {
+  const { teacherRosterClassIds } = require("../config/syncFeed");
+  const roster = await teacherRosterClassIds(req, require("mongoose").models);
+  if (!roster) return classId ? String(classId) : undefined;
+  if (classId) return roster.includes(String(classId)) ? String(classId) : { $in: [] };
+  return { $in: roster };
+};
 
 // Three capabilities where this file had three hand-rolled role checks. The
 // defaults are the same sets those checks used — attendance.view is
@@ -294,12 +318,15 @@ router.get("/students/roster", staffRead, async (req, res) => {
     }
 
     const query = { schoolId, isActive: { $ne: false } };
-    if (classId) query.classId = classId;
+    const classFilter = await pupilClassFilter(req, classId);
+    if (classFilter !== undefined) query.classId = classFilter;
 
     const students = await Student.find(query)
       .select(
         "_id studentName firstName lastName email " +
-        "classId className grade admissionNo"
+        // enrollmentNo is the field a student record holds; admissionNo
+        // only on older imports.
+        "classId className grade enrollmentNo admissionNo"
       )
       .sort({ studentName: 1 })
       .lean();
@@ -1287,12 +1314,9 @@ router.get("/report/overview", staffRead, async (req, res) => {
       late:     studentRecords.filter((r) => r.status === "late").length,
       excused:  studentRecords.filter((r) => r.status === "excused").length,
       unmarked: totalStudents - studentRecords.length,
-      rate: totalStudents > 0
-        ? Math.round(
-            (studentRecords.filter((r) => r.status === "present").length /
-              totalStudents) * 100
-          )
-        : 0,
+      // C3: null — shown "–" — when nobody was marked, not 0%.
+      rate: dayRate(studentRecords.filter((r) => r.status === "present").length,
+                    studentRecords.length, totalStudents),
     };
 
     const teacherSummary = {
@@ -1303,12 +1327,8 @@ router.get("/report/overview", staffRead, async (req, res) => {
       late:     teacherRecords.filter((r) => r.status === "late").length,
       on_leave: teacherRecords.filter((r) => r.status === "on_leave").length,
       unmarked: totalTeachers - teacherRecords.length,
-      rate: totalTeachers > 0
-        ? Math.round(
-            (teacherRecords.filter((r) => r.status === "present").length /
-              totalTeachers) * 100
-          )
-        : 0,
+      rate: dayRate(teacherRecords.filter((r) => r.status === "present").length,
+                    teacherRecords.length, totalTeachers),
     };
 
     return res.json({
@@ -1330,7 +1350,11 @@ router.get("/report/weekly", staffRead, async (req, res) => {
 
     // Shared with the desktop — see the note in shared/attendance.js on why the
     // local/UTC mix in this arithmetic is not worth writing twice.
-    const days = lastSevenDays();
+    // C3: the school's open days only — no Saturday or Sunday bars at 0%.
+    const SchoolModel = require("../db/models/School");
+    const schoolDoc = schoolId ? await SchoolModel.findById(schoolId).select("schoolDays").lean().catch(() => null) : null;
+    const days = schoolDaysOnly(lastSevenDays(), schoolDoc?.schoolDays);
+    if (!days.length) return res.json({ success: true, trend: [], days });
 
     const startDate = days[0];
     const endDate   = days[days.length - 1];
@@ -1361,12 +1385,8 @@ router.get("/report/weekly", staffRead, async (req, res) => {
           late:    dayStudents.filter((r) => r.status === "late").length,
           excused: dayStudents.filter((r) => r.status === "excused").length,
           total:   totalStudents,
-          rate: totalStudents > 0
-            ? Math.round(
-                (dayStudents.filter((r) => r.status === "present").length /
-                  totalStudents) * 100
-              )
-            : 0,
+          rate:    dayRate(dayStudents.filter((r) => r.status === "present").length,
+                           dayStudents.length, totalStudents),
         },
         teachers: {
           present:  dayTeachers.filter((r) => r.status === "present").length,
@@ -1374,12 +1394,8 @@ router.get("/report/weekly", staffRead, async (req, res) => {
           late:     dayTeachers.filter((r) => r.status === "late").length,
           on_leave: dayTeachers.filter((r) => r.status === "on_leave").length,
           total:    totalTeachers,
-          rate: totalTeachers > 0
-            ? Math.round(
-                (dayTeachers.filter((r) => r.status === "present").length /
-                  totalTeachers) * 100
-              )
-            : 0,
+          rate:     dayRate(dayTeachers.filter((r) => r.status === "present").length,
+                            dayTeachers.length, totalTeachers),
         },
       };
     });

@@ -123,6 +123,10 @@
     {
       "studentId": "S15",
       "classId": "C2"
+    },
+    {
+      "studentId": "S16",
+      "classId": "C1"
     }
   ],
   "results": [
@@ -1180,6 +1184,82 @@
           "subjectName": "Science",
           "normalizedMark": 15,
           "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S16-X1",
+      "studentId": "S16",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 14,
+          "score": 14,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S16-X2",
+      "studentId": "S16",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 15,
+          "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S16-X3",
+      "studentId": "S16",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 18,
+          "score": 18,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S16-X4",
+      "studentId": "S16",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 13,
+          "score": 13,
           "maxScore": 20,
           "coefficient": 1,
           "isAbsent": false,

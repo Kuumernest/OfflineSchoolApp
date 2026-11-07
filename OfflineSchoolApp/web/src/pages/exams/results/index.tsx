@@ -4,6 +4,7 @@ import { useSearchParams, Link }      from "react-router-dom";
 import { useExams }                   from "@/hooks/useExams";
 import { useUser }                    from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import {
   useExamStats,
   useRankings,
@@ -17,6 +18,13 @@ import type {
   ResultSummary,
   SubjectStat,
 }                                     from "@/types/exam.types";
+import { Trophy, BarChart3, Calculator, Pin, Printer, PieChart, Layers, ListOrdered, BookOpen, Percent, FileText } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { cn } from "@/utils/cn";
+import { type DashAccent } from "@/config/dashboardTint";
+import { DASH_TINT } from "@/config/dashboardTint";
+import { resultsScope, type ClassOption } from "@/utils/resultsScope";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -32,26 +40,47 @@ interface Stats {
   highest:           number;
   lowest:            number;
   passRate:          number;
-  averageGpa:        number;
-  gradeDistribution: Record<string, number>;
+  passMark?:         number;
+  /** Pupils per band of the school's remark scale, highest band first. */
+  remarkDistribution?: RemarkBand[];
   subjectStats:      SubjectStat[];
+  /** The classes this exam has results in, for the class filter. */
+  classes?:          { classId: string; className: string | null }[];
+  /** The chosen class's best and weakest pupils; null with no class chosen. */
+  topBottom?:        { top: PlacedPupil[]; bottom: PlacedPupil[]; total: number } | null;
 }
+
+/** A pupil in a class's top or bottom list, numbered by class position. */
+interface PlacedPupil {
+  position:    number;
+  studentId:   string;
+  studentName: string | null;
+  admissionNo: string | null;
+  className:   string | null;
+  average20:   number | null;
+  remark:      string | null;
+  remarkFr:    string | null;
+  passes:      boolean | null;
+}
+
+interface RemarkBand {
+  remark:   string | null;
+  remarkFr: string | null;
+  minMark:  number;
+  maxMark:  number;
+  count:    number;
+}
+
+/** A ranking row's remark in the reader's language. */
+const remarkText = (r: ResultSummary) =>
+  (i18next.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? null;
+
+/** A mark out of twenty, as every analytics figure is printed. */
+const on20 = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toFixed(2)}/20`);
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
-
-const GRADE_COLORS: Record<string, string> = {
-  "A+": "bg-emerald-500",
-  "A":  "bg-emerald-400",
-  "B+": "bg-blue-500",
-  "B":  "bg-blue-400",
-  "C+": "bg-yellow-500",
-  "C":  "bg-yellow-400",
-  "D":  "bg-orange-500",
-  "E":  "bg-red-400",
-  "F":  "bg-red-600",
-};
 
 // `key` is the scope sent to the rankings endpoint — it must not change.
 // Module scope has no `t`, so the label is stored as a key and resolved
@@ -83,18 +112,30 @@ const Spinner = () => (
                   border-t-transparent rounded-full animate-spin" />
 );
 
+/** A small solid icon square in front of a panel's heading. */
+const HeadBox = ({ icon: Icon, accent = "slate" }: { icon: LucideIcon; accent?: DashAccent }) => (
+  <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)} aria-hidden="true">
+    <Icon className="h-4 w-4" />
+  </span>
+);
+
 const EmptyState = ({
   icon, title, subtitle,
 }: {
-  icon: string; title: string; subtitle?: string;
-}) => (
+  icon: LucideIcon; title: string; subtitle?: string;
+}) => {
+  const Icon = icon;
+  return (
   <div className="flex flex-col items-center justify-center
-                  py-20 text-center text-gray-400">
-    <span className="text-5xl mb-3">{icon}</span>
-    <p className="font-semibold text-gray-600 text-lg">{title}</p>
+                  py-20 text-center text-ink-muted">
+    <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.slate.box)} aria-hidden="true">
+      <Icon className="w-6 h-6" aria-hidden />
+    </div>
+    <p className="font-semibold text-ink text-lg">{title}</p>
     {subtitle && <p className="text-sm mt-1 max-w-sm">{subtitle}</p>}
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // EXAM PICKER
@@ -102,27 +143,32 @@ const EmptyState = ({
 
 const ExamPicker = ({
   exams,
+  loading = false,
   selectedId,
   onSelect,
 }: {
   exams:      Exam[];
+  /** C2: while the exams load, a spinner — not "no completed exams". */
+  loading?:   boolean;
   selectedId: string | null;
   onSelect:   (id: string) => void;
 }) => {
   const { t } = useTranslation();
-  return <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+  return <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+    <div className="px-4 py-3 bg-accent-slate-soft border-b border-line">
+      <p className="text-xs font-bold text-accent-slate-deep uppercase tracking-wide">
         {t("results.selectExam")}
       </p>
     </div>
 
-    {exams.length === 0 ? (
-      <div className="px-4 py-8 text-center text-sm text-gray-400">
+    {loading ? (
+      <div className="flex justify-center py-8"><Spinner /></div>
+    ) : exams.length === 0 ? (
+      <div className="px-4 py-8 text-center text-sm text-ink-muted">
         {t("results.noneCompleted")}
       </div>
     ) : (
-      <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+      <div className="max-h-80 overflow-y-auto divide-y divide-line">
         {exams.map((exam) => {
           const meta     = EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
           const isActive = selectedId === exam._id;
@@ -134,21 +180,21 @@ const ExamPicker = ({
                 gap-3 transition-colors
                 ${isActive
                   ? "bg-primary-50 border-l-4 border-primary-600"
-                  : "hover:bg-gray-50 border-l-4 border-transparent"
+                  : "hover:bg-accent-blue-soft/70 border-l-4 border-transparent"
                 }`}
             >
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-semibold truncate
-                  ${isActive ? "text-primary-700" : "text-gray-900"}`}>
+                  ${isActive ? "text-primary-700" : "text-ink"}`}>
                   {exam.name}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                <p className="text-xs text-ink-muted mt-0.5 truncate">
                   {examTypeLabel(t, exam.type)}
                   {exam.term         ? ` · ${exam.term}`         : ""}
                   {exam.academicYear ? ` · ${exam.academicYear}` : ""}
                 </p>
                 {exam.classNames && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">
+                  <p className="text-xs text-ink-muted truncate mt-0.5">
                     {exam.classNames}
                   </p>
                 )}
@@ -172,23 +218,24 @@ const ExamPicker = ({
 const StatsOverview = ({ stats }: { stats: Stats }) => {
   const { t } = useTranslation();
   const cards = [
-    { id: "students", label: t("academic.student_other"), value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
-    { id: "passed",   label: t("results.passed"),         value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
-    { id: "failed",   label: t("results.failed"),         value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
-    { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { id: "average",  label: t("academic.average"),       value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
-    { id: "highest",  label: t("results.highest"),        value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
-    { id: "lowest",   label: t("results.lowest"),         value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
-    { id: "gpa",      label: t("results.avgGpa"),         value: stats.averageGpa.toFixed(2),     color: "text-purple-600",  bg: "bg-purple-50"   },
+    // Tinted cards (config/dashboardTint.ts): the kind's wash and top edge,
+    // the figure in its deep shade.
+    { id: "students", label: t("academic.student_other"), value: stats.totalStudents,             tint: DASH_TINT.blue  },
+    { id: "passed",   label: t("results.passed"),         value: stats.passed,                    tint: DASH_TINT.green },
+    { id: "failed",   label: t("results.failed"),         value: stats.failed,                    tint: DASH_TINT.red   },
+    { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, tint: DASH_TINT.slate },
+    { id: "average",  label: t("academic.average"),       value: on20(stats.average),             tint: DASH_TINT.amber },
+    { id: "highest",  label: t("results.highest"),        value: on20(stats.highest),             tint: DASH_TINT.green },
+    { id: "lowest",   label: t("results.lowest"),         value: on20(stats.lowest),              tint: DASH_TINT.red   },
   ];
 
   return (
-    <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
       {cards.map((c) => (
         <div key={c.id}
-             className={`rounded-xl border border-gray-100 p-3 text-center ${c.bg}`}>
-          <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">{c.label}</p>
+             className={`p-3 text-center ${c.tint.card}`}>
+          <p className={`text-xl font-bold ${c.tint.number}`}>{c.value}</p>
+          <p className="text-xs text-ink-muted font-medium mt-0.5">{c.label}</p>
         </div>
       ))}
     </div>
@@ -224,10 +271,10 @@ const PassFailDonut = ({
              style={{ margin: "12px", width: "calc(100% - 24px)",
                       height: "calc(100% - 24px)" }}>
           <div className="text-center">
-            <p className="text-sm font-bold text-gray-900">
+            <p className="text-sm font-bold text-ink">
               {total > 0 ? Math.round((passed / total) * 100) : 0}%
             </p>
-            <p className="text-xs text-gray-400">{t("examCreate.pass")}</p>
+            <p className="text-xs text-ink-muted">{t("examCreate.pass")}</p>
           </div>
         </div>
       </div>
@@ -235,19 +282,19 @@ const PassFailDonut = ({
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-ink">
             {t("results.passed")} — <strong>{passed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-ink">
             {t("results.failed")} — <strong>{failed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-gray-300 shrink-0" />
-          <span className="text-sm text-gray-700">
+          <span className="w-3 h-3 rounded-full bg-accent-slate shrink-0" />
+          <span className="text-sm text-ink">
             {t("common.total")} — <strong>{total}</strong>
           </span>
         </div>
@@ -270,19 +317,19 @@ const ScoreDistributionBar = ({
   return <div className="space-y-3">
     {[
       { id: "highest", label: t("results.highest"),  value: highest, color: "bg-emerald-500" },
-      { id: "average", label: t("academic.average"), value: average, color: "bg-indigo-500"  },
+      { id: "average", label: t("academic.average"), value: average, color: "bg-primary-500"  },
       { id: "lowest",  label: t("results.lowest"),   value: lowest,  color: "bg-red-500"     },
     ].map(({ id, label, value, color }) => (
       <div key={id} className="flex items-center gap-3">
-        <span className="w-14 text-xs text-gray-500 text-right">{label}</span>
-        <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+        <span className="w-14 text-xs text-ink-muted text-right">{label}</span>
+        <div className="flex-1 h-4 bg-accent-slate-soft rounded-full overflow-hidden">
           <div
             className={`h-full ${color} rounded-full transition-all`}
-            style={{ width: `${Math.min(value, 100)}%` }}
+            style={{ width: `${Math.min((value / 20) * 100, 100)}%` }}
           />
         </div>
-        <span className="w-10 text-xs font-bold text-gray-700 text-right">
-          {value.toFixed(1)}%
+        <span className="w-16 text-xs font-bold text-ink text-right">
+          {on20(value)}
         </span>
       </div>
     ))}
@@ -293,58 +340,55 @@ const ScoreDistributionBar = ({
 // GRADE DISTRIBUTION CHART
 // ─────────────────────────────────────────────────────────
 
-const GradeDistributionChart = ({
-  distribution,
+const RemarkDistributionChart = ({
+  bands,
   total,
 }: {
-  distribution: Record<string, number>;
-  total:        number;
+  bands: RemarkBand[];
+  total: number;
 }) => {
-  const { t } = useTranslation();
-  const entries = Object.entries(distribution)
-    .sort(([a], [b]) => a.localeCompare(b));
-
-  if (entries.length === 0) {
+  const { t, i18n } = useTranslation();
+  if (bands.every((b) => b.count === 0)) {
     return (
-      <p className="text-sm text-gray-400 text-center py-6">
+      <p className="text-sm text-ink-muted text-center py-6">
         {t("results.noGradeData")}
       </p>
     );
   }
 
-  const maxCount = Math.max(...entries.map(([, n]) => n));
+  const maxCount = Math.max(...bands.map((b) => b.count));
+  // Highest band first, shaded from strong to weak; the server sends them in
+  // the school's own order.
+  const SHADES = ["bg-emerald-500", "bg-emerald-400", "bg-blue-500", "bg-blue-400",
+                  "bg-yellow-500", "bg-yellow-400", "bg-orange-500", "bg-red-500", "bg-red-600"];
 
   return (
     <div className="space-y-2.5">
-      {entries.map(([grade, count]) => {
-        const pct      = total > 0 ? Math.round((count / total) * 100) : 0;
-        const barColor = GRADE_COLORS[grade] ?? "bg-gray-400";
-        const barWidth = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
-
+      {bands.map((b, i) => {
+        const pct      = total > 0 ? Math.round((b.count / total) * 100) : 0;
+        const barWidth = maxCount > 0 ? Math.round((b.count / maxCount) * 100) : 0;
+        const label    = (i18n.language?.startsWith("fr") ? b.remarkFr : b.remark) || b.remark || "—";
         return (
-          <div key={grade} className="flex items-center gap-3">
-            {/* Grade label */}
-            <span className="w-8 text-sm font-bold text-gray-700 text-right">
-              {grade}
+          <div key={`${b.minMark}-${b.maxMark}`} className="flex items-center gap-3">
+            <span className="w-40 text-xs font-semibold text-ink text-right truncate" title={label}>
+              {label}
+              <span className="block text-[10px] font-normal text-ink-muted">
+                {b.minMark}–{b.maxMark}/20
+              </span>
             </span>
-
-            {/* Bar */}
-            <div className="flex-1 h-7 bg-gray-100 rounded-lg overflow-hidden
-                            relative">
+            <div className="flex-1 h-7 bg-accent-slate-soft rounded-lg overflow-hidden relative">
               <div
-                className={`h-full ${barColor} rounded-lg flex items-center
+                className={`h-full ${SHADES[Math.min(i, SHADES.length - 1)]} rounded-lg flex items-center
                             justify-end pr-2 transition-all`}
-                style={{ width: `${Math.max(barWidth, 3)}%` }}
+                style={{ width: `${b.count > 0 ? Math.max(barWidth, 3) : 0}%` }}
               >
                 {pct > 15 && (
                   <span className="text-white text-xs font-bold">{pct}%</span>
                 )}
               </div>
             </div>
-
-            {/* Count */}
-            <span className="w-8 text-sm text-gray-500 font-medium">
-              {count}
+            <span className="w-8 text-sm text-ink-muted font-medium">
+              {b.count}
             </span>
           </div>
         );
@@ -365,7 +409,7 @@ const SubjectPerformanceTable = ({
   const { t } = useTranslation();
   if (subjects.length === 0) {
     return (
-      <p className="text-sm text-gray-400 text-center py-6">
+      <p className="text-sm text-ink-muted text-center py-6">
         {t("results.noBreakdown")}
       </p>
     );
@@ -377,7 +421,7 @@ const SubjectPerformanceTable = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-xs font-bold text-gray-500
+        <thead className="bg-surface text-xs font-bold text-ink-muted
                           uppercase tracking-wide">
           <tr>
             <th className="px-4 py-2.5 text-left">{t("academic.subject")}</th>
@@ -388,7 +432,7 @@ const SubjectPerformanceTable = ({
             <th className="px-4 py-2.5 text-right">{t("academic.student_other")}</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {sorted.map((s) => {
             const passColor = s.passRate >= 70
               ? "text-green-600"
@@ -398,23 +442,23 @@ const SubjectPerformanceTable = ({
 
             return (
               <tr key={s.subjectId}
-                  className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-medium text-gray-900">
+                  className="hover:bg-accent-blue-soft/70 transition-colors">
+                <td className="px-4 py-2.5 font-medium text-ink">
                   {s.subjectName}
                 </td>
-                <td className="px-4 py-2.5 text-right font-semibold text-indigo-600">
-                  {s.average.toFixed(1)}%
+                <td className="px-4 py-2.5 text-right font-semibold text-primary-600">
+                  {on20(s.average)}
                 </td>
                 <td className="px-4 py-2.5 text-right text-emerald-600 font-semibold">
-                  {s.highest.toFixed(1)}%
+                  {on20(s.highest)}
                 </td>
                 <td className="px-4 py-2.5 text-right text-red-500 font-semibold">
-                  {s.lowest.toFixed(1)}%
+                  {on20(s.lowest)}
                 </td>
                 <td className={`px-4 py-2.5 text-right font-bold ${passColor}`}>
                   {s.passRate.toFixed(1)}%
                 </td>
-                <td className="px-4 py-2.5 text-right text-gray-500">
+                <td className="px-4 py-2.5 text-right text-ink-muted">
                   {s.total}
                 </td>
               </tr>
@@ -433,15 +477,26 @@ const SubjectPerformanceTable = ({
 const RankingsTable = ({
   examId,
   scope,
+  classId,
+  page,
+  onPage,
 }: {
-  examId: string;
-  scope:  RankScope;
+  examId:   string;
+  scope:    RankScope;
+  classId?: string;
+  page:     number;
+  onPage:   (page: number) => void;
 }) => {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useRankings(examId, scope);
+  const { data, isLoading } = useRankings(examId, scope, classId, page);
+  const totalPages: number = data?.totalPages ?? 1;
   // Memoised: `?? []` is a new array each render, and these feed a useMemo
   // below, which then recomputes every render instead of memoising.
+  // In the server's order, a page at a time. With every class shown, class
+  // positions come grouped by class (Form 1's table, then Form 2's), so a
+  // page never interleaves positions (1, 1, 2, 2…) — the server sorts so
+  // that the page boundary falls inside one class's run, not across them.
   const rankings: ResultSummary[] = useMemo(() => data?.data ?? [], [data]);
 
   const posField: keyof ResultSummary =
@@ -476,7 +531,7 @@ const RankingsTable = ({
   if (rankings.length === 0) {
     return (
       <EmptyState
-        icon="🏆"
+        icon={Trophy}
         title={t("results.noRankings")}
         subtitle={t("results.processFirst")}
       />
@@ -486,13 +541,13 @@ const RankingsTable = ({
   return (
     <div>
       {/* Search */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-line">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("results.searchPh")}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg
+          className="w-full px-3 py-2 border border-line rounded-lg
                      text-sm focus:outline-none focus:ring-2
                      focus:ring-primary-400"
         />
@@ -500,47 +555,39 @@ const RankingsTable = ({
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs font-bold text-gray-500
+          <thead className="bg-surface text-xs font-bold text-ink-muted
                             uppercase tracking-wide">
             <tr>
               <th className="px-4 py-3 text-left">{t("results.pos")}</th>
               <th className="px-4 py-3 text-left">{t("academic.student")}</th>
               <th className="px-4 py-3 text-left">{t("academic.class")}</th>
-              <th className="px-4 py-3 text-right">{t("academic.score")}</th>
-              <th className="px-4 py-3 text-right">%</th>
-              <th className="px-4 py-3 text-center">{t("academic.grade")}</th>
-              <th className="px-4 py-3 text-center">GPA</th>
+              <th className="px-4 py-3 text-right">{t("academic.average")}</th>
+              <th className="px-4 py-3 text-left">{t("results.remark")}</th>
               <th className="px-4 py-3 text-center">{t("academic.subject_other")}</th>
               <th className="px-4 py-3 text-center">{t("common.status")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {filtered.map((r, idx) => {
               const pos     = (r[posField] as number | null) ?? idx + 1;
-              const total   = (r[totalField] as number | null) ?? rankings.length;
-              const passing = r.isPassing;
+              const total   = (r[totalField] as number | null) ?? data?.total ?? rankings.length;
+              // Judged on /20 against the school's pass mark by the server.
+              const passing = r.passes ?? r.isPassing;
               const color   = passing ? "text-green-600" : "text-red-600";
-              const medal   =
-                pos === 1 ? "🥇" :
-                pos === 2 ? "🥈" :
-                pos === 3 ? "🥉" : null;
+              const podium  = pos >= 1 && pos <= 3;
 
               return (
                 <tr key={r._id || r.studentId}
-                    className="hover:bg-gray-50 transition-colors">
+                    className="hover:bg-accent-blue-soft/70 transition-colors">
 
                   {/* Position */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      {medal ? (
-                        <span className="text-lg">{medal}</span>
-                      ) : (
-                        <span className="font-bold text-gray-500">
-                          #{pos}
-                        </span>
-                      )}
+                      <span className={`font-bold ${podium ? "text-amber-600" : "text-ink-muted"}`}>
+                        #{pos}
+                      </span>
                       {total > 0 && (
-                        <span className="text-xs text-gray-300">
+                        <span className="text-xs text-ink-muted">
                           /{total}
                         </span>
                       )}
@@ -549,47 +596,37 @@ const RankingsTable = ({
 
                   {/* Student */}
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-ink">
                       {r.studentName || t("results.unknownStudent")}
                     </p>
                     {r.admissionNo && (
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-ink-muted">
                         #{r.admissionNo}
                       </p>
                     )}
                   </td>
 
                   {/* Class */}
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-ink-muted text-xs">
                     {r.className || "—"}
                   </td>
 
-                  {/* Score */}
-                  <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                    {r.totalScore}/{r.maxTotalScore}
-                  </td>
-
-                  {/* Percentage */}
+                  {/* Average /20 */}
                   <td className={`px-4 py-3 text-right font-bold ${color}`}>
-                    {r.percentage?.toFixed(1)}%
+                    {on20(r.average20)}
                   </td>
 
-                  {/* Grade */}
-                  <td className={`px-4 py-3 text-center font-bold ${color}`}>
-                    {r.overallGrade || "—"}
-                  </td>
-
-                  {/* GPA */}
-                  <td className="px-4 py-3 text-center text-gray-500">
-                    {r.gpa != null ? r.gpa.toFixed(2) : "—"}
+                  {/* The school's remark */}
+                  <td className="px-4 py-3 text-ink-body">
+                    {remarkText(r) || "—"}
                   </td>
 
                   {/* Subjects passed/total */}
-                  <td className="px-4 py-3 text-center text-xs text-gray-500">
+                  <td className="px-4 py-3 text-center text-xs text-ink-muted">
                     <span className="text-green-600 font-semibold">
                       {r.subjectsPassed}
                     </span>
-                    <span className="text-gray-300 mx-0.5">/</span>
+                    <span className="text-ink-muted mx-0.5">/</span>
                     <span>{r.subjectsTotal}</span>
                   </td>
 
@@ -611,11 +648,41 @@ const RankingsTable = ({
         </table>
 
         {filtered.length === 0 && search && (
-          <div className="text-center py-8 text-sm text-gray-400">
+          <div className="text-center py-8 text-sm text-ink-muted">
             {t("results.noStudentsMatch", { query: search })}
           </div>
         )}
       </div>
+
+      {/* Pages of RANKINGS_PAGE_SIZE, as Term Results pages its list. */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t border-line px-4 py-3">
+          {search && (
+            <span className="w-full text-center text-xs text-ink-muted">
+              {t("results.searchThisPage")}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => onPage(Math.max(1, page - 1))}
+            disabled={page <= 1}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-accent-slate-soft disabled:opacity-40"
+          >
+            {t("common.previous")}
+          </button>
+          <span className="text-sm text-ink-muted">
+            {t("pagination.pageOf", { current: page, total: totalPages })}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPage(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-accent-slate-soft disabled:opacity-40"
+          >
+            {t("common.next")}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -627,40 +694,50 @@ const RankingsTable = ({
 // ─────────────────────────────────────────────────────────
 
 const TopBottomStudents = ({
-  rankings,
+  topBottom,
   n = 5,
 }: {
-  rankings: ResultSummary[];
-  n?:       number;
+  topBottom: Stats["topBottom"];
+  n?:        number;
 }) => {
-  const { t } = useTranslation();
-  if (rankings.length === 0) return null;
+  const { t, i18n } = useTranslation();
+  // One class at a time (A6): Form 1 and Upper Sixth are not one list. The
+  // server numbers each pupil by their position in the class — the bottom
+  // list runs weakest first, so it reads 5, 4, … not 4, 5.
+  if (!topBottom) {
+    return (
+      <p className={cn("text-sm text-ink-muted text-center py-4 bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
+        {t("results.chooseClassForTop")}
+      </p>
+    );
+  }
+  if (topBottom.total === 0) return null;
+  const top    = topBottom.top;
+  const bottom = topBottom.bottom;
+  const remarkOf = (r: PlacedPupil) =>
+    (i18n.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? null;
 
-  const sorted  = [...rankings].sort((a, b) => b.percentage - a.percentage);
-  const top     = sorted.slice(0, n);
-  const bottom  = sorted.slice(-n).reverse();
-
-  const Row = ({ r, rank }: { r: ResultSummary; rank: number }) => (
+  const Row = ({ r, rank }: { r: PlacedPupil; rank: number }) => (
     <div className="flex items-center gap-3 py-2 border-b
-                    border-gray-50 last:border-0">
-      <span className="w-6 text-sm font-bold text-gray-400 text-center">
+                    border-line last:border-0">
+      <span className="w-6 text-sm font-bold text-ink-muted text-center">
         {rank}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">
+        <p className="text-sm font-semibold text-ink truncate">
           {r.studentName || t("results.unknownStudent")}
         </p>
-        <p className="text-xs text-gray-400 truncate">
+        <p className="text-xs text-ink-muted truncate">
           {r.className || "—"}
           {r.admissionNo ? ` · #${r.admissionNo}` : ""}
         </p>
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-bold
-          ${r.isPassing ? "text-green-600" : "text-red-600"}`}>
-          {r.percentage?.toFixed(1)}%
+          ${r.passes ? "text-green-600" : "text-red-600"}`}>
+          {on20(r.average20)}
         </p>
-        <p className="text-xs text-gray-400">{r.overallGrade || "—"}</p>
+        <p className="text-xs text-ink-muted">{remarkOf(r) || "—"}</p>
       </div>
     </div>
   );
@@ -668,28 +745,31 @@ const TopBottomStudents = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* Top performers */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-4", DASH_TINT.slate.edge)}>
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg">🏆</span>
-          <h3 className="font-semibold text-gray-900 text-sm">
+          <HeadBox icon={Trophy} accent="amber" />
+          <h3 className="font-semibold text-ink text-sm">
             {t("results.topStudents", { count: n })}
           </h3>
         </div>
-        {top.map((r, i) => (
-          <Row key={r.studentId} r={r} rank={i + 1} />
+        {top.map((r) => (
+          <Row key={r.studentId} r={r} rank={r.position} />
         ))}
       </div>
 
       {/* Bottom performers — need attention */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-4", DASH_TINT.slate.edge)}>
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg">📌</span>
-          <h3 className="font-semibold text-gray-900 text-sm">
+          <HeadBox icon={Pin} accent="red" />
+          <h3 className="font-semibold text-ink text-sm">
             {t("results.needsAttention", { count: n })}
           </h3>
         </div>
-        {bottom.map((r, i) => (
-          <Row key={r.studentId} r={r} rank={rankings.length - n + i + 1} />
+        {bottom.length === 0 && (
+          <p className="text-xs text-ink-muted py-2">{t("results.allInTop")}</p>
+        )}
+        {bottom.map((r) => (
+          <Row key={r.studentId} r={r} rank={r.position} />
         ))}
       </div>
     </div>
@@ -708,16 +788,32 @@ export default function ExamResultsPage() {
     searchParams.get("examId") ?? null
   );
   const [rankScope, setRankScope] = useState<RankScope>("class");
+  // The page of the rankings table; back to 1 whenever what it ranks changes.
+  const [rankPage, setRankPage] = useState(1);
+  // The class the analytics are for; "" (the default) is every class the exam
+  // was sat in — the pupils Term Results counts. One class is only ever the
+  // user's choice, and the page then says "Showing <class> only".
+  const [classId, setClassId] = useState<string>("");
   const [activeSection, setActiveSection] = useState<
     "overview" | "rankings" | "subjects"
   >("overview");
 
   // Data fetching
-  const { data: examsData } = useExams();
-  const { data: statsData, isLoading: statsLoading } = useExamStats(
-    selectedExamId ?? ""
+  const { data: examsData, isLoading: examsLoading } = useExams();
+  // The exam's classes come from its all-classes statistics. With every class
+  // shown, rankings are still per class (grouped by class, A6) and the top 5
+  // asks for a class: Form 1 and Upper Sixth are not one list.
+  const { data: allStatsData, isLoading: allStatsLoading } = useExamStats(selectedExamId ?? "");
+  const classOptions: ClassOption[] =
+    (allStatsData?.data as Stats | undefined)?.classes ?? [];
+  const scope = resultsScope(classId, classOptions);
+  const activeClassId = scope.classId ?? "";
+  const { data: classStatsData, isLoading: classStatsLoading } = useExamStats(
+    activeClassId ? selectedExamId ?? "" : "", activeClassId || undefined
   );
-  const { data: rankingsData } = useRankings(selectedExamId ?? "", rankScope);
+  const statsData    = activeClassId ? classStatsData : allStatsData;
+  const statsLoading = allStatsLoading || (!!activeClassId && classStatsLoading);
+  const { data: rankingsData, isLoading: rankingsLoading } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined, rankPage);
 
   // A processed-but-unpublished exam is the office's to look at; the server
   // answers a teacher's statistics and rankings for published results only,
@@ -734,11 +830,16 @@ export default function ExamResultsPage() {
 
   const stats: Stats | null    = statsData?.data ?? null;
   const rankings: ResultSummary[] = rankingsData?.data ?? [];
+  // The whole table's size, not this page's: "N students" agrees with the
+  // overview however many pages the table runs to.
+  const rankingsTotal: number = rankingsData?.total ?? rankings.length;
 
   const selectedExam = completedExams.find((e) => e._id === selectedExamId);
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
+    setClassId("");
+    setRankPage(1);
     setSearchParams({ examId: id });
     setActiveSection("overview");
   };
@@ -750,21 +851,24 @@ export default function ExamResultsPage() {
 
       {/* Page header */}
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t("results.analytics")}
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {t("results.selectCompletedExam")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">
+              {t("results.analytics")}
+            </h1>
+            <p className="text-ink-muted text-sm mt-1">
+              {t("results.selectCompletedExam")}
+            </p>
+          </div>
         </div>
         <Link
           to="/reports/cards"
-          className="px-4 py-2 bg-green-600 text-white rounded-xl
-                     text-sm font-semibold hover:bg-green-700
+          className="px-4 py-2 bg-primary-600 text-white rounded-xl
+                     text-sm font-semibold hover:bg-primary-700
                      transition-colors"
         >
-          🖨️ {t("reportCards.title")}
+          <Printer className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("reportCards.title")}
         </Link>
       </div>
 
@@ -775,10 +879,11 @@ export default function ExamResultsPage() {
         <div className="space-y-3">
           <ExamPicker
             exams={completedExams}
+            loading={examsLoading}
             selectedId={selectedExamId}
             onSelect={handleSelectExam}
           />
-          <p className="text-xs text-gray-400 text-center">
+          <p className="text-xs text-ink-muted text-center">
             {t("results.onlyCompleted")}
           </p>
         </div>
@@ -786,9 +891,9 @@ export default function ExamResultsPage() {
         {/* Right — Results panel */}
         <div className="space-y-5">
           {!selectedExamId ? (
-            <div className="bg-white rounded-xl border border-gray-100">
+            <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
               <EmptyState
-                icon="📊"
+                icon={BarChart3}
                 title={t("results.selectToView")}
                 subtitle={t("results.chooseExam")}
               />
@@ -798,9 +903,9 @@ export default function ExamResultsPage() {
               <Spinner />
             </div>
           ) : !stats || stats.totalStudents === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-100">
+            <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.slate.edge)}>
               <EmptyState
-                icon="🧮"
+                icon={Calculator}
                 title={t("results.none")}
                 subtitle={t("results.processFromDetail")}
               />
@@ -821,31 +926,46 @@ export default function ExamResultsPage() {
             <>
               {/* Exam title bar */}
               {selectedExam && (
-                <div className="bg-white rounded-xl border border-gray-100
-                                px-5 py-4 flex items-center justify-between">
+                <div className={cn("bg-surface rounded-xl border border-line px-5 py-4 flex items-center justify-between", DASH_TINT.slate.edge)}>
                   <div>
-                    <h2 className="font-bold text-gray-900 text-lg">
+                    <h2 className="flex items-center gap-2 font-bold text-ink text-lg">
+                      <HeadBox icon={FileText} accent="amber" />
                       {selectedExam.name}
                     </h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-ink-muted mt-0.5">
                       {examTypeLabel(t, selectedExam.type)}
                       {selectedExam.term         ? ` · ${selectedExam.term}`         : ""}
                       {selectedExam.academicYear ? ` · ${selectedExam.academicYear}` : ""}
                       {selectedExam.classNames   ? ` · ${selectedExam.classNames}`   : ""}
                     </p>
                   </div>
-                  <Link
-                    to={`/exams/${selectedExamId}`}
-                    className="text-xs font-semibold text-primary-600
-                               hover:text-primary-700"
-                  >
-                    {t("results.manageExam")} →
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    {classOptions.length > 1 && (
+                      <select
+                        value={activeClassId}
+                        onChange={(e) => { setClassId(e.target.value); setRankPage(1); }}
+                        aria-label={t("academic.class")}
+                        className="rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-ink"
+                      >
+                        <option value="">{t("results.allClasses")}</option>
+                        {classOptions.map((c) => (
+                          <option key={c.classId} value={c.classId}>{c.className || c.classId}</option>
+                        ))}
+                      </select>
+                    )}
+                    <Link
+                      to={`/exams/${selectedExamId}`}
+                      className="text-xs font-semibold text-primary-600
+                                 hover:text-primary-700"
+                    >
+                      {t("results.manageExam")} →
+                    </Link>
+                  </div>
                 </div>
               )}
 
               {/* Section tabs */}
-              <div className="flex border-b border-gray-200 bg-white
+              <div className="flex border-b border-line bg-surface
                               rounded-t-xl overflow-hidden">
                 {(["overview", "rankings", "subjects"] as const).map((s) => (
                   <button
@@ -855,13 +975,33 @@ export default function ExamResultsPage() {
                       transition-colors
                       ${activeSection === s
                         ? "text-primary-600 border-b-2 border-primary-600"
-                        : "text-gray-500 hover:text-gray-700"
+                        : "text-ink-muted hover:text-ink"
                       }`}
                   >
                     {t(SECTION_LABEL_KEYS[s])}
                   </button>
                 ))}
               </div>
+
+              {/* One class chosen: every figure below is that class's, and
+                  the exam title above names them all — say which. */}
+              {scope.className && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+                >
+                  <span className="font-semibold">
+                    {t("results.showingClassOnly", { className: scope.className })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setClassId(""); setRankPage(1); }}
+                    className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                  >
+                    {t("results.showAllClasses")}
+                  </button>
+                </div>
+              )}
 
               {/* ── OVERVIEW SECTION ── */}
               {activeSection === "overview" && (
@@ -872,8 +1012,9 @@ export default function ExamResultsPage() {
 
                   {/* Pass/fail + score distribution */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 mb-4 text-sm">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                        <HeadBox icon={PieChart} />
                         {t("results.passFailSplit")}
                       </h3>
                       <PassFailDonut
@@ -883,8 +1024,9 @@ export default function ExamResultsPage() {
                       />
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 mb-4 text-sm">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                        <HeadBox icon={BarChart3} />
                         {t("results.scoreDistribution")}
                       </h3>
                       <ScoreDistributionBar
@@ -896,18 +1038,19 @@ export default function ExamResultsPage() {
                   </div>
 
                   {/* Grade distribution */}
-                  <div className="bg-white rounded-xl border border-gray-100 p-5">
-                    <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                      {t("results.gradeDistribution")}
+                  <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                    <h3 className="flex items-center gap-2 font-semibold text-ink mb-4 text-sm">
+                      <HeadBox icon={Layers} />
+                      {t("results.remarkDistribution")}
                     </h3>
-                    <GradeDistributionChart
-                      distribution={stats.gradeDistribution}
+                    <RemarkDistributionChart
+                      bands={stats.remarkDistribution ?? []}
                       total={stats.totalStudents}
                     />
                   </div>
 
                   {/* Top / Bottom students */}
-                  <TopBottomStudents rankings={rankings} n={5} />
+                  <TopBottomStudents topBottom={stats.topBottom ?? null} n={5} />
                 </div>
               )}
 
@@ -916,21 +1059,20 @@ export default function ExamResultsPage() {
                 <div className="space-y-4">
 
                   {/* Scope selector */}
-                  <div className="bg-white rounded-xl border border-gray-100 p-4
-                                  flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-700">
+                  <div className={cn("bg-surface rounded-xl border border-line p-4 flex items-center justify-between", DASH_TINT.slate.edge)}>
+                    <p className="text-sm font-semibold text-ink">
                       {t("results.rankBy")}
                     </p>
                     <div className="flex gap-1">
                       {RANK_SCOPES.map((s) => (
                         <button
                           key={s.key}
-                          onClick={() => setRankScope(s.key)}
+                          onClick={() => { setRankScope(s.key); setRankPage(1); }}
                           className={`px-3 py-1.5 rounded-lg text-xs
                             font-semibold transition-colors
                             ${rankScope === s.key
                               ? "bg-primary-600 text-white"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              : "bg-accent-slate-soft text-accent-slate-deep hover:bg-accent-blue-soft"
                             }`}
                         >
                           {t(s.labelKey)}
@@ -940,20 +1082,23 @@ export default function ExamResultsPage() {
                   </div>
 
                   {/* Table */}
-                  <div className="bg-white rounded-xl border border-gray-100
-                                  overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100
+                  <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+                    <div className="px-5 py-3 border-b border-line
                                     flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900 text-sm">
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm">
+                        <HeadBox icon={ListOrdered} />
                         {t(RANKINGS_TITLE_KEYS[rankScope])}
-                        <span className="ml-2 text-xs text-gray-400 font-normal">
-                          {t("results.studentCount", { count: rankings.length })}
+                        <span className="ml-2 text-xs text-ink-muted font-normal">
+                          {rankingsLoading ? "…" : t("results.studentCount", { count: rankingsTotal })}
                         </span>
                       </h3>
                     </div>
                     <RankingsTable
                       examId={selectedExamId}
                       scope={rankScope}
+                      classId={activeClassId || undefined}
+                      page={rankPage}
+                      onPage={setRankPage}
                     />
                   </div>
                 </div>
@@ -962,12 +1107,12 @@ export default function ExamResultsPage() {
               {/* ── SUBJECT ANALYSIS SECTION ── */}
               {activeSection === "subjects" && (
                 <div className="space-y-4">
-                  <div className="bg-white rounded-xl border border-gray-100
-                                  overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100">
-                      <h3 className="font-semibold text-gray-900 text-sm">
+                  <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.slate.edge)}>
+                    <div className="px-5 py-3 border-b border-line">
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm">
+                        <HeadBox icon={BookOpen} />
                         {t("results.bySubject")}
-                        <span className="ml-2 text-xs text-gray-400 font-normal">
+                        <span className="ml-2 text-xs text-ink-muted font-normal">
                           {t("results.subjectCount", { count: stats.subjectStats.length })}
                         </span>
                       </h3>
@@ -977,8 +1122,9 @@ export default function ExamResultsPage() {
 
                   {/* Subject pass rate bars */}
                   {stats.subjectStats.length > 0 && (
-                    <div className="bg-white rounded-xl border border-gray-100 p-5">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-4">
+                    <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.slate.edge)}>
+                      <h3 className="flex items-center gap-2 font-semibold text-ink text-sm mb-4">
+                        <HeadBox icon={Percent} />
                         {t("results.subjectPassRates")}
                       </h3>
                       <div className="space-y-3">
@@ -992,11 +1138,11 @@ export default function ExamResultsPage() {
                             return (
                               <div key={s.subjectId}
                                    className="flex items-center gap-3">
-                                <span className="w-28 text-xs text-gray-600
+                                <span className="w-28 text-xs text-ink-body
                                                  truncate text-right">
                                   {s.subjectName}
                                 </span>
-                                <div className="flex-1 h-5 bg-gray-100
+                                <div className="flex-1 h-5 bg-accent-slate-soft
                                                 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full ${color} rounded-full
@@ -1014,7 +1160,7 @@ export default function ExamResultsPage() {
                                     )}
                                   </div>
                                 </div>
-                                <span className="w-10 text-xs text-gray-500
+                                <span className="w-10 text-xs text-ink-muted
                                                  text-right">
                                   {s.total}
                                 </span>

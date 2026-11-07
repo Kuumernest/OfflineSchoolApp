@@ -17,43 +17,51 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import TeacherProfile from "../../../src/services/teacherProfile.service";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { loadOwnStaffNo } from "../../../src/services/staffNumber.service";
+import { staffNoText } from "../../../src/utils/staffNumber";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
 
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.violet.solid,
+  primaryBg: ACCENT.violet.wash,
+  success:   ACCENT.green.solid,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     THEME.danger,
+  errorBg:   SEMANTIC.error.bg,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   THEME.border,
+  gray300:   THEME.textMuted,
+  gray400:   THEME.textSubtle,
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
 // ─────────────────────────────────────────────────────────
 // SECTION
 // ─────────────────────────────────────────────────────────
 
-function Section({ title, children }) {
+function Section({ title, icon, children }) {
   return (
     <View style={sc.wrap}>
-      <Text style={sc.title}>{title}</Text>
+      <View style={sc.titleRow}>
+        {icon ? <IconSquare icon={icon} accent="slate" size={22} radius={6} /> : null}
+        <Text style={sc.title}>{title}</Text>
+      </View>
       <View style={sc.body}>{children}</View>
     </View>
   );
@@ -61,20 +69,21 @@ function Section({ title, children }) {
 
 const sc = StyleSheet.create({
   wrap: { marginBottom: 24 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, paddingHorizontal: 4 },
   title: {
     fontSize:          12,
     fontWeight:        "700",
-    color:             C.gray500,
+    color:             ACCENT.slate.deep,
     textTransform:     "uppercase",
     letterSpacing:     0.8,
-    marginBottom:      8,
-    paddingHorizontal: 4,
   },
   body: {
     backgroundColor: C.white,
     borderRadius:    16,
     overflow:        "hidden",
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    3,
     elevation:       1,
@@ -95,8 +104,8 @@ function SettingRow({
 }) {
   const sharedContent = (
     <>
-      <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-        <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+      <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+        <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
       </View>
       <View style={sr.textWrap}>
         <Text style={[sr.title, destructive && sr.destructive]}>{title}</Text>
@@ -117,8 +126,8 @@ function SettingRow({
   if (type === "toggle") {
     return (
       <View style={[sr.row, last && sr.rowLast]}>
-        <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-          <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+        <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+          <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
         </View>
         <View style={sr.textWrap}>
           <Text style={sr.title}>{title}</Text>
@@ -196,11 +205,11 @@ function Avatar({ name, size = 64 }) {
 
 const av = StyleSheet.create({
   wrap: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  text: { fontWeight: "800", color: "#4F46E5" },
+  text: { fontWeight: "800", color: THEME.onPrimary },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -216,7 +225,6 @@ function ProfileProgress({ profile }) {
     profile?.lastName,
     profile?.gender,
     profile?.phone,
-    profile?.staffId,
     profile?.qualification,
     profile?.address,
     profile?.emergencyName,
@@ -268,7 +276,7 @@ const pp = StyleSheet.create({
   pct:   { fontSize: 12, fontWeight: "800" },
   track: {
     height:          6,
-    backgroundColor: C.gray100,
+    backgroundColor: THEME.border,
     borderRadius:    3,
     overflow:        "hidden",
   },
@@ -283,12 +291,20 @@ const pp = StyleSheet.create({
 export default function TeacherSettingsScreen() {
   const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const userId = String(user?._id || user?.id || "");
 
   const [profile,         setProfile]         = useState(null);
   const [loading,         setLoading]         = useState(true);
   const [profileComplete, setProfileComplete] = useState(false);
+  // The school's staff number (server-issued), not anything the teacher typed.
+  const [staffNo,         setStaffNo]         = useState({ kind: "none", value: null });
+
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   // ✅ Fix 2 — notification preference loaded from AsyncStorage
   const [notifEnabled, setNotifEnabled] = useState(true);
@@ -317,30 +333,19 @@ export default function TeacherSettingsScreen() {
     try {
       setLoading(true);
 
-      // Try API first
-      try {
-        const res = await api.get("/teacher/profile", { timeout: 6000 });
-        const p   = res.data?.data || res.data;
-        if (p && typeof p === "object") {
-          setProfile(p);
-          setProfileComplete(p.profileCompleted ?? false);
-          return;
-        }
-      } catch { /* fall through to SQLite */ }
-
       /*
-       * SQLite fallback.
+       * The server's copy merged with this phone's (teacherProfile.service).
        *
-       * This read `teacher_profiles`, which is the attendance directory —
-       * five columns, none of them teacher_id — behind a .catch(() => null).
-       * So offline it found nothing, reported nothing, and the screen showed
-       * an empty profile as though the teacher had never filled the form in.
-       * specialization stays omitted here: it is admin-assigned.
+       * This used to take the server's reply alone — `res.data.data || res.data`
+       * on a reply that had no `data` and no profile — so online it showed an
+       * empty, "incomplete" profile and never looked at this phone's copy.
+       * Offline it showed the phone's copy, which is why the profile seemed to
+       * come and go.
        */
-      const saved = await TeacherProfile.getLocal(userId);
-      if (saved) {
-        setProfile(saved);
-        setProfileComplete(saved.profileCompleted);
+      const { profile: p } = await TeacherProfile.loadProfile(userId, { api, timeout: 6000 });
+      if (p) {
+        setProfile(p);
+        setProfileComplete(p.profileCompleted);
       }
     } catch (err) {
       console.warn("[settings] load profile failed:", err.message);
@@ -355,23 +360,15 @@ export default function TeacherSettingsScreen() {
   }, [userId]);
 
   // ── Logout ───────────────────────────────────────────
+  // Warns first when this account has changes not yet sent.
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      t("teacherSettings.logout"),
-      t("teacherSettings.logoutConfirm"),
-      [
-        { text: t("teacherSettings.cancel"), style: "cancel" },
-        {
-          text:  t("teacherSettings.logout"),
-          style: "destructive",
-          onPress: async () => {
-            try { await logout(); } catch { /* ignore */ }
-            router.replace("/auth/login");
-          },
-        },
-      ]
-    );
-  }, [logout, t]);
+    safeLogout({
+      title:        t("teacherSettings.logout"),
+      body:         t("teacherSettings.logoutConfirm"),
+      confirmLabel: t("teacherSettings.logout"),
+      cancelLabel:  t("teacherSettings.cancel"),
+    });
+  }, [safeLogout, t]);
 
   // ── Derived display values ────────────────────────────
   const displayName = profile
@@ -381,7 +378,7 @@ export default function TeacherSettingsScreen() {
 
   const profileSubtitle =
     [
-      profile?.staffId ? t("teacherSettings.idLabel", { id: profile.staffId }) : null,
+      staffNo.value ? t("teacherSettings.idLabel", { id: staffNo.value }) : null,
       profile?.qualification || null,
     ]
       .filter(Boolean)
@@ -408,6 +405,7 @@ export default function TeacherSettingsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <Text style={styles.headerTitle}>{t("teacherSettings.title")}</Text>
         <TouchableOpacity
           onPress={loadProfile}
@@ -455,9 +453,7 @@ export default function TeacherSettingsScreen() {
             onPress={() => router.push("/teacher/profile/setup")}
             activeOpacity={0.8}
           >
-            <View style={styles.setupPromptIcon}>
-              <Ionicons name="person-add-outline" size={20} color={C.white} />
-            </View>
+            <IconSquare icon="person-add-outline" accent="amber" size={38} radius={10} />
             <View style={{ flex: 1 }}>
               <Text style={styles.setupPromptTitle}>
                 {t("teacherSettings.completeYourProfile")}
@@ -466,16 +462,15 @@ export default function TeacherSettingsScreen() {
                 {t("teacherSettings.schoolNeedsInfo")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={C.white} />
+            <Ionicons name="chevron-forward" size={18} color={SEMANTIC.warning.text} />
           </TouchableOpacity>
         )}
 
         {/* ── Account ── */}
-        <Section title={t("teacherSettings.accountSection")}>
+        <Section title={t("teacherSettings.accountSection")} icon="person">
           <SettingRow
             icon="person-outline"
-            iconBg={C.primaryBg}
-            iconColor={C.primary}
+            iconBg={ACCENT.indigo.solid}
             title={t("teacherSettings.editProfile")}
             subtitle={
               profileComplete
@@ -486,8 +481,7 @@ export default function TeacherSettingsScreen() {
           />
           <SettingRow
             icon="lock-closed-outline"
-            iconBg={C.warningBg}
-            iconColor={C.warning}
+            iconBg={ACCENT.amber.solid}
             title={t("teacherSettings.changePassword")}
             subtitle={t("teacherSettings.updateLoginPassword")}
             onPress={() => router.push("/auth/set-password")}
@@ -497,22 +491,18 @@ export default function TeacherSettingsScreen() {
 
         {/* ── My Details (shown once profile has data) ── */}
         {profile && (
-          <Section title={t("teacherSettings.myDetails")}>
-            {!!profile.staffId && (
-              <SettingRow
-                icon="id-card-outline"
-                iconBg="#EDE9FE"
-                iconColor="#7C3AED"
-                title={t("teacherSettings.staffId")}
-                type="value"
-                value={profile.staffId}
-              />
-            )}
+          <Section title={t("teacherSettings.myDetails")} icon="id-card">
+            <SettingRow
+              icon="id-card-outline"
+              iconBg={ACCENT.violet.solid}
+              title={t("staffNo.labelLong")}
+              type="value"
+              value={staffNoText(t, staffNo)}
+            />
             {!!profile.qualification && (
               <SettingRow
                 icon="ribbon-outline"
-                iconBg={C.primaryBg}
-                iconColor={C.primary}
+                iconBg={ACCENT.indigo.solid}
                 title={t("teacherSettings.qualification")}
                 type="value"
                 value={profile.qualification}
@@ -521,8 +511,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.employmentType && (
               <SettingRow
                 icon="briefcase-outline"
-                iconBg="#FFF7ED"
-                iconColor="#EA580C"
+                iconBg={ACCENT.amber.solid}
                 title={t("teacherSettings.employment")}
                 type="value"
                 value={profile.employmentType.replace(/_/g, " ")}
@@ -531,8 +520,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.phone && (
               <SettingRow
                 icon="call-outline"
-                iconBg={C.successBg}
-                iconColor={C.success}
+                iconBg={ACCENT.green.solid}
                 title={t("teacherSettings.phone")}
                 type="value"
                 value={profile.phone}
@@ -541,8 +529,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.bloodGroup && (
               <SettingRow
                 icon="water-outline"
-                iconBg={C.errorBg}
-                iconColor={C.error}
+                iconBg={ACCENT.red.solid}
                 title={t("teacherSettings.bloodGroup")}
                 type="value"
                 value={profile.bloodGroup}
@@ -551,8 +538,7 @@ export default function TeacherSettingsScreen() {
             {!!profile.emergencyName && (
               <SettingRow
                 icon="medical-outline"
-                iconBg={C.warningBg}
-                iconColor={C.warning}
+                iconBg={ACCENT.amber.solid}
                 title={t("teacherSettings.emergencyContact")}
                 subtitle={profile.emergencyRelation || undefined}
                 type="value"
@@ -564,7 +550,7 @@ export default function TeacherSettingsScreen() {
         )}
 
         {/* ── Preferences ── */}
-        <Section title={t("teacherSettings.preferences")}>
+        <Section title={t("teacherSettings.preferences")} icon="options">
           {/*
             Language first in Preferences. Somebody looking for this control is,
             by definition, reading an interface in a language they did not choose,
@@ -580,8 +566,7 @@ export default function TeacherSettingsScreen() {
           {/* ✅ Fix 2 + Fix 5 — persisted toggle, renders as View not TouchableOpacity */}
           <SettingRow
             icon="notifications-outline"
-            iconBg={C.warningBg}
-            iconColor={C.warning}
+            iconBg={ACCENT.amber.solid}
             title={t("teacherSettings.pushNotifications")}
             subtitle={t("teacherSettings.pushNotificationsHint")}
             type="toggle"
@@ -592,11 +577,10 @@ export default function TeacherSettingsScreen() {
         </Section>
 
         {/* ── Support ── */}
-        <Section title={t("teacherSettings.support")}>
+        <Section title={t("teacherSettings.support")} icon="help-buoy">
           <SettingRow
             icon="help-circle-outline"
-            iconBg={C.primaryBg}
-            iconColor={C.primary}
+            iconBg={ACCENT.indigo.solid}
             title={t("teacherSettings.helpFaqs")}
             onPress={() =>
               Alert.alert(
@@ -608,15 +592,13 @@ export default function TeacherSettingsScreen() {
           {/* ✅ Fix 6 — Terms and Privacy now open real URLs */}
           <SettingRow
             icon="document-text-outline"
-            iconBg={C.gray100}
-            iconColor={C.gray500}
+            iconBg={ACCENT.slate.solid}
             title={t("teacherSettings.terms")}
             onPress={() => Linking.openURL("https://yourapp.com/terms")}
           />
           <SettingRow
             icon="shield-outline"
-            iconBg={C.gray100}
-            iconColor={C.gray500}
+            iconBg={ACCENT.slate.solid}
             title={t("teacherSettings.privacy")}
             onPress={() => Linking.openURL("https://yourapp.com/privacy")}
             last
@@ -624,11 +606,10 @@ export default function TeacherSettingsScreen() {
         </Section>
 
         {/* ── Session ── */}
-        <Section title={t("teacherSettings.session")}>
+        <Section title={t("teacherSettings.session")} icon="log-out">
           <SettingRow
             icon="log-out-outline"
-            iconBg={C.errorBg}
-            iconColor={C.error}
+            iconBg={ACCENT.red.solid}
             title={t("teacherSettings.logout")}
             subtitle={t("teacherSettings.signOutHint")}
             destructive
@@ -660,7 +641,7 @@ const styles = StyleSheet.create({
     paddingBottom:     14,
     backgroundColor:   C.white,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: THEME.border,
   },
   backBtn: {
     width:          40,
@@ -670,6 +651,7 @@ const styles = StyleSheet.create({
     alignItems:     "center",
     justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerTitle: {
     flex:       1,
     textAlign:  "center",
@@ -686,15 +668,20 @@ const styles = StyleSheet.create({
 
   content: { padding: 16, paddingTop: 20 },
 
+  // The teacher's own card: violet, the teachers' colour.
   profileCard: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.violet.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
     gap:             14,
-    shadowColor:     "#000",
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.violet.base,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.05,
     shadowRadius:    4,
     elevation:       2,
@@ -717,43 +704,39 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             3,
-    backgroundColor: C.successBg,
+    backgroundColor: SEMANTIC.success.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.success.icon + "4D",
     borderRadius:    8,
     paddingHorizontal: 7,
     paddingVertical:   2,
   },
-  verifiedText: { fontSize: 10, fontWeight: "700", color: C.success },
-  profileRole:  { fontSize: 12, color: C.gray500 },
-  profileEmail: { fontSize: 11, color: C.gray400, marginTop: 2 },
+  verifiedText: { fontSize: 10, fontWeight: "700", color: SEMANTIC.success.text },
+  profileRole:  { fontSize: 12, color: ACCENT.violet.deep },
+  profileEmail: { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
 
   setupPrompt: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             12,
-    backgroundColor: C.primary,
+    backgroundColor: SEMANTIC.warning.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.warning.box,
     borderRadius:    14,
     padding:         14,
     marginBottom:    20,
   },
-  setupPromptIcon: {
-    width:           38,
-    height:          38,
-    borderRadius:    10,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
-  setupPromptTitle: { fontSize: 14, fontWeight: "700", color: C.white },
+  setupPromptTitle: { fontSize: 14, fontWeight: "700", color: SEMANTIC.warning.text },
   setupPromptSub:   {
     fontSize:  12,
-    color:     "rgba(255,255,255,0.8)",
+    color:     SEMANTIC.warning.text,
     marginTop: 2,
   },
 
   version: {
     textAlign:  "center",
     fontSize:   12,
-    color:      C.gray400,
+    color:      THEME.textSecondary,
     fontWeight: "500",
     marginTop:  8,
   },

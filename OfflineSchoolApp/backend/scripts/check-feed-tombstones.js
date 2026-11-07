@@ -115,8 +115,11 @@ const ROOT = path.join(__dirname, "..");
   await M("Student").deleteOne({ _id: (await pupil("p3", A, "c2"))._id });   // Form 2, after the cursor
   await M("Student").deleteOne({ _id: (await pupil("p4", A, "c1"))._id });   // Form 1, after the cursor
   r = await feed("tea", { cursors: JSON.stringify({ syncTombstone: teaCursor }) });
+  // p1 comes again: the pass ended inside the commit-safety window, so the
+  // cursor rests at its floor and the next pass re-reads the overlap
+  // (config/syncWindow.js). What matters here is the scope: p3 never.
   check("a teacher reading on from a cursor still hears only of its classes (scope and cursor both apply)",
-    names(r), ["student:p4"]);
+    names(r), ["student:p1", "student:p4"]);
 
   server.close();
   await mongoose.disconnect();

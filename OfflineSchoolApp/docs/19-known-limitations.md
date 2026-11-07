@@ -150,7 +150,7 @@ These are not "probably fine". They are unmeasured.
 
 | # | Item | Status |
 |---|---|---|
-| E1 | **`POST /api/sync/push`.** Implemented server-side with `requirePermission("sync.push")`, plus `pushChanges` → `pushPeriodChanges` / `pushStudentDecisions`. Declared in `mobile/src/services/apiEndpoints.js` and `web/src/services/apiEndpoints.ts` and **invoked by nothing**. Verified by searching all four clients for the endpoint and its payload shape. A live, permission-gated write path with no caller and no test coverage. | `UNUSED / DEAD CODE` |
+| E1 | **`POST /api/sync/push`.** Implemented server-side with `requirePermission("sync.push")`, plus `pushChanges` → `pushPeriodChanges` / `pushStudentDecisions`. Declared in `mobile/src/services/apiEndpoints.js` and `web/src/services/apiEndpoints.ts` and **invoked by nothing**. Verified by searching all four clients for the endpoint and its payload shape. A live, permission-gated write path with no caller and no test coverage. **Resolved:** retired — 410 `SYNC_PUSH_RETIRED` to any authenticated caller, nothing written; the `sync.push` permission is removed. | `RETIRED` |
 | E2 | **`backend/scripts/check-student-integrity.js`.** A real suite wired into no npm script. Nothing runs it, so nothing knows whether it still passes. | `UNUSED` |
 | E3 | **`GET /api/admin/debug/counts`.** A diagnostic endpoint shipping enabled, gated on `dashboard.view`. | Remove or gate before public deployment |
 | E4 | **Stale comment in `teacher.routes.js`** referring to `middleware/upload.js` as though it exists. That file was removed at an earlier commit. | Harmless, misleading |

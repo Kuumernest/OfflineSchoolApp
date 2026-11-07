@@ -43,24 +43,110 @@ const OFFLINE_INTERVAL_MS = 15_000;
 const MAX_PAGES_PER_CYCLE = 40;
 
 /**
- * @param feedCollections  Optional. Leave it out — see the note in pull().
+ * After a cycle that stopped at the page ceiling with more still to come. A
+ * first sync of a large school is exactly that, and waiting the idle minute
+ * between each forty pages kept the screens half-filled for no reason.
  */
-const engine = ({ docs, queue, state, client, feedCollections = null, onChange = () => {}, currentUser = () => null }) => {
+const CONTINUE_INTERVAL_MS = 1_000;
+
+/**
+ * @param feedCollections  Optional. Leave it out — see the note in pull().
+ * @param schoolId         The school to ask for, for a super_admin only (who has
+ *                         none of their own). Null for everybody else.
+ * @param scope            Which server and school the cursors belong to, as one
+ *                         string. When it changes, the cursors are dropped.
+ * @param marks            Somewhere to remember the scope and whether a first
+ *                         full pull has finished for it (store.meta). Optional:
+ *                         without it neither is tracked.
+ */
+const engine = ({
+  docs, queue, state, client, feedCollections = null, onChange = () => {}, currentUser = () => null,
+  schoolId = () => null, scope = () => null, marks = null,
+}) => {
   let running  = false;
   let timer    = null;
   let stopped  = false;
+  const whenIdle = [];
 
   /** The last thing that happened, for the UI to render. */
   let status = {
-    phase:      "idle",   // idle | pushing | pulling | offline | blocked | unauthenticated
+    phase:      "idle",   // idle | pushing | pulling | offline | error | blocked | unauthenticated
+    // "done" once a full pull has finished for the current server and school;
+    // "pending" before that. See initialSync() below.
+    initialSync: "pending",
     lastCycleAt: null,
+    // Last SUCCESSFUL pull for this server and school (see lastSyncedAt()).
+    lastSyncedAt: null,
     lastError:   null,
     pushed:      0,
     pulled:      0,
+    // "unauthenticated" means two different things: nobody has handed this
+    // machine a token (signed out, or the window has not said yet), or the
+    // server answered 401 to the one it holds. Only the second needs a person
+    // to sign in again, and the window has no other way to tell them apart.
+    sessionRejected: false,
+  };
+
+  /**
+   * Has this machine ever finished a full pull for the server and school it is
+   * signed in to?
+   *
+   * "pending" is the state in which every screen is empty for a reason that is
+   * not "the school has nothing": the mirror has simply not been filled yet, or
+   * filling it failed. The window shows that instead of empty lists.
+   */
+  const initialSync = () => {
+    if (!marks) return "done";
+    const current = scope();
+    // No school (a super_admin on the platform pages): nothing to wait for.
+    if (!current) return "done";
+    return marks.get("initialSyncFor") === current ? "done" : "pending";
+  };
+
+  /**
+   * Cursors belong to one server and one school. Drop them when either changes.
+   *
+   * Previously nothing did: pointing an installation at another server, or a
+   * second school signing in on the same machine, carried on from the old
+   * positions and silently skipped everything older.
+   */
+  const checkScope = () => {
+    if (!marks) return;
+    const current = scope();
+    if (!current) return;
+    if (marks.get("syncScope") === current) return;
+    state.clear();
+    marks.set("syncScope", current);
+    console.log(`[sync] new scope ${current}: starting the pull from the beginning`);
+  };
+
+  /**
+   * When this machine last completed a pull from the server, for the current
+   * server and school — the clock the 30-day offline period runs on (the
+   * window warns from day 21, web/src/config/offlinePeriod.ts).
+   *
+   * lastCycleAt is not it: a cycle that failed sets that too. Kept in marks so
+   * it survives a restart (a machine offline for three weeks is restarted many
+   * times in between), and tied to the scope so another school's sync never
+   * counts. Null when unknown.
+   */
+  let lastSyncedMemo = null; // { scope, at } when there are no marks
+  const lastSyncedAt = () => {
+    const current = scope();
+    if (!marks) return lastSyncedMemo && lastSyncedMemo.scope === current ? lastSyncedMemo.at : null;
+    if (!current || marks.get("lastSyncedFor") !== current) return null;
+    return marks.get("lastSyncedAt") || null;
+  };
+  const markSynced = (at) => {
+    const current = scope();
+    if (!marks) { lastSyncedMemo = { scope: current, at }; return; }
+    if (!current) return;
+    marks.set("lastSyncedFor", current);
+    marks.set("lastSyncedAt", at);
   };
 
   const publish = (next) => {
-    status = { ...status, ...next };
+    status = { ...status, ...next, initialSync: initialSync(), lastSyncedAt: lastSyncedAt() };
     onChange(status);
   };
 
@@ -96,11 +182,28 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         // while taking the response's copy below cannot leave them pending: a
         // pending row is never overwritten by a pull, so it would disagree with
         // the server permanently rather than until the next cycle.
+        //
+        // ── Settled only by the LAST queued write to a row ─────────────────
+        //
+        // Two edits to one pupil queued, the first accepted and the second
+        // still waiting: settling on the first cleared the pending flag, so
+        // the pull in this same cycle overwrote the screen with the server's
+        // copy — the FIRST edit — while the second was still queued. While
+        // another request for the row is queued it stays pending and keeps
+        // showing the latest local change; the server's answer is kept under
+        // it (rebase), which is what a discard of the later write restores.
         for (const extra of item.extraDocs ?? []) {
-          if (extra?.collection && extra?.docId) docs.settle(extra.collection, extra.docId);
+          if (!extra?.collection || !extra?.docId) continue;
+          if (!queue.queuedFor(extra.collection, extra.docId)) docs.settle(extra.collection, extra.docId);
         }
 
-        if (item.collection && item.doc_id) {
+        const stillQueued = Boolean(item.collection && item.doc_id) && queue.queuedFor(item.collection, item.doc_id);
+        if (stillQueued) {
+          const stored = answer?.data ?? answer?.admin ?? answer?.teacher ?? null;
+          if (stored && String(stored._id ?? stored.id) === String(item.doc_id)) {
+            docs.rebase(item.collection, item.doc_id, stored);
+          }
+        } else if (item.collection && item.doc_id) {
           docs.settle(item.collection, item.doc_id);
 
           /**
@@ -169,6 +272,10 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
    */
   const pull = async () => {
     let pulled = 0;
+    // Whether this pull reached the end of every collection, or stopped at the
+    // page ceiling with more to come.
+    let complete = false;
+    let pages = 0;
     const refusedNow = [];
     const heldBack   = [];
 
@@ -197,7 +304,8 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         cursors[row.collection] = row.cursor;
       }
 
-      const answer = await client.changes({ collections, cursors });
+      const answer = await client.changes({ collections, cursors, schoolId: schoolId() });
+      pages++;
 
       for (const r of answer.refused ?? []) refusedNow.push(r);
 
@@ -265,10 +373,10 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         if (slice.hasMore && state.cursorFor(name) !== before) more = true;
       }
 
-      if (!more) break;
+      if (!more) { complete = true; break; }
     }
 
-    return { pulled, refused: refusedNow, heldBack };
+    return { pulled, refused: refusedNow, heldBack, complete, pages };
   };
 
   // ── ONE CYCLE ───────────────────────────────────────────────────────────
@@ -279,19 +387,25 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
 
     try {
       if (!client.hasToken()) {
-        publish({ phase: "unauthenticated", lastError: null });
+        publish({ phase: "unauthenticated", lastError: null, sessionRejected: false });
         return status;
       }
       if (!client.serverUrl()) {
-        publish({ phase: "unauthenticated", lastError: "No server address configured" });
+        publish({ phase: "unauthenticated", lastError: "No server address configured", sessionRejected: false });
         return status;
       }
 
-      publish({ phase: "pushing" });
+      // The last cycle could not reach the server. If this one can, the
+      // connection is back — see the second push after the pull.
+      const wasOffline = status.phase === "offline";
+
+      // A cycle with a token starts with no verdict on it: a new token handed
+      // over after signing in again must not inherit the old one's refusal.
+      publish({ phase: "pushing", sessionRejected: false });
       const pushed = await push();
 
       if (pushed.stopped === "unauthenticated") {
-        publish({ phase: "unauthenticated", pushed: pushed.sent });
+        publish({ phase: "unauthenticated", pushed: pushed.sent, sessionRejected: true });
         return status;
       }
 
@@ -299,8 +413,45 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       // problem; refusing to take any news from the server because of it would
       // make the whole machine stale over something the bursar may not look at
       // until Friday.
+      checkScope();
       publish({ phase: "pulling", pushed: pushed.sent });
+      const startedAt    = Date.now();
       const pulledResult = await pull();
+      const pullMs       = Date.now() - startedAt;
+
+      // Only a pull that reached the end of every collection counts. One that
+      // stopped at the page ceiling has more to fetch, and is continued at once
+      // (see scheduleNext) rather than declared finished.
+      if (pulledResult.complete && marks && scope()) marks.set("initialSyncFor", scope());
+
+      // The server answered every page asked for: this is a successful sync,
+      // whether or not more pages remain or a write is blocked.
+      markSynced(new Date().toISOString());
+
+      // ── Back from offline: send now, not when the backoff runs out ───────
+      //
+      // The push above ran while the queue still believed the network was
+      // gone: a request that failed for want of a connection may be backing
+      // off for up to ten minutes. The pull just reached the server, so that
+      // belief is out of date. Bring those requests forward and push again,
+      // once. Refused (blocked) and 5xx-backed-off requests are untouched —
+      // see outbox.retryNetworkNow().
+      if (wasOffline && pushed.stopped !== "blocked" && queue.retryNetworkNow() > 0) {
+        publish({ phase: "pushing" });
+        const again = await push();
+        pushed.sent += again.sent;
+        pushed.stopped = again.stopped;
+        if (again.stopped === "unauthenticated") {
+          publish({ phase: "unauthenticated", pushed: pushed.sent, sessionRejected: true });
+          return status;
+        }
+      }
+
+      console.log(
+        `[sync] pulled ${pulledResult.pulled} row(s) in ${pulledResult.pages} page(s), ${pullMs} ms` +
+        (pulledResult.complete ? "" : " — more to come") +
+        (pulledResult.refused.length ? `; refused: ${pulledResult.refused.map((r) => r.collection).join(", ")}` : "")
+      );
 
       publish({
         phase:       pushed.stopped === "blocked" ? "blocked" : "idle",
@@ -310,19 +461,35 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
         pulled:      pulledResult.pulled,
         refused:     pulledResult.refused,
         heldBack:    pulledResult.heldBack,
+        morePending: !pulledResult.complete,
+        lastPullMs:  pullMs,
       });
 
       return status;
     } catch (err) {
       const offline = err instanceof SyncError && err.status === null;
+      // A refusal or a server fault is "error", not "idle". Reported as idle,
+      // the window had no way to tell a failed first sync from a school with no
+      // data, and showed empty screens.
+      console.warn(
+        `[sync] cycle failed (${offline ? "unreachable" : `status ${err.status ?? "?"}`}): ${err.message}` +
+        ` — server ${client.serverUrl() || "(none)"}`
+      );
       publish({
-        phase:     offline ? "offline" : "idle",
+        phase:     offline ? "offline" : err.status === 401 ? "unauthenticated" : "error",
+        sessionRejected: !offline && err.status === 401,
         lastError: err.message,
         lastCycleAt: new Date().toISOString(),
       });
       return status;
     } finally {
       running = false;
+      // Anything waiting for this cycle to finish (kick, below).
+      for (const resolve of whenIdle.splice(0)) resolve();
+      // A cycle run on demand (sign-in, a local write) is not followed by
+      // scheduleNext, so without this the rest of a first sync would wait the
+      // full idle interval. Re-arming is safe: scheduleNext clears any timer.
+      if (status.morePending && !stopped) scheduleNext();
     }
   };
 
@@ -333,7 +500,8 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
     clearTimeout(timer);
 
     const wait =
-      status.phase === "offline" ? OFFLINE_INTERVAL_MS :
+      status.phase === "offline" || status.phase === "error" ? OFFLINE_INTERVAL_MS :
+      status.morePending ? CONTINUE_INTERVAL_MS :
       IDLE_INTERVAL_MS;
 
     timer = setTimeout(async () => {
@@ -344,9 +512,44 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
     timer.unref?.();
   };
 
+  /**
+   * A cycle now, with network backoffs brought forward first — for "Sync now"
+   * and for the connection coming back.
+   *
+   * If a cycle is already running, its push may have passed over requests
+   * that were not due; so another runs straight after it rather than this
+   * call being dropped, as cycle() alone would drop it.
+   */
+  let rerun = null;
+  const kick = async () => {
+    queue.retryNetworkNow();
+    if (!running) return cycle();
+    if (!rerun) {
+      rerun = (async () => {
+        while (running) await new Promise((r) => whenIdle.push(r));
+        rerun = null;
+        queue.retryNetworkNow();
+        return cycle();
+      })();
+    }
+    return rerun;
+  };
+
   return {
     /** Run one cycle now — on sign-in, on a local write, on a button. */
     cycle,
+
+    /** "Sync now": send what is waiting for the network, then sync. */
+    syncNow: kick,
+
+    /**
+     * The connectivity monitor (sync/connectivity.js) saw the connection come
+     * back and the server answer. Same as Sync now; named for the log.
+     */
+    reconnected: () => {
+      console.log("[sync] connection back: sending what was waiting for it");
+      return kick();
+    },
 
     start() {
       stopped = false;
@@ -358,7 +561,7 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       clearTimeout(timer);
     },
 
-    status: () => status,
+    status: () => ({ ...status, initialSync: initialSync(), lastSyncedAt: lastSyncedAt() }),
   };
 };
 
@@ -366,5 +569,6 @@ module.exports = {
   engine,
   IDLE_INTERVAL_MS,
   OFFLINE_INTERVAL_MS,
+  CONTINUE_INTERVAL_MS,
   MAX_PAGES_PER_CYCLE,
 };

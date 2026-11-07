@@ -33,8 +33,154 @@
  */
 
 const { displayName } = require("../../../../../shared/studentName");
+const { currentAcademicYearOf, yearKey } = require("../../../../../shared/academicYear");
+const { feePosition } = require("../../../../../shared/arrears");
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
+
+/**
+ * What a school is owed — the server's fees.service outstandingBySchool, on
+ * the local copy, for Fees > Outstanding and Financial reports alike:
+ *
+ * - current students only: approved, active, not deleted;
+ * - one year: the one asked for, else the school's current year
+ *   (settings.academicYear; the calendar's when unset);
+ * - charges not voided, payments not deleted (a reversal is a negative row
+ *   and nets off);
+ * - outstanding = the sum of POSITIVE balances — a credit does not hide
+ *   another family's debt.
+ *
+ * One SQL statement per collection, not one per pupil.
+ */
+function outstandingOf(docs, { schoolId, academicYear = null, classId = null }) {
+  const school = docs.get("school", schoolId);
+  const year   = academicYear ? yearKey(academicYear) : currentAcademicYearOf(school);
+  const forms  = [...new Set([year, year.replace("/", "-")])];
+
+  const students = docs.find("student", {
+    schoolId, deletedAt: null, status: "approved",
+    ...(classId ? { classId } : {}),
+  }).filter((s) => s.isActive !== false);
+  const empty = { academicYear: year, charged: 0, waived: 0, billed: 0, paid: 0, outstanding: 0, owing: 0, rows: [] };
+  if (!students.length) return empty;
+
+  const yearClause = `AND json_extract(json,'$.academicYear') IN (${forms.map(() => "?").join(",")})`;
+  const charged = docs.sql(`
+    SELECT json_extract(json,'$.studentId') AS studentId,
+           COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
+           COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
+    FROM docs
+    WHERE collection = 'feeCharge'
+      AND school_id = ?
+      AND deleted_at IS NULL
+      AND json_extract(json,'$.voidedAt') IS NULL
+      ${yearClause}
+    GROUP BY studentId
+  `, schoolId, ...forms);
+  const paid = docs.sql(`
+    SELECT json_extract(json,'$.studentId') AS studentId,
+           COALESCE(SUM(json_extract(json,'$.amount')), 0) AS paid
+    FROM docs
+    WHERE collection = 'feePayment'
+      AND school_id = ?
+      AND deleted_at IS NULL
+      ${yearClause}
+    GROUP BY studentId
+  `, schoolId, ...forms);
+
+  const balances = new Map();
+  const ensure = (id) => {
+    if (!balances.has(id)) balances.set(id, { charged: 0, waived: 0, paid: 0 });
+    return balances.get(id);
+  };
+  for (const row of charged) {
+    const b = ensure(String(row.studentId));
+    b.charged = row.charged ?? 0;
+    b.waived  = row.waived  ?? 0;
+  }
+  for (const row of paid) ensure(String(row.studentId)).paid = row.paid ?? 0;
+
+  const out = { ...empty, rows: [] };
+  for (const s of students) {
+    const b = balances.get(String(s._id));
+    if (!b) continue;
+    const balance = b.charged - b.waived - b.paid;
+    out.charged += b.charged;
+    out.waived  += b.waived;
+    out.paid    += b.paid;
+    if (balance > 0) {
+      out.outstanding += balance;
+      out.rows.push({
+        studentId:    String(s._id),
+        // The shared resolver, not a field read: a pupil's name lives in one
+        // of three fields and reading the wrong one blanks them.
+        name:         displayName(s) || null,
+        enrollmentNo: s.enrollmentNo ?? null,
+        classId:      s.classId ?? null,
+        ...b, balance,
+      });
+    }
+  }
+  out.billed = out.charged - out.waived;
+  out.owing  = out.rows.length;
+  out.rows.sort((a, b) => b.balance - a.balance);
+  return out;
+}
+
+/**
+ * Owed and overdue — the server's arrears.service, on the local copy.
+ *
+ * outstandingOf's rows (what each pupil owes this year), each split by
+ * shared/arrears feePosition into the part past its due date and the part
+ * still to come — the same function the server runs, so a bursar offline
+ * sees the figures the bell shows online.
+ *
+ * Families: guardian access records are not synced to the desktop, so a
+ * late pupil counts as a family of one here; online, siblings on one code
+ * count once.
+ */
+function arrearsOf(docs, { schoolId, academicYear = null, classId = null, asOf = Date.now() }) {
+  const o = outstandingOf(docs, { schoolId, academicYear, classId });
+  const owing = new Set(o.rows.map((r) => r.studentId));
+  const forms = new Set([o.academicYear, o.academicYear.replace("/", "-")]);
+  const inYear = (d) => owing.has(String(d.studentId)) && forms.has(String(d.academicYear));
+
+  const chargesBy = new Map();
+  for (const c of docs.find("feeCharge", { schoolId, deletedAt: null })) {
+    if (c.voidedAt || !inYear(c)) continue;
+    const k = String(c.studentId);
+    if (!chargesBy.has(k)) chargesBy.set(k, []);
+    chargesBy.get(k).push(c);
+  }
+  const planBy = new Map(
+    docs.find("paymentPlan", { schoolId, status: "active", deletedAt: null })
+      .filter(inYear).map((p) => [String(p.studentId), p]),
+  );
+
+  const when = new Date(asOf);
+  const rows = o.rows.map((r) => {
+    const mine = chargesBy.get(r.studentId) ?? [];
+    const dated = mine.filter((c) => c.dueDate);
+    return {
+      ...r,
+      ...feePosition({ charges: mine, paid: r.paid, plan: planBy.get(r.studentId) ?? null, asOf: when }),
+      latestDue: dated.length ? new Date(Math.max(...dated.map((c) => new Date(c.dueDate).getTime()))) : null,
+      datedCharges:   dated.length,
+      undatedCharges: mine.length - dated.length,
+    };
+  });
+  const late = rows.filter((r) => r.isOverdue);
+  return {
+    academicYear: o.academicYear,
+    rows,
+    totals: {
+      owed: o.outstanding, owingStudents: rows.length,
+      overdue: late.reduce((sum, r) => sum + r.overdue, 0),
+      overdueStudents: late.length,
+      overdueFamilies: late.length,
+    },
+  };
+}
 
 /**
  * The totals for one pupil, as backend/src/services/fees.service.js computes them.
@@ -174,77 +320,22 @@ module.exports = [
       const schoolId = query.schoolId ? String(query.schoolId).trim() : null;
       if (!schoolId) return null;
 
-      const academicYear = query.academicYear || null;
-      const classId      = query.classId || null;
-
-      // status: "approved" — an applicant who has not been admitted is not
-      // somebody the school chases for fees.
-      const students = docs.find("student", {
-        schoolId, deletedAt: null, status: "approved",
-        ...(classId ? { classId } : {}),
+      const a = arrearsOf(docs, {
+        schoolId, academicYear: query.academicYear || null, classId: query.classId || null,
       });
-      if (!students.length) {
-        return ok({ count: 0, totalOutstanding: 0, data: [] });
-      }
-
-      const yearClause = academicYear ? "AND json_extract(json,'$.academicYear') = ?" : "";
-      const yearParam  = academicYear ? [academicYear] : [];
-
-      const charged = docs.sql(`
-        SELECT json_extract(json,'$.studentId') AS studentId,
-               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
-               COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
-        FROM docs
-        WHERE collection = 'feeCharge'
-          AND school_id = ?
-          AND deleted_at IS NULL
-          AND json_extract(json,'$.voidedAt') IS NULL
-          ${yearClause}
-        GROUP BY studentId
-      `, schoolId, ...yearParam);
-
-      const paid = docs.sql(`
-        SELECT json_extract(json,'$.studentId') AS studentId,
-               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS paid
-        FROM docs
-        WHERE collection = 'feePayment'
-          AND school_id = ?
-          AND deleted_at IS NULL
-          ${yearClause}
-        GROUP BY studentId
-      `, schoolId, ...yearParam);
-
-      const balances = new Map();
-      const ensure = (id) => {
-        if (!balances.has(id)) balances.set(id, { charged: 0, waived: 0, paid: 0, balance: 0 });
-        return balances.get(id);
-      };
-      for (const row of charged) {
-        const b = ensure(String(row.studentId));
-        b.charged = row.charged ?? 0;
-        b.waived  = row.waived  ?? 0;
-      }
-      for (const row of paid) ensure(String(row.studentId)).paid = row.paid ?? 0;
-      for (const b of balances.values()) b.balance = b.charged - b.waived - b.paid;
-
-      const rows = students
-        .map((s) => ({
-          studentId:    String(s._id),
-          // The shared resolver, not a field read: a pupil's name lives in one
-          // of three fields and reading the wrong one blanks them.
-          name:         displayName(s) || null,
-          enrollmentNo: s.enrollmentNo ?? null,
-          classId:      s.classId ?? null,
-          ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),
-        }))
-        // A zero balance is not an arrears row, and a credit is not either.
-        .filter((r) => r.balance > 0)
-        .sort((a, b) => b.balance - a.balance);
-
       return ok({
-        count: rows.length,
-        totalOutstanding: rows.reduce((sum, r) => sum + r.balance, 0),
-        data: rows,
+        count: a.rows.length,
+        totalOutstanding: a.totals.owed,
+        overdueTotal:     a.totals.overdue,
+        overdueCount:     a.totals.overdueStudents,
+        overdueFamilies:  a.totals.overdueFamilies,
+        academicYear: a.academicYear,
+        data: a.rows.map((r) => ({
+          studentId: r.studentId, name: r.name, enrollmentNo: r.enrollmentNo, classId: r.classId,
+          charged: r.charged, waived: r.waived, paid: r.paid,
+          balance: r.balance, overdue: r.overdue, isOverdue: r.isOverdue,
+          overdueSince: r.overdueSince, nextDue: r.nextDue, onPlan: r.onPlan,
+        })),
       });
     },
   },
@@ -289,7 +380,16 @@ module.exports = [
         ? planStatusLocal(plan, totals.paid, Date.now())
         : null;
 
-      return ok({ data: { charges, payments, totals, plan, planStatus } });
+      // C1: whose account this is, as the server answers it.
+      const pupil = docs.get("student", studentId);
+      const student = pupil && String(pupil.schoolId) === String(schoolId) ? {
+        _id:         String(pupil._id),
+        name:        displayName(pupil) || null,
+        admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+        className:   (pupil.classId && docs.get("class", pupil.classId)?.name) || pupil.className || null,
+      } : null;
+
+      return ok({ data: { student, charges, payments, totals, plan, planStatus } });
     },
   },
 ];
@@ -300,6 +400,7 @@ module.exports = [
  * of "what does this family owe" is the last thing this codebase needs.
  */
 module.exports.totalsFor = totalsFor;
+module.exports.outstandingOf = outstandingOf;
 
 /**
  * Balance computation for many students at once — the same SQL as outstanding
@@ -596,142 +697,54 @@ module.exports.push(
       const school = docs.get("school", schoolId);
       const channel = school?.settings?.notifications?.channel || "sms";
 
-      // All approved students
-      const studentFilter = {
-        schoolId, deletedAt: null, status: "approved",
-        ...(classId ? { classId } : {}),
-      };
-      const students = docs.find("student", studentFilter);
-      const studentMap = new Map(students.map((s) => [String(s._id), s]));
-
-      const balances = balancesMap(docs, schoolId, academicYear);
-
-      // Find dated charges and group by student
-      const chargeFilter = {
-        schoolId, deletedAt: null,
-        ...(academicYear ? { academicYear } : {}),
-      };
-      const allCharges = docs.find("feeCharge", chargeFilter)
-        .filter((c) => c.dueDate && !c.voidedAt);
-
-      const byStudent = new Map();
-      for (const c of allCharges) {
-        const sid = String(c.studentId);
-        if (!byStudent.has(sid)) byStudent.set(sid, []);
-        byStudent.get(sid).push(c);
-      }
-
-      // Active payment plans
-      const plans = docs.find("paymentPlan", {
-        schoolId, status: "active", deletedAt: null,
-        ...(academicYear ? { academicYear } : {}),
-      });
-      const plansByStudent = new Map(plans.map((p) => [String(p.studentId), p]));
-
+      // Who owes and how much of it is late: arrearsOf, the server's
+      // arrears.service on the local copy. This used to call a pupil late when
+      // ANY due date had passed, even one their payments had covered — so a
+      // family that paid First Term and owed a Second Term not yet due was
+      // chased offline and not online.
+      const a = arrearsOf(docs, { schoolId, academicYear, classId, asOf: now });
+      const studentMap = new Map(
+        docs.find("student", { schoolId, deletedAt: null }).map((s) => [String(s._id), s]),
+      );
+      const soonCutoff = now + 14 * DAY_MS;
       const results = [];
 
-      // Group ALL charges (dated and undated) by student
-      const allChargesAll = docs.find("feeCharge", chargeFilter)
-        .filter((c) => !c.voidedAt);
-
-      const byStudentAll = new Map();
-      for (const c of allChargesAll) {
-        const sid = String(c.studentId);
-        if (!byStudentAll.has(sid)) byStudentAll.set(sid, []);
-        byStudentAll.get(sid).push(c);
-      }
-
-      for (const [sid, charges] of byStudentAll) {
-        const bal = balances.get(sid);
-        if (!bal || bal.balance <= 0) continue;
-
-        const student = studentMap.get(sid);
+      for (const r of a.rows) {
+        const student = studentMap.get(r.studentId);
         if (!student) continue;
 
-        const plan = plansByStudent.get(sid);
-        let earliestDue = null;
-        let latestDue = null;
-        let isOverdue = false;
-        let daysOverdue = 0;
-        let onPlan = false;
-        let planBehindBy = 0;
-        let planNextDue = null;
-        let planDueByNow = 0;
+        const isOverdue = r.isOverdue;
+        const due       = isOverdue ? r.overdueSince : r.nextDue;
+        const dueTime   = due ? new Date(due).getTime() : null;
+        const isDueSoon = !isOverdue && dueTime !== null && dueTime <= soonCutoff;
 
-        // Separate dated and undated charges
-        const datedCharges = charges.filter((c) => c.dueDate);
-        const undatedCharges = charges.filter((c) => !c.dueDate);
-        const hasUndated = undatedCharges.length > 0;
-
-        for (const c of datedCharges) {
-          const due = new Date(c.dueDate).getTime();
-          if (!earliestDue || due < earliestDue) earliestDue = due;
-          if (!latestDue || due > latestDue) latestDue = due;
-        }
-
-        if (plan) {
-          onPlan = true;
-          const ps = planStatusLocal(plan, bal.paid, now);
-          planBehindBy = ps.behindBy;
-          planNextDue  = ps.nextDue;
-          planDueByNow = ps.dueByNow;
-
-          if (ps.isBehind) {
-            isOverdue = true;
-            daysOverdue = Math.floor((now - new Date(ps.missedSince).getTime()) / DAY_MS);
-          } else {
-            // On track — use the next instalment date
-            if (ps.nextDue) {
-              const nextTime = new Date(ps.nextDue).getTime();
-              if (endOfDay(nextTime) < now) {
-                isOverdue = true;
-                daysOverdue = Math.floor((now - nextTime) / DAY_MS);
-              }
-            }
-          }
-        } else {
-          // No plan — overdue if any due date has passed
-          if (earliestDue && endOfDay(earliestDue) < now) {
-            isOverdue = true;
-            daysOverdue = Math.floor((now - earliestDue) / DAY_MS);
-          }
-          // Undated charges are immediately overdue
-          if (hasUndated && !isOverdue) {
-            isOverdue = true;
-          }
-        }
-
-        // Mode filter
         if (mode === "overdue" && !isOverdue) continue;
-        if (mode === "dueSoon" && isOverdue) continue;
-        if (mode === "dueSoon" && earliestDue) {
-          const dueSoonCutoff = now + 14 * DAY_MS;
-          if (earliestDue > dueSoonCutoff) continue;
-        }
-
-        const reachable = isReachable(school, student, channel);
+        if (mode === "dueSoon" && !isDueSoon) continue;
 
         results.push({
-          studentId:        sid,
+          studentId:        r.studentId,
           name:             displayName(student) || null,
           enrollmentNo:     student.enrollmentNo ?? null,
           classId:          student.classId ?? null,
           guardianName:     student.guardianName ?? null,
-          balance:          bal.balance,
-          charged:          bal.charged,
-          paid:             bal.paid,
-          earliestDue:      earliestDue ? new Date(earliestDue).toISOString() : null,
-          latestDue:        latestDue ? new Date(latestDue).toISOString() : null,
-          totalCharges:     charges.length,
-          datedCharges:     datedCharges.length,
-          undatedCharges:   undatedCharges.length,
+          balance:          r.balance,
+          overdue:          r.overdue,
+          charged:          r.charged,
+          paid:             r.paid,
+          earliestDue:      dueTime ? new Date(dueTime).toISOString() : null,
+          latestDue:        r.latestDue ? r.latestDue.toISOString() : null,
+          totalCharges:     r.datedCharges + r.undatedCharges,
+          datedCharges:     r.datedCharges,
+          undatedCharges:   r.undatedCharges,
           isOverdue,
-          daysOverdue:      Math.max(0, daysOverdue),
-          onPlan,
-          planBehindBy,
-          planNextDue,
-          planDueByNow,
-          reachable,
+          daysOverdue:      isOverdue
+            ? (dueTime ? Math.max(0, Math.floor((now - dueTime) / DAY_MS)) : 1)
+            : 0,
+          onPlan:           r.onPlan,
+          planBehindBy:     r.plan?.behindBy ?? 0,
+          planNextDue:      r.plan?.nextDue ?? null,
+          planDueByNow:     r.plan?.dueByNow ?? 0,
+          reachable:        isReachable(school, student, channel),
           recentlyReminded: false,  // Notification collection not synced
         });
       }
@@ -748,3 +761,18 @@ module.exports.push(
     },
   }
 );
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// fees.routes.js runs router.use(requirePermission("fees.view")) in front of
+// every route, and plans, penalties and reminders each add their own. See
+// readPermissions.js (audit F6): without this, a teacher signed in after a
+// bursar on the same computer read the bursar's mirrored ledgers.
+const { guardReads } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/fees/plans":               { permissions: ["fees.view", "fees.plan"] },
+  "GET /api/fees/structures":          { permissions: ["fees.view"] },
+  "GET /api/fees/outstanding":         { permissions: ["fees.view"] },
+  "GET /api/fees/students/:studentId": { permissions: ["fees.view"] },
+  "GET /api/fees/penalties":           { permissions: ["fees.view", "fees.penalize"] },
+  "GET /api/fees/reminders":           { permissions: ["fees.view", "fees.remind"] },
+}, { ownWrites: ["/api/fees/"] });

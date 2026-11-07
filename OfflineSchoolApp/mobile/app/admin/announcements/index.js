@@ -32,25 +32,42 @@ const FILTERS = [
   { key: "unread",       labelKey: "annAdmin.filterUnread",         icon: "mail-unread-outline"},
 ];
 
+// A priority's pill takes its status tone; its card's megaphone square takes
+// the matching accent (urgent red, high amber, normal sky, low slate).
 const PRIORITY_COLORS = {
-  normal:    { bg: "#F0FDF4", text: "#15803D", border: "#BBF7D0" },
-  important: { bg: "#FEF3C7", text: "#92400E", border: "#FDE68A" },
-  urgent:    { bg: "#FEE2E2", text: "#991B1B", border: "#FECACA" },
+  low:       statusBadge("info"),
+  normal:    statusBadge("info"),
+  important: statusBadge("warning"),
+  high:      statusBadge("warning"),
+  urgent:    statusBadge("error"),
+};
+const PRIORITY_ACCENT = {
+  low: "slate", normal: "sky", important: "amber", high: "amber", urgent: "red",
 };
 
+// An audience that is a role takes that role's colour; anything else is sky.
 const AUDIENCE_LABELS = {
-  all:      { labelKey: "annAdmin.audAll",  icon: "globe-outline",  color: "#4F46E5" },
-  teachers: { labelKey: "annAdmin.audTeachersShort",  icon: "people-outline", color: "#0891B2" },
-  students: { labelKey: "annAdmin.audStudentsShort",  icon: "school-outline", color: "#7C3AED" },
-  class:    { labelKey: "annAdmin.audClassShort",     icon: "layers-outline", color: "#EA580C" },
+  all:      { labelKey: "annAdmin.audAll",  icon: "globe-outline",  accent: "sky" },
+  teachers: { labelKey: "annAdmin.audTeachersShort",  icon: "people-outline", accent: roleAccent("teacher") },
+  students: { labelKey: "annAdmin.audStudentsShort",  icon: "school-outline", accent: roleAccent("student") },
+  class:    { labelKey: "annAdmin.audClassShort",     icon: "layers-outline", accent: "sky" },
 };
 
-const AUTHOR_ROLE_COLORS = {
-  super_admin:  { labelKey: "annAdmin.roleSuperAdmin",   color: "#4F46E5", bg: "#EEF2FF" },
-  school_admin: { labelKey: "annAdmin.roleSchoolAdmin",  color: "#4F46E5", bg: "#EEF2FF" },
-  admin:        { labelKey: "annAdmin.roleAdmin",         color: "#4F46E5", bg: "#EEF2FF" },
-  teacher:      { labelKey: "annAdmin.roleTeacher",       color: "#0891B2", bg: "#E0F2FE" },
+const roleBadge = (role) => {
+  const c = accentBadge(roleAccent(role));
+  return { color: c.text, bg: c.bg, border: c.border };
 };
+const AUTHOR_ROLE_COLORS = {
+  super_admin:  { labelKey: "annAdmin.roleSuperAdmin",   ...roleBadge("super_admin") },
+  school_admin: { labelKey: "annAdmin.roleSchoolAdmin",  ...roleBadge("school_admin") },
+  admin:        { labelKey: "annAdmin.roleAdmin",         ...roleBadge("admin") },
+  teacher:      { labelKey: "annAdmin.roleTeacher",       ...roleBadge("teacher") },
+};
+
+const CLASS_BADGE   = accentBadge("indigo");
+const EXPIRED_BADGE = statusBadge("error");
+const OFFLINE_BADGE = statusBadge("warning");
+const TEACHER       = ACCENT[roleAccent("teacher")];
 
 // `t` is a parameter, not a hook call: this runs once per announcement row
 // inside a .map(), and a hook fired a list-length-dependent number of times
@@ -75,13 +92,11 @@ const formatDate = (dateStr, t) => {
 
 const isExpired = (d) => d && new Date(d) < new Date();
 
-function StatCard({ icon, label, value, color }) {
+// Plain announcement cards, except unread (info) and urgent (error) when any.
+function StatCard({ icon, label, value, tone }) {
   return (
-    <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <Ionicons name={icon} size={18} color={color} />
-      <Text style={styles.statValue}>{value ?? 0}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <StatTile kind="announcements" tone={tone} icon={icon} value={value ?? 0} label={label}
+      style={styles.statCard} />
   );
 }
 
@@ -208,7 +223,7 @@ export default function AdminAnnouncementsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.sky.solid} />
         <Text style={styles.loadingText}>{t("annAdmin.loadingAnnouncements")}</Text>
       </View>
     );
@@ -216,7 +231,7 @@ export default function AdminAnnouncementsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -224,9 +239,10 @@ export default function AdminAnnouncementsScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("annAdmin.listTitle")}</Text>
           <Text style={styles.headerSub}>
@@ -242,7 +258,7 @@ export default function AdminAnnouncementsScreen() {
           style={styles.createBtn}
           activeOpacity={0.7}
         >
-          <Ionicons name="add" size={22} color="#FFF" />
+          <Ionicons name="add" size={22} color={COLORS.onPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -257,19 +273,18 @@ export default function AdminAnnouncementsScreen() {
             icon="mail-unread-outline"
             label={t("annAdmin.filterUnread")}
             value={stats.unread}
-            color="#DC2626"
+            tone={(stats.unread ?? 0) > 0 ? "info" : undefined}
           />
           <StatCard
             icon="warning-outline"
             label={t("annAdmin.filterUrgent")}
             value={stats.urgentUnack}
-            color="#EA580C"
+            tone={(stats.urgentUnack ?? 0) > 0 ? "error" : undefined}
           />
           <StatCard
             icon="pin-outline"
             label={t("annAdmin.pinned")}
             value={stats.pinned}
-            color="#4F46E5"
           />
           <TouchableOpacity
             onPress={() => setActiveFilter("from_teachers")}
@@ -279,14 +294,12 @@ export default function AdminAnnouncementsScreen() {
               icon="people-outline"
               label={t("annAdmin.filterFromTeachers")}
               value={stats.fromTeachers}
-              color="#0891B2"
             />
           </TouchableOpacity>
           <StatCard
             icon="list-outline"
             label={t("common.total")}
             value={stats.total}
-            color="#059669"
           />
         </ScrollView>
       )}
@@ -294,7 +307,7 @@ export default function AdminAnnouncementsScreen() {
       {activeFilter === "from_teachers" && (
         <View style={styles.filterBanner}>
           <View style={styles.filterBannerLeft}>
-            <Ionicons name="people" size={18} color="#0891B2" />
+            <Ionicons name="people" size={18} color={TEACHER.solid} />
             <Text style={styles.filterBannerText}>
               {t("annAdmin.showingTeacherCount", { count: announcements.length })}
             </Text>
@@ -327,7 +340,7 @@ export default function AdminAnnouncementsScreen() {
             <Ionicons
               name={f.icon}
               size={14}
-              color={activeFilter === f.key ? "#FFF" : "#6B7280"}
+              color={activeFilter === f.key ? ACCENT.sky.deep : COLORS.textSecondary}
             />
             <Text style={[
               styles.filterText,
@@ -353,21 +366,22 @@ export default function AdminAnnouncementsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.sky.solid}
+            colors={[ACCENT.sky.solid]}
           />
         }
       >
         {announcements.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons
-              name={
+            <IconSquare
+              icon={
                 activeFilter === "from_teachers"
                   ? "people-outline"
                   : "megaphone-outline"
               }
-              size={48}
-              color="#D1D5DB"
+              accent={activeFilter === "from_teachers" ? roleAccent("teacher") : "sky"}
+              size={56}
+              radius={16}
             />
             <Text style={styles.emptyTitle}>
               {activeFilter === "from_teachers"
@@ -417,10 +431,15 @@ export default function AdminAnnouncementsScreen() {
                 {!item.isRead && <View style={styles.unreadStrip} />}
 
                 <View style={styles.cardTopRow}>
+                  <IconSquare
+                    icon="megaphone"
+                    accent={PRIORITY_ACCENT[item.priority] || "sky"}
+                    size={28}
+                  />
                   {role && (
                     <View style={[
                       styles.authorRoleBadge,
-                      { backgroundColor: role.bg },
+                      { backgroundColor: role.bg, borderColor: role.border },
                     ]}>
                       <Ionicons
                         name={
@@ -442,14 +461,14 @@ export default function AdminAnnouncementsScreen() {
 
                   {item.isPinned && (
                     <View style={styles.pinBadge}>
-                      <Ionicons name="pin" size={10} color="#4F46E5" />
+                      <Ionicons name="pin" size={10} color={ACCENT.sky.deep} />
                       <Text style={styles.pinText}>{t("annAdmin.pinned")}</Text>
                     </View>
                   )}
 
                   {expired && (
                     <View style={styles.expiredBadge}>
-                      <Ionicons name="time-outline" size={10} color="#6B7280" />
+                      <Ionicons name="time-outline" size={10} color={EXPIRED_BADGE.text} />
                       <Text style={styles.expiredBadgeText}>{t("annAdmin.expired")}</Text>
                     </View>
                   )}
@@ -468,7 +487,7 @@ export default function AdminAnnouncementsScreen() {
                       <Ionicons
                         name={item.isPinned ? "pin" : "pin-outline"}
                         size={15}
-                        color={item.isPinned ? "#4F46E5" : "#9CA3AF"}
+                        color={item.isPinned ? ACCENT.sky.solid : COLORS.textSecondary}
                       />
                     </TouchableOpacity>
 
@@ -483,7 +502,7 @@ export default function AdminAnnouncementsScreen() {
                       <Ionicons
                         name="trash-outline"
                         size={15}
-                        color="#EF4444"
+                        color={COLORS.danger}
                       />
                     </TouchableOpacity>
                   </View>
@@ -516,14 +535,14 @@ export default function AdminAnnouncementsScreen() {
                   <View style={[
                     styles.badge,
                     {
-                      backgroundColor: `${aud.color}15`,
-                      borderColor:     `${aud.color}40`,
+                      backgroundColor: accentBadge(aud.accent).bg,
+                      borderColor:     accentBadge(aud.accent).border,
                     },
                   ]}>
-                    <Ionicons name={aud.icon} size={10} color={aud.color} />
+                    <Ionicons name={aud.icon} size={10} color={accentBadge(aud.accent).text} />
                     <Text style={[
                       styles.badgeText,
-                      { color: aud.color, marginLeft: 3 },
+                      { color: accentBadge(aud.accent).text, marginLeft: 3 },
                     ]}>
                       {t(aud.labelKey)}
                     </Text>
@@ -532,12 +551,12 @@ export default function AdminAnnouncementsScreen() {
                   {item.targetClasses?.length > 0 && (
                     <View style={[
                       styles.badge,
-                      { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" },
+                      { backgroundColor: CLASS_BADGE.bg, borderColor: CLASS_BADGE.border },
                     ]}>
-                      <Ionicons name="school-outline" size={10} color="#EA580C" />
+                      <Ionicons name="school-outline" size={10} color={CLASS_BADGE.text} />
                       <Text style={[
                         styles.badgeText,
-                        { color: "#EA580C", marginLeft: 3 },
+                        { color: CLASS_BADGE.text, marginLeft: 3 },
                       ]}>
                         {t("annAdmin.classCount", { count: item.targetClasses.length })}
                       </Text>
@@ -549,7 +568,7 @@ export default function AdminAnnouncementsScreen() {
                       <Ionicons
                         name="cloud-offline-outline"
                         size={10}
-                        color="#F59E0B"
+                        color={OFFLINE_BADGE.text}
                       />
                       <Text style={styles.syncBadgeText}>{t("annAdmin.offline")}</Text>
                     </View>
@@ -565,11 +584,11 @@ export default function AdminAnnouncementsScreen() {
                           : "shield-half-outline"
                       }
                       size={13}
-                      color={fromTeacher ? "#0891B2" : "#9CA3AF"}
+                      color={fromTeacher ? TEACHER.solid : COLORS.textSecondary}
                     />
                     <Text style={[
                       styles.authorText,
-                      fromTeacher && { color: "#0891B2", fontWeight: "600" },
+                      fromTeacher && { color: TEACHER.deep, fontWeight: "600" },
                     ]}>
                       {item.authorName || t("annAdmin.unknown")}
                       {fromTeacher ? " (Teacher)" : ""}
@@ -591,17 +610,17 @@ export default function AdminAnnouncementsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
   loadingText: {
     marginTop:  12,
     fontSize:   14,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     fontWeight: "500",
   },
 
@@ -611,26 +630,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerIcon:   { marginLeft: 12 },
+  headerCenter: { flex: 1 },
+  headerTitle:  { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   createBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.sky.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -661,47 +681,27 @@ const styles = StyleSheet.create({
     paddingVertical:   12,
     gap:               10,
   },
-  statCard: {
-    backgroundColor: "#FFF",
-    borderRadius:    12,
-    padding:         12,
-    width:           100,
-    alignItems:      "center",
-    borderLeftWidth: 3,
-    borderWidth:     1,
-    borderColor:     "#F3F4F6",
-  },
-  statValue: {
-    fontSize:   20,
-    fontWeight: "800",
-    color:      "#111827",
-    marginTop:  4,
-  },
-  statLabel: {
-    fontSize:   11,
-    color:      "#6B7280",
-    marginTop:  2,
-    textAlign:  "center",
-  },
+  // Fixed width in a horizontal scroller, so the tile's flex: 1 is cancelled.
+  statCard: { flex: 0, width: 100 },
 
   filterBanner: {
     flexDirection:     "row",
     alignItems:        "center",
     justifyContent:    "space-between",
-    backgroundColor:   "#E0F2FE",
+    backgroundColor:   TEACHER.wash,
     paddingHorizontal: 16,
     paddingVertical:   8,
     borderBottomWidth: 1,
-    borderBottomColor: "#BAE6FD",
+    borderBottomColor: accentBadge(roleAccent("teacher")).border,
   },
   filterBannerLeft: {
     flexDirection: "row",
     alignItems:    "center",
     gap:           6,
   },
-  filterBannerText:      { fontSize: 13, color: "#0891B2", fontWeight: "600" },
+  filterBannerText:      { fontSize: 13, color: TEACHER.deep, fontWeight: "600" },
   filterBannerClear:     { paddingHorizontal: 10, paddingVertical: 4 },
-  filterBannerClearText: { fontSize: 13, color: "#0891B2", fontWeight: "700" },
+  filterBannerClearText: { fontSize: 13, color: TEACHER.deep, fontWeight: "700" },
 
   filtersScroll:  {},   // see statsScroll
   filtersContent: {
@@ -716,16 +716,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      20,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
     gap:               4,
   },
-  filterChipActive: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  filterText:       { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  filterTextActive: { color: "#FFF" },
+  filterChipActive: { backgroundColor: ACCENT.sky.wash, borderColor: ACCENT.sky.base },
+  filterText:       { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary },
+  filterTextActive: { color: ACCENT.sky.deep },
   filterBadge: {
-    backgroundColor:   "#DC2626",
+    backgroundColor:   TEACHER.solid,
     borderRadius:      8,
     minWidth:          16,
     height:            16,
@@ -733,32 +733,33 @@ const styles = StyleSheet.create({
     justifyContent:    "center",
     paddingHorizontal: 3,
   },
-  filterBadgeText: { color: "#FFF", fontSize: 9, fontWeight: "800" },
+  filterBadgeText: { color: COLORS.onPrimary, fontSize: 9, fontWeight: "800" },
 
   listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 },
 
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.sky.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    12,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
     overflow:        "hidden",
   },
   cardPinned: {
-    borderColor:     "#C7D2FE",
-    backgroundColor: "#FAFBFF",
-    borderTopWidth:  2,
-    borderTopColor:  "#4F46E5",
+    borderColor:     ACCENT.sky.base,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.sky.base,
   },
   cardUnread: {
     borderLeftWidth: 3,
-    borderLeftColor: "#4F46E5",
+    borderLeftColor: ACCENT.sky.solid,
   },
   cardTeacher: {
     borderLeftWidth: 3,
-    borderLeftColor: "#0891B2",
+    borderLeftColor: TEACHER.base,
   },
   cardExpired: { opacity: 0.7 },
 
@@ -768,7 +769,7 @@ const styles = StyleSheet.create({
     top:                    0,
     bottom:                 0,
     width:                  3,
-    backgroundColor:        "#4F46E5",
+    backgroundColor:        ACCENT.sky.solid,
     borderTopLeftRadius:    16,
     borderBottomLeftRadius: 16,
   },
@@ -787,24 +788,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical:   3,
     borderRadius:      6,
+    borderWidth:       1,
   },
   authorRoleText: { fontSize: 11, fontWeight: "700" },
   pinBadge: {
-    flexDirection: "row",
-    alignItems:    "center",
-    gap:           3,
+    flexDirection:     "row",
+    alignItems:        "center",
+    gap:               3,
+    paddingHorizontal: 6,
+    paddingVertical:   2,
+    borderRadius:      6,
+    borderWidth:       1,
+    backgroundColor:   accentBadge("sky").bg,
+    borderColor:       accentBadge("sky").border,
   },
-  pinText:    { fontSize: 10, color: "#4F46E5", fontWeight: "700" },
+  pinText:    { fontSize: 10, color: ACCENT.sky.deep, fontWeight: "700" },
   expiredBadge: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               3,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   EXPIRED_BADGE.bg,
+    borderWidth:       1,
+    borderColor:       EXPIRED_BADGE.border,
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      6,
   },
-  expiredBadgeText: { fontSize: 10, color: "#6B7280", fontWeight: "600" },
+  expiredBadgeText: { fontSize: 10, color: EXPIRED_BADGE.text, fontWeight: "600" },
 
   cardActions: {
     flexDirection: "row",
@@ -814,7 +824,7 @@ const styles = StyleSheet.create({
     width:           28,
     height:          28,
     borderRadius:    8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -822,14 +832,14 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize:     15,
     fontWeight:   "600",
-    color:        "#374151",
+    color:        COLORS.textSecondary,
     marginBottom: 6,
   },
-  cardTitleUnread: { fontWeight: "700", color: "#111827" },
+  cardTitleUnread: { fontWeight: "700", color: COLORS.text },
 
   cardBody: {
     fontSize:     13,
-    color:        "#6B7280",
+    color:        COLORS.textSecondary,
     lineHeight:   18,
     marginBottom: 10,
   },
@@ -860,11 +870,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical:   3,
     borderRadius:      12,
-    backgroundColor:   "#FFFBEB",
+    backgroundColor:   OFFLINE_BADGE.bg,
     borderWidth:       1,
-    borderColor:       "#FDE68A",
+    borderColor:       OFFLINE_BADGE.border,
   },
-  syncBadgeText: { fontSize: 10, color: "#F59E0B", fontWeight: "600" },
+  syncBadgeText: { fontSize: 10, color: OFFLINE_BADGE.text, fontWeight: "600" },
 
   cardFooter: {
     flexDirection:  "row",
@@ -872,8 +882,8 @@ const styles = StyleSheet.create({
     alignItems:     "center",
   },
   authorRow:  { flexDirection: "row", alignItems: "center", gap: 4 },
-  authorText: { fontSize: 11, color: "#9CA3AF", fontWeight: "500" },
-  dateText:   { fontSize: 11, color: "#9CA3AF" },
+  authorText: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
+  dateText:   { fontSize: 11, color: COLORS.textSecondary },
 
   emptyState: {
     alignItems:      "center",
@@ -883,13 +893,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize:   16,
     fontWeight: "700",
-    color:      "#374151",
+    color:      COLORS.text,
     marginTop:  12,
     textAlign:  "center",
   },
   emptySubtitle: {
     fontSize:   13,
-    color:      "#9CA3AF",
+    color:      COLORS.textSecondary,
     marginTop:  4,
     textAlign:  "center",
     lineHeight: 20,
@@ -898,10 +908,15 @@ const styles = StyleSheet.create({
     marginTop:         16,
     paddingHorizontal: 20,
     paddingVertical:   8,
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.sky.wash,
     borderRadius:      10,
   },
-  clearFilterText: { color: "#4F46E5", fontWeight: "600", fontSize: 13 },
+  clearFilterText: { color: ACCENT.sky.deep, fontWeight: "600", fontSize: 13 },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+import {
+  COLORS, ACCENT, roleAccent, accentBadge, statusBadge,
+} from "../../../src/theme/colors";
 import { errorText } from "../../../src/utils/appError";

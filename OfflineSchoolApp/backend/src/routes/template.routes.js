@@ -185,6 +185,57 @@ router.post("/seed-default", asyncHandler(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// READY-MADE LAYOUTS (C12) — print/reportPresets.js
+//
+//   GET  /api/templates/presets           the three layouts, and which is in use
+//   POST /api/templates/presets/:id/use   make it the school's default template
+//
+// "Use" creates the preset's template once (by its name) and promotes it the
+// same way PATCH /:id/default does: every OTHER template loses the flag.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { PRESETS, presetById, PRESET_HTML } = require("../print/reportPresets");
+
+router.get("/presets", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, error: "schoolId is required" });
+  const current = await ReportTemplate.findOne({ schoolId, isDefault: true, deletedAt: null })
+    .select("name").lean();
+  res.json({
+    success: true,
+    presets: PRESETS.map(({ id, name, description }) => ({
+      id, name, description, inUse: current?.name === name,
+    })),
+    // No default template: cards print with the built-in layout.
+    custom: current && !PRESETS.some((p) => p.name === current.name) ? current.name : null,
+  });
+}));
+
+router.post("/presets/:id/use", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, error: "schoolId is required" });
+  const preset = presetById(req.params.id);
+  if (!preset) return res.status(404).json({ success: false, error: "No such layout" });
+
+  let template = await ReportTemplate.findOne({ schoolId, name: preset.name, deletedAt: null });
+  if (!template) {
+    template = await ReportTemplate.create({
+      _id: uuidv4(), schoolId, name: preset.name,
+      html: PRESET_HTML, css: preset.css, isDefault: false, version: 1,
+      variables: scanVariables(PRESET_HTML),
+      createdBy: req.user?._id || null, updatedBy: req.user?._id || null,
+    });
+  }
+  await ReportTemplate.updateMany(
+    { schoolId, deletedAt: null, _id: { $ne: template._id } },
+    { $set: { isDefault: false } }
+  );
+  template.isDefault = true;
+  await template.save();
+  return res.json({ success: true, template: { _id: template._id, name: template.name, isDefault: true } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/templates/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -551,20 +602,32 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
     };
   });
 
+  // The school's real letterhead and the pupil's real photo, resolved as the
+  // cards resolve them. Both were hard-coded null, so a head designing a
+  // template could never see where the logo or the photo would land.
+  const { loadSchoolForCard, absoluteLogoUrl } = require("../services/reportCardData.service");
+  const [{ school: letterhead }, pupil] = await Promise.all([
+    loadSchoolForCard(schoolId, req),
+    require("../db/models/Student").findOne({ _id: String(studentId), schoolId })
+      .select("photoUrl gender dateOfBirth").lean().catch(() => null),
+  ]);
+
   const data = {
     student: {
       fullName:        summary?.studentName || "",
       admissionNumber: summary?.admissionNo || "",
-      gender:          "",
-      dateOfBirth:     null,
+      gender:          pupil?.gender || "",
+      dateOfBirth:     pupil?.dateOfBirth || null,
+      photoUrl:        absoluteLogoUrl(pupil?.photoUrl, req),
       photoBase64:     null,
     },
     school: {
-      name:          "",
-      motto:         "",
-      address:       "",
-      phone:         "",
+      name:          letterhead.name    || "",
+      motto:         letterhead.motto   || "",
+      address:       letterhead.address || "",
+      phone:         letterhead.phone   || "",
       principalName: "",
+      logoUrl:       letterhead.logo,
       logoBase64:    null,
     },
     className:    summary?.className   || "",

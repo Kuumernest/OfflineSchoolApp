@@ -29,6 +29,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { cn }              from "@/utils/cn";
+import { DASH_TINT }       from "@/config/dashboardTint";
 import { getErrorMessage } from "@/lib/axios";
 import {
   fetchRuns, fetchRun, generateRun, setDecision,
@@ -38,10 +39,10 @@ import type {
   Outcome, RunStatus, PromotionDecision,
 } from "@/types/promotion.types";
 
-const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "default"> = {
+const STATUS_VARIANT: Record<RunStatus, "warning" | "success" | "danger"> = {
   draft:     "warning",
   committed: "success",
-  reversed:  "default",
+  reversed:  "danger",
 };
 
 const OUTCOME_VARIANT: Record<Outcome, "success" | "warning" | "info" | "danger"> = {
@@ -236,13 +237,13 @@ export default function PromotionPage() {
           <>
             {run.status === "draft" && blocked === 0 && (
               <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
                 <p>{t("promo.draftNotice")}</p>
               </div>
             )}
 
             {blocked > 0 && (
-              <div className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
+              <div className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                 <p>{t("promo.blockedNotice", { count: blocked })}</p>
               </div>
@@ -250,25 +251,28 @@ export default function PromotionPage() {
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {([
-                ["promo.promoted",   run.counts.promoted],
-                ["promo.repeated",   run.counts.repeated],
-                ["promo.graduated",  run.counts.graduated],
-                ["promo.unassigned", run.counts.unassigned],
-              ] as const).map(([key, value]) => (
-                <Card key={key}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                    {t(key)}
-                  </p>
-                  <p
-                    className={cn(
-                      "mt-2 font-display text-[26px] leading-none tabular",
-                      key === "promo.unassigned" && value > 0 ? "text-danger" : "text-ink"
-                    )}
-                  >
+                ["promo.promoted",   run.counts.promoted,   DASH_TINT.green],
+                ["promo.repeated",   run.counts.repeated,   DASH_TINT.amber],
+                ["promo.graduated",  run.counts.graduated,  DASH_TINT.blue],
+                ["promo.unassigned", run.counts.unassigned, DASH_TINT.blue],
+              ] as const).map(([key, value, tint]) => {
+                // Tinted counts; a pupil left unassigned is a problem, so that
+                // card alone takes a red border and figure when above zero.
+                const fault = key === "promo.unassigned" && value > 0;
+                return (
+                <div
+                  key={key}
+                  className={cn("min-w-0 p-5", fault ? tint.errorCard : tint.card)}
+                >
+                  <p className={cn("text-[28px] font-bold leading-none tracking-tight tabular", fault ? "text-danger-text" : tint.number)}>
                     {value}
                   </p>
-                </Card>
-              ))}
+                  <p className="mt-2 text-sm font-medium text-ink-muted">
+                    {t(key)}
+                  </p>
+                </div>
+                );
+              })}
             </div>
 
             <Card padding={false}>
@@ -446,7 +450,7 @@ export default function PromotionPage() {
 
       {incomplete > 0 && (
         <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <div>
             <p className="font-medium">{t("prog.incomplete", { count: incomplete })}</p>
             <p className="text-ink-muted">{t("prog.incompleteHint")}</p>
@@ -482,7 +486,7 @@ export default function PromotionPage() {
                   <Td numeric className="text-ink-muted">{r.counts.graduated}</Td>
                   <Td
                     numeric
-                    className={r.counts.unassigned > 0 ? "font-semibold text-danger" : "text-ink-muted"}
+                    className={r.counts.unassigned > 0 ? "font-semibold text-danger-text" : "text-ink-muted"}
                   >
                     {r.counts.unassigned}
                   </Td>
@@ -520,7 +524,7 @@ export default function PromotionPage() {
             </FormField>
           </div>
           {classesWithoutResults.length > 0 && (
-            <p className="text-sm text-warning">
+            <p className="text-sm text-warning-text">
               {t("prog.noResults", { count: classesWithoutResults.length })}{" "}
               {classesWithoutResults.map((c) => c.name).join(", ")} — {t("prog.noResultsHint")}
             </p>

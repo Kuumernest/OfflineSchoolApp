@@ -39,8 +39,8 @@
  */
 
 const path   = require("path");
-const fs     = require("fs");
 const crypto = require("crypto");
+const { getStore } = require("../storage/fileStore");
 
 const APPLICATIONS_DIR = path.resolve(__dirname, "..", "uploads", "applications");
 
@@ -55,8 +55,14 @@ const CONTENT_TYPES = {
 
 /** The stored filename of one document — the only handle the API exposes. */
 const documentKey = (doc) => {
-  const raw = doc?.filename || String(doc?.url || "").split("?")[0] || "";
-  const base = path.basename(String(raw));
+  let raw = doc?.filename;
+  if (!raw) {
+    // A URL holds the name percent-encoded ("birth%20cert.pdf"); the file on
+    // disk, and the key the route compares with, is the decoded name.
+    raw = String(doc?.url || "").split("?")[0];
+    try { raw = decodeURIComponent(raw); } catch { /* keep it as stored */ }
+  }
+  const base = path.basename(String(raw || ""));
   return base && base !== "." && base !== ".." ? base : null;
 };
 
@@ -121,6 +127,11 @@ const presentDocuments = (req, applicationId, docs) =>
 const redactDocumentsDeep = (req, value, depth = 0) => {
   if (depth > 4 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => redactDocumentsDeep(req, v, depth + 1));
+  // Plain records only. A Date, an ObjectId or a Buffer is a value: walking
+  // its (absent) own keys rebuilt it as {}, which JSON then sent as {} where a
+  // timestamp belonged.
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
 
   const out = {};
   for (const [k, v] of Object.entries(value)) {
@@ -135,17 +146,19 @@ const redactDocumentsDeep = (req, value, depth = 0) => {
 };
 
 /**
- * The file for one key, if it is inside the applications directory. The key
- * is reduced to a basename first, so a key cannot climb out of the directory.
+ * The bytes of one document, from the file store (storage/fileStore.js), or
+ * null. The key is reduced to a basename first, so it cannot climb out of
+ * applications/.
+ *
+ * @returns {Promise<{ body: Buffer, contentType: string } | null>}
  */
-const resolveDocumentFile = (key) => {
+const readDocument = async (key) => {
   const base = path.basename(String(key || ""));
   if (!base || base === "." || base === "..") return null;
-  const filePath = path.resolve(APPLICATIONS_DIR, base);
-  if (!filePath.startsWith(APPLICATIONS_DIR + path.sep)) return null;
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
+  const body = await getStore().read(`applications/${base}`);
+  if (!body) return null;
   const ext = path.extname(base).toLowerCase();
-  return { filePath, contentType: CONTENT_TYPES[ext] || "application/octet-stream" };
+  return { body, contentType: CONTENT_TYPES[ext] || "application/octet-stream" };
 };
 
 /** A filename safe to put in a Content-Disposition header. */
@@ -173,6 +186,6 @@ module.exports = {
   presentDocument,
   presentDocuments,
   redactDocumentsDeep,
-  resolveDocumentFile,
+  readDocument,
   safeDownloadName,
 };

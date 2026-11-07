@@ -1,18 +1,13 @@
 // backend/controllers/sync.controller.js
 "use strict";
 
-const crypto  = require("crypto");
-const mongoose = require("mongoose");
-
-const bcrypt         = require("bcryptjs");
-const { v4: uuidv4 } = require("uuid");
-
-const Class             = require("../db/models/Class");
+const Class            = require("../db/models/Class");
 const User              = require("../db/models/User");
 const Subject           = require("../db/models/Subject");
 const Period            = require("../db/models/Period");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const SyncTombstone     = require("../db/models/SyncTombstone");
+const { safeHorizon }   = require("../config/syncWindow");
 
 // ── Optional models ───────────────────────────────────────────────────────────
 
@@ -23,23 +18,21 @@ try {
   console.warn("[sync] ⚠️  Student model not found — students will be omitted from pull");
 }
 
-let School = null;
-try {
-  School = require("../db/models/School");
-} catch {
-  console.warn("[sync] ⚠️  School model not found — enrollment codes will use fallback");
-}
-
-let Counter = null;
-try {
-  Counter = require("../db/models/Counter");
-} catch {
-  console.warn("[sync] ⚠️  Counter model not found — enrollment number generation may race");
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * May this caller sync the named school?
+ *
+ * Their own school, or any school for a super_admin, who has none of their own
+ * and names the one they are working inside (the phone's school picker). The
+ * door (middleware/auth.js) has already refused a super_admin naming a school
+ * that does not exist or was deleted.
+ */
+const mayUseSchool = (req, schoolId) =>
+  req.user?.role === "super_admin" ||
+  req.user?.schoolId?.toString() === String(schoolId);
 
 /**
  * Builds a Mongoose updatedAt filter.
@@ -79,6 +72,36 @@ const sinceFilter = (lastSyncDate) => {
   }
 
   return { updatedAt: { $gte: lastSyncDate } };
+};
+
+/**
+ * How many rows of ONE collection a single pull may carry.
+ *
+ * The pull used to answer with every changed row of all six collections in
+ * one body, so a first sync of a large school was one unbounded response —
+ * tens of thousands of students over a phone link that may not last a minute.
+ *
+ * Now each collection is read in (updatedAt, _id) order and cut at the limit.
+ * When any collection is cut, `timestamp` is pulled back to the updatedAt of
+ * the last row sent from the cut collection(s), and `hasMore: true` says so.
+ * A client that knows nothing of paging — every phone build before the feed
+ * moved to /sync/changes — stores `timestamp` as it always has, and its next
+ * pull (inclusive `$gte`) continues from there. The data arrives over several
+ * syncs instead of one, and nothing is skipped: every row after the cursor is
+ * either in this answer or after the cursor that goes back.
+ *
+ * Known edge, documented rather than fixed: more than `limit` rows of one
+ * collection sharing ONE millisecond cannot be split by a plain timestamp, so
+ * an old client would be offered the same first `limit` of them every time.
+ * New clients read /sync/changes, whose (updatedAt, _id) cursor has no such
+ * edge; logged when it happens.
+ */
+const PULL_LIMIT_DEFAULT = 2000;
+const PULL_LIMIT_MAX     = 2000;
+
+const pullLimit = (raw) => {
+  const n = Number.parseInt(raw, 10);
+  return Math.min(Math.max(Number.isFinite(n) ? n : PULL_LIMIT_DEFAULT, 1), PULL_LIMIT_MAX);
 };
 
 /** Excludes soft-deleted documents from any query. */
@@ -131,55 +154,6 @@ const normaliseStudentForSync = (s) => {
   };
 };
 
-/**
- * Atomically generates the next sequential enrollment number for a school/year.
- * Falls back to a timestamp-based suffix when the Counter model is unavailable
- * so we never silently duplicate numbers.
- */
-const generateEnrollmentNo = async (schoolId, prefix) => {
-  if (Counter) {
-    const counter = await Counter.findOneAndUpdate(
-      { _id: `enrollmentNo:${schoolId}:${prefix}` },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: 'after' }
-    );
-    return `${prefix}-${String(counter.seq).padStart(4, "0")}`;
-  }
-
-  // Graceful degradation — still sequential per process but safe across restarts
-  // because we sort descending and parse the last known value.
-  const last = await User.findOne(
-    { enrollmentNo: { $regex: `^${prefix}-` }, role: "student" },
-    { enrollmentNo: 1 },
-    { sort: { enrollmentNo: -1 } }
-  ).lean();
-
-  let nextNum = 1;
-  if (last?.enrollmentNo) {
-    const parts = last.enrollmentNo.split("-");
-    const seq   = parseInt(parts[parts.length - 1], 10);
-    if (!isNaN(seq)) nextNum = seq + 1;
-  }
-
-  return `${prefix}-${String(nextNum).padStart(4, "0")}`;
-};
-
-/**
- * Resolves a short school code used in enrollment number prefixes.
- * Returns a safe uppercase string regardless of model availability.
- */
-const resolveSchoolCode = async (schoolId) => {
-  if (School) {
-    try {
-      const school = await School.findById(schoolId).select("code").lean();
-      if (school?.code) return school.code.trim().toUpperCase().slice(0, 5);
-    } catch (err) {
-      console.warn("[sync] Could not load School for code:", err.message);
-    }
-  }
-  return String(schoolId).replace(/[^A-Z0-9]/gi, "").slice(0, 3).toUpperCase() || "SCH";
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // PULL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,8 +174,7 @@ exports.pullChanges = async (req, res) => {
     }
 
     // ── Ownership guard — caller must belong to the requested school ─────
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
+    if (!mayUseSchool(req, schoolId)) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
@@ -244,7 +217,7 @@ exports.pullChanges = async (req, res) => {
     // timetable on their device, and it says nothing about the account.
     const teacherFields = isStudent
       ? "name role schoolId deletedAt createdAt updatedAt"
-      : "name email role schoolId isActive mustResetPassword enrollmentNo deletedAt createdAt updatedAt";
+      : "name email role schoolId isActive mustResetPassword enrollmentNo staffNo deletedAt createdAt updatedAt";
 
     // ── Removals: how a deletion reaches a device ────────────────────────
     //
@@ -277,46 +250,108 @@ exports.pullChanges = async (req, res) => {
     // and a student's token received every pupil in the school with their
     // guardians' names and phone numbers.
     const ownStudent = isStudent ? { $or: [{ userId: callerId }, { _id: callerId }] } : null;
+    // A teacher: the pupils of their roster classes only (config/syncFeed.js
+    // teacherRosterClassIds — the phone feed's rule, and the one the phone
+    // purges by). null for every other role.
+    const mongoose = require("mongoose");
+    const { teacherRosterClassIds } = require("../config/syncFeed");
+    const roster = await teacherRosterClassIds(req, mongoose.models);
     const studentFilter = {
       schoolId,
       ...since,
+      ...(roster ? { classId: { $in: roster } } : {}),
       ...(incremental ? {} : { status: "approved", isActive: true }),
       $and: [ownStudent, incremental ? null : NOT_DELETED].filter(Boolean),
     };
     if (!studentFilter.$and.length) delete studentFilter.$and;
 
-    // ── Fetch all entity types in parallel ───────────────────────────────
-    const [classes, teachers, subjects, periods, assignments, rawStudents, tombstones] =
-      await Promise.all([
-        Class.find({ schoolId, ...since, ...live }).lean(),
+    // ── Fetch all entity types in parallel, one bounded page each ────────
+    const limit = pullLimit(req.query.limit);
+    const page  = (q, key = "updatedAt") => q.sort({ [key]: 1, _id: 1 }).limit(limit + 1);
 
-        User.find({ schoolId, role: "teacher", ...since })
-          .select(teacherFields)
+    const [rawClasses, rawTeachers, rawSubjects, rawPeriods, rawAssignments, rawStudentsPage, rawTombstones] =
+      await Promise.all([
+        page(Class.find({ schoolId, ...since, ...live })).lean(),
+
+        page(User.find({ schoolId, role: "teacher", ...since })
+          .select(teacherFields))
           .lean(),
 
-        Subject.find({ schoolId, ...since, ...live }).lean(),
+        page(Subject.find({ schoolId, ...since, ...live })).lean(),
 
-        Period.find({ schoolId, ...since, ...live }).lean(),
+        page(Period.find({ schoolId, ...since, ...live })).lean(),
 
-        TeacherAssignment.find({ schoolId, ...since, ...live })
+        page(TeacherAssignment.find({ schoolId, ...since, ...live })
           // Name only for a student: teacherFields above keeps staff emails
           // off a pupil's device, and this join handed them back.
           .populate("teacher", isStudent ? "name" : "name email")
           .populate("class",   "name")
-          .populate("subject", "name")
+          .populate("subject", "name"))
           .lean(),
 
         // Their own row is still sent to a student rather than dropped,
         // because the local students table is what several student screens
         // read their class and admission number from.
-        Student ? Student.find(studentFilter).lean() : Promise.resolve([]),
+        Student ? page(Student.find(studentFilter)).lean() : Promise.resolve([]),
 
         incremental
           // The same bound as every row above (sinceFilter: a cursor from the
           // future reads from the beginning), on the deletion's own time.
-          ? SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }).lean()
+          ? page(SyncTombstone.find({ schoolId: String(schoolId), deletedAt: since.updatedAt }), "deletedAt").lean()
           : Promise.resolve([]),
       ]);
+
+    // Cut each collection at the limit. The cursor handed back may not pass
+    // the last row SENT of any cut collection, or the rows after it in that
+    // collection would sort before the next pull's `since` and never come.
+    // A class the teacher GAINED since lastSync: its pupils did not change, so
+    // the timestamp cursor would never offer them. The grant did change — an
+    // assignment created or switched on, a class given this form master — so
+    // every roster class whose grant is newer than lastSync sends its live
+    // pupils whatever their updatedAt. Outside the page limit (one teacher's
+    // classes, not the school), so it cannot hold the cursor back. Over-sending
+    // is an upsert the phone already tolerates; under-sending is a pupil
+    // missing from a register.
+    let gainedStudents = [];
+    if (roster && roster.length && incremental && Student) {
+      const [byAssignment, byFormMaster] = await Promise.all([
+        TeacherAssignment.find({
+          schoolId: String(schoolId), isActive: { $ne: false }, ...since,
+          $or: [{ teacher: callerId }, { teacherId: callerId }],
+        }).select("class classId").lean(),
+        Class.find({ schoolId: String(schoolId), classTeacherId: callerId, ...since }).distinct("_id"),
+      ]);
+      const gained = [...new Set([
+        ...byAssignment.map((a) => String(a.classId ?? a.class ?? "")),
+        ...byFormMaster.map(String),
+      ])].filter((id) => roster.includes(id));
+      if (gained.length) {
+        gainedStudents = await Student.find({
+          schoolId, classId: { $in: gained }, status: "approved", isActive: true, ...NOT_DELETED,
+        }).sort({ updatedAt: 1, _id: 1 }).lean();
+      }
+    }
+
+    let hasMore  = false;
+    let boundary = null;
+    const cut = (rows, key = "updatedAt") => {
+      if (rows.length <= limit) return rows;
+      hasMore = true;
+      const kept = rows.slice(0, limit);
+      const at   = new Date(kept[kept.length - 1][key]);
+      if (!boundary || at < boundary) boundary = at;
+      return kept;
+    };
+    const classes     = cut(rawClasses);
+    const teachers    = cut(rawTeachers);
+    const subjects    = cut(rawSubjects);
+    const periods     = cut(rawPeriods);
+    const assignments = cut(rawAssignments);
+    const rawStudents = cut(rawStudentsPage);
+    for (const s of gainedStudents) {
+      if (!rawStudents.some((r) => String(r._id) === String(s._id))) rawStudents.push(s);
+    }
+    const tombstones  = cut(rawTombstones, "deletedAt");
 
     // Students: on the roster → the full row; off it → a removal.
     const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
@@ -334,7 +369,10 @@ exports.pullChanges = async (req, res) => {
     // Hard deletes. A student caller hears only of their own record.
     const stoneFor = { subject: subjects, teacherAssignment: assignments, student: students };
     const stoneModel = { subject: Subject, teacherAssignment: TeacherAssignment, student: Student };
-    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (!isStudent || t.entity !== "student" || t.docId === callerId));
+    // A pupil hears only of their own deletion; a teacher only of their roster
+    // classes' pupils (the tombstone keeps the deleted pupil's class).
+    const relevant = tombstones.filter((t) => stoneFor[t.entity] && (t.entity !== "student" || (
+      isStudent ? t.docId === callerId : !roster || roster.includes(String(t.classId)))));
     for (const entity of Object.keys(stoneFor)) {
       const ids = relevant.filter((t) => t.entity === entity).map((t) => t.docId);
       if (!ids.length || !stoneModel[entity]) continue;
@@ -359,8 +397,38 @@ exports.pullChanges = async (req, res) => {
       `📦 Pull results (${role ?? "unknown"}) — classes: ${classes.length}, ` +
       `teachers: ${teachers.length}, subjects: ${subjects.length}, ` +
       `periods: ${periods.length}, assignments: ${assignments.length}, ` +
-      `students: ${students.length}`
+      `students: ${students.length}` + (hasMore ? ` — page cut at ${limit}, more to come` : "")
     );
+
+    // The cursor: the earliest of
+    //   - "before the queries ran", less the commit-safety window
+    //     (config/syncWindow.js). updatedAt is stamped when a document is
+    //     BUILT, not when it commits, so a slow write can become visible
+    //     with an updatedAt behind a cursor already handed out — and a
+    //     timestamp cursor would then skip it for good. Lagging the cursor
+    //     re-reads the last two minutes on every pull instead;
+    //   - the last row sent from a collection that was cut (PULL_LIMIT_DEFAULT).
+    // It also keeps a row dated in the future from mattering: the cursor is
+    // never later than the server's clock less the window.
+    let timestamp = safeHorizon(new Date(pulledAt)).toISOString();
+    if (boundary && boundary < new Date(timestamp)) timestamp = boundary.toISOString();
+
+    // Rows dated ahead of the clock are re-sent every pull until real time
+    // passes them. Delivered, never hidden, and said out loud.
+    const nowMs = Date.now();
+    let futureDated = 0;
+    for (const rows of [classes, teachers, subjects, periods, assignments, rawStudents]) {
+      for (const r of rows) if (r.updatedAt && new Date(r.updatedAt).getTime() > nowMs) futureDated++;
+    }
+    if (futureDated) {
+      console.warn(`[sync] ⚠️  ${futureDated} row(s) for school ${schoolId} are dated in the future — re-sent until the clock passes them`);
+    }
+    if (hasMore && boundary && boundary.getTime() <= effectiveDate.getTime()) {
+      console.warn(
+        `[sync] ⚠️  more than ${limit} rows share updatedAt ${boundary.toISOString()} — ` +
+        "a timestamp cursor cannot split them; /sync/changes can"
+      );
+    }
 
     return res.json({
       success: true,
@@ -373,7 +441,12 @@ exports.pullChanges = async (req, res) => {
         students,
         deletedItems,
       },
-      timestamp: pulledAt,
+      timestamp,
+      // True when a collection was cut at `limit`: pull again from `timestamp`
+      // for the rest. Older clients ignore it and get the rest next sync.
+      hasMore,
+      limit,
+      futureDated,
     });
 
   } catch (err) {
@@ -383,367 +456,42 @@ exports.pullChanges = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUSH — PERIODS
+// PUSH — retired
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * POST /sync/periods
+ * POST /sync/push — 410 Gone.
  *
- * Accepts an array of period change operations (create / update / delete).
- * Client-supplied _id values are validated; dangerous fields are stripped.
+ * It wrote period definitions and student approve/reject decisions from a
+ * device, and both were wrong in ways that mattered:
+ *
+ *   - an approval found the pupil's login by User.findOne({ email, role:
+ *     "student" }). Siblings share the parent's email, so approving the second
+ *     child renamed the FIRST child's account, reset its password and gave it
+ *     the second child's admission number — an account takeover inside a family;
+ *   - a period create discarded the client's UUID (only an ObjectId was kept),
+ *     so the device's row and the server's never matched up again;
+ *   - the wrapper answered success: true whatever the sub-handlers reported.
+ *
+ * No client calls it. The phone drains its outbox through the real routes
+ * (PUT /admin/students/:id/approve, the periods routes) and pulls with GET
+ * /sync/pull; the desktop pulls GET /sync/changes and replays the same real
+ * routes. The web and mobile endpoint maps only held the constant.
+ *
+ * The route stays so that anything old still holding it is told plainly what
+ * happened instead of meeting a 404 that reads like a deployment fault.
+ * Nothing in the body is read and nothing is written.
  */
-exports.pushPeriodChanges = async (req, res) => {
-  try {
-    const { schoolId, changes } = req.body;
-
-    if (!schoolId) {
-      return res.status(400).json({ success: false, message: "schoolId is required" });
-    }
-
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    const results = { created: [], updated: [], failed: [] };
-
-    if (!changes?.periods?.length) {
-      return res.json({ success: true, results, serverTime: new Date().toISOString() });
-    }
-
-    for (const item of changes.periods) {
-      const { _id, operation, data } = item;
-
-      try {
-        if (operation === "create") {
-          // ── Strip fields the client must not control ──────────────────
-          const {
-            _id:      clientId,
-            schoolId: _s,
-            assignedBy: _a,
-            ...safeData
-          } = data || {};
-
-          // Accept the client id only if it is a valid ObjectId
-          const isValidId = mongoose.isValidObjectId(clientId);
-          const docId     = isValidId
-            ? clientId
-            : new mongoose.Types.ObjectId();
-
-          const existing = await Period.findOne({
-            schoolId,
-            _id: docId,
-            ...NOT_DELETED,
-          });
-
-          if (existing) {
-            results.updated.push({ _id: existing._id, status: "exists" });
-            continue;
-          }
-
-          const created = await Period.create({
-            ...safeData,
-            _id:        docId,
-            schoolId,
-            assignedBy: req.user?._id,
-          });
-          results.created.push(created._id);
-
-        } else if (operation === "update") {
-          const { schoolId: _s, assignedBy: _a, ...safeData } = data || {};
-
-          const updated = await Period.findOneAndUpdate(
-            { _id, schoolId, ...NOT_DELETED },
-            { ...safeData, $inc: { version: 1 } },
-            { returnDocument: 'after', timestamps: true }
-          );
-
-          if (updated) results.updated.push(_id);
-          else         results.failed.push({ _id, reason: "Not found" });
-
-        } else if (operation === "delete") {
-          await Period.findOneAndUpdate(
-            { _id, schoolId },
-            { deletedAt: new Date() },
-            { timestamps: true }
-          );
-          results.updated.push(_id);
-
-        } else {
-          results.failed.push({ _id, reason: `Unknown operation: ${operation}` });
-        }
-
-      } catch (itemErr) {
-        console.error("[sync] Period item failed:", itemErr);
-        results.failed.push({ _id: item._id, reason: itemErr.message });
-      }
-    }
-
-    console.log(
-      `📤 Period push — created: ${results.created.length}, ` +
-      `updated: ${results.updated.length}, failed: ${results.failed.length}`
-    );
-
-    return res.json({ success: true, results, serverTime: new Date().toISOString() });
-
-  } catch (err) {
-    console.error("[sync] pushPeriodChanges error:", err);
-    return res.status(500).json({ success: false, message: "Failed to process period sync" });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PUSH — STUDENT DECISIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /sync/student-decisions
- *
- * Approves or rejects pending student registrations.
- * On approval a linked User account is created (or updated) atomically
- * inside a Mongoose session so a failed student.save() cannot leave an
- * orphaned User document.
- *
- * A random temporary password is generated (NOT the enrollment number)
- * and returned once in the response so the admin can communicate it.
- */
-exports.pushStudentDecisions = async (req, res) => {
-  try {
-    if (!Student) {
-      return res.status(501).json({
-        success: false,
-        message: "Student model is not available on this server",
-      });
-    }
-
-    const { schoolId, changes } = req.body;
-
-    if (!schoolId) {
-      return res.status(400).json({ success: false, message: "schoolId is required" });
-    }
-
-    const callerSchool = req.user?.schoolId?.toString();
-    if (callerSchool !== schoolId.toString()) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    const results = { synced: [], failed: [] };
-
-    if (!changes?.studentDecisions?.length) {
-      return res.json({ success: true, results, serverTime: new Date().toISOString() });
-    }
-
-    for (const decision of changes.studentDecisions) {
-      const { studentId, status, classId, reason } = decision;
-
-      // ── Basic payload validation ────────────────────────────────────────
-      if (!studentId || !["approved", "rejected"].includes(status)) {
-        results.failed.push({ studentId, reason: "Invalid decision payload" });
-        continue;
-      }
-
-      const session = await mongoose.startSession();
-      session.startTransaction();
-
-      try {
-        const student = await Student.findOne({ _id: studentId, schoolId }).session(session);
-
-        if (!student) {
-          await session.abortTransaction();
-          results.failed.push({ studentId, reason: "Not found" });
-          continue;
-        }
-
-        if (student.status !== "pending") {
-          await session.abortTransaction();
-          results.synced.push({
-            studentId,
-            status:  student.status,
-            note:    "Already reviewed on server",
-          });
-          continue;
-        }
-
-        // ── APPROVE ────────────────────────────────────────────────────────
-        if (status === "approved") {
-          if (!classId) {
-            await session.abortTransaction();
-            results.failed.push({ studentId, reason: "classId is required for approval" });
-            continue;
-          }
-
-          // Resolve display name and email
-          const displayName =
-            [student.firstName, student.lastName].filter(Boolean).join(" ").trim()
-            || student.name || "Student";
-
-          const email =
-            (student.email || student.studentEmail || student.parentEmail || "")
-              .toLowerCase()
-              .trim() || undefined;
-
-          // Resolve or generate enrollment number
-          let enrollmentNo =
-            student.admissionNo || student.enrollmentNo || null;
-
-          if (!enrollmentNo) {
-            const schoolCode = await resolveSchoolCode(schoolId);
-            const year       = new Date().getFullYear();
-            const prefix     = `${schoolCode}-${year}`;
-            enrollmentNo     = await generateEnrollmentNo(schoolId, prefix);
-          }
-
-          // Generate a cryptographically random temporary password
-          const tempPassword = crypto.randomBytes(16).toString("hex");
-          const hashedPass   = await bcrypt.hash(tempPassword, 12);
-
-          // Upsert the linked User document inside the transaction
-          let userDoc = email
-            ? await User.findOne({ email, role: "student" }).session(session)
-            : null;
-
-          if (userDoc) {
-            userDoc.name             = displayName;
-            userDoc.isActive         = true;
-            userDoc.schoolId         = schoolId;
-            userDoc.enrollmentNo     = enrollmentNo;
-            userDoc.mustResetPassword= true;
-            // Rotate password on re-approval so stale credentials are invalidated
-            userDoc.password         = hashedPass;
-            await userDoc.save({ session });
-          } else {
-            [userDoc] = await User.create(
-              [{
-                _id:              uuidv4(),
-                name:             displayName,
-                email,
-                role:             "student",
-                schoolId,
-                isActive:         true,
-                enrollmentNo,
-                password:         hashedPass,
-                mustResetPassword: true,
-              }],
-              { session }
-            );
-          }
-
-          // Update the Student document atomically in the same session
-          student.status       = "approved";
-          student.classId      = classId;
-          student.userId       = userDoc._id;
-          student.admissionNo  = enrollmentNo;
-          student.enrollmentNo = enrollmentNo;
-          student.reviewedAt   = new Date();
-          student.approvedAt   = new Date();
-          await student.save({ session });
-
-          await session.commitTransaction();
-
-          // tempPassword is intentionally surfaced once so the admin
-          // can communicate initial credentials to the student.
-          results.synced.push({
-            studentId,
-            status:       "approved",
-            enrollmentNo,
-            tempPassword,           // present only at approval time
-          });
-
-        // ── REJECT ─────────────────────────────────────────────────────────
-        } else if (status === "rejected") {
-          student.status          = "rejected";
-          student.rejectionReason = reason?.trim() || null;
-          student.isActive        = false;
-          student.reviewedAt      = new Date();
-          student.rejectedAt      = new Date();
-          await student.save({ session });
-
-          await session.commitTransaction();
-          results.synced.push({ studentId, status: "rejected" });
-        }
-
-      } catch (decisionErr) {
-        await session.abortTransaction();
-        console.error("[sync] Student decision failed:", decisionErr);
-        results.failed.push({ studentId, reason: decisionErr.message });
-      } finally {
-        session.endSession();
-      }
-    }
-
-    console.log(
-      `📤 Student decisions — synced: ${results.synced.length}, failed: ${results.failed.length}`
-    );
-
-    return res.json({ success: true, results, serverTime: new Date().toISOString() });
-
-  } catch (err) {
-    console.error("[sync] pushStudentDecisions error:", err);
-    return res.status(500).json({ success: false, message: "Failed to process student decisions" });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LEGACY PUSH (backwards-compat wrapper)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /sync/push
- *
- * Retained for older clients that POST both periods and studentDecisions
- * in a single request.  Delegates to the focused handlers above and merges
- * their results so the response shape is unchanged.
- */
-exports.pushChanges = async (req, res) => {
-  // Synthesise sub-requests that share the same body/user context
-  const makeSubReq = (extraBody) => ({
-    ...req,
-    body: { ...req.body, ...extraBody },
+exports.pushRetired = (_req, res) =>
+  res.status(410).json({
+    success: false,
+    code:    "SYNC_PUSH_RETIRED",
+    message:
+      "POST /sync/push has been retired. Send each change to its own route " +
+      "(e.g. PUT /api/admin/students/:id/approve, the periods routes) and pull " +
+      "with GET /api/sync/pull or GET /api/sync/changes.",
   });
 
-  const periodResults  = { created: [], updated: [], failed: [] };
-  const studentResults = { synced: [],  failed:  []            };
-
-  // Collect period results via the focused handler ─────────────────────────
-  if (req.body?.changes?.periods?.length) {
-    await new Promise((resolve) => {
-      const fakeRes = {
-        status: () => fakeRes,
-        json:   (payload) => {
-          if (payload?.results) Object.assign(periodResults, payload.results);
-          resolve();
-        },
-      };
-      exports.pushPeriodChanges(makeSubReq({}), fakeRes);
-    });
-  }
-
-  // Collect student results via the focused handler ────────────────────────
-  if (req.body?.changes?.studentDecisions?.length) {
-    await new Promise((resolve) => {
-      const fakeRes = {
-        status: () => fakeRes,
-        json:   (payload) => {
-          if (payload?.results) Object.assign(studentResults, payload.results);
-          resolve();
-        },
-      };
-      exports.pushStudentDecisions(makeSubReq({}), fakeRes);
-    });
-  }
-
-  console.log(
-    `📤 Push (legacy) — ` +
-    `periods: created ${periodResults.created.length}, updated ${periodResults.updated.length}, failed ${periodResults.failed.length} | ` +
-    `students: synced ${studentResults.synced.length}, failed ${studentResults.failed.length}`
-  );
-
-  return res.json({
-    success: true,
-    results: {
-      periods:  periodResults,
-      students: studentResults,
-    },
-    serverTime: new Date().toISOString(),
-  });
-};
+// The pupil row shape, shared with the phone profile of /sync/changes
+// (config/syncFeed.js PHONE_FEED) so both feeds hand the phone the same row.
+exports.normaliseStudentForSync = normaliseStudentForSync;

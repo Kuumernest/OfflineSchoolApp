@@ -9,23 +9,26 @@ const router  = express.Router();
 // numbers — and what an unauthenticated caller has no other limit on. The
 // admission numbers are sequential (SCH-2026-0004), so the route is the
 // guessable half of the credential and it is the half that had no ceiling.
-const rateLimit = require("express-rate-limit");
+//
+// FAILURES per address, successful sign-ins free (utils/loginRateLimit.js).
+// It was 15 requests per IP with successes counted, so parents behind one
+// address — a school's Wi-Fi at a meeting, a cyber café, a mobile operator's
+// carrier-grade NAT — were refused after the fifteenth of them got in.
+//
+// No per-account limiter here: portal.service already locks each access
+// record after MAX_TRIES wrong codes, across every address. What this route
+// adds is the cross-account ceiling, and 30 failures in 15 minutes from one
+// address is far more than honest typos and far too few to walk a school's
+// admission numbers. Same opt-out as the staff limiter; only scripts/ sets it.
+const { failedAttemptsLimiter } = require("../utils/loginRateLimit");
 
-// Same shape and the same opt-out as the staff login limiter in auth.routes.js:
-// the verification harness signs in dozens of times from 127.0.0.1 in a few
-// seconds, which is indistinguishable from the attack this stops. Only
-// scripts/ sets the flag; production never does.
-const portalLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15,                  // per IP per window
-  standardHeaders: true,
-  legacyHeaders: false,
+const portalLoginLimiter = failedAttemptsLimiter({
+  max: 30,
   message: {
     success: false,
     code:    "RATE_LIMITED",
     message: "Too many sign-in attempts. Please try again later.",
   },
-  skip: () => process.env.DISABLE_LOGIN_RATE_LIMIT === "1",
 });
 
 const School        = require("../db/models/School");
@@ -50,9 +53,12 @@ const comms         = require("../services/communication/conversation.service");
 // yields an object with no .find, which fails only when the route is called.
 const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
+const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
+const { getStore } = require("../storage/fileStore");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const { displayName } = require("../utils/studentName");
@@ -232,6 +238,50 @@ const GUARDIAN_NOTICE_KINDS = [
   "announcement",
 ];
 
+/** Unread messages in one thread, for THIS guardian. The one definition. */
+const unreadIn = (c, me) => {
+  const mine = (c.participants || []).find(
+    (p) => p.kind === "guardian" && String(p.id) === String(me.id)
+  );
+  return Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+};
+
+/**
+ * What the Messages section has unread, counted from the same queries its
+ * lists are built from.
+ *
+ * The section's badge is the sum of its two counted tabs: Conversations
+ * (`messages`, from comms.listFor — the query /messages/conversations lists)
+ * and Notices (`notices`, from noticeFilters — the filter /notifications
+ * lists). Both are counted here, once, and every route that reports an unread
+ * number takes it from here — so the badge can never count something the
+ * section has no row for.
+ *
+ * Family-wide, like the section: threads belong to the guardian, not to a
+ * child, and every child's notices are listed together, each saying whose it
+ * is.
+ *
+ * Best-effort per half: a messaging fault must not take out the screen that
+ * shows a child's fees.
+ */
+async function unreadSummary(req) {
+  const me = comms.principalFromRequest(req);
+  const [threads, notices] = await Promise.all([
+    comms.listFor(me, { limit: 50 }).catch(() => []),
+    (async () => {
+      const { unread } = noticeFilters({
+        schoolId:      req.portal.schoolId,
+        studentIds:    req.portal.studentIds ?? [req.portal.studentId],
+        accessId:      req.portal.accessId,
+        noticesSeenAt: req.portal.noticesSeenAt,
+      });
+      return Notification.countDocuments(unread);
+    })().catch(() => 0),
+  ]);
+  const messages = threads.reduce((n, c) => n + unreadIn(c, me), 0);
+  return { me, threads, messages, notices, total: messages + notices };
+}
+
 /**
  * The school heading, EVERY child this code covers, and which one is selected.
  *
@@ -249,47 +299,21 @@ router.get("/me", asyncHandler(async (req, res) => {
     .select("name").lean();
   const className = new Map(classes.map((c) => [String(c._id), c.name]));
 
-  // How many unread messages are waiting.
+  // What the Messages section has unread — its badge.
   //
   // Here rather than only on /notifications because this is the one endpoint
   // every screen loads, whatever tab it is showing — and a badge that needs a
   // second request to a tab the parent has not opened is a badge no client
-  // draws. A parent had no indication anywhere that a message had arrived; the
-  // count existed and nothing carried it to a place it could be seen.
+  // draws.
   //
-  // Read-only and best-effort: a messaging fault must not take out the screen
-  // that shows a child's fees.
-  const unreadMessages = await (async () => {
-    try {
-      const me      = comms.principalFromRequest(req);
-      const threads = await comms.listFor(me, { limit: 50 });
-      return threads.reduce((total, c) => {
-        const mine = (c.participants || []).find(
-          (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-        );
-        return total + Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
-      }, 0);
-    } catch {
-      return 0;
-    }
-  })();
-
-  // School notices that arrived since this parent last opened the tab. Same
-  // reasoning as unreadMessages: it rides on the one request every screen
-  // makes, because a badge that needs a request to the tab it is about is a
-  // badge nobody can draw before the parent has already gone there.
-  const unreadNotices = await (async () => {
-    try {
-      const { unread } = noticeFilters({
-        schoolId, studentIds,
-        accessId:      req.portal.accessId,
-        noticesSeenAt: req.portal.noticesSeenAt,
-      });
-      return await Notification.countDocuments(unread);
-    } catch {
-      return 0;
-    }
-  })();
+  // `unread.total` is THE badge. It used to be left to the client to add
+  // unreadMessages and unreadNotices, while the section opened on
+  // Conversations: one unread gate notice gave the tab a 1 and a screen that
+  // said "No conversations yet". The two halves are still sent, separately,
+  // so the section can open on the tab that holds what is unread.
+  const unread = await unreadSummary(req);
+  const unreadMessages = unread.messages;
+  const unreadNotices  = unread.notices;
 
   return res.json({
     success: true,
@@ -302,6 +326,7 @@ router.get("/me", asyncHandler(async (req, res) => {
       selectedId: String(student._id),
       unreadMessages,
       unreadNotices,
+      unread: { messages: unread.messages, notices: unread.notices, total: unread.total },
       student: {
         _id:          String(student._id),
         name:         displayName(student) || null,
@@ -313,6 +338,101 @@ router.get("/me", asyncHandler(async (req, res) => {
       },
     },
   });
+}));
+
+/** Exam names for result rows: a parent reads "2nd Sequence", not "term 1". */
+async function examNamesFor(schoolId, rows) {
+  const ids = [...new Set(rows.map((r) => r.examId).filter(Boolean).map(String))];
+  if (!ids.length) return new Map();
+  const exams = await Exam.find({ _id: { $in: ids }, schoolId }).select("name").lean();
+  return new Map(exams.map((e) => [String(e._id), e.name]));
+}
+
+const isoDay = (d) => d.toISOString().slice(0, 10);
+
+/** A notice's moment, as a number to sort by: sent, else created. */
+const timeOf = (n) => new Date(n.sentAt || n.createdAt || 0).getTime() || 0;
+
+/**
+ * GET /home: one card per child, in one request (a parent on slow data
+ * should not wait for fifteen). Every figure is read the way the screen it
+ * leads to reads it, so the card and the page never disagree:
+ *
+ *   latest      the newest published result: average /20 and class position,
+ *               with the one before it for the change (/results)
+ *   attendance  this month, present ÷ marked (/attendance with from/to)
+ *   fees        the family ledger's balance (/fees); overdue and the due date
+ *               by the school's own rule (feeReminders.candidates, as fee
+ *               reminders and Students to watch use)
+ *   nextExam    the class's next exam that has not started
+ *   news        the latest announcement for this family (/announcements)
+ */
+router.get("/home", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds } = req.portal;
+  const children = await portal.childrenOf(schoolId, studentIds);
+  const ids      = children.map((c) => c._id);
+  const classIds = [...new Set(children.map((c) => c.classId).filter(Boolean).map(String))];
+
+  const now        = new Date();
+  const today      = isoDay(now);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const reminders  = require("../services/feeReminders.service");
+
+  const [classes, allSummaries, marks, owing, ledgers, exams, news] = await Promise.all([
+    Class.find({ _id: { $in: classIds }, schoolId }).select("name").lean(),
+    ResultSummary.find({ schoolId, studentId: { $in: ids }, isPublished: true, deletedAt: null })
+      .select("studentId examId academicYear term average classPosition totalInClass publishedAt")
+      .sort({ publishedAt: -1, academicYear: -1, term: -1 }).lean(),
+    StudentAttendance.find({ schoolId, studentId: { $in: ids }, date: { $gte: monthStart, $lte: today } })
+      .select("studentId status").lean(),
+    reminders.candidates({ schoolId, onlyStudentIds: ids, mode: "all", asOf: now }).catch(() => []),
+    Promise.all(ids.map((studentId) => fees.familyLedger({ schoolId, studentId, academicYear: null }).catch(() => null))),
+    Exam.find({
+      schoolId, deletedAt: null,
+      $or: [{ classId: { $in: classIds } }, { classIds: { $in: classIds } }],
+      status: { $in: ["draft", "scheduled", "ongoing"] },
+      startDate: { $gte: today },
+    }).select("name startDate endDate classId classIds").sort({ startDate: 1 }).lean(),
+    announcementsFor({ schoolId, studentIds, limit: 1 }),
+  ]);
+
+  const className = new Map(classes.map((c) => [String(c._id), c.name]));
+  const summaries = await withoutDeletedExams(schoolId, allSummaries);
+  const examName  = await examNamesFor(schoolId, summaries);
+  const owingById = new Map(owing.map((r) => [String(r.studentId), r]));
+
+  const cards = children.map((c, i) => {
+    const mine = summaries.filter((r) => String(r.studentId) === c._id);
+    const [latest, previous] = mine;
+    const days = marks.filter((m) => String(m.studentId) === c._id);
+    const present = days.filter((m) => m.status === "present").length;
+    const due = owingById.get(c._id) ?? null;
+    const next = exams.find((e) => [e.classId, ...(e.classIds ?? [])].map(String).includes(String(c.classId)));
+    return {
+      ...c,
+      className: c.classId ? (className.get(String(c.classId)) ?? null) : null,
+      latest: latest ? {
+        resultId: String(latest._id), examName: examName.get(String(latest.examId)) ?? null,
+        academicYear: latest.academicYear, term: latest.term, average: latest.average,
+        position: latest.classPosition ?? null, outOf: latest.totalInClass ?? null,
+        previousAverage: previous?.average ?? null,
+        previousExamName: previous ? (examName.get(String(previous.examId)) ?? null) : null,
+      } : null,
+      attendance: { from: monthStart, present, marked: days.length,
+        rate: days.length ? Math.round((present / days.length) * 100) : null },
+      fees: ledgers[i] ? {
+        balance: ledgers[i].totals?.balance ?? 0,
+        // The part of it past its due date, by the school's rule — the Fees
+        // page's "overdue". The card says "owes X, of which Y is overdue";
+        // it used to colour the whole balance overdue.
+        overdue: due?.isOverdue ? (due?.overdue ?? 0) : 0,
+        isOverdue: Boolean(due?.isOverdue), dueDate: due?.earliestDue ?? null, daysOverdue: due?.daysOverdue ?? 0,
+      } : null,
+      nextExam: next ? { name: next.name, startDate: next.startDate, endDate: next.endDate ?? null } : null,
+    };
+  });
+
+  return res.json({ success: true, data: { children: cards, latestNews: news[0] ?? null } });
 }));
 
 /** The fee account: what was charged, what has been paid, what is left. */
@@ -352,24 +472,36 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
   const balance = totalCharged - totalWaived - totalPaid;
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   // Check for an active payment plan
   const plan = await PaymentPlan.findOne({
     schoolId, studentId, status: "active", deletedAt: null,
   }).lean();
 
-  // Build reminders from undischarged charges with due dates
+  // How much of the account is late, by the one rule every screen reads
+  // (arrears.service → shared/arrears): the Fees page's owed and overdue,
+  // for the school's current year. This endpoint used to decide on its own.
+  const { arrearsFor } = require("../services/arrears.service");
+  const { chargeStatuses } = require("../../../shared/arrears");
+  const { daysBetween, DUE_SOON_DAYS_MS } = require("../services/feeReminders.service");
+  const { rows: [account] } = await arrearsFor({ schoolId, onlyStudentIds: [String(studentId)], asOf: now });
+
+  // Each charge as payments settle it (oldest due first): a charge whose date
+  // has passed is overdue only while something is still unpaid on it. It
+  // used to be "overdue" the day after its date even when paid in full. On
+  // an active plan the plan's dates govern, so no single charge is late.
+  const settled = new Map(chargeStatuses(charges, totalPaid, now).map((x) => [String(x.charge._id), x]));
   const reminders = charges
     .filter((c) => c.dueDate && !c.voidedAt)
     .map((c) => {
       const dueDate = new Date(c.dueDate);
-      const isOverdue = dueDate < today;
-      const daysOverdue = isOverdue
-        ? Math.floor((today - dueDate) / 86_400_000)
-        : 0;
-      const isDueSoon = !isOverdue &&
-        dueDate <= new Date(today.getTime() + 14 * 86_400_000);
+      const st = settled.get(String(c._id));
+      const unpaid = st?.unpaid ?? 0;
+      const isOverdue = !plan && Boolean(st?.isOverdue);
+      // Counted as Fee reminders counts them (feeReminders.daysBetween).
+      const daysOverdue = isOverdue ? daysBetween(now, dueDate) : 0;
+      const isDueSoon = !isOverdue && unpaid > 0 && !st?.isLate &&
+        dueDate.getTime() <= now.getTime() + DUE_SOON_DAYS_MS;
 
       return {
         chargeId:    c._id,
@@ -378,6 +510,8 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
         amount:      c.amount,
         waivedAmount: c.waivedAmount ?? 0,
         netAmount:   c.amount - (c.waivedAmount ?? 0),
+        /** What payments have not covered on this charge. */
+        unpaid,
         dueDate:     c.dueDate,
         isOverdue,
         isDueSoon,
@@ -391,6 +525,9 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
     success: true,
     data: {
       balance,
+      /** The part past its due date (the Fees page's figure), 0 when none. */
+      overdue:   account?.isOverdue ? account.overdue : 0,
+      isOverdue: Boolean(account?.isOverdue),
       totalCharged,
       totalWaived,
       totalPaid,
@@ -443,7 +580,7 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Each row carries the child it concerns so the card can say whose it is.
   const forChildren = (studentIds ?? [studentId]).map(String);
 
-  const { all: notificationFilter, unread: unreadFilter } = noticeFilters({
+  const { all: notificationFilter } = noticeFilters({
     schoolId, studentIds: forChildren, accessId,
     noticesSeenAt: req.portal.noticesSeenAt,
   });
@@ -469,15 +606,15 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // gets it, the ordering is decided once, and the unread total below exists
   // at all — a client cannot badge a tab it has to fetch two endpoints to
   // count.
-  const me       = comms.principalFromRequest(req);
-  const threads  = await comms.listFor(me, { limit: 50 }).catch(() => []);
+  //
+  // The threads and both unread counts come from unreadSummary, the one that
+  // /me badges the section from, so this list and that badge cannot drift.
+  const summary = await unreadSummary(req);
+  const { me, threads } = summary;
 
   const messageNotices = threads
     .map((c) => {
-      const mine = (c.participants || []).find(
-        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-      );
-      const unread = Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+      const unread = unreadIn(c, me);
       if (unread < 1) return null;
 
       const others = (c.participants || []).filter(
@@ -513,7 +650,7 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Counted against the marker rather than a flag per row: a notice has no
   // per-guardian read state, and giving it one would mean a write for every
   // card a parent scrolls past.
-  const unreadNotices = await Notification.countDocuments(unreadFilter);
+  const unreadNotices = summary.notices;
 
   // Which of the listed rows this guardian has read, so the card can show it.
   // Computed against the same floor the count uses, or a card could look
@@ -544,9 +681,9 @@ router.get("/notifications", asyncHandler(async (req, res) => {
       sentAt:    n.sentAt,
       createdAt: n.createdAt,
     })),
-  ].sort((a, b) =>
-    String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
-  );
+  // Newest first, by time. String() of a Date is "Tue Oct 13 …", so comparing
+  // those sorted the list by weekday name.
+  ].sort((a, b) => timeOf(b) - timeOf(a));
 
   // Nothing is marked read here any more.
   //
@@ -559,12 +696,14 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     // What a badge needs, counted once on the side that can count it.
-    unread: messageNotices.reduce((n, m) => n + m.unread, 0),
+    unread: summary.messages,
     // School notices that arrived since this parent last opened the tab, which
     // is what the tab's own badge counts. Deliberately NOT including the
     // unread-thread rows above: those are counted by the Messages badge, and a
     // number that appears in two places at once is a number nobody trusts.
     unreadNotices,
+    // The section's badge, the same number /me carries as unread.total.
+    unreadTotal: summary.total,
     data: rows,
   });
 }));
@@ -698,6 +837,8 @@ router.get("/receipt/:paymentId", asyncHandler(async (req, res) => {
   };
 
   const lang = req.query.lang;
+  // The receipt embeds the school logo; with a bucket it is fetched first.
+  await getStore().warmImages([data.school?.logo]);
   const html = buildReceiptHtml({
     data,
     labels:    labelsFor(lang),
@@ -716,14 +857,19 @@ router.get("/receipt/:paymentId", asyncHandler(async (req, res) => {
 router.get("/results", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
 
-  const rows = await ResultSummary.find({
+  const rows = await withoutDeletedExams(schoolId, await ResultSummary.find({
     schoolId, studentId, isPublished: true, deletedAt: null,
-  }).sort({ academicYear: -1, term: -1 }).lean();
+  // Newest first within a term too: two sequences share term 1, and Home's
+  // "latest result" must be the one this list leads with. A deleted exam's
+  // result is dropped here as it is on Home.
+  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean());
+  const examName = await examNamesFor(schoolId, rows);
 
   return res.json({
     success: true,
     data: rows.map((r) => ({
       _id: r._id, academicYear: r.academicYear, term: r.term,
+      examName: examName.get(String(r.examId)) ?? null,
       className: r.className, average: r.average, percentage: r.percentage,
       overallGrade: r.overallGrade, classPosition: r.classPosition,
       totalInClass: r.totalInClass, isPassing: r.isPassing,
@@ -770,7 +916,9 @@ router.get("/results/:summaryId/report-card", asyncHandler(async (req, res) => {
     deletedAt:   null,
   }).select("examId term academicYear").lean();
 
-  if (!summary) {
+  // A deleted exam's result is not on /results, so its card is not served
+  // either — even to someone who kept the summary id.
+  if (!summary || !(await withoutDeletedExams(schoolId, [summary])).length) {
     return res.status(404).json({
       success: false,
       error:   "Result not found",
@@ -821,10 +969,6 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     data: rows.map((c) => {
-      const mine = (c.participants || []).find(
-        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-      );
-
       // Everyone on the thread except this guardian.
       //
       // A direct thread carries no title — it is named for the other person,
@@ -854,7 +998,8 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
         lastMessageAt:      c.lastMessageAt,
         lastMessagePreview: c.lastMessagePreview,
         isArchived:         c.isArchived,
-        unread: Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0)),
+        // The same per-thread count the section's badge sums (unreadSummary).
+        unread: unreadIn(c, me),
       };
     }),
   });
@@ -1186,8 +1331,11 @@ router.get("/attendance", asyncHandler(async (req, res) => {
 }));
 
 /** School announcements a parent should see. */
-router.get("/announcements", asyncHandler(async (req, res) => {
-  const { schoolId, studentIds } = req.portal;
+/**
+ * What the school has published for these children's guardians: the one
+ * query behind /announcements and the latest notice on /home.
+ */
+async function announcementsFor({ schoolId, studentIds, limit = 30 }) {
 
   // ── Every child's class, and only what concerns them ─────────────────────
   //
@@ -1247,20 +1395,22 @@ router.get("/announcements", asyncHandler(async (req, res) => {
       { $or: [{ publishAt: null }, { publishAt: { $exists: false } }, { publishAt: { $lte: now } }] },
       { $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gte: now } }] },
     ],
-  }).sort({ isPinned: -1, createdAt: -1 }).limit(30).lean();
+  }).sort({ isPinned: -1, createdAt: -1 }).limit(limit).lean();
 
-  return res.json({
-    success: true,
-    data: rows.map((a) => ({
-      _id: a._id, title: a.title, body: a.body ?? a.message ?? null,
-      createdAt: a.createdAt, priority: a.priority ?? null,
-      isPinned: a.isPinned ?? false,
-      // Which of this parent's children the notice concerns, when it names
-      // any. A parent with three children reading "bring PE kit on Thursday"
-      // needs to know which of them it is about.
-      forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
-    })),
-  });
+  return rows.map((a) => ({
+    _id: a._id, title: a.title, body: a.body ?? a.message ?? null,
+    createdAt: a.createdAt, priority: a.priority ?? null,
+    isPinned: a.isPinned ?? false,
+    // Which of this parent's children the notice concerns, when it names
+    // any. A parent with three children reading "bring PE kit on Thursday"
+    // needs to know which of them it is about.
+    forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
+  }));
+}
+
+router.get("/announcements", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds } = req.portal;
+  return res.json({ success: true, data: await announcementsFor({ schoolId, studentIds }) });
 }));
 
 /**

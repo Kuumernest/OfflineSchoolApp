@@ -19,6 +19,8 @@ import { subjectService }  from "@/services/subject.service";
 import { fetchClasses }    from "@/services/class.service";
 import { useUser }         from "@/store/auth.store";
 import { cn }              from "@/utils/cn";
+import { ACCENT_BADGE, ACCENT_LEFT_CARD, DASH_TINT, levelAccent, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon }        from "@/components/ui/PageHeader";
 import type { RawSubject } from "@/services/subject.service";
 import type { Class }      from "@/types/classes.types";
 import { useTranslation } from "react-i18next";
@@ -118,10 +120,10 @@ const FilterChip = ({ label, isActive, onClick }: FilterChipProps) => (
     className={cn(
       "shrink-0 rounded-full border px-4 py-1.5 text-sm font-semibold",
       "transition-colors duration-150 focus-visible:outline-none",
-      "focus-visible:ring-2 focus-visible:ring-emerald-500",
+      "focus-visible:ring-2 focus-visible:ring-primary-500",
       isActive
-        ? "border-emerald-600 bg-emerald-600 text-white"
-        : "border-gray-200 bg-gray-100 text-gray-500 hover:border-gray-300 hover:bg-gray-200"
+        ? "border-emerald-600 bg-primary-600 text-white"
+        : "border-accent-slate/30 bg-accent-slate-soft text-accent-slate-deep hover:shadow-lift"
     )}
   >
     {label}
@@ -137,26 +139,27 @@ interface StatsBannerProps {
 const StatsBanner = ({ total, assigned, unassigned }: StatsBannerProps) => {
   const { t } = useTranslation();
   const items: StatItem[] = [
-    { label: t("common.total"),      value: total,      color: "text-gray-900"    },
-    { label: t("subjects.assigned"), value: assigned,   color: "text-emerald-600" },
+    { label: t("common.total"),      value: total,      color: "text-accent-slate-deep" },
+    { label: t("subjects.assigned"), value: assigned,   color: "text-success-text" },
     {
       label: t("subjects.unassigned"),
       value: unassigned,
-      color: unassigned > 0 ? "text-amber-600" : "text-gray-900",
+      color: unassigned > 0 ? "text-warning-text" : "text-accent-slate-deep",
     },
   ];
 
   return (
-    <div className="flex items-center justify-center gap-8 border-b border-gray-100 bg-white px-6 py-3">
+    // The subjects' slate tint, as on the dashboard: a wash and a 3px top edge.
+    <div className="flex items-center justify-center gap-8 border-b border-line border-t-[3px] border-t-accent-slate bg-accent-slate-soft px-6 py-3">
       {items.map(({ label, value, color }, i) => (
         <div key={label} className="flex items-center gap-8">
           <div className="flex flex-col items-center">
             <span className={cn("text-xl font-bold", color)}>{value}</span>
-            <span className="mt-0.5 text-xs font-medium text-gray-400">
+            <span className="mt-0.5 text-xs font-medium text-ink-muted">
               {label}
             </span>
           </div>
-          {i < items.length - 1 && <div className="h-7 w-px bg-gray-200" />}
+          {i < items.length - 1 && <div className="h-7 w-px bg-line" />}
         </div>
       ))}
     </div>
@@ -187,16 +190,16 @@ const SubjectCard = ({
   canManage = true,
 }: SubjectCardProps) => {
   const { t } = useTranslation();
-  return <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
-      <BookOpen size={20} className="text-emerald-600" />
+  return <div className={cn("flex items-center gap-4 p-4 transition-shadow hover:shadow-lift", ACCENT_LEFT_CARD.slate)}>
+    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", DASH_TINT.slate.box)}>
+      <BookOpen size={20} />
     </div>
 
     <div className="min-w-0 flex-1">
-      <p className="truncate text-[15px] font-bold text-gray-900">
+      <p className="truncate text-[15px] font-bold text-ink">
         {subject.name}
         {subject.code && (
-          <span className="ml-2 text-xs font-medium text-gray-400">
+          <span className="ml-2 text-xs font-medium text-ink-muted">
             ({subject.code})
           </span>
         )}
@@ -204,19 +207,19 @@ const SubjectCard = ({
 
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {!hideClassBadge && (
-          <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+          <span className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.indigo)}>
             <School size={11} />
             {subject.className}
           </span>
         )}
 
         {subject.teacherName ? (
-          <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+          <span className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.green)}>
             <UserCheck size={11} />
             {subject.teacherName}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+          <span className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.amber)}>
             <UserX size={11} />
             {t("subjects.noTeacher")}
           </span>
@@ -228,7 +231,7 @@ const SubjectCard = ({
       <div className="flex shrink-0 items-center gap-1">
         <button
           onClick={() => onEdit(subject)}
-          className="rounded-lg p-2 text-indigo-500 transition-colors hover:bg-indigo-50"
+          className="rounded-lg p-2 text-primary-500 transition-colors hover:bg-primary-50"
           title={t("subjects.edit")}
         >
           <Pencil size={17} />
@@ -247,6 +250,8 @@ const SubjectCard = ({
 
 interface ClassSectionProps {
   className:    string;
+  /** The class's level — picks the section's colour (levelAccent). */
+  level?:       string | null;
   count:        number;
   children:     React.ReactNode;
   defaultOpen?: boolean;
@@ -254,33 +259,36 @@ interface ClassSectionProps {
 
 const ClassSection = ({
   className,
+  level,
   count,
   children,
   defaultOpen = true,
 }: ClassSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
+  const accent = levelAccent(level);
 
   return (
     <div className="mb-4">
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex w-full items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5",
-          "text-left transition-colors hover:bg-indigo-100"
+          "flex w-full items-center gap-2 px-4 py-2.5",
+          ACCENT_LEFT_CARD[accent],
+          "text-left transition-shadow hover:shadow-lift"
         )}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white">
-          <GraduationCap size={14} className="text-indigo-500" />
+        <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", DASH_TINT[accent].box)}>
+          <GraduationCap size={14} />
         </div>
-        <span className="flex-1 truncate text-sm font-bold text-indigo-900">
+        <span className="flex-1 truncate text-sm font-bold text-ink">
           {className}
         </span>
-        <span className="rounded-lg bg-white px-2 py-0.5 text-xs font-bold text-indigo-600">
+        <span className={cn("rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset", ACCENT_BADGE[accent])}>
           {count}
         </span>
         {open
-          ? <ChevronDown  size={15} className="text-indigo-400" />
-          : <ChevronRight size={15} className="text-indigo-400" />
+          ? <ChevronDown  size={15} className="text-ink-muted" />
+          : <ChevronRight size={15} className="text-ink-muted" />
         }
       </button>
 
@@ -293,32 +301,31 @@ const ClassSection = ({
 
 interface EmptyStateAction {
   label:   string;
-  color:   string;
   onClick: () => void;
 }
 
 interface EmptyStateProps {
   icon:     React.ElementType;
+  accent?:  DashAccent;
   title:    string;
   subtitle: string;
   action?:  EmptyStateAction;
 }
 
-const EmptyState = ({ icon: Icon, title, subtitle, action }: EmptyStateProps) => (
+const EmptyState = ({ icon: Icon, accent = "slate", title, subtitle, action }: EmptyStateProps) => (
   <div className="flex flex-col items-center justify-center py-20 text-center">
-    <div className="mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100">
-      <Icon size={36} className="text-gray-400" />
+    <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT[accent].box)} aria-hidden="true">
+      <Icon size={24} />
     </div>
-    <p className="mt-2 text-[17px] font-bold text-gray-900">{title}</p>
-    <p className="mt-1.5 max-w-xs text-sm leading-5 text-gray-500">{subtitle}</p>
+    <p className="mt-2 text-[17px] font-bold text-ink">{title}</p>
+    <p className="mt-1.5 max-w-xs text-sm leading-5 text-ink-muted">{subtitle}</p>
     {action && (
       <button
         onClick={action.onClick}
         className={cn(
-          "mt-6 inline-flex items-center gap-2 rounded-xl border-2 px-5 py-3",
-          "text-sm font-semibold transition-colors hover:opacity-80"
+          "mt-6 inline-flex items-center gap-2 rounded-xl border-2 border-primary-600 px-5 py-3",
+          "text-sm font-semibold text-primary-600 transition-colors hover:bg-primary-50"
         )}
-        style={{ borderColor: action.color, color: action.color }}
       >
         <Plus size={17} />
         {action.label}
@@ -511,11 +518,11 @@ export default function AdminSubjectsPage() {
       return (
         <EmptyState
           icon={School}
+          accent="indigo"
           title={t("classes.noneYet")}
           subtitle={t("subjects.needClass")}
           action={{
             label:   t("subjects.addClass"),
-            color:   "#4F46E5",
             onClick: () => navigate("/classes"),
           }}
         />
@@ -541,7 +548,6 @@ export default function AdminSubjectsPage() {
             canManage
               ? {
                   label:   t("subjects.add"),
-                  color:   "#059669",
                   onClick: () => navigate("/subjects/add"),
                 }
               : undefined
@@ -555,6 +561,7 @@ export default function AdminSubjectsPage() {
         <ClassSection
           key={group.classId}
           className={group.className}
+          level={classes.find((c) => nid(c._id ?? c.id) === group.classId)?.level}
           count={group.items.length}
         >
           {group.items.map((subject) => (
@@ -596,9 +603,9 @@ export default function AdminSubjectsPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-canvas">
 
-      <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
         <button
           onClick={() => navigate(-1)}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -606,9 +613,11 @@ export default function AdminSubjectsPage() {
           ←
         </button>
 
+        <PageIcon />
+
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">{t("subjects.title")}</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-ink">{t("subjects.title")}</h1>
+          <p className="text-sm text-ink-muted">
             {t("academic.subjectCount", { count: stats.total })}
             {stats.unassigned > 0 ? ` • ${t("subjects.unassignedCount", { count: stats.unassigned })}` : ""}
           </p>
@@ -625,7 +634,7 @@ export default function AdminSubjectsPage() {
 
         <button
           onClick={() => navigate("/subjects/add")}
-          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700"
         >
           <Plus size={18} />
           {t("subjects.add")}
@@ -633,7 +642,7 @@ export default function AdminSubjectsPage() {
       </header>
 
       {hasClasses && (
-        <div className="border-b border-gray-100 bg-white">
+        <div className="border-b border-line bg-surface">
           <div className="flex gap-2 overflow-x-auto px-6 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <FilterChip
               label={t("subjects.allWithCount", { count: stats.total })}

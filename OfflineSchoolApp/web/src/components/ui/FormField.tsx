@@ -37,7 +37,7 @@ export function FormField({
       <label className="block text-[13px] font-medium text-ink-body">
         {label}
         {required && (
-          <span className="ml-0.5 text-danger" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-danger-text" aria-hidden="true">*</span>
         )}
       </label>
 
@@ -46,7 +46,7 @@ export function FormField({
       {/* An error replaces the hint rather than stacking under it — two lines
           of guidance under one input reads as noise. */}
       {error ? (
-        <p className="text-xs text-danger" role="alert">{error}</p>
+        <p className="text-xs text-danger-text" role="alert">{error}</p>
       ) : hint ? (
         <p className="text-xs text-ink-muted">{hint}</p>
       ) : null}
@@ -62,8 +62,14 @@ export function FormField({
 // bar of mixed controls lines up without per-page nudging. The focus state is
 // a border change plus the global :focus-visible outline — the old ring-2 sat
 // outside the control and shifted neighbouring fields on focus.
+//
+// 16px under `sm`: iOS Safari zooms the page into any field set smaller, and
+// the zoom stays after the keyboard closes. `min-w-0` + border-box so a field
+// in a grid or flex row shrinks with it instead of pushing a long value such
+// as an admission number off the edge.
 const CONTROL_BASE = cn(
-  "w-full rounded-control border border-line-strong bg-surface px-3 text-sm",
+  "w-full min-w-0 box-border rounded-control border border-line-strong bg-surface px-3",
+  "text-base sm:text-sm",
   "text-ink placeholder:text-ink-faint",
   "transition-colors hover:border-ink-faint",
   "focus:border-primary-500 focus:outline-none",

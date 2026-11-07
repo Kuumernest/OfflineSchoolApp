@@ -1,5 +1,6 @@
 // web/src/services/fee.service.ts
 import api from "@/services/api";
+import { desktop } from "@/lib/offline/bridge";
 import type {
   PaymentPlan,
   FeeStructure,
@@ -278,11 +279,17 @@ export async function fetchOutstanding(
   const body = data as {
     count: number;
     totalOutstanding: number;
+    overdueTotal?:    number;
+    overdueCount?:    number;
+    overdueFamilies?: number;
     data: OutstandingRow[];
   };
   return {
     count:            body.count ?? 0,
     totalOutstanding: body.totalOutstanding ?? 0,
+    overdueTotal:     body.overdueTotal ?? 0,
+    overdueCount:     body.overdueCount ?? 0,
+    overdueFamilies:  body.overdueFamilies ?? 0,
     rows:             body.data ?? [],
   };
 }
@@ -305,4 +312,24 @@ export async function fetchReceiptHtml(
     responseType: "text",
   });
   return data as string;
+}
+
+/**
+ * The payments on this desktop the server has not confirmed yet.
+ *
+ * Their receipt prints PROVISIONAL (desktop handlers/receipts.js answers
+ * GET /fees/receipt/:id from the local copy while the payment's create is still
+ * queued), so the screen labels them before anyone presses Print. The test is
+ * the same one the handler uses: an outbox entry creating the row. In a browser
+ * there is no outbox and nothing is ever provisional.
+ */
+export async function fetchUnconfirmedPaymentIds(): Promise<string[]> {
+  const bridge = desktop();
+  if (!bridge) return [];
+  const entries = (await bridge.outbox.list()) as Array<
+    { method: string; collection?: string | null; doc_id?: string | null }
+  >;
+  return entries
+    .filter((e) => e.collection === "feePayment" && String(e.method).toUpperCase() === "POST" && e.doc_id)
+    .map((e) => String(e.doc_id));
 }

@@ -33,6 +33,12 @@ import { StudentApplicationsService } from "../../../../src/services/studentAppl
 import { StudentService }             from "../../../../src/services/student.service";
 import { ClassService }               from "../../../../src/services/class.service";
 import { useTranslation }             from "../../../../src/i18n/useTranslation";
+import { StatTile } from "../../../../src/components/Tiles";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE, statusBadge } from "../../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../../src/components/Tinted";
+
+const PENDING_BADGE = statusBadge("warning");
+const STALE_BADGE   = statusBadge("error");
 import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,12 +266,10 @@ const safeResultField = (result, key) => {
 // SUB-COMPONENTS  (unchanged — kept exactly as original)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SummaryCard = React.memo(({ bg, icon, iconColor, value, label }) => (
-  <View style={[styles.summaryCard, { backgroundColor: bg }]}>
-    <Ionicons name={icon} size={20} color={iconColor} />
-    <Text style={styles.summaryNumber}>{value}</Text>
-    <Text style={styles.summaryLabel}>{label}</Text>
-  </View>
+// Applications are pupils-to-be: the students accent. Pending and stale ones
+// are warnings when there are any.
+const SummaryCard = React.memo(({ icon, value, label, tone }) => (
+  <StatTile kind="students" tone={tone} icon={icon} value={value} label={label} />
 ));
 
 const ApplicationCard = React.memo(({ application, onReview }) => {
@@ -276,11 +280,11 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
   return (
     <View style={[styles.applicationCard, stale && styles.applicationCardStale]}>
       <View style={styles.applicationTop}>
-        <View style={[styles.avatarBox, { backgroundColor: stale ? "#FEE2E2" : "#FEF3C7" }]}>
+        <View style={[styles.avatarBox, { backgroundColor: stale ? ACCENT.red.solid : ACCENT.blue.solid }]}>
           <Ionicons
             name="person-outline"
             size={22}
-            color={stale ? "#DC2626" : "#D97706"}
+            color={COLORS.onPrimary}
           />
         </View>
 
@@ -308,29 +312,29 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
 
       <View style={styles.metaGrid}>
         <View style={styles.metaItem}>
-          <Ionicons name="school-outline" size={14} color="#4F46E5" />
+          <Ionicons name="school-outline" size={14} color={ACCENT.indigo.solid} />
           <Text style={styles.metaText} numberOfLines={1}>
             {application.className || t("appsReview.noClass")}
           </Text>
         </View>
         <View style={styles.metaItem}>
-          <Ionicons name="people-outline" size={14} color="#6B7280" />
+          <Ionicons name="people-outline" size={14} color={ACCENT.blue.solid} />
           <Text style={styles.metaText} numberOfLines={1}>
             {application.guardianName || t("appsReview.noGuardian")}
           </Text>
         </View>
         <View style={styles.metaItem}>
-          <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+          <Ionicons name="calendar-outline" size={14} color={ACCENT.blue.solid} />
           <Text style={styles.metaText}>{formatDate(application.created_at, t)}</Text>
         </View>
         {application.phone ? (
           <View style={styles.metaItem}>
-            <Ionicons name="call-outline" size={14} color="#059669" />
+            <Ionicons name="call-outline" size={14} color={ACCENT.blue.solid} />
             <Text style={styles.metaText} numberOfLines={1}>{application.phone}</Text>
           </View>
         ) : null}
         <View style={styles.metaItem}>
-          <Ionicons name="document-attach-outline" size={14} color="#059669" />
+          <Ionicons name="document-attach-outline" size={14} color={ACCENT.blue.solid} />
           <Text style={styles.metaText}>
             {t("appsReview.docCount", { count: docCount })}
           </Text>
@@ -342,7 +346,7 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
         onPress={() => onReview(application)}
         activeOpacity={0.7}
       >
-        <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
+        <Ionicons name="eye-outline" size={18} color={COLORS.onPrimary} />
         <Text style={styles.reviewButtonText}>{t("appsReview.reviewApplication")}</Text>
       </TouchableOpacity>
     </View>
@@ -373,7 +377,7 @@ const DocumentCard = React.memo(({ doc, index, onOpen }) => {
       activeOpacity={0.7}
     >
       <View style={styles.documentIcon}>
-        <Ionicons name="document-attach-outline" size={18} color="#059669" />
+        <Ionicons name="document-attach-outline" size={18} color={COLORS.onPrimary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.documentTitle} numberOfLines={1}>
@@ -383,7 +387,7 @@ const DocumentCard = React.memo(({ doc, index, onOpen }) => {
           {doc.type || doc.mimeType || t("appsReview.attachedDocument")}
         </Text>
       </View>
-      <Ionicons name="open-outline" size={18} color="#9CA3AF" />
+      <Ionicons name="open-outline" size={18} color={COLORS.textSecondary} />
     </TouchableOpacity>
   );
 });
@@ -397,7 +401,7 @@ const ClassOption = React.memo(({ classItem, isSelected, onSelect }) => (
     <Ionicons
       name="school-outline"
       size={16}
-      color={isSelected ? "#4F46E5" : "#6B7280"}
+      color={isSelected ? ACCENT.indigo.solid : COLORS.textSecondary}
     />
     <Text style={[styles.classOptionText, isSelected && styles.classOptionTextActive]}>
       {classItem.name}
@@ -406,7 +410,7 @@ const ClassOption = React.memo(({ classItem, isSelected, onSelect }) => (
       <Ionicons
         name="checkmark-circle"
         size={18}
-        color="#4F46E5"
+        color={ACCENT.indigo.solid}
         style={{ marginLeft: "auto" }}
       />
     )}
@@ -421,14 +425,14 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
   return (
     <View style={styles.credentialsCard}>
       <View style={styles.credentialsHeader}>
-        <Ionicons name="key-outline" size={16} color="#4F46E5" />
+        <IconSquare icon="key" accent="indigo" size={28} />
         <Text style={styles.credentialsTitle}>{t("appsReview.credentialsTitle")}</Text>
       </View>
 
       {enrollmentNo ? (
         <View style={styles.credentialRow}>
           <View style={styles.credentialLabelBox}>
-            <Ionicons name="id-card-outline" size={14} color="#6B7280" />
+            <Ionicons name="id-card-outline" size={14} color={ACCENT.indigo.solid} />
             <Text style={styles.credentialLabel}>{t("appsReview.labelEnrollmentNo")}</Text>
           </View>
           <Text style={styles.credentialValue} numberOfLines={1}>
@@ -439,7 +443,7 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
             onPress={() => onCopy(enrollmentNo, t("appsReview.copyLabelEnrollment"))}
             activeOpacity={0.7}
           >
-            <Ionicons name="copy-outline" size={13} color="#4F46E5" />
+            <Ionicons name="copy-outline" size={13} color={ACCENT.indigo.deep} />
             <Text style={styles.copyChipText}>{t("appsReview.btnCopy")}</Text>
           </TouchableOpacity>
         </View>
@@ -448,7 +452,7 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
       {tempPassword ? (
         <View style={styles.credentialRow}>
           <View style={styles.credentialLabelBox}>
-            <Ionicons name="lock-closed-outline" size={14} color="#6B7280" />
+            <Ionicons name="lock-closed-outline" size={14} color={ACCENT.indigo.solid} />
             <Text style={styles.credentialLabel}>{t("appsReview.labelTempPassword")}</Text>
           </View>
           <Text style={styles.credentialValue} numberOfLines={1}>
@@ -459,7 +463,7 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
             onPress={() => onCopy(tempPassword, t("appsReview.copyLabelPassword"))}
             activeOpacity={0.7}
           >
-            <Ionicons name="copy-outline" size={13} color="#4F46E5" />
+            <Ionicons name="copy-outline" size={13} color={ACCENT.indigo.deep} />
             <Text style={styles.copyChipText}>{t("appsReview.btnCopy")}</Text>
           </TouchableOpacity>
         </View>
@@ -757,7 +761,9 @@ export default function StudentApplicationsScreen() {
   // ── Document opener ────────────────────────────────────────────────────────
 
   const openDocument = useCallback(async (doc) => {
-    const uri = doc?.uri || doc?.url || doc?.fileUrl || doc?.path || null;
+    // The server's signed link. Never `path` — that named a file on the
+    // server's disk, which the phone reported as an invalid file path.
+    const uri = doc?.url || doc?.uri || doc?.fileUrl || null;
 
     if (!uri) {
       Alert.alert(
@@ -768,7 +774,10 @@ export default function StudentApplicationsScreen() {
     }
 
     try {
-      const supported = await Linking.canOpenURL(uri);
+      // A web link is opened directly. canOpenURL answers false for https on
+      // Android 11+ unless the manifest declares a browser query, which made a
+      // perfectly good link look unopenable.
+      const supported = /^https?:\/\//i.test(uri) || await Linking.canOpenURL(uri);
       if (!supported) {
         Alert.alert(
           t("appsReview.cannotOpenTitle"),
@@ -790,7 +799,7 @@ export default function StudentApplicationsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>{t("appsReview.loading")}</Text>
       </View>
     );
@@ -802,7 +811,7 @@ export default function StudentApplicationsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -811,8 +820,10 @@ export default function StudentApplicationsScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon icon="person-add" style={styles.headerIcon} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("appsReview.title")}</Text>
@@ -826,30 +837,26 @@ export default function StudentApplicationsScreen() {
           onPress={() => loadData(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh" size={20} color="#D97706" />
+          <Ionicons name="refresh" size={20} color={ACCENT.blue.solid} />
         </TouchableOpacity>
       </View>
 
       {/* ── Summary cards ── */}
       <View style={styles.summaryRow}>
         <SummaryCard
-          bg="#FEF3C7"
           icon="person-add-outline"
-          iconColor="#D97706"
+          tone={applications.length > 0 ? "warning" : undefined}
           value={applications.length}
           label={t("appsReview.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
           icon="alert-circle-outline"
-          iconColor="#DC2626"
+          tone={staleCount > 0 ? "warning" : undefined}
           value={staleCount}
           label={t("appsReview.overDays", { days: STALE_DAYS })}
         />
         <SummaryCard
-          bg="#EEF2FF"
           icon="school-outline"
-          iconColor="#4F46E5"
           value={classes.length}
           label={t("appsReview.classes")}
         />
@@ -864,14 +871,14 @@ export default function StudentApplicationsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#D97706"
-            colors={["#D97706"]}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
           />
         }
       >
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadData()}
@@ -884,13 +891,13 @@ export default function StudentApplicationsScreen() {
         )}
 
         {applications.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle-outline" size={48} color="#059669" />
-            <Text style={styles.emptyTitle}>{t("appsReview.emptyTitle")}</Text>
-            <Text style={styles.emptySubtitle}>
-              {t("appsReview.emptySubtitle")}
-            </Text>
-          </View>
+          <EmptyState
+            icon="checkmark-circle-outline"
+            accent="green"
+            title={t("appsReview.emptyTitle")}
+            message={t("appsReview.emptySubtitle")}
+            style={styles.emptyState}
+          />
         ) : (
           applications.map((app) => (
             <ApplicationCard
@@ -935,7 +942,7 @@ export default function StudentApplicationsScreen() {
                 disabled={isActionBusy}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={22} color="#6B7280" />
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -947,7 +954,7 @@ export default function StudentApplicationsScreen() {
               >
                 {approvalCredentials.synced === false && (
                   <View style={styles.offlineBanner}>
-                    <Ionicons name="cloud-offline-outline" size={18} color="#92400E" />
+                    <Ionicons name="cloud-offline-outline" size={18} color={SEMANTIC.warning.text} />
                     <Text style={styles.offlineBannerText}>
                       {t("appsReview.offlineBanner")}
                     </Text>
@@ -956,7 +963,7 @@ export default function StudentApplicationsScreen() {
 
                 {approvalCredentials.emailSent === true && (
                   <View style={styles.emailSentBanner}>
-                    <Ionicons name="mail-outline" size={18} color="#065F46" />
+                    <Ionicons name="mail-outline" size={18} color={SEMANTIC.success.text} />
                     <Text style={styles.emailSentText}>
                       {t("appsReview.emailSentBanner")}
                     </Text>
@@ -965,7 +972,7 @@ export default function StudentApplicationsScreen() {
 
                 {approvalCredentials.warning ? (
                   <View style={styles.warningBanner}>
-                    <Ionicons name="warning-outline" size={18} color="#92400E" />
+                    <Ionicons name="warning-outline" size={18} color={SEMANTIC.warning.text} />
                     <Text style={styles.warningBannerText}>
                       {approvalCredentials.warning}
                     </Text>
@@ -983,7 +990,7 @@ export default function StudentApplicationsScreen() {
                   onPress={closeReviewModal}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                  <Ionicons name="checkmark" size={20} color={COLORS.onPrimary} />
                   <Text style={styles.doneButtonText}>{t("appsReview.btnDone")}</Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -998,38 +1005,38 @@ export default function StudentApplicationsScreen() {
               >
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
-                    <Ionicons name="person" size={16} color="#4F46E5" />
+                    <IconSquare icon="person" accent="blue" size={28} />
                     <Text style={styles.detailSectionTitle}>{t("appsReview.sectionStudentDetails")}</Text>
                   </View>
 
                   <DetailRow
                     icon="person-outline"
-                    iconColor="#D97706"
+                    iconColor={ACCENT.blue.solid}
                     label={t("appsReview.labelFullName")}
                     value={selectedApplication.name}
                   />
                   <DetailRow
                     icon="mail-outline"
-                    iconColor="#4F46E5"
+                    iconColor={ACCENT.blue.solid}
                     label={t("appsReview.labelEmail")}
                     value={selectedApplication.email || t("appsReview.noEmail")}
                   />
                   <DetailRow
                     icon="call-outline"
-                    iconColor="#059669"
+                    iconColor={ACCENT.blue.solid}
                     label={t("appsReview.labelPhone")}
                     value={selectedApplication.phone}
                   />
                   <DetailRow
                     icon="people-outline"
-                    iconColor="#4F46E5"
+                    iconColor={ACCENT.sky.solid}
                     label={t("appsReview.labelGuardian")}
                     value={selectedApplication.guardianName}
                   />
                   {selectedApplication.address ? (
                     <DetailRow
                       icon="home-outline"
-                      iconColor="#6B7280"
+                      iconColor={ACCENT.blue.solid}
                       label={t("appsReview.labelAddress")}
                       value={selectedApplication.address}
                     />
@@ -1037,20 +1044,20 @@ export default function StudentApplicationsScreen() {
                   {selectedApplication.notes ? (
                     <DetailRow
                       icon="document-text-outline"
-                      iconColor="#6B7280"
+                      iconColor={ACCENT.blue.solid}
                       label={t("appsReview.labelNotes")}
                       value={selectedApplication.notes}
                     />
                   ) : null}
                   <DetailRow
                     icon="school-outline"
-                    iconColor="#7C3AED"
+                    iconColor={ACCENT.indigo.solid}
                     label={t("appsReview.labelAppliedClass")}
                     value={selectedApplication.className || t("appsReview.notSpecified")}
                   />
                   <DetailRow
                     icon="calendar-outline"
-                    iconColor="#4F46E5"
+                    iconColor={ACCENT.blue.solid}
                     label={t("appsReview.labelAppliedOn")}
                     value={formatDate(selectedApplication.created_at, t)}
                   />
@@ -1058,7 +1065,7 @@ export default function StudentApplicationsScreen() {
 
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
-                    <Ionicons name="document-text" size={16} color="#059669" />
+                    <IconSquare icon="document-text" accent="slate" size={28} />
                     <Text style={styles.detailSectionTitle}>{t("appsReview.sectionDocuments")}</Text>
                   </View>
 
@@ -1073,7 +1080,7 @@ export default function StudentApplicationsScreen() {
                     ))
                   ) : (
                     <View style={styles.emptyDocuments}>
-                      <Ionicons name="document-outline" size={20} color="#9CA3AF" />
+                      <Ionicons name="document-outline" size={20} color={ACCENT.slate.solid} />
                       <Text style={styles.emptyDocumentsText}>
                         {t("appsReview.noDocuments")}
                       </Text>
@@ -1083,7 +1090,7 @@ export default function StudentApplicationsScreen() {
 
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
-                    <Ionicons name="school" size={16} color="#4F46E5" />
+                    <IconSquare icon="school" accent="indigo" size={28} />
                     <Text style={styles.detailSectionTitle}>
                       {t("appsReview.sectionAssignClass")}
                     </Text>
@@ -1091,7 +1098,7 @@ export default function StudentApplicationsScreen() {
 
                   {classes.length === 0 ? (
                     <View style={styles.noClassesBox}>
-                      <Ionicons name="alert-circle-outline" size={18} color="#D97706" />
+                      <Ionicons name="alert-circle-outline" size={18} color={SEMANTIC.warning.text} />
                       <Text style={styles.noClassesText}>
                         {t("appsReview.noActiveClasses")}
                       </Text>
@@ -1119,7 +1126,7 @@ export default function StudentApplicationsScreen() {
                         <Ionicons
                           name={showClassPicker ? "chevron-up" : "chevron-down"}
                           size={18}
-                          color="#6B7280"
+                          color={COLORS.textSecondary}
                         />
                       </TouchableOpacity>
 
@@ -1144,7 +1151,7 @@ export default function StudentApplicationsScreen() {
 
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
-                    <Ionicons name="chatbubble-ellipses" size={16} color="#DC2626" />
+                    <IconSquare icon="chatbubble-ellipses" accent="red" size={28} />
                     <Text style={styles.detailSectionTitle}>
                       {t("appsReview.sectionRejectReason")}{" "}
                       <Text style={styles.optional}>{t("appsReview.optional")}</Text>
@@ -1153,7 +1160,7 @@ export default function StudentApplicationsScreen() {
                   <TextInput
                     style={styles.reasonInput}
                     placeholder={t("appsReview.phRejectReason")}
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={COLORS.textMuted}
                     multiline
                     numberOfLines={3}
                     value={rejectReason}
@@ -1175,10 +1182,10 @@ export default function StudentApplicationsScreen() {
                     activeOpacity={0.7}
                   >
                     {rejecting ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <ActivityIndicator size="small" color={COLORS.onPrimary} />
                     ) : (
                       <>
-                        <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+                        <Ionicons name="close-circle-outline" size={18} color={COLORS.onPrimary} />
                         <Text style={styles.actionButtonText}>{t("appsReview.btnReject")}</Text>
                       </>
                     )}
@@ -1195,10 +1202,10 @@ export default function StudentApplicationsScreen() {
                     activeOpacity={0.7}
                   >
                     {approving ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <ActivityIndicator size="small" color={COLORS.onPrimary} />
                     ) : (
                       <>
-                        <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                        <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.onPrimary} />
                         <Text style={styles.actionButtonText}>{t("appsReview.btnApprove")}</Text>
                       </>
                     )}
@@ -1219,14 +1226,14 @@ export default function StudentApplicationsScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.page,
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   header: {
     flexDirection:     "row",
@@ -1234,26 +1241,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12, marginRight: 8 },
-  headerTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   refreshButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: ACCENT.blue.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -1261,15 +1271,15 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection:    "row",
     alignItems:       "center",
-    backgroundColor:  "#FEE2E2",
+    backgroundColor:  SEMANTIC.error.bg,
     marginHorizontal: 20,
     marginTop:        16,
     padding:          12,
     borderRadius:     10,
     gap:              8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText: { fontSize: 13, color: SEMANTIC.error.text, fontWeight: "700" },
 
   summaryRow: {
     flexDirection:     "row",
@@ -1278,34 +1288,21 @@ const styles = StyleSheet.create({
     marginTop:         20,
     marginBottom:      8,
   },
-  summaryCard: {
-    flex:              1,
-    borderRadius:      14,
-    paddingVertical:   14,
-    paddingHorizontal: 6,
-    alignItems:        "center",
-    gap:               4,
-  },
-  summaryNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  summaryLabel:  {
-    fontSize:   10,
-    color:      "#6B7280",
-    fontWeight: "600",
-    textAlign:  "center",
-  },
 
   scrollContent: { paddingTop: 12, paddingBottom: 40 },
 
   applicationCard: {
-    backgroundColor:  "#FFFFFF",
+    backgroundColor:  ACCENT.blue.wash,
     borderRadius:     14,
     padding:          16,
     marginHorizontal: 20,
     marginBottom:     10,
     borderWidth:      1,
-    borderColor:      "#E5E7EB",
+    borderColor:      COLORS.border,
+    borderLeftWidth:  3,
+    borderLeftColor:  ACCENT.blue.base,
   },
-  applicationCardStale: { borderColor: "#FECACA", borderWidth: 1.5 },
+  applicationCardStale: { borderColor: TONE_EDGE.error, borderLeftColor: TONE_EDGE.error, borderWidth: 1.5, borderLeftWidth: 3 },
   applicationTop:       { flexDirection: "row", alignItems: "center" },
   avatarBox: {
     width:          44,
@@ -1316,29 +1313,29 @@ const styles = StyleSheet.create({
     marginRight:    12,
   },
   applicationInfo: { flex: 1, marginRight: 8 },
-  studentName:     { fontSize: 15, fontWeight: "700", color: "#111827" },
-  studentEmail:    { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
-  statusBadge:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  pendingBadge:    { backgroundColor: "#FEF3C7" },
-  staleBadge:      { backgroundColor: "#FEE2E2" },
+  studentName:     { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  studentEmail:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  statusBadge:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+  pendingBadge:    { backgroundColor: PENDING_BADGE.bg, borderColor: PENDING_BADGE.border },
+  staleBadge:      { backgroundColor: STALE_BADGE.bg, borderColor: STALE_BADGE.border },
   statusBadgeText: {
     fontSize:      10,
     fontWeight:    "700",
     textTransform: "uppercase",
   },
-  pendingBadgeText:  { color: "#92400E" },
-  staleBadgeText:    { color: "#991B1B" },
+  pendingBadgeText:  { color: PENDING_BADGE.text },
+  staleBadgeText:    { color: STALE_BADGE.text },
   metaGrid:          { marginTop: 12, gap: 6 },
   metaItem:          { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: {
     fontSize:   13,
-    color:      "#374151",
+    color:      COLORS.text,
     fontWeight: "500",
     flexShrink: 1,
   },
   reviewButton: {
     marginTop:       14,
-    backgroundColor: "#D97706",
+    backgroundColor: ACCENT.blue.solid,
     borderRadius:    12,
     paddingVertical: 12,
     flexDirection:   "row",
@@ -1346,21 +1343,13 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     gap:             8,
   },
-  reviewButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+  reviewButtonText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   emptyState: {
     alignItems:        "center",
     justifyContent:    "center",
     paddingVertical:   60,
     paddingHorizontal: 40,
-  },
-  emptyTitle:    { fontSize: 16, fontWeight: "600", color: "#374151", marginTop: 12 },
-  emptySubtitle: {
-    fontSize:   13,
-    color:      "#9CA3AF",
-    marginTop:  4,
-    textAlign:  "center",
-    lineHeight: 18,
   },
 
   modalOverlay: {
@@ -1370,7 +1359,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     maxHeight:            "92%",
-    backgroundColor:      "#F9FAFB",
+    backgroundColor:      COLORS.page,
     borderTopLeftRadius:  24,
     borderTopRightRadius: 24,
     paddingTop:           10,
@@ -1379,7 +1368,7 @@ const styles = StyleSheet.create({
     width:           44,
     height:          5,
     borderRadius:    99,
-    backgroundColor: "#D1D5DB",
+    backgroundColor: COLORS.border,
     alignSelf:       "center",
     marginBottom:    14,
   },
@@ -1389,16 +1378,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom:     14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     marginBottom:      4,
   },
-  modalTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  modalSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  modalTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  modalSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   closeButton: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -1409,12 +1400,12 @@ const styles = StyleSheet.create({
   },
 
   detailSection: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     marginBottom:    12,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
   },
   detailSectionHeader: {
     flexDirection: "row",
@@ -1422,8 +1413,8 @@ const styles = StyleSheet.create({
     gap:           8,
     marginBottom:  14,
   },
-  detailSectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  optional:           { fontSize: 13, fontWeight: "400", color: "#9CA3AF" },
+  detailSectionTitle: { flex: 1, fontSize: 15, fontWeight: "700", color: COLORS.text },
+  optional:           { fontSize: 13, fontWeight: "400", color: COLORS.textSecondary },
   detailRow: {
     flexDirection: "row",
     alignItems:    "flex-start",
@@ -1433,14 +1424,14 @@ const styles = StyleSheet.create({
   detailTextBox: { flex: 1 },
   detailLabel: {
     fontSize:      12,
-    color:         "#9CA3AF",
+    color:         COLORS.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
   detailValue: {
     fontSize:   14,
-    color:      "#111827",
+    color:      COLORS.text,
     fontWeight: "600",
     marginTop:  2,
   },
@@ -1448,65 +1439,67 @@ const styles = StyleSheet.create({
   documentCard: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    12,
     padding:         12,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.slate.base,
   },
   documentIcon: {
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginRight:     10,
   },
-  documentTitle:    { fontSize: 14, fontWeight: "600", color: "#111827" },
-  documentSubtitle: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  documentTitle:    { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  documentSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   emptyDocuments: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    12,
     padding:         12,
     gap:             8,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
   },
-  emptyDocumentsText: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
+  emptyDocumentsText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
 
   noClassesBox: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    10,
     padding:         12,
     gap:             8,
   },
-  noClassesText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  noClassesText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   classSelector: {
-    backgroundColor:  "#F9FAFB",
+    backgroundColor:  COLORS.surface,
     borderRadius:     12,
     paddingHorizontal: 14,
     paddingVertical:  14,
     borderWidth:      1.5,
-    borderColor:      "#E5E7EB",
+    borderColor:      COLORS.border,
     flexDirection:    "row",
     alignItems:       "center",
     justifyContent:   "space-between",
   },
-  classSelectorSelected:    { borderColor: "#4F46E5", backgroundColor: "#FAFAFF" },
-  classSelectorText:        { fontSize: 15, color: "#111827", fontWeight: "600" },
-  classSelectorPlaceholder: { color: "#9CA3AF", fontWeight: "400" },
+  classSelectorSelected:    { borderColor: ACCENT.indigo.base, backgroundColor: ACCENT.indigo.wash },
+  classSelectorText:        { fontSize: 15, color: COLORS.text, fontWeight: "600" },
+  classSelectorPlaceholder: { color: COLORS.textSubtle, fontWeight: "400" },
   classOptionsBox: {
     marginTop:       8,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    12,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
     overflow:        "hidden",
   },
   classOption: {
@@ -1516,29 +1509,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
-  classOptionActive:     { backgroundColor: "#EEF2FF" },
-  classOptionText:       { fontSize: 14, color: "#374151", fontWeight: "500", flex: 1 },
-  classOptionTextActive: { color: "#4F46E5", fontWeight: "700" },
+  classOptionActive:     { backgroundColor: ACCENT.indigo.wash },
+  classOptionText:       { fontSize: 14, color: COLORS.text, fontWeight: "500", flex: 1 },
+  classOptionTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   reasonInput: {
     minHeight:         90,
     textAlignVertical: "top",
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   COLORS.surface,
     borderRadius:      12,
     paddingHorizontal: 14,
     paddingVertical:   12,
     fontSize:          14,
-    color:             "#111827",
+    color:             COLORS.text,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
 
   modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
   rejectButton: {
     flex:            1,
-    backgroundColor: "#DC2626",
+    backgroundColor: ACCENT.red.solid,
     borderRadius:    12,
     paddingVertical: 14,
     flexDirection:   "row",
@@ -1548,7 +1541,7 @@ const styles = StyleSheet.create({
   },
   approveButton: {
     flex:            1,
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.green.solid,
     borderRadius:    12,
     paddingVertical: 14,
     flexDirection:   "row",
@@ -1556,16 +1549,18 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     gap:             8,
   },
-  actionButtonDisabled: { backgroundColor: "#9CA3AF" },
-  actionButtonText:     { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+  actionButtonDisabled: { backgroundColor: COLORS.textMuted },
+  actionButtonText:     { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   credentialsCard: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.wash,
     borderRadius:    14,
     padding:         16,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#C7D2FE",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.indigo.base,
   },
   credentialsHeader: {
     flexDirection: "row",
@@ -1573,18 +1568,18 @@ const styles = StyleSheet.create({
     gap:           8,
     marginBottom:  14,
   },
-  credentialsTitle: { fontSize: 15, fontWeight: "700", color: "#3730A3" },
+  credentialsTitle: { fontSize: 15, fontWeight: "700", color: ACCENT.indigo.deep },
   credentialRow: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    10,
     paddingVertical: 10,
     paddingLeft:     12,
     paddingRight:    8,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#E0E7FF",
+    borderColor:     COLORS.border,
     gap:             8,
   },
   credentialLabelBox: {
@@ -1593,27 +1588,27 @@ const styles = StyleSheet.create({
     gap:           4,
     width:         110,
   },
-  credentialLabel: { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  credentialLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
   credentialValue: {
     flex:          1,
     fontSize:      14,
     fontWeight:    "700",
-    color:         "#111827",
+    color:         COLORS.text,
     letterSpacing: 0.5,
   },
   copyChip: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACCENT.indigo.wash,
     borderRadius:      6,
     paddingHorizontal: 8,
     paddingVertical:   5,
     gap:               4,
   },
-  copyChipText:    { fontSize: 11, fontWeight: "700", color: "#4F46E5" },
+  copyChipText:    { fontSize: 11, fontWeight: "700", color: ACCENT.indigo.deep },
   credentialsHint: {
     fontSize:   12,
-    color:      "#4338CA",
+    color:      ACCENT.indigo.deep,
     lineHeight: 18,
     marginTop:  4,
   },
@@ -1621,35 +1616,35 @@ const styles = StyleSheet.create({
   offlineBanner: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    12,
     gap:             8,
   },
-  offlineBannerText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  offlineBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   emailSentBanner: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#ECFDF5",
+    backgroundColor: SEMANTIC.success.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    12,
     gap:             8,
   },
-  emailSentText: { flex: 1, fontSize: 13, color: "#065F46", fontWeight: "500" },
+  emailSentText: { flex: 1, fontSize: 13, color: SEMANTIC.success.text, fontWeight: "500" },
   warningBanner: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    12,
     gap:             8,
   },
-  warningBannerText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  warningBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   doneButton: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: COLORS.primary,
     borderRadius:    12,
     paddingVertical: 14,
     flexDirection:   "row",
@@ -1658,5 +1653,5 @@ const styles = StyleSheet.create({
     gap:             8,
     marginTop:       4,
   },
-  doneButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  doneButtonText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 15 },
 });

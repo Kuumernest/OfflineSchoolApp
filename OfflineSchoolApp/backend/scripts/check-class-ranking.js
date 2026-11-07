@@ -622,6 +622,38 @@ const main = async () => {
   check("  lb1's term card carries the grade place: 1/3",
     [lbCard?.summary?.gradePosition, lbCard?.summary?.totalInGrade], [1, 3]);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a class of three ranked out of the pupils with results (\"1st / 50\") ---");
+  // A school whose current-year setting does not name the period, so the
+  // roster does not decide. GV1: gv1 15, gv2 12, gv3 sat nothing. GV2 sits
+  // the same exam: o1..o4 18, 17, 16, 9. Rows a past run left under GV1: one
+  // for gv3 (no mark), one for a deleted pupil, one for a pupil with no mark
+  // in this class at all.
+  const GV = await school("2025/2026");
+  await cls(GV, "GV1", ["gv1", "gv2", "gv3", "gvdel"]);
+  await cls(GV, "GV2", ["o1", "o2", "o3", "o4"]);
+  await exam(GV, "gve", ["GV1", "GV2"]);
+  await marks(GV, "gve", "GV1", { gv1: 15, gv2: 12, gvdel: 11 });
+  await marks(GV, "gve", "GV2", { o1: 18, o2: 17, o3: 16, o4: 9 });
+  await processExam(GV, "gve");
+  await M("Student").updateOne({ _id: "gvdel" }, { $set: { deletedAt: new Date() } });
+  for (const studentId of ["gv3", "gvdel", "stranger"]) {
+    await M("TermResult").create({ schoolId: GV, academicYear: YEAR, term: 1, classId: "GV1", studentId,
+      termAverage: 10, classPosition: 46, totalInClass: 50 });
+  }
+  await computeTerm(GV, "GV1");
+  check("term: gv1 1/2, gv2 2/2 — the stale and deleted rows are not counted",
+    await termOf(GV, ["gv1", "gv2", "gv3", "stranger"]), { gv1: [1, 2], gv2: [2, 2], gv3: null, stranger: null });
+  await M("AnnualResult").create({ schoolId: GV, academicYear: YEAR, classId: "GV1", studentId: "stranger",
+    annualAverage: 10, classPosition: 46, totalInClass: 50 });
+  await computeAnnual(GV, "GV1");
+  check("  annual: gv1 1/2, gv2 2/2, the stale row gone", await annualOf(GV, ["gv1", "gv2", "stranger"]),
+    { gv1: [1, 2], gv2: [2, 2], stranger: null });
+  const gvCard = await cards.buildTermCard({ schoolId: GV, academicYear: YEAR, term: 1, classId: "GV1", studentId: "gv1" });
+  check("  gv1's term card: 1 / 2 overall, Maths 1st / 2 — not ranked against GV2, which sat the same paper",
+    [gvCard?.summary?.classPosition, gvCard?.summary?.totalInClass,
+     gvCard?.subjects?.[0]?.subjectPosition, gvCard?.subjects?.[0]?.subjectTotal], [1, 2, 1, 2]);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();
   await mongoose.disconnect();

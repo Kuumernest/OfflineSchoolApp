@@ -97,13 +97,22 @@ const gradingFor = (docs, schoolId) => {
 const historyFor = (docs, schoolId, studentIds) => {
   if (!studentIds.length) return new Map();
 
-  const summaries = docs.find("resultSummary", {
+  const all = docs.find("resultSummary", {
     schoolId, isPublished: true, deletedAt: null, studentId: { in: studentIds },
   });
-  if (!summaries.length) return new Map();
+  if (!all.length) return new Map();
 
-  const examIds = [...new Set(summaries.map((s) => String(s.examId)).filter(Boolean))];
-  const exams = docs.find("exam", { _id: { in: examIds } });
+  const examIds = [...new Set(all.map((s) => String(s.examId)).filter(Boolean))];
+  const found = docs.find("exam", { _id: { in: examIds } });
+
+  // A deleted exam's summaries stay live, as on the server; drop them as the
+  // server's loader does (academicHistory.publishedHistory, deletedExams). A
+  // summary whose exam is not mirrored at all is kept — absence is not
+  // deletion — and the shared order handles it.
+  const gone = new Set(found.filter((e) => e.deletedAt).map((e) => String(e._id)));
+  const summaries = gone.size ? all.filter((s) => !gone.has(String(s.examId))) : all;
+  if (!summaries.length) return new Map();
+  const exams = found.filter((e) => !e.deletedAt);
 
   return academicOrder.orderPublishedHistory(summaries, exams);
 };

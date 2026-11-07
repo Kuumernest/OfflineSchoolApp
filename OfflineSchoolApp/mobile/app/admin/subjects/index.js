@@ -14,6 +14,13 @@ import {
 } from "../../../src/services/subject.service";
 import { ClassService } from "../../../src/services/class.service";
 import { getDatabase }  from "../../../src/db/database";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+
+const CLASS_BADGE = accentBadge("indigo");
+const ASSIGNED    = statusBadge("success");
+const UNASSIGNED  = statusBadge("warning");
 
 const normaliseId = (id) => {
   if (id === null || id === undefined) return null;
@@ -69,7 +76,7 @@ const SubjectCard = React.memo(
     return (
     <View style={styles.card}>
       <View style={styles.iconBox}>
-        <Ionicons name="book-outline" size={22} color="#059669" />
+        <Ionicons name="book-outline" size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.cardInfo}>
@@ -77,7 +84,7 @@ const SubjectCard = React.memo(
         <View style={styles.badgeRow}>
           {!hideClassBadge && (
             <View style={styles.classBadge}>
-              <Ionicons name="school-outline" size={12} color="#4F46E5" />
+              <Ionicons name="school-outline" size={12} color={CLASS_BADGE.text} />
               <Text style={styles.classBadgeText} numberOfLines={1}>{subject.className}</Text>
             </View>
           )}
@@ -89,18 +96,28 @@ const SubjectCard = React.memo(
             <Ionicons
               name="people-outline"
               size={12}
-              color={subject.teacherName ? "#059669" : "#D97706"}
+              color={subject.teacherName ? ASSIGNED.text : UNASSIGNED.text}
             />
             <Text
               style={[
                 styles.teacherBadgeText,
-                { color: subject.teacherName ? "#065F46" : "#92400E" },
+                { color: subject.teacherName ? ASSIGNED.text : UNASSIGNED.text },
               ]}
               numberOfLines={1}
             >
               {subject.teacherName || t("subjects.noTeacher")}
             </Text>
           </View>
+
+          {/* Created or edited here and still queued: it goes by itself. */}
+          {subject._synced === 0 && (
+            <View style={[styles.teacherBadge, styles.teacherUnassigned]}>
+              <Ionicons name="cloud-upload-outline" size={12} color={UNASSIGNED.text} />
+              <Text style={[styles.teacherBadgeText, { color: UNASSIGNED.text }]} numberOfLines={1}>
+                {t("common.notSentYet")}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -111,7 +128,7 @@ const SubjectCard = React.memo(
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
-          <Ionicons name="create-outline" size={20} color="#4F46E5" />
+          <Ionicons name="create-outline" size={20} color={ACCENT.slate.solid} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
@@ -119,7 +136,7 @@ const SubjectCard = React.memo(
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
-          <Ionicons name="trash-outline" size={20} color="#DC2626" />
+          <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
         </TouchableOpacity>
       </View>
     </View>
@@ -127,11 +144,9 @@ const SubjectCard = React.memo(
   }
 );
 
-const EmptyState = React.memo(({ icon, title, subtitle, action }) => (
+const EmptyState = React.memo(({ icon, accent = "slate", title, subtitle, action }) => (
   <View style={styles.emptyState}>
-    <View style={styles.emptyIconWrap}>
-      <Ionicons name={icon} size={36} color="#9CA3AF" />
-    </View>
+    <IconSquare icon={icon} accent={accent} size={80} radius={20} style={styles.emptyIconWrap} />
     <Text style={styles.emptyTitle}>{title}</Text>
     <Text style={styles.emptySubtitle}>{subtitle}</Text>
     {action && (
@@ -162,9 +177,7 @@ const FilterChip = React.memo(({ label, isActive, onPress }) => (
 const ClassSection = React.memo(({ className, count, children }) => (
   <View style={styles.classSection}>
     <View style={styles.classSectionHeader}>
-      <View style={styles.classSectionIcon}>
-        <Ionicons name="school-outline" size={16} color="#4F46E5" />
-      </View>
+      <IconSquare icon="school-outline" accent="indigo" size={28} radius={8} />
       <Text style={styles.classSectionTitle} numberOfLines={1}>{className}</Text>
       <View style={styles.classSectionCount}>
         <Text style={styles.classSectionCountText}>{count}</Text>
@@ -314,7 +327,7 @@ export default function AdminSubjects() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
+        <ActivityIndicator size="large" color={ACCENT.slate.solid} />
         <Text style={styles.loadingText}>{t("subjectsList.loading")}</Text>
       </View>
     );
@@ -326,8 +339,9 @@ export default function AdminSubjects() {
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon />
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerTitle}>{t("subjects.title")}</Text>
           <Text style={styles.headerSubtitle}>
@@ -336,7 +350,7 @@ export default function AdminSubjects() {
           </Text>
         </View>
         <TouchableOpacity style={styles.addButton} onPress={handleAddSubject} activeOpacity={0.7}>
-          <Ionicons name="add" size={24} color="#FFFFFF" />
+          <Ionicons name="add" size={24} color={COLORS.onPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -378,12 +392,12 @@ export default function AdminSubjects() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.assigned}</Text>
+            <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>{stats.assigned}</Text>
             <Text style={styles.statLabel}>{t("subjectsList.assigned")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
+            <Text style={[styles.statNumber, stats.unassigned > 0 && { color: SEMANTIC.warning.text }]}>
               {stats.unassigned}
             </Text>
             <Text style={styles.statLabel}>{t("subjectsList.unassigned")}</Text>
@@ -400,14 +414,14 @@ export default function AdminSubjects() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#059669"
-            colors={["#059669"]}
+            tintColor={ACCENT.slate.solid}
+            colors={[ACCENT.slate.solid]}
           />
         }
       >
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadData()}
@@ -422,9 +436,10 @@ export default function AdminSubjects() {
         {!hasClasses ? (
           <EmptyState
             icon="school-outline"
+            accent="indigo"
             title={t("subjectsList.noClasses")}
             subtitle={t("subjects.needClass")}
-            action={{ icon: "add-circle-outline", label: t("subjectsList.addClass"), color: "#4F46E5", onPress: handleAddClass }}
+            action={{ icon: "add-circle-outline", label: t("subjectsList.addClass"), color: ACCENT.indigo.solid, onPress: handleAddClass }}
           />
         ) : subjects.length === 0 ? (
           <EmptyState
@@ -433,7 +448,7 @@ export default function AdminSubjects() {
             subtitle={selectedClassId
               ? t("subjectsList.noneInClass")
               : t("subjectsList.noneHint")}
-            action={{ icon: "add-circle-outline", label: t("subjects.add"), color: "#059669", onPress: handleAddSubject }}
+            action={{ icon: "add-circle-outline", label: t("subjects.add"), color: ACCENT.slate.solid, onPress: handleAddSubject }}
           />
         ) : isAllTab ? (
           groupedSubjects.map((group) => (
@@ -469,109 +484,111 @@ export default function AdminSubjects() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F3F4F6" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1, borderBottomColor: "#E5E7EB",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     flexShrink: 0,
   },
   backButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
     marginRight: 12,
   },
   headerTextWrap: { flex: 1 },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle: { fontSize: 22, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.slate.solid,
     alignItems: "center", justifyContent: "center",
   },
   filterBar: {
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     minHeight: 56, justifyContent: "center", flexShrink: 0,
   },
   filterScroll: { flexGrow: 0 },
   filterRow: { paddingHorizontal: 20, paddingVertical: 12, gap: 8, alignItems: "center" },
   filterChip: {
-    backgroundColor: "#F3F4F6", borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderColor: COLORS.border,
     borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  filterChipActive: { backgroundColor: "#059669", borderColor: "#059669" },
-  filterChipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  filterChipTextActive: { color: "#FFFFFF" },
+  filterChipActive: { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base },
+  filterChipText: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  filterChipTextActive: { color: ACCENT.slate.deep },
   statsBanner: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#FFFFFF", paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    paddingVertical: 12,
+    ...tileShell("subjects"),
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     gap: 24, flexShrink: 0,
   },
   statItem: { alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 1 },
-  statDivider: { width: 1, height: 24, backgroundColor: "#E5E7EB" },
+  statNumber: { fontSize: 18, fontWeight: "700", color: ACCENT.slate.deep },
+  statLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 1 },
+  statDivider: { width: 1, height: 24, backgroundColor: COLORS.border },
   mainScroll: { flex: 1 },
   scrollContent: { paddingTop: 12, paddingBottom: 12, flexGrow: 1 },
   errorBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     marginHorizontal: 20, marginTop: 16,
     padding: 12, borderRadius: 10, gap: 8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText: { fontSize: 13, color: SEMANTIC.error.text, fontWeight: "700" },
   classSection: { marginBottom: 14 },
   classSectionHeader: {
     flexDirection: "row", alignItems: "center",
     marginHorizontal: 20, marginBottom: 8,
     paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: "#EEF2FF", borderRadius: 12, gap: 8,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12, gap: 8,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
   },
-  classSectionIcon: {
-    width: 28, height: 28, borderRadius: 8,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center", justifyContent: "center",
-  },
-  classSectionTitle: { flex: 1, fontSize: 14, fontWeight: "700", color: "#3730A3" },
+  classSectionTitle: { flex: 1, fontSize: 14, fontWeight: "700", color: ACCENT.indigo.deep },
   classSectionCount: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: CLASS_BADGE.border,
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
   },
-  classSectionCountText: { fontSize: 12, fontWeight: "700", color: "#4F46E5" },
+  classSectionCountText: { fontSize: 12, fontWeight: "700", color: ACCENT.indigo.deep },
   card: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 14, padding: 16,
     marginHorizontal: 20, marginBottom: 10,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.slate.base,
   },
   iconBox: {
     width: 46, height: 46, borderRadius: 12,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: ACCENT.slate.solid,
     alignItems: "center", justifyContent: "center",
     marginRight: 14, flexShrink: 0,
   },
   cardInfo: { flex: 1 },
-  subjectName: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 8 },
+  subjectName: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
   badgeRow: { gap: 6 },
   classBadge: {
     flexDirection: "row", alignItems: "center", alignSelf: "flex-start",
-    backgroundColor: "#EEF2FF", borderRadius: 8,
+    backgroundColor: CLASS_BADGE.bg, borderRadius: 8,
+    borderWidth: 1, borderColor: CLASS_BADGE.border,
     paddingHorizontal: 8, paddingVertical: 4,
     gap: 4, maxWidth: "100%",
   },
-  classBadgeText: { fontSize: 12, fontWeight: "600", color: "#4338CA", flexShrink: 1 },
+  classBadgeText: { fontSize: 12, fontWeight: "600", color: CLASS_BADGE.text, flexShrink: 1 },
   teacherBadge: {
     flexDirection: "row", alignItems: "center", alignSelf: "flex-start",
     borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1,
     gap: 4, maxWidth: "100%",
   },
-  teacherAssigned: { backgroundColor: "#ECFDF5" },
-  teacherUnassigned: { backgroundColor: "#FEF3C7" },
+  teacherAssigned: { backgroundColor: ASSIGNED.bg, borderColor: ASSIGNED.border },
+  teacherUnassigned: { backgroundColor: UNASSIGNED.bg, borderColor: UNASSIGNED.border },
   teacherBadgeText: { fontSize: 12, fontWeight: "600", flexShrink: 1 },
   actions: {
     flexDirection: "row", alignItems: "center",
@@ -583,13 +600,10 @@ const styles = StyleSheet.create({
     paddingVertical: 60, paddingHorizontal: 32,
   },
   emptyIconWrap: {
-    width: 80, height: 80, borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center", justifyContent: "center",
     marginBottom: 8,
   },
-  emptyTitle: { fontSize: 17, fontWeight: "700", color: "#111827", marginTop: 8 },
-  emptySubtitle: { fontSize: 14, color: "#6B7280", marginTop: 6, textAlign: "center", lineHeight: 20 },
+  emptyTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text, marginTop: 8 },
+  emptySubtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, textAlign: "center", lineHeight: 20 },
   emptyButton: {
     flexDirection: "row", alignItems: "center",
     marginTop: 20, gap: 6,

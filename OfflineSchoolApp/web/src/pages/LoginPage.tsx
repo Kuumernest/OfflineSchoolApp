@@ -1,7 +1,7 @@
 // web/src/pages/LoginPage.tsx
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate }            from "react-router-dom";
-import { useForm }                from "react-hook-form";
+import { useForm, useWatch }      from "react-hook-form";
 import { zodResolver }            from "@hookform/resolvers/zod";
 import { z }                      from "zod";
 import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { useAuthStore, useMustResetPassword } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 import { desktop } from "@/lib/offline/bridge";
 import { CHANGE_SERVER_EVENT } from "@/components/offline/DesktopServerGate";
+import OfflineBanner from "@/components/offline/OfflineBanner";
 // The 0.22 MB JPEG the phone uses, not the 2.61 MB PNG this pointed at.
 // A login page is the one screen every user loads before anything is
 // cached, over the same school connection the rest of the app now
@@ -90,25 +91,15 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors },
   } = useForm<LoginForm>({ resolver: zodResolver(loginRules) });
 
-  /*
-   * ACCEPTED — react-hooks/incompatible-library (a warning, not an error).
-   *
-   * react-hook-form's watch() returns a function the React Compiler cannot
-   * memoize safely, so it skips compiling this component. That is a library
-   * limitation rather than a fault here, and the cost is one uncompiled
-   * component. The compiler's caveat — trouble if the value reaches a
-   * memoized child — does not apply: `identifier` is read once, below, to
-   * decide whether the input looks like an email, and is passed to nothing.
-   *
-   * useWatch({ control }) would narrow the re-render to this field and may
-   * satisfy the compiler, but changing how the login form subscribes to its
-   * own input is not a change to make while tidying lint.
-   */
-  const identifier     = watch("identifier", "");
+  // useWatch rather than watch(): the same live value of the field, but a
+  // subscription the React Compiler can work with (watch() made it skip this
+  // component — react-hooks/incompatible-library).
+  // No defaultValues on the form, so the field is undefined until typed in.
+  const identifier     = useWatch({ control, name: "identifier" }) ?? "";
   const looksLikeEmail = identifier.includes("@");
 
   const onSubmit = async (data: LoginForm) => {
@@ -131,6 +122,9 @@ export default function LoginPage() {
     >
       {/* Dark overlay so the white text and logo stay readable on the photo */}
       <div className="absolute inset-0 bg-primary-900/70 pointer-events-none" aria-hidden="true" />
+      {/* Above the card, not inside it: offline, signing in cannot work, and
+          that is worth knowing before the password is typed. */}
+      <OfflineBanner className="absolute inset-x-0 top-0 z-10" />
       <div className="relative w-full max-w-md">
 
         {/* Logo */}

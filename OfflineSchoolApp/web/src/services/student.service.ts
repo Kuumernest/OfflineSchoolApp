@@ -747,3 +747,38 @@ export async function fetchStudentStats(
     total:    stats?.total    ?? 0,
   };
 }
+
+// ─── Profile overview (C10) ──────────────────────────────────────────────────
+
+export interface StudentOverviewResult {
+  examId:       string;
+  examName:     string | null;
+  term:         string | null;
+  academicYear: string | null;
+  /** On /20. */
+  average:      number | null;
+  /** Against the school's pass mark; null when the pupil sat nothing. */
+  passed:       boolean | null;
+  position:     number | null;
+  outOf:        number | null;
+  remark:       string | null;
+}
+
+export interface StudentOverview {
+  results:  StudentOverviewResult[];
+  passMark: number;
+  attendance: {
+    days: number; present: number; absent: number; late: number; excused: number;
+    marked: number;
+    /** Percent attended; null when no register marked the pupil. */
+    rate: number | null;
+  };
+  /** Absent for a reader without fees.view. */
+  fees: { academicYear: string; charged: number; paid: number; balance: number } | null;
+  guardian: { name: string | null; phone: string | null; email: string | null };
+}
+
+export async function fetchStudentOverview(studentId: string): Promise<StudentOverview> {
+  const { data } = await api.get(`/admin/students/${studentId}/overview`);
+  return data?.overview ?? data?.data?.overview;
+}

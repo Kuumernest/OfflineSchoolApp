@@ -26,6 +26,7 @@
  */
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
+const { outstandingOf } = require("./fees");
 
 /**
  * What the finance report reads, expressed as the capabilities that mirror it.
@@ -312,29 +313,9 @@ module.exports = [
       const expenditureTotal = expenses.total + payroll.total;
 
       // ── Arrears: a position, not a flow ──────────────────────────────────
-      const year = query.academicYear ? String(query.academicYear) : null;
-      const yearSql    = year ? "AND json_extract(json,'$.academicYear') = ?" : "";
-      const yearParams = year ? [year] : [];
-
-      const charges = docs.sql(`
-        SELECT COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
-               COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
-        FROM docs
-        WHERE collection = 'feeCharge' AND school_id = ? AND deleted_at IS NULL
-          AND json_extract(json,'$.voidedAt') IS NULL
-          ${yearSql}
-      `, schoolId, ...yearParams)[0];
-
-      // waivedAmount, a number — not a `waived` boolean. Half a trip fee
-      // forgiven is a real thing and reading it as a flag writes off the lot.
-      const charged = charges?.charged ?? 0;
-      const waived  = charges?.waived  ?? 0;
-      const billed  = charged - waived;
-
-      const paid = sumOf({
-        sql: `collection = 'feePayment' AND school_id = ? AND deleted_at IS NULL ${yearSql}`,
-        params: [schoolId, ...yearParams],
-      }, "amount").total;
+      // The one outstanding figure (fees.js outstandingOf), the same as Fees >
+      // Outstanding: current students, one year, positive balances only.
+      const owed = outstandingOf(docs, { schoolId, academicYear: query.academicYear || null });
 
       return ok({
         data: {
@@ -358,19 +339,14 @@ module.exports = [
             months,
           },
           arrears: {
-            // Raw again, and `?academicYear=` is the case that shows why: the
-            // service filters on a truthy value and echoes the value it was
-            // given, so an empty parameter narrows nothing and still comes back.
-            academicYear: query.academicYear ?? null,
-            charged,
-            waived,
-            billed,
-            paid,
-            // Negative means the school holds more than it billed, which happens
-            // after an overpayment. Reported, not clamped — clamping it to zero
-            // would hide a credit the family is owed.
-            outstanding: billed - paid,
-            collectionRate: billed > 0 ? Math.round((paid / billed) * 100) : null,
+            academicYear:   owed.academicYear,
+            charged:        owed.charged,
+            waived:         owed.waived,
+            billed:         owed.billed,
+            paid:           owed.paid,
+            outstanding:    owed.outstanding,
+            owing:          owed.owing,
+            collectionRate: owed.billed > 0 ? Math.round((owed.paid / owed.billed) * 100) : null,
           },
         },
       });

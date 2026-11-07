@@ -52,6 +52,9 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
+import { COLORS, TILE, SEMANTIC, ACCENT, levelAccent, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
+import { tileShell } from "../../../src/components/Tiles";
 
 // #R1 — correct wrapper: _tableExists(db, tableName)
 const tableExists = async (tableName) => {
@@ -67,35 +70,38 @@ const tableExists = async (tableName) => {
 // DESIGN TOKENS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// Results are slate; quizzes indigo; a mark's colour is its tone (pass
+// success, borderline warning, fail error).
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  info:      "#2563EB",
-  infoBg:    "#DBEAFE",
-  purple:    "#7C3AED",
-  purpleBg:  "#EDE9FE",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray600:   "#4B5563",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.slate.solid,
+  primaryBg: ACCENT.slate.wash,
+  primaryDeep: ACCENT.slate.deep,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text,
+  errorBg:   SEMANTIC.error.bg,
+  info:      SEMANTIC.info.text,
+  infoBg:    SEMANTIC.info.box,
+  purple:    ACCENT.indigo.solid,
+  purpleBg:  ACCENT.indigo.wash,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textSecondary,
+  gray500:   COLORS.textSecondary,
+  gray600:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
-const CLASS_ACCENT_COLORS = [
-  "#4F46E5", "#059669", "#D97706", "#DC2626",
-  "#0284C7", "#A855F7", "#EA580C", "#16A34A",
-];
+/** A class's accent, by the level its name carries. */
+const classAccentOf = (cls) => ACCENT[levelAccent(cls?.className)];
+const SOURCE_BADGE = { exam: accentBadge("amber"), quiz: accentBadge("indigo") };
+const NEUTRAL_TONE = { bg: ACCENT.slate.wash, text: ACCENT.slate.deep, icon: ACCENT.slate.base };
 
 // ═════════════════════════════════════════════════════════════════════════════
 // GRADE / PERFORMANCE HELPERS
@@ -109,15 +115,18 @@ const CLASS_ACCENT_COLORS = [
 // with no letter (a quiz, an absence) shows none; nothing is invented.
 const letterOf = (result) => ({
   grade: result?.grade || "—",
-  color: result?.grade ? getPerformanceColor(result?.percentage) : C.gray400,
+  color: result?.grade ? getPerformanceColor(result?.percentage) : NEUTRAL_TONE.text,
+  bg:    result?.grade ? performanceTone(result?.percentage).bg : NEUTRAL_TONE.bg,
 });
 
-const getPerformanceColor = (percentage) => {
-  if (percentage == null) return C.gray400;
-  if (percentage >= 70)   return C.success;
-  if (percentage >= 50)   return C.warning;
-  return C.error;
+/** A mark's tone: 70%+ success, 50%+ warning, below that error; none slate. */
+const performanceTone = (percentage) => {
+  if (percentage == null) return NEUTRAL_TONE;
+  if (percentage >= 70)   return SEMANTIC.success;
+  if (percentage >= 50)   return SEMANTIC.warning;
+  return SEMANTIC.error;
 };
+const getPerformanceColor = (percentage) => performanceTone(percentage).text;
 
 const calcPct = (obtained, total) =>
   obtained != null && total > 0
@@ -633,7 +642,7 @@ function StatBox({ label, value, color, bg }) {
 const sb = StyleSheet.create({
   box:   { flex: 1, alignItems: "center", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 4 },
   value: { fontSize: 18, fontWeight: "800" },
-  label: { fontSize: 10, color: C.gray500, fontWeight: "600", marginTop: 2, textAlign: "center" },
+  label: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600", marginTop: 2, textAlign: "center" },
 });
 
 function ProgressBar({ value, color, max = 100 }) {
@@ -646,7 +655,7 @@ function ProgressBar({ value, color, max = 100 }) {
 }
 
 const pb = StyleSheet.create({
-  track: { height: 6, backgroundColor: C.gray100, borderRadius: 3, overflow: "hidden", flex: 1 },
+  track: { height: 6, backgroundColor: COLORS.border, borderRadius: 3, overflow: "hidden", flex: 1 },
   fill:  { height: "100%", borderRadius: 3 },
 });
 
@@ -682,16 +691,16 @@ function TabBar({ tabs, active, onSelect }) {
 }
 
 const tb = StyleSheet.create({
-  wrap:            { backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: C.gray100 },
+  wrap:            { backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   content:         { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: "row" },
-  tab:             { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.gray100 },
-  tabActive:       { backgroundColor: C.primaryBg },
-  label:           { fontSize: 13, fontWeight: "600", color: C.gray500 },
-  labelActive:     { color: C.primary },
-  badge:           { backgroundColor: C.gray300, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, minWidth: 18, alignItems: "center" },
-  badgeActive:     { backgroundColor: C.primary },
-  badgeText:       { fontSize: 10, fontWeight: "700", color: C.gray600 },
-  badgeTextActive: { color: C.white },
+  tab:             { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  tabActive:       { backgroundColor: C.primaryBg, borderColor: ACCENT.slate.base },
+  label:           { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  labelActive:     { color: C.primaryDeep },
+  badge:           { backgroundColor: accentBadge("slate").bg, borderWidth: 1, borderColor: accentBadge("slate").border, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, minWidth: 18, alignItems: "center" },
+  badgeActive:     { backgroundColor: C.primary, borderColor: C.primary },
+  badgeText:       { fontSize: 10, fontWeight: "700", color: accentBadge("slate").text },
+  badgeTextActive: { color: COLORS.onPrimary },
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -708,7 +717,7 @@ function SubjectAnalyticsStrip({ analytics }) {
         { id: "pass",  label: t("teacherResults.stats.pass"),  value: `${analytics.passRate}%`, color: analytics.passRate >= 70 ? C.success : C.warning },
         { id: "high",  label: t("teacherResults.stats.high"),  value: `${analytics.max}%`,      color: C.success },
         { id: "low",   label: t("teacherResults.stats.low"),   value: `${analytics.min}%`,      color: analytics.min < 50 ? C.error : C.gray700 },
-        { id: "total", label: t("teacherResults.stats.total"), value: analytics.total,          color: C.primary },
+        { id: "total", label: t("teacherResults.stats.total"), value: analytics.total,          color: C.primaryDeep },
       ].map(({ id, label, value, color }, i, arr) => (
         <React.Fragment key={id}>
           <View style={sas.item}>
@@ -723,10 +732,10 @@ function SubjectAnalyticsStrip({ analytics }) {
 }
 
 const sas = StyleSheet.create({
-  wrap:    { flexDirection: "row", alignItems: "center", backgroundColor: C.gray50, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
+  wrap:    { flexDirection: "row", alignItems: "center", backgroundColor: C.primaryBg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
   item:    { flex: 1, alignItems: "center" },
   value:   { fontSize: 13, fontWeight: "800" },
-  label:   { fontSize: 9, color: C.gray400, fontWeight: "600", marginTop: 1 },
+  label:   { fontSize: 9, color: COLORS.textSecondary, fontWeight: "600", marginTop: 1 },
   divider: { width: 1, height: 24, backgroundColor: C.gray200 },
 });
 
@@ -743,7 +752,7 @@ function ResultRow({ result, onPress }) {
 
   return (
     <TouchableOpacity style={rr.row} onPress={() => onPress?.(result)} activeOpacity={0.7}>
-      <View style={[rr.gradeBadge, { backgroundColor: grade.color + "18" }]}>
+      <View style={[rr.gradeBadge, { backgroundColor: grade.bg }]}>
         <Text style={[rr.gradeText, { color: grade.color }]}>{grade.grade}</Text>
       </View>
       <View style={rr.info}>
@@ -779,14 +788,14 @@ function ResultRow({ result, onPress }) {
 }
 
 const rr = StyleSheet.create({
-  row:         { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: C.gray100, gap: 10 },
+  row:         { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.slate.base, backgroundColor: COLORS.surface, gap: 10 },
   gradeBadge:  { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   gradeText:   { fontSize: 12, fontWeight: "800" },
   info:        { flex: 1 },
   nameRow:     { flexDirection: "row", alignItems: "center", gap: 6 },
   studentName: { fontSize: 13, fontWeight: "700", color: C.gray900, flex: 1 },
-  quizTag:     { backgroundColor: C.purpleBg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  quizTagText: { fontSize: 9, fontWeight: "800", color: C.purple },
+  quizTag:     { backgroundColor: SOURCE_BADGE.quiz.bg, borderWidth: 1, borderColor: SOURCE_BADGE.quiz.border, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  quizTagText: { fontSize: 9, fontWeight: "800", color: SOURCE_BADGE.quiz.text },
   examTitle:   { fontSize: 11, color: C.gray400, marginTop: 2 },
   scoreCol:    { alignItems: "flex-end" },
   pct:         { fontSize: 14, fontWeight: "800" },
@@ -806,17 +815,17 @@ function ResultCard({ result, onPress }) {
 
   return (
     <TouchableOpacity style={rc.card} onPress={() => onPress?.(result)} activeOpacity={0.7}>
-      <View style={[rc.accent, { backgroundColor: isQuiz ? C.purple : C.primary }]} />
+      <View style={[rc.accent, { backgroundColor: isQuiz ? ACCENT.indigo.base : ACCENT.slate.base }]} />
       <View style={rc.body}>
         <View style={rc.headerRow}>
           <View style={rc.titleWrap}>
-            <View style={[rc.sourceTag, { backgroundColor: isQuiz ? C.purpleBg : C.primaryBg }]}>
+            <View style={[rc.sourceTag, { backgroundColor: COLORS.surface, borderColor: SOURCE_BADGE[isQuiz ? "quiz" : "exam"].border }]}>
               <Ionicons
                 name={isQuiz ? "help-circle-outline" : "document-text-outline"}
                 size={10}
-                color={isQuiz ? C.purple : C.primary}
+                color={SOURCE_BADGE[isQuiz ? "quiz" : "exam"].text}
               />
-              <Text style={[rc.sourceText, { color: isQuiz ? C.purple : C.primary }]}>
+              <Text style={[rc.sourceText, { color: SOURCE_BADGE[isQuiz ? "quiz" : "exam"].text }]}>
                 {isQuiz
                   ? t("teacherResults.sourceQuiz")
                   : t("teacherResults.sourceExam")}
@@ -826,7 +835,7 @@ function ResultCard({ result, onPress }) {
               {result.examTitle || t("teacherResults.assessment")}
             </Text>
           </View>
-          <View style={[rc.gradeBadge, { backgroundColor: grade.color + "18" }]}>
+          <View style={[rc.gradeBadge, { backgroundColor: grade.bg }]}>
             <Text style={[rc.gradeText, { color: grade.color }]}>{grade.grade}</Text>
           </View>
         </View>
@@ -836,19 +845,19 @@ function ResultCard({ result, onPress }) {
         <View style={rc.metaRow}>
           {!!result.subjectName && (
             <View style={rc.metaChip}>
-              <Ionicons name="book-outline" size={10} color={C.gray400} />
+              <Ionicons name="book-outline" size={10} color={ACCENT.slate.solid} />
               <Text style={rc.metaText}>{result.subjectName}</Text>
             </View>
           )}
           {!!result.className && (
             <View style={rc.metaChip}>
-              <Ionicons name="school-outline" size={10} color={C.gray400} />
+              <Ionicons name="school-outline" size={10} color={ACCENT.indigo.solid} />
               <Text style={rc.metaText}>{result.className}</Text>
             </View>
           )}
           {!!result.examDate && (
             <View style={rc.metaChip}>
-              <Ionicons name="calendar-outline" size={10} color={C.gray400} />
+              <Ionicons name="calendar-outline" size={10} color={ACCENT.slate.solid} />
               <Text style={rc.metaText}>
                 {new Date(result.examDate).toLocaleDateString()}
               </Text>
@@ -886,12 +895,12 @@ function ResultCard({ result, onPress }) {
 }
 
 const rc = StyleSheet.create({
-  card:        { flexDirection: "row", backgroundColor: C.white, borderRadius: 12, marginBottom: 8, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 2 },
+  card:        { flexDirection: "row", backgroundColor: C.primaryBg, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, marginBottom: 8, overflow: "hidden", shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 2 },
   accent:      { width: 4 },
   body:        { flex: 1, padding: 12, gap: 6 },
   headerRow:   { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
   titleWrap:   { flex: 1, gap: 4, marginRight: 8 },
-  sourceTag:   { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" },
+  sourceTag:   { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, alignSelf: "flex-start" },
   sourceText:  { fontSize: 9, fontWeight: "700" },
   examTitle:   { fontSize: 13, fontWeight: "700", color: C.gray900 },
   gradeBadge:  { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
@@ -925,8 +934,9 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
     >
-      {grouped.map((cls, ci) => {
-        const accentColor = CLASS_ACCENT_COLORS[ci % CLASS_ACCENT_COLORS.length];
+      {grouped.map((cls) => {
+        const tint        = classAccentOf(cls);
+        const accentColor = tint.base;
         const isClassOpen = expandedClasses[cls.classId] !== false;
 
         const classResults = cls.subjects.flatMap((s) => s.results);
@@ -940,13 +950,11 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
         return (
           <View key={cls.classId} style={gv.classCard}>
             <TouchableOpacity
-              style={[gv.classHeader, { borderLeftColor: accentColor }]}
+              style={[gv.classHeader, { borderLeftColor: accentColor, backgroundColor: tint.wash }]}
               onPress={() => toggleClass(cls.classId)}
               activeOpacity={0.8}
             >
-              <View style={[gv.classIconBg, { backgroundColor: accentColor + "18" }]}>
-                <Ionicons name="school-outline" size={18} color={accentColor} />
-              </View>
+              <IconSquare icon="school-outline" accent={levelAccent(cls.className)} size={36} radius={10} />
               <View style={gv.classHeaderText}>
                 <Text style={gv.className}>{cls.className}</Text>
                 <Text style={gv.classMeta}>
@@ -967,7 +975,7 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
               <Ionicons
                 name={isClassOpen ? "chevron-up" : "chevron-down"}
                 size={18}
-                color={C.gray400}
+                color={COLORS.textSecondary}
               />
             </TouchableOpacity>
 
@@ -995,7 +1003,7 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
                         onPress={() => toggleSubject(subKey)}
                         activeOpacity={0.7}
                       >
-                        <View style={[gv.subjectDot, { backgroundColor: accentColor }]} />
+                        <View style={[gv.subjectDot, { backgroundColor: ACCENT.slate.base }]} />
                         <Text style={gv.subjectName}>{sub.subjectName}</Text>
                         <Text style={gv.subjectCount}>{subResults.length}</Text>
                         <Ionicons
@@ -1030,18 +1038,17 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
 }
 
 const gv = StyleSheet.create({
-  classCard:       { backgroundColor: C.white, borderRadius: 16, marginBottom: 16, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  classCard:       { backgroundColor: C.white, borderRadius: 16, marginBottom: 16, overflow: "hidden", borderWidth: 1, borderColor: COLORS.border, shadowColor: COLORS.shadow, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   classHeader:     { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderLeftWidth: 4 },
-  classIconBg:     { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   classHeaderText: { flex: 1 },
   className:       { fontSize: 16, fontWeight: "700", color: C.gray900 },
   classMeta:       { fontSize: 11, color: C.gray400, marginTop: 2 },
-  classBody:       { borderTopWidth: 1, borderTopColor: C.gray100 },
-  subjectBlock:    { borderBottomWidth: 1, borderBottomColor: C.gray100 },
-  subjectHeader:   { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 8, backgroundColor: C.gray50 },
+  classBody:       { borderTopWidth: 1, borderTopColor: COLORS.border },
+  subjectBlock:    { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  subjectHeader:   { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 8, backgroundColor: C.primaryBg },
   subjectDot:      { width: 8, height: 8, borderRadius: 4 },
   subjectName:     { flex: 1, fontSize: 13, fontWeight: "700", color: C.gray700 },
-  subjectCount:    { fontSize: 11, fontWeight: "700", color: C.gray400, backgroundColor: C.gray100, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  subjectCount:    { fontSize: 11, fontWeight: "700", color: accentBadge("slate").text, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: accentBadge("slate").border, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, overflow: "hidden" },
   subjectResults:  { backgroundColor: C.white },
 });
 
@@ -1055,19 +1062,19 @@ function AnalyticsPanel({ analytics }) {
   if (!analytics) {
     return (
       <View style={ap.empty}>
-        <Ionicons name="bar-chart-outline" size={32} color={C.gray300} />
+        <IconSquare icon="bar-chart-outline" accent="slate" size={48} radius={14} />
         <Text style={ap.emptyText}>{t("teacherResults.panel.noData")}</Text>
       </View>
     );
   }
 
   const gradeColors = {
-    "A+": "#059669", A: "#059669", B: "#2563EB",
-    C: "#D97706", D: "#EA580C", F: "#DC2626",
+    "A+": SEMANTIC.success.text, A: SEMANTIC.success.text, B: SEMANTIC.info.text,
+    C: SEMANTIC.warning.text, D: ACCENT.amber.deep, F: SEMANTIC.error.text,
   };
   const rangeColors = {
-    "90-100": "#059669", "70-89": "#2563EB",
-    "50-69":  "#D97706", "0-49":  "#DC2626",
+    "90-100": SEMANTIC.success.text, "70-89": SEMANTIC.info.text,
+    "50-69":  SEMANTIC.warning.text, "0-49":  SEMANTIC.error.text,
   };
 
   const maxGrade = Math.max(...Object.values(analytics.gradeDist), 1);
@@ -1078,14 +1085,14 @@ function AnalyticsPanel({ analytics }) {
       <View style={ap.row}>
         <StatBox label={t("teacherResults.stats.average")} value={`${analytics.avg}%`}
           color={getPerformanceColor(analytics.avg)}
-          bg={getPerformanceColor(analytics.avg) + "15"} />
+          bg={performanceTone(analytics.avg).bg} />
         <StatBox label={t("teacherResults.stats.highest")} value={`${analytics.max}%`} color={C.success} bg={C.successBg} />
         <StatBox label={t("teacherResults.stats.lowest")}  value={`${analytics.min}%`}
           color={analytics.min < 50 ? C.error : C.warning}
           bg={analytics.min < 50 ? C.errorBg : C.warningBg} />
       </View>
       <View style={[ap.row, { marginTop: 8 }]}>
-        <StatBox label={t("teacherResults.stats.total")}    value={analytics.total}  color={C.primary} bg={C.primaryBg} />
+        <StatBox label={t("teacherResults.stats.total")}    value={analytics.total}  color={C.primaryDeep} bg={C.primaryBg} />
         <StatBox label={t("teacherResults.stats.passed")}   value={analytics.passed} color={C.success} bg={C.successBg} />
         <StatBox label={t("teacherResults.stats.failed")}   value={analytics.failed} color={C.error}   bg={C.errorBg}   />
         <StatBox label={t("teacherResults.stats.passRate")} value={`${analytics.passRate}%`}
@@ -1136,7 +1143,7 @@ const ap = StyleSheet.create({
   barTrack:     { flex: 1 },
   barCount:     { width: 24, fontSize: 11, color: C.gray500, textAlign: "right" },
   empty:        { alignItems: "center", justifyContent: "center", gap: 12, paddingVertical: 40 },
-  emptyText:    { fontSize: 14, color: C.gray400, fontWeight: "500" },
+  emptyText:    { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1205,6 +1212,7 @@ function ResultDetailModal({ result, visible, onClose }) {
     >
       <View style={dm.wrap}>
         <View style={dm.header}>
+          <IconSquare icon="stats-chart" accent="slate" size={36} style={dm.headerIcon} />
           <Text style={dm.title} numberOfLines={2}>
             {result.examTitle || t("teacherResults.assessmentDetail")}
           </Text>
@@ -1251,7 +1259,8 @@ function ResultDetailModal({ result, visible, onClose }) {
 
 const dm = StyleSheet.create({
   wrap:            { flex: 1, backgroundColor: C.white },
-  header:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.gray100 },
+  header:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  headerIcon:      { marginRight: 12 },
   title:           { flex: 1, fontSize: 17, fontWeight: "700", color: C.gray900, marginRight: 12 },
   closeBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
   body:            { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
@@ -1260,8 +1269,8 @@ const dm = StyleSheet.create({
   gradeCircleText: { fontSize: 26, fontWeight: "900" },
   pctText:         { fontSize: 32, fontWeight: "800", color: C.gray900 },
   marksText:       { fontSize: 14, color: C.gray500 },
-  infoCard:        { backgroundColor: C.gray50, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 8 },
-  infoRow:         { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.gray100 },
+  infoCard:        { backgroundColor: C.primaryBg, borderWidth: 1, borderColor: COLORS.border, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 8 },
+  infoRow:         { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   infoLabel:       { fontSize: 13, color: C.gray500, fontWeight: "500" },
   infoValue:       { fontSize: 13, color: C.gray900, fontWeight: "600", textAlign: "right", flex: 1, marginLeft: 16 },
 });
@@ -1276,9 +1285,7 @@ function EmptyState({ message }) {
 
   return (
     <View style={styles.empty}>
-      <View style={styles.emptyIconBg}>
-        <Ionicons name="document-outline" size={48} color={C.gray300} />
-      </View>
+      <IconSquare icon="document-outline" accent="slate" size={88} radius={24} />
       <Text style={styles.emptyTitle}>{t("teacherResults.empty.title")}</Text>
       <Text style={styles.emptyText}>
         {message || t("teacherResults.empty.default")}
@@ -1434,6 +1441,7 @@ export default function TeacherResultsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("teacherResults.title")}</Text>
           <Text style={styles.headerSub}>
@@ -1464,7 +1472,7 @@ export default function TeacherResultsScreen() {
       {/* ERROR */}
       {!!error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color={C.error} />
+          <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadResults(true)}>
             <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -1509,12 +1517,12 @@ export default function TeacherResultsScreen() {
             }
             ListHeaderComponent={
               flatListAnalytics ? (
-                <View style={styles.summaryStrip}>
+                <View style={[styles.summaryStrip, tileShell("results")]}>
                   {[
                     { id: "average",  label: t("teacherResults.stats.average"),  value: `${flatListAnalytics.avg}%` },
-                    { id: "passRate", label: t("teacherResults.stats.passRate"), value: `${flatListAnalytics.passRate}%`, color: C.success },
+                    { id: "passRate", label: t("teacherResults.stats.passRate"), value: `${flatListAnalytics.passRate}%`, color: SEMANTIC.success.text },
                     { id: "results",  label: t("teacherResults.stats.results"),  value: flatListData.length },
-                    { id: "topScore", label: t("teacherResults.stats.topScore"), value: `${flatListAnalytics.max}%`,      color: C.primary },
+                    { id: "topScore", label: t("teacherResults.stats.topScore"), value: `${flatListAnalytics.max}%` },
                   ].map(({ id, label, value, color }, i, arr) => (
                     <React.Fragment key={id}>
                       <View style={styles.summaryItem}>
@@ -1585,13 +1593,14 @@ export default function TeacherResultsScreen() {
                   <Text style={styles.analysisSectionTitle}>
                     {t("teacherResults.sections.perClass")}
                   </Text>
-                  {grouped.map((cls, ci) => {
+                  {grouped.map((cls) => {
                     const clsResults   = cls.subjects.flatMap((s) => s.results);
                     const clsAnalytics = calculateAnalytics(clsResults);
                     if (!clsAnalytics) return null;
-                    const accent = CLASS_ACCENT_COLORS[ci % CLASS_ACCENT_COLORS.length];
+                    const tint   = classAccentOf(cls);
+                    const accent = tint.base;
                     return (
-                      <View key={cls.classId} style={styles.classBreakdown}>
+                      <View key={cls.classId} style={[styles.classBreakdown, { backgroundColor: tint.wash, borderLeftColor: accent }]}>
                         <View style={[styles.classBreakdownDot, { backgroundColor: accent }]} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.classBreakdownTitle}>{cls.className}</Text>
@@ -1600,7 +1609,7 @@ export default function TeacherResultsScreen() {
                               label={t("teacherResults.stats.avg")}
                               value={`${clsAnalytics.avg}%`}
                               color={getPerformanceColor(clsAnalytics.avg)}
-                              bg={getPerformanceColor(clsAnalytics.avg) + "15"}
+                              bg={performanceTone(clsAnalytics.avg).bg}
                             />
                             <StatBox
                               label={t("teacherResults.stats.passRate")}
@@ -1611,13 +1620,13 @@ export default function TeacherResultsScreen() {
                             <StatBox
                               label={t("teacherResults.stats.total")}
                               value={clsAnalytics.total}
-                              color={C.primary}
-                              bg={C.primaryBg}
+                              color={C.primaryDeep}
+                              bg={COLORS.surface}
                             />
                           </View>
                           {cls.subjects.map((sub) => (
                             <View key={sub.subjectKey} style={styles.subjectBreakdown}>
-                              <View style={[styles.subjectBreakdownDot, { backgroundColor: accent }]} />
+                              <View style={[styles.subjectBreakdownDot, { backgroundColor: ACCENT.slate.base }]} />
                               <Text style={styles.subjectBreakdownName}>{sub.subjectName}</Text>
                               {sub.analytics ? (
                                 <Text style={styles.subjectBreakdownStats}>
@@ -1662,37 +1671,37 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: C.gray100, gap: 10,
+    backgroundColor: C.white, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backBtn:      { width: 40, height: 40, borderRadius: 12, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
   headerTitle:  { fontSize: 20, fontWeight: "700", color: C.gray900 },
   headerSub:    { fontSize: 12, color: C.gray500, marginTop: 2 },
   refreshBtn:   { padding: 8 },
 
-  summaryStrip:   { flexDirection: "row", backgroundColor: C.white, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
+  summaryStrip:   { flexDirection: "row", backgroundColor: TILE.results.wash, borderWidth: 1, borderColor: COLORS.border, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   summaryItem:    { flex: 1, alignItems: "center" },
-  summaryValue:   { fontSize: 16, fontWeight: "800", color: C.gray900 },
-  summaryLabel:   { fontSize: 10, color: C.gray400, fontWeight: "600", marginTop: 2 },
+  summaryValue:   { fontSize: 16, fontWeight: "800", color: TILE.results.deep },
+  summaryLabel:   { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600", marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: C.gray200, marginVertical: 4 },
 
-  errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginVertical: 8, padding: 12, backgroundColor: C.errorBg, borderRadius: 10, borderWidth: 1, borderColor: "#FECACA" },
+  errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginVertical: 8, padding: 12, backgroundColor: C.errorBg, borderRadius: 10, borderWidth: 1, borderColor: SEMANTIC.error.box },
   errorText:   { flex: 1, fontSize: 13, color: C.error },
-  retryText:   { fontSize: 13, fontWeight: "700", color: C.primary },
+  retryText:   { fontSize: 13, fontWeight: "700", color: C.primaryDeep },
 
   list:   { padding: 16, paddingBottom: 40 },
   footer: { textAlign: "center", fontSize: 12, color: C.gray400, fontWeight: "500", marginTop: 8, marginBottom: 8 },
 
   // #R9 — no flex:1 so EmptyState renders correctly inside FlatList
   empty:       { alignItems: "center", justifyContent: "center", paddingHorizontal: 40, gap: 16, paddingVertical: 60 },
-  emptyIconBg: { width: 88, height: 88, borderRadius: 24, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
   emptyTitle:  { fontSize: 18, fontWeight: "700", color: C.gray700 },
   emptyText:   { fontSize: 14, color: C.gray500, textAlign: "center", lineHeight: 22 },
 
-  analysisSection:      { marginHorizontal: 16, marginTop: 16, backgroundColor: C.white, borderRadius: 16, padding: 16, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
+  analysisSection:      { marginHorizontal: 16, marginTop: 16, backgroundColor: C.white, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.slate.base, shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   analysisSectionTitle: { fontSize: 15, fontWeight: "700", color: C.gray900, marginBottom: 12 },
 
-  classBreakdown:      { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: C.gray50, borderRadius: 12, padding: 12, marginBottom: 10 },
+  classBreakdown:      { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: C.gray50, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3 },
   classBreakdownDot:   { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   classBreakdownTitle: { fontSize: 13, fontWeight: "700", color: C.gray700, marginBottom: 8 },
   classBreakdownStats: { flexDirection: "row", gap: 8, marginBottom: 8 },

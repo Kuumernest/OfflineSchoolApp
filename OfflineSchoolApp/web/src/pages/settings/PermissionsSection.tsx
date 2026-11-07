@@ -32,7 +32,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Lock, ShieldCheck, RotateCcw, Save } from "lucide-react";
+import { Lock, ShieldCheck, RotateCcw, Save, KeyRound } from "lucide-react";
 
 import api from "@/services/api";
 import { Card } from "@/components/ui/Card";
@@ -41,6 +41,7 @@ import { PageSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, categoryAccent } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WIRE SHAPES
@@ -67,7 +68,7 @@ const EMPTY_ROWS: MatrixRow[] = [];
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PermissionsSection({ schoolId }: { schoolId: string }) {
-  const { t }     = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const qc        = useQueryClient();
 
@@ -192,8 +193,8 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
       {/* ── What this screen is, before anybody starts ticking ───────────── */}
       <Card>
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50">
-            <ShieldCheck className="h-4 w-4 text-primary-600" aria-hidden="true" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-slate-solid text-white">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-ink">
@@ -239,8 +240,14 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
 
       {/* ── The matrix ───────────────────────────────────────────────────── */}
       {grouped.map(({ module, rows: moduleRows }) => (
-        <Card key={module}>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <Card key={module} className={DASH_TINT[categoryAccent(module)].edge}>
+          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <span
+              aria-hidden="true"
+              className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(module)].box)}
+            >
+              <KeyRound className="h-4 w-4" />
+            </span>
             {t(`permissions.module.${module}`, { defaultValue: module })}
           </h3>
 
@@ -249,7 +256,12 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
               const on        = held.has(r.key);
               const isDefault = r.defaults.includes(activeRole);
               const changed   = on !== isDefault;
-              const note      = t(`permissions.note.${r.key}`, { defaultValue: "" });
+              // Only the permissions with something to say carry a note — 30 of
+              // 77. Looked up with an empty default, the rest printed their key
+              // ("permissions.note.fees.view"): i18n/index.ts sets
+              // returnEmptyString: false, which treats "" as no translation.
+              const noteKey   = `permissions.note.${r.key}`;
+              const note      = i18n.exists(noteKey) ? t(noteKey) : "";
 
               return (
                 <li key={r.key} className="flex items-start gap-3 py-3">
@@ -282,7 +294,7 @@ export default function PermissionsSection({ schoolId }: { schoolId: string }) {
                       </code>
 
                       {!r.delegable && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning-text">
                           <Lock className="h-3 w-3" aria-hidden="true" />
                           {t("permissions.locked")}
                         </span>

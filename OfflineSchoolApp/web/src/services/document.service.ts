@@ -26,10 +26,12 @@ export const fetchClassListHtml = (
 ): Promise<string> =>
   fetchDocument(`/class-list/${classId}`, { schoolId, variant, lang });
 
+/** `preview`: a look, not a print — the server shows any code the transcript
+ *  already has and issues none. */
 export const fetchTranscriptHtml = (
-  studentId: string, schoolId: string, lang: string
+  studentId: string, schoolId: string, lang: string, preview = false
 ): Promise<string> =>
-  fetchDocument(`/transcript/${studentId}`, { schoolId, lang });
+  fetchDocument(`/transcript/${studentId}`, { schoolId, lang, ...(preview ? { preview: "1" } : {}) });
 
 /** A whole class of ID cards, ten to an A4 sheet. */
 export const fetchIdCardsHtml = (

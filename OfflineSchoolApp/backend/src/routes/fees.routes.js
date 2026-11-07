@@ -6,7 +6,7 @@ const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
 // Shared with the desktop application, which issues the offline ones. See
 // OfflineSchoolApp/shared/receipts.js for why a client may name its own.
-const { parseDeviceReceipt } = require("../../../shared/receipts");
+const { parseDeviceReceipt, rejectedDeviceReceipt } = require("../../../shared/receipts");
 
 const { requirePermission } = require("../../middleware/permissions");
 
@@ -21,12 +21,14 @@ const Class        = require("../db/models/Class");
 const {
   nextReceiptNo,
   balanceFor,
-  balancesFor,
   applyStructure,
+  voidReplacedCharges,
 } = require("../services/fees.service");
+const { arrearsFor } = require("../services/arrears.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
 const reminders = require("../services/feeReminders.service");
+const { getStore } = require("../storage/fileStore");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 
@@ -279,19 +281,23 @@ router.post("/structures/:id/apply", canWrite, asyncHandler(async (req, res) => 
     return bad(res, "No approved students match those classes", "NO_STUDENTS");
   }
 
-  const result = await applyStructure({
-    structure,
-    students,
-    raisedBy: req.user?._id ? String(req.user._id) : null,
-  });
+  const raisedBy = req.user?._id ? String(req.user._id) : null;
+  const result = await applyStructure({ structure, students, raisedBy });
+
+  // A replacement: what the deactivated structure it replaces charged these
+  // students for the same year and term is voided, so the class does not owe
+  // both price lists. Payments stay and count against the new charges.
+  const voided = await voidReplacedCharges({ structure, students, by: raisedBy });
 
   return res.status(201).json({
     success:  true,
     students: students.length,
     ...result,
-    message: result.skipped
+    voided,
+    message: (result.skipped
       ? `${result.raised} charge(s) raised; ${result.skipped} already existed and were left alone.`
-      : `${result.raised} charge(s) raised.`,
+      : `${result.raised} charge(s) raised.`) +
+      (voided ? ` ${voided} charge(s) from the structure it replaces were voided.` : ""),
   });
 }));
 
@@ -310,7 +316,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
   const scope = { schoolId, studentId, deletedAt: null };
   if (academicYear) scope.academicYear = academicYear;
 
-  const [charges, payments, totals, plan] = await Promise.all([
+  const [charges, payments, totals, plan, pupil] = await Promise.all([
     FeeCharge.find(scope).sort({ createdAt: 1 }).lean(),
     FeePayment.find(scope).sort({ receivedAt: 1 }).lean(),
     balanceFor({ schoolId, studentId, academicYear }),
@@ -322,7 +328,17 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
       schoolId, studentId, status: "active", deletedAt: null,
       ...(academicYear ? { academicYear } : {}),
     }).lean(),
+    // C1: whose account this is, for the page header.
+    Student.findOne({ _id: studentId, schoolId })
+      .select("firstName lastName studentName name enrollmentNo admissionNo classId className").lean(),
   ]);
+  const cls = pupil?.classId ? await Class.findOne({ _id: pupil.classId }).select("name").lean() : null;
+  const student = pupil ? {
+    _id:         String(pupil._id),
+    name:        displayName(pupil) || null,
+    admissionNo: pupil.admissionNo || pupil.enrollmentNo || null,
+    className:   cls?.name || pupil.className || null,
+  } : null;
 
   // Where they stand against it, computed here so the browser never has to do
   // the cumulative arithmetic — and so the ledger screen and the arrears list
@@ -333,13 +349,17 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
 
   return res.json({
     success: true,
-    data: { charges, payments, totals, plan, planStatus },
+    data: { student, charges, payments, totals, plan, planStatus },
   });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAYMENTS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** FeePayment.source values a client may claim. "import" is the server's own. */
+const PAYMENT_SOURCES = ["web", "mobile", "desktop"];
+const DEVICE_SOURCES  = ["mobile", "desktop"];
 
 // POST /api/fees/payments
 //
@@ -352,8 +372,13 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
   const {
     _id, studentId, academicYear, term = null,
     method = "cash", reference = null, note = null,
-    receivedAt, source = "web",
+    receivedAt,
   } = req.body;
+
+  // Where the row was made. The phone and the desktop say so; the browser sends
+  // nothing and is "web", as it always was. Anything unrecognised is "web" too,
+  // rather than a validation error on money that has already changed hands.
+  const source = PAYMENT_SOURCES.includes(req.body.source) ? req.body.source : "web";
 
   if (!studentId)    return bad(res, "studentId is required");
   if (!academicYear) return bad(res, "academicYear is required");
@@ -409,6 +434,13 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
     ? String(req.body.receiptNo).trim()
     : await nextReceiptNo(schoolId, academicYear);
 
+  // A device number this endpoint refused is still the number on the paper the
+  // parent may be holding. Kept beside the server's, so the official receipt
+  // can say which provisional receipt it replaces. Written only here, at
+  // creation — the replay above returns the stored row untouched, and the
+  // field is immutable on the model.
+  const claimedReceiptNo = claimed ? null : rejectedDeviceReceipt(req.body.receiptNo, academicYear);
+
   let payment;
   try {
     payment = await FeePayment.create({
@@ -417,6 +449,7 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
       classId:    student.classId ?? null,
       amount, method, reference, note,
       receiptNo,
+      claimedReceiptNo,
       receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
       receivedBy: req.user?._id ? String(req.user._id) : null,
       source,
@@ -532,11 +565,16 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
     receiptNo:    claimedReceipt
       ? String(req.body.receiptNo).trim()
       : await nextReceiptNo(schoolId, original.academicYear),
+    // As a payment: the refused device number, for the credit note to name.
+    claimedReceiptNo: claimedReceipt
+      ? null
+      : rejectedDeviceReceipt(req.body.receiptNo, original.academicYear),
     receivedAt:   new Date(),
     receivedBy:   req.user?._id ? String(req.user._id) : null,
     reversesId:   String(original._id),
     reversalReason: reason,
-    source:       "web",
+    // A device that took the reversal offline says so; the browser does not.
+    source:       DEVICE_SOURCES.includes(req.body.source) ? req.body.source : "web",
   });
 
   original.reversedById   = String(reversal._id);
@@ -1096,37 +1134,29 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
 
   const { academicYear, classId } = req.query;
 
-  const filter = { schoolId, deletedAt: null, status: "approved" };
-  if (classId) filter.classId = classId;
-
-  const students = await Student.find(filter)
-    .select("_id studentName name firstName lastName enrollmentNo classId")
-    .lean();
-
-  const balances = await balancesFor({
-    schoolId,
-    studentIds: students.map((s) => String(s._id)),
-    academicYear,
+  // The one owed / overdue pair (arrears.service): the school's current
+  // students, one year — the one asked for, else the school's current year.
+  // Owed is outstandingFor's figure, unchanged; overdue is the part of it
+  // past its due date, the same figure the bell and Fee reminders show.
+  const result = await arrearsFor({
+    schoolId, academicYear: academicYear || null, classId: classId || null,
   });
-
-  const rows = students
-    .map((s) => ({
-      studentId:    String(s._id),
-      name:         displayName(s) || null,
-      enrollmentNo: s.enrollmentNo ?? null,
-      classId:      s.classId ?? null,
-      ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),
-    }))
-    // Only those who actually owe; a zero balance is not an arrears row.
-    .filter((r) => r.balance > 0)
-    .sort((a, b) => b.balance - a.balance);
-
-  const totalOutstanding = rows.reduce((sum, r) => sum + r.balance, 0);
+  const rows = result.rows.map((r) => ({
+    studentId: r.studentId, enrollmentNo: r.enrollmentNo, classId: r.classId,
+    name: displayName(r.student) || null,
+    charged: r.charged, waived: r.waived, paid: r.paid,
+    balance: r.owed, overdue: r.overdue, isOverdue: r.isOverdue,
+    overdueSince: r.overdueSince, nextDue: r.nextDue, onPlan: r.onPlan,
+  }));
 
   return res.json({
     success: true,
     count:   rows.length,
-    totalOutstanding,
+    totalOutstanding: result.totals.owed,
+    overdueTotal:     result.totals.overdue,
+    overdueCount:     result.totals.overdueStudents,
+    overdueFamilies:  result.totals.overdueFamilies,
+    academicYear: result.academicYear,
     data:    rows,
   });
 }));
@@ -1206,6 +1236,8 @@ router.get("/receipt/:paymentId", requirePermission("fees.view"), asyncHandler(a
     totals: { charged, waived, paid, balance: charged - waived - paid },
   };
 
+  // The receipt embeds the school logo; with a bucket it is fetched first.
+  await getStore().warmImages([data.school?.logo]);
   const html = buildReceiptHtml({
     data,
     labels:    labelsFor(lang),

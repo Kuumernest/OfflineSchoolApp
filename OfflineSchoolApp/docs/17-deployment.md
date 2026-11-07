@@ -6,7 +6,8 @@ GitHub Actions (APK and desktop releases), nightly off-VM backups.*
 
 > **Read [19-known-limitations.md](19-known-limitations.md) and the launch
 > blockers at the end of this page before deploying.** The packaged desktop
-> app does not work yet (see "Desktop").
+> app reaches its server since 2026-10-17 (see "Desktop: reaching the
+> server"); installers are still unsigned.
 
 ---
 
@@ -55,6 +56,7 @@ no values appear in this documentation.
 | `MONGODB_URI` | always | `config/env.js` — process exits if unset |
 | `JWT_SECRET` | always | `config/env.js` — exits if unset, a known placeholder, or too short (32+ characters) |
 | `ALLOWED_ORIGINS` | **in production** | `config/env.js` — exits if unset when `NODE_ENV=production`. Comma-separated. |
+| `JWT_REFRESH_SECRET` | **in production** | `config/env.js` — exits if unset when `NODE_ENV=production`. Outside production an unset value is tolerated: the first `/auth/refresh` handler then falls through to a second that refreshes against the access token. |
 
 ### Backend — optional
 
@@ -63,9 +65,9 @@ no values appear in this documentation.
 | `PORT` | `5000` | listen port |
 | `NODE_ENV` | unset | `production` enables strict CORS, `trust proxy`, combined logging |
 | `JWT_EXPIRES_IN` | `30d` | access-token lifetime |
-| `JWT_REFRESH_SECRET` | unset | **when unset, the first `/auth/refresh` handler falls through to a second that refreshes against the access token** |
 | `JWT_REFRESH_EXPIRES` | `90d` | refresh-token lifetime |
 | `REQUIRE_MEDIA_SIGNATURE` | off | `1` enforces HMAC signatures on message attachments |
+| `ALLOWED_ORIGIN_PATTERNS` | unset | extra CORS origins by anchored regex (`config/corsOrigins.js`), for a **dev** backend serving preview builds. **Leave unset in production**: preview deployments must never reach live data. |
 | `SENTRY_DSN` | unset | Sentry is fully inert without it |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0` | tracing is opt-in |
 | `SENTRY_RELEASE` | unset | release tag |
@@ -85,6 +87,9 @@ no values appear in this documentation.
 | `ANALYSIS_CONCURRENCY` | `1` | analyses one server process runs at once; budget about `ANALYSIS_WORKER_HEAP_MB` of free memory for each |
 | `ANALYSIS_TIMEOUT_MS` | `600000` | an analysis worker running longer is stopped (`TIMEOUT`) |
 | `ANALYSIS_REPORT_MAX_BYTES` | `12582912` | largest compressed analysis report stored (`REPORT_TOO_LARGE` above it) |
+| `ADVANCED_INTELLIGENCE_PROVIDER` | `none` | `anthropic` turns on model-written explanations; needs `ANTHROPIC_API_KEY` (docs/31) |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | the model asked; `ADVANCED_INTELLIGENCE_MODEL` is an older name for it |
+| `ADVANCED_INTELLIGENCE_EFFORT` · `_TIMEOUT_MS` · `_MODEL_FALLBACKS` | `low` · `20000` · off | effort level, per-request timeout, refusal fallbacks |
 
 The four `ANALYSIS_*` variables are read once at startup as whole numbers;
 anything that is not at least 1 is the default.
@@ -140,6 +145,7 @@ never reached production even when set.
 |---|---|
 | `VITE_API_URL` | **yes for Cloudflare Pages**: `https://<api-domain>/api`. Unset, the console calls `/api` on its own origin, which on Pages is not the API. |
 | `VITE_SENTRY_DSN`, `VITE_SENTRY_RELEASE`, `VITE_SENTRY_TRACES_SAMPLE_RATE` | optional (a Sentry DSN is public) |
+| `VITE_ANDROID_APP_URL`, `VITE_IOS_APP_URL` | recommended: the phone-app links on the screen teachers and students get instead of the console. Unset, no link, and the screen says to ask the school office. Android is the release APK (or the Play Store listing later); there is no iOS build yet. See `web/.env.production.example`. |
 
 No client bundle may contain a secret. Checked: no Anthropic, Brevo, JWT or
 private-key material in `web/src`, `web/dist`, `mobile/`, `desktop/src` or
@@ -255,6 +261,80 @@ Three services:
   marks the container `unhealthy` on an Atlas outage and does **not** restart
   it, so there is no restart loop; nginx depends on the backend having
   *started*, not being healthy, so it can always answer the ACME challenge.
+
+### Backend scripts on the VM
+
+The production image carries `src/`, not `backend/scripts/`, and the VM has no
+Node.js of its own. A one-off script runs in a throwaway container of the same
+image, with the checkout's `backend/scripts` mounted over `/app/scripts`
+(read-only), from `/opt/offlineschool/OfflineSchoolApp`. `docker compose run`
+gives that container the backend's own environment (`deploy/backend.env`), so
+the server's `MONGODB_URI` is already there and never typed. `--rm` removes the
+container afterwards; `--no-deps` starts nothing else. Build the image first
+(`docker compose up -d --build` does).
+
+**First super admin** (a new database has no users; see "First super admin"):
+
+```bash
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  node scripts/create-super-admin.js --email=<operator email> --name="<full name>"
+```
+
+Exit 0 prints the temporary password once; exit 3 = a super admin already
+exists (or the email is taken), and nothing was written.
+
+**Index plan on the production database** (the server's own, from
+`deploy/backend.env`: the planner reads only `PROVISION_MONGODB_URI`, so the
+command hands it the server's `MONGODB_URI` explicitly):
+
+```bash
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  sh -c 'PROVISION_MONGODB_URI="$MONGODB_URI" exec node scripts/provision-indexes.js'            # plan, read-only
+docker compose run --rm --no-deps -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  sh -c 'PROVISION_MONGODB_URI="$MONGODB_URI" exec node scripts/provision-indexes.js --apply'    # off-peak
+```
+
+**Index plan on another database** (staging), typed at a prompt that does not
+echo, so it stays out of the shell history and the screen:
+
+```bash
+read -rs PROVISION_MONGODB_URI && export PROVISION_MONGODB_URI    # paste, Enter
+docker compose run --rm --no-deps -e PROVISION_MONGODB_URI -v "$PWD/backend/scripts:/app/scripts:ro" backend \
+  node scripts/provision-indexes.js
+unset PROVISION_MONGODB_URI
+```
+
+Atlas must allow the VM's IP on that cluster too. With the variable unset, the
+planner refuses (exit 64) rather than fall back to the server's database.
+
+Tested 2026-10-23 against the production image and a throwaway MongoDB 7
+container: the admin command created one account and refused a second run; the
+plan reported 469 missing, `--apply` created 469, the plan then reported
+nothing missing; the staging form reached its own database; the backend then
+reported ready and the printed password signed in, with platform routes
+answering `PASSWORD_CHANGE_REQUIRED` until it was changed.
+
+### First super admin
+
+A new database has no users, and every other way to make a super admin needs
+one signed in. `backend/scripts/create-super-admin.js` makes the first, once:
+it refuses when any super admin exists (active or not) or the email is taken,
+generates a 20-character password, prints it once, stores only its hash, flags
+the account so its first sign-in can only change the password, and records
+`superAdmin.created` in the audit log.
+
+1. After the index plan shows nothing missing and `/api/health/ready` answers
+   `ready`, run it with the container command in "Backend scripts on the VM".
+2. Sign in on the console's `/login` with that email and the printed password,
+   straight away, and set a new password. Until then every other route answers
+   `PASSWORD_CHANGE_REQUIRED`. Keep the new one in a password manager; the
+   printed one is now dead.
+3. Create any further operators from **Platform settings**, signed in as this
+   one: the audit log then names who made them. The script refuses from now on.
+
+Password lost before that first sign-in: in Atlas (Data Explorer, `users`),
+delete the one document with that email and `role: "super_admin"`, then run the
+command again.
 
 ### TLS
 
@@ -597,6 +677,9 @@ PROVISION_MONGODB_URI='<staging uri>' node scripts/provision-indexes.js --apply 
 # then production, the same two steps
 ```
 
+That form needs Node.js and `npm ci` in `backend/`. On the VM, use the container
+commands in "Backend scripts on the VM" instead.
+
 Resolve reported duplicates as a per-school data decision (money and results
 rows need a person). Resolve conflicts by hand; the existing
 `fix-enrollment-index.js` / `fix-payroll-index.js` (`--dry-run` first) replace
@@ -634,14 +717,17 @@ anything.
 
 ```text
 [ ] Atlas: dedicated app user (readWrite on one database), read-only backup user, Network Access = VM IP only
+[ ] First super admin created with scripts/create-super-admin.js (after the indexes); signed in once and its password changed
 [ ] Index plan run against staging, then production; duplicates resolved; missing unique indexes created; /api/health/ready no longer INDEXES_INCOMPLETE
 [ ] Production on a NEW database (not school_db); staging rehearsal on school_db: legacy indexes reviewed and superseded ones dropped by hand, then --apply, then the plan shows nothing missing/incompatible/legacy
 [ ] Domain DNS A/AAAA → VM; VCN + iptables open 80/443 only; first certificate issued; renewal dry-run passes
 [ ] deploy/backend.env complete (chmod 600); backend "healthy" in docker compose ps
 [ ] Cloudflare Pages: VITE_API_URL set; Pages domain(s) in ALLOWED_ORIGINS; login works end to end
 [ ] Backups: both timers enabled (database, uploads); one successful run of each seen in the bucket; one restore drill of each passed; alerts configured
-[ ] Android: eas init + keystore generated and backed up offline; EXPO_TOKEN + PRODUCTION_API_URL set; a test tag produces an installable APK
-[ ] Desktop: an installer tested against staging (school_db) — until then DESKTOP_RELEASE_ENABLED stays unset
+[x] Android: eas init (@kuum/mobile) + keystore generated on EAS; EXPO_TOKEN + PRODUCTION_API_URL set; tag v0.1.0 built the APK (2026-10-23; checksum and baked-in API URL verified)
+[ ] Android: keystore downloaded and backed up offline; the v0.1.0 APK installed and signed in on a phone
+[x] Desktop: DESKTOP_RELEASE_ENABLED + DESKTOP_API_URL set; tag v0.1.0 built the Windows installer and portable .exe (2026-10-23; DESKTOP_API_URL = the dev backend)
+[ ] Desktop: an installer tested against staging (school_db): installs, opens without asking for a server, signs in, syncs
 [ ] npm run check:all passes on the deployment commit
 ```
 

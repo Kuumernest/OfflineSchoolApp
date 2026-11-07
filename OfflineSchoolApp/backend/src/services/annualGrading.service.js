@@ -30,6 +30,8 @@ const { rosterDecides } = require("./rankingScope.service");
 const { rankAcrossClasses } = require("./schoolRanking.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 const { effectiveRules, calcVersionFor, promotionUnderRules } = require("../../../shared/academicRules");
+const { averageOfSubjects } = require("../../../shared/averages");
+const periodMarks = require("./periodMarks.service");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,8 @@ async function annualContextFor({ schoolId, academicYear }) {
   // which keeps a class's cost fixed (check-complexity).
   const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
   const termWeights = getTermWeights(policy.policy.structure.periods);
+  // The terms with their sequences, for the year's subject marks.
+  const terms = legacyTermsFromPeriods(policy.policy.structure.periods);
 
   // Promotion exams do not decide promotion under the decided rule (the
   // annual average against the class's bar, docs/39 §14); they are read by
@@ -96,7 +100,7 @@ async function annualContextFor({ schoolId, academicYear }) {
 
   const rules = effectiveRules(policy.policy.rules);
   return {
-    structure, passMark, termWeights, promotionExamIds, policyHash: policy._id,
+    structure, passMark, termWeights, terms, promotionExamIds, policyHash: policy._id,
     // The rules in force (shared/academicRules, decided 2026-10-16), from the
     // same snapshot: the school's bands on the stored row, promotion by the
     // annual average against the class's bar.
@@ -112,7 +116,7 @@ async function annualContextFor({ schoolId, academicYear }) {
  * already in hand. Pure: no database. The promotion status follows the rule
  * in the file header.
  */
-function annualRowFor(ctx, { termResults, promotionResults, classId = null, isFinalYear = false }) {
+function annualRowFor(ctx, { termResults, promotionResults, subjectMarks = null, classId = null, isFinalYear = false }) {
   const { passMark, termWeights } = ctx;
   // The school's bands; the built-in scale only for a context built by hand.
   const gradeOf = ctx.gradeOf || lookupGrade;
@@ -142,10 +146,15 @@ function annualRowFor(ctx, { termResults, promotionResults, classId = null, isFi
     }
   }
 
-  // 6. Compute weighted annual average
-  const annualAverage = totalWeight > 0
+  // 6. The annual average: sum(subject mark for the year x coefficient) /
+  // sum(coefficients of the subjects with a mark) — shared/averages.js, the
+  // figure the annual card's TOTAL row prints (decided 2026-10-27, annual/4).
+  // The weighted mean of the term averages decides it only for a pupil with
+  // no per-subject marks to read (a context built by hand).
+  const fromSubjects = subjectMarks && subjectMarks.size ? averageOfSubjects(subjectMarks) : null;
+  const annualAverage = fromSubjects ?? (totalWeight > 0
     ? Math.round((totalWeightedAvg / totalWeight) * 100) / 100
-    : 0;
+    : 0);
 
   const annualGrade = gradeOf(annualAverage);
   const isPassing = annualAverage >= passMark;
@@ -245,7 +254,11 @@ async function computeStudentAnnualAverage({
   }
 
   const cls = await mongoose.model("Class").findOne({ _id: classId, schoolId }).select("isFinalYear").lean();
-  const row = annualRowFor(ctx, { termResults, promotionResults, classId, isFinalYear: Boolean(cls?.isFinalYear) });
+  const marks = await periodMarks.annualMarks({ schoolId, academicYear, classId, terms: ctx.terms });
+  const row = annualRowFor(ctx, {
+    termResults, promotionResults, subjectMarks: marks.byStudent.get(String(studentId)),
+    classId, isFinalYear: Boolean(cls?.isFinalYear),
+  });
 
   // 8. Upsert AnnualResult
   const filter = {
@@ -334,6 +347,7 @@ async function computeClassAnnualAverages({
     // as it failed every pupil of it before), one read of the class's term
     // results grouped by pupil, one read of the promotion results, one write.
     const ctx = await annualContextFor({ schoolId, academicYear });
+    const marks = await periodMarks.annualMarks({ schoolId, academicYear, classId, terms: ctx.terms });
     // Student._id, which is what TermResult.studentId holds and what
     // buildAnnualCard looks the pupil up by. Reading the login id here
     // matched no term results at all for any pupil who had an account.
@@ -371,6 +385,7 @@ async function computeClassAnnualAverages({
         const row = annualRowFor(ctx, {
           termResults:      termsByStudent.get(k) ?? [],
           promotionResults: promoByStudent.get(k) ?? [],
+          subjectMarks:     marks.byStudent.get(k),
           classId,
           isFinalYear:      Boolean(classDoc?.isFinalYear),
         });
@@ -412,7 +427,13 @@ async function computeClassAnnualAverages({
   // class size (rankingScope.service says why only this year): the positions
   // keep exactly the pupils computed here. Unpublished only; a published row
   // refused the class above.
-  const keep = await rosterDecides({ schoolId, academicYear, classId }) ? computedIds : null;
+  //
+  // Otherwise the pupils with a term result in this class who have not been
+  // deleted — never simply every row that exists, which is how a class of
+  // three printed "1st / 50".
+  const keep = await rosterDecides({ schoolId, academicYear, classId })
+    ? computedIds
+    : await pupilsWithTermResults({ schoolId, academicYear, classId });
 
   // Compute class positions
   await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded, keep });
@@ -422,6 +443,18 @@ async function computeClassAnnualAverages({
   if (schoolPlaces) await rankAcrossClasses(AnnualResult, { schoolId, academicYear }, "annualAverage");
 
   return { computed, skipped: skipped + noTerms, noTerms };
+}
+
+/** The pupils with a term result in a class who have not been deleted. */
+async function pupilsWithTermResults({ schoolId, academicYear, classId }) {
+  const ids = (await TermResult.distinct("studentId", {
+    schoolId, academicYear, classId, deletedAt: null,
+  })).map(String);
+  if (!ids.length) return [];
+  const live = await mongoose.model("Student")
+    .find({ _id: { $in: ids }, schoolId, deletedAt: null })
+    .select("_id").lean();
+  return live.map((s) => String(s._id));
 }
 
 /**

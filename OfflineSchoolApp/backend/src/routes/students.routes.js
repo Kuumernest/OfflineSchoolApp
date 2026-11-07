@@ -24,6 +24,7 @@ const { authenticate } = require("../../middleware/auth");
 const Student       = require("../db/models/Student");
 const User          = require("../db/models/User");
 const Class         = require("../db/models/Class");
+const { checkStudentInput, normalisePhone, PHONE_FIELDS, ageWarning } = require("../../../shared/studentValidation");
 const Announcement  = require("../db/models/Announcement");
 // The school-scoped announcement lookup, shared with announcement.routes.js and
 // the read/acknowledge handlers in server.js.
@@ -54,6 +55,27 @@ const sendSuccess = (res, data, status = 200) =>
     success: true,
     ...applicationDocuments.redactDocumentsDeep(res.req, data),
   });
+
+/**
+ * B3 (shared/studentValidation.js): a date of birth in the future is refused,
+ * a Cameroon phone is stored as +237 and nine digits (or refused), and an age
+ * outside the class level's range comes back as a warning. The stored forms
+ * replace what was typed in `body`, so the route below reads them.
+ *
+ * @returns {Promise<{ errors: string[], warnings: object[] }>}
+ */
+const checkAndNormaliseStudentInput = async (body, schoolId, classId) => {
+  const School = getSchoolModel();
+  const [cls, school] = await Promise.all([
+    classId ? Class.findOne({ _id: String(classId), ...(schoolId ? { schoolId: String(schoolId) } : {}) }).select("name").lean().catch(() => null) : null,
+    schoolId && School ? School.findById(String(schoolId)).select("settings.studentAgeRanges").lean().catch(() => null) : null,
+  ]);
+  const { errors, values, warnings } = checkStudentInput(body, {
+    className: cls?.name ?? null, ageRanges: school?.settings?.studentAgeRanges ?? null,
+  });
+  if (!errors.length) Object.assign(body, values);
+  return { errors, warnings };
+};
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
@@ -225,38 +247,8 @@ const sendEmailSafe = async ({ to, template, data, context = "" }) => {
 // SECTION 2 — ENROLLMENT NUMBER HELPERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-const resolveSchoolCode = async (schoolId) => {
-  if (!schoolId) return "SCH";
-  try {
-    const School = getSchoolModel();
-    if (School) {
-      const school = await School.findById(schoolId).select("code").lean();
-      if (school?.code) return school.code.trim().toUpperCase().slice(0, 5);
-    }
-  } catch (err) {
-    console.warn("[resolveSchoolCode] failed:", err.message);
-  }
-  return String(schoolId).replace(/[^A-Z0-9]/gi, "").slice(0, 3).toUpperCase() || "SCH";
-};
-
-const buildEnrollmentNo = async (schoolCode, year) => {
-  const prefix = `${schoolCode}-${year}-`;
-
-  const last = await User.findOne(
-    { enrollmentNo: { $regex: `^${escapeRegex(prefix)}` }, role: "student" },
-    { enrollmentNo: 1 },
-    { sort: { enrollmentNo: -1 } }
-  ).lean();
-
-  let nextNum = 1;
-  if (last?.enrollmentNo) {
-    const parts = last.enrollmentNo.split("-");
-    const seq   = parseInt(parts[parts.length - 1], 10);
-    if (!Number.isNaN(seq)) nextNum = seq + 1;
-  }
-
-  return `${prefix}${String(nextNum).padStart(4, "0")}`;
-};
+// One generator for every admission path — see the service for why.
+const { nextAdmissionNo } = require("../services/admissionNumber.service");
 
 const saveUserWithUniqueEnrollment = async (userAccount, seedNo, schoolId) => {
   let enrollmentNo = seedNo;
@@ -274,8 +266,7 @@ const saveUserWithUniqueEnrollment = async (userAccount, seedNo, schoolId) => {
       console.warn(
         `[enrollment] "${enrollmentNo}" collided — regenerating (attempt ${attempt + 1})`
       );
-      const schoolCode = await resolveSchoolCode(schoolId);
-      enrollmentNo     = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
+      enrollmentNo     = await nextAdmissionNo(schoolId);
     }
   }
 
@@ -423,13 +414,21 @@ const resolveStudentRecord = async (userId, schoolId) => {
   student = await Student.findOne({ _id: userId, schoolId }).lean();
   if (student) return student;
 
+  // Last resort, for a legacy account never linked by userId: the record that
+  // carries this account's email. Only when that is unambiguous. Siblings
+  // share the parent's address, so "the first pupil with this email" could be
+  // a brother or sister — and this resolver feeds the pupil's own profile
+  // EDIT as well as every read. A record already linked to another account is
+  // that account's, never this one's.
   const user = await User.findById(userId).select("email").lean();
   if (user?.email) {
-    student = await Student.findOne({
+    const matches = await Student.find({
       email: user.email.toLowerCase(),
       schoolId,
-    }).lean();
-    if (student) return student;
+      deletedAt: null,
+    }).limit(2).lean();
+    const only = matches.length === 1 ? matches[0] : null;
+    if (only && (!only.userId || String(only.userId) === String(userId))) return only;
   }
 
   return null;
@@ -548,38 +547,48 @@ const findDuplicateStudent = async ({
 
 const provisionStudentAccount = async ({ student, schoolId, displayName, emailRaw }) => {
   const tempPassword = generateTempPassword();
-  const schoolCode   = await resolveSchoolCode(schoolId);
-  const seedNo       = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
 
   let userAccount   = null;
   let isNewUser     = false;
   let emailAttached = false;
   let notice        = null;
 
-  if (emailRaw) {
-    const existing = await User.findOne({ email: emailRaw.toLowerCase().trim() });
+  const emailClean = emailRaw ? emailRaw.toLowerCase().trim() : "";
+
+  // The pupil's OWN login first, found by their record (student.userId) and
+  // never by the address. Siblings share the parent's email, so "the account
+  // with this email" may be a brother's or sister's: looking it up first both
+  // missed this pupil's own account when a sibling's came back instead (a
+  // second login was minted and theirs orphaned) and is the shape of lookup
+  // that let /sync/push take over a sibling's account.
+  if (student?.userId) {
+    const own = await User.findOne({ _id: String(student.userId), role: "student" });
+    if (own) {
+      own.name              = displayName;
+      own.isActive          = true;
+      own.schoolId          = schoolId;
+      own.password          = tempPassword;
+      own.mustResetPassword = true;
+      userAccount   = own;
+      emailAttached = Boolean(emailClean) && String(own.email ?? "").toLowerCase() === emailClean;
+    }
+  }
+
+  // Otherwise, only to word the notice: whose account already carries this
+  // address. It is never reused, renamed or re-passworded from here.
+  if (!userAccount && emailClean) {
+    const existing = await User.findOne({ email: emailClean });
 
     if (existing) {
-      const isOwnAccount =
-        student?.userId && String(existing._id) === String(student.userId);
-
-      if (isOwnAccount) {
-        existing.name              = displayName;
-        existing.isActive          = true;
-        existing.schoolId          = schoolId;
-        existing.password          = tempPassword;
-        existing.mustResetPassword = true;
-        userAccount   = existing;
-        emailAttached = true;
-      } else if (existing.role === "student") {
+      if (existing.role === "student") {
         const sibling = await Student.findOne({ userId: existing._id })
           .select("name firstName lastName studentName").lean().catch(() => null);
         const siblingName = sibling
           ? resolveDisplayName(sibling)
           : existing.name || "another student";
         notice =
-          `The application email (${emailRaw}) is already used by ` +
-          `${siblingName}. A separate account has been created for ${displayName} — ` +
+          `The application email (${emailRaw}) is also the contact for ` +
+          `${siblingName}. ${displayName} has their own account — ` +
           `they will log in using their enrollment number.`;
       } else {
         notice =
@@ -602,7 +611,9 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
       isActive:          true,
       password:          tempPassword,
       mustResetPassword: true,
-      enrollmentNo:      seedNo,
+      // Issued here, not up front: a number is taken from the sequence only
+      // for an account that has none, so re-provisioning leaves no gap.
+      enrollmentNo:      await nextAdmissionNo(schoolId),
     };
     if (canAttachEmail) userFields.email = emailRaw;
 
@@ -611,7 +622,7 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
     emailAttached = canAttachEmail;
   }
 
-  const targetNo     = userAccount.enrollmentNo || seedNo;
+  const targetNo     = userAccount.enrollmentNo || await nextAdmissionNo(schoolId);
   const enrollmentNo = await saveUserWithUniqueEnrollment(userAccount, targetNo, schoolId);
 
   return { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser };
@@ -638,6 +649,8 @@ async function logOverwriteIfNeeded({
   if (prevEditorId && thisEditorId && prevEditorId === thisEditorId) return null;
 
   try {
+    // Taken BEFORE the caller applies its change — the edit route used to
+    // assign the new values first, so the "lost" version held the winner's.
     const snapshot = student.toObject ? student.toObject() : student;
     const record   = await SyncOverwrite.create({
       entityType,
@@ -652,6 +665,9 @@ async function logOverwriteIfNeeded({
       lostEditByName:    student.updatedByName || null,
       lostEditAt:        student.updatedAt,
       lostVersion:       snapshot,
+      // What a roster-only reader (students.view) may see of it, through the
+      // same projection GET /students/:id applies.
+      lostVersionRoster: pickRoster(normaliseStudent(snapshot)),
     });
 
     console.log(
@@ -659,7 +675,19 @@ async function logOverwriteIfNeeded({
       `${currentUser?.name || thisEditorId} (action: ${action})`
     );
 
-    return { id: String(record._id), lostEditAt: record.lostEditAt, lostEditBy: record.lostEditByName };
+    // What the WINNER is told. The loser learns of it from
+    // GET /api/sync/overwrites/mine. `lostEditBy` stays the name for older
+    // clients that read it as one.
+    return {
+      id:                String(record._id),
+      lostEditAt:        record.lostEditAt,
+      lostEditBy:        record.lostEditByName,
+      lostEditById:      record.lostEditBy,
+      lostEditByName:    record.lostEditByName,
+      overwrittenBy:     record.overwrittenBy,
+      overwrittenByName: record.overwrittenByName,
+      overwrittenAt:     record.overwrittenAt,
+    };
   } catch (err) {
     console.warn("[sync-overwrite] Failed to log:", err.message);
     return null;
@@ -671,6 +699,9 @@ async function logOverwriteIfNeeded({
 // ═════════════════════════════════════════════════════════════════════════════
 
 router.post("/apply", asyncHandler(async (req, res) => {
+  const input = await checkAndNormaliseStudentInput(req.body, req.body?.schoolId, req.body?.classId);
+  if (input.errors.length) return sendError(res, 400, input.errors.join("; "), { errors: input.errors });
+
   const {
     firstName, lastName, name, email, phone, dateOfBirth,
     gender, address, guardianName, guardianPhone, guardianEmail,
@@ -785,6 +816,7 @@ router.post("/apply", asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     message: "Application submitted successfully. You will be notified once reviewed.",
     data:    { id: student._id, name: displayName, status: "pending" },
+    warnings: input.warnings,
   }, 201);
 }));
 
@@ -902,9 +934,10 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
 // the answer never says whether the document exists.
 router.get("/applications/:applicationId/documents/:key", asyncHandler(async (req, res) => {
   const applicationId = String(req.params.applicationId || "");
-  let key;
-  try { key = path.basename(decodeURIComponent(String(req.params.key || ""))); }
-  catch { return sendError(res, 404, "Document not found"); }
+  // Express has already decoded the parameter. Decoding it a second time
+  // broke any name with a "%" in it — "100%.pdf" threw, "a%2520b" became
+  // another file's name.
+  const key = path.basename(String(req.params.key || ""));
   if (!applicationId || !key) return sendError(res, 404, "Document not found");
 
   let scope = null;
@@ -931,7 +964,9 @@ router.get("/applications/:applicationId/documents/:key", asyncHandler(async (re
   const doc = (record.documents || []).find((d) => applicationDocuments.documentKey(d) === key);
   if (!doc) return sendError(res, 404, "Document not found");
 
-  const file = applicationDocuments.resolveDocumentFile(key);
+  // From the file store — a bucket in production — and through here rather
+  // than a link to it, so the authorisation above stays the only way in.
+  const file = await applicationDocuments.readDocument(key);
   if (!file) return sendError(res, 404, "Document not found");
 
   res.set({
@@ -940,9 +975,7 @@ router.get("/applications/:applicationId/documents/:key", asyncHandler(async (re
     "Cache-Control":          "private, no-store",
     "X-Content-Type-Options": "nosniff",
   });
-  const stream = fs.createReadStream(file.filePath);
-  stream.on("error", () => { if (!res.headersSent) sendError(res, 404, "Document not found"); else res.end(); });
-  stream.pipe(res);
+  return res.send(file.body);
 }));
 
 router.get("/teacher/students",    authenticate, teacherOrAdmin, handleTeacherStudents);
@@ -978,7 +1011,7 @@ router.put(
 
     let saved;
     try {
-      saved = photoStorage.savePhotoFromBase64(student._id, photoBase64);
+      saved = await photoStorage.savePhotoFromBase64(student._id, photoBase64, { schoolId: student.schoolId ?? schoolId });
     } catch (err) {
       // These messages name the actual problem — too large, not an image — so
       // they are worth passing through rather than replacing with "bad request".
@@ -993,7 +1026,7 @@ router.put(
     // order risks deleting the only copy and then failing to save the new one,
     // which loses the photo entirely.
     if (previous && previous !== saved.publicPath) {
-      photoStorage.deletePhotoFile(previous);
+      await photoStorage.deletePhotoFile(previous);
     }
 
     return sendSuccess(res, {
@@ -1014,7 +1047,7 @@ router.delete(
 
     if (!student) return sendError(res, 404, "Student record not found");
 
-    if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+    if (student.photoUrl) await photoStorage.deletePhotoFile(student.photoUrl);
     await Student.updateOne({ _id: student._id }, { photoUrl: null });
 
     return sendSuccess(res, { photoUrl: null });
@@ -1145,6 +1178,8 @@ router.get(
         grade:             student.grade            || null,
         gender:            student.gender           || null,
         dateOfBirth:       student.dateOfBirth      || null,
+        placeOfBirth:      student.placeOfBirth     || null,
+        isRepeating:       student.isRepeating      === true,
         phone:             student.phone            || null,
         alternatePhone:    student.alternatePhone   || null,
         address:           student.address          || null,
@@ -1202,7 +1237,7 @@ router.put(
      * updating their own phone number.
      */
     const {
-      firstName, lastName, gender, dateOfBirth,
+      firstName, lastName, gender, dateOfBirth, placeOfBirth, isRepeating,
       nationalId,
       phone, alternatePhone, address, city, state,
       guardianName, guardianPhone, guardianRelation, guardianEmail,
@@ -1220,6 +1255,7 @@ router.put(
     if (medicalConditions !== undefined) allowedUpdate.medicalConditions = medicalConditions?.trim() || null;
     if (bio               !== undefined) allowedUpdate.bio               = bio?.trim()               || null;
     if (profileCompleted  !== undefined) allowedUpdate.profileCompleted  = !!profileCompleted;
+    if (isRepeating       !== undefined) allowedUpdate.isRepeating       = !!isRepeating;
 
     const current = await resolveStudentRecord(userId, schoolId);
 
@@ -1252,6 +1288,7 @@ router.put(
     fillIfEmpty("firstName",   firstName);
     fillIfEmpty("lastName",    lastName);
     fillIfEmpty("dateOfBirth", dateOfBirth);
+    fillIfEmpty("placeOfBirth", placeOfBirth);
 
     // Guardian contact follows the same fill-only rule as identity. Fee
     // reminders, absence notices and gate alerts are delivered to the guardian
@@ -1793,6 +1830,9 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
+  const input = await checkAndNormaliseStudentInput(req.body, schoolId, req.body?.classId);
+  if (input.errors.length) return sendError(res, 400, input.errors.join("; "), { errors: input.errors });
+
   const {
     id,
     firstName, lastName, name, email, phone, dateOfBirth,
@@ -1823,7 +1863,18 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
       ...(schoolId ? { schoolId } : {}),
     }).lean();
     if (existing) {
+      // Billed on the replay as well. A first attempt that saved the student
+      // and then failed before billing (a dropped connection, a restart) is
+      // retried by the outbox and lands here; returning early left that
+      // student with no fees. Charges already raised are skipped by the
+      // unique index, so a replay of a complete enrolment raises nothing.
+      const billing = await billStudentForClass({
+        schoolId,
+        student:  { _id: existing._id, classId: existing.classId },
+        raisedBy: req.user?._id ? String(req.user._id) : null,
+      });
       return sendSuccess(res, {
+        feesRaised:    billing.raised,
         // Reduced shape: an idempotency replay needs identity, class and
         // enrolment number — not the document the office keeps.
         student:       pickRoster(normaliseStudent(existing)),
@@ -1966,6 +2017,8 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     emailSent: emailResult.success,
     warning:   notice,
+    // B3: e.g. an age outside the class level's range — saved, but worth a look.
+    warnings:  input.warnings,
     feesRaised: billing.raised,
     message:   notice
       ? `${displayName} enrolled in ${className}. ${notice}`
@@ -2156,7 +2209,15 @@ const handleApprove = asyncHandler(async (req, res) => {
 
     console.log(`✅ Application approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+    // Approved into a class is joining its fees, as on the admin approve route.
+    const billing = await billStudentForClass({
+      schoolId: String(appRecord.schoolId || schoolId || ""),
+      student:  { _id: student._id, classId: String(targetClass._id) },
+      raisedBy: req.user?._id ? String(req.user._id) : null,
+    });
+
     return sendSuccess(res, {
+      feesRaised:   billing.raised,
       emailSent:    emailResult.success,
       warning:      notice,
       message:      notice
@@ -2231,7 +2292,14 @@ const handleApprove = asyncHandler(async (req, res) => {
 
   console.log(`✅ Student approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: String(targetClass._id) },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised:   billing.raised,
     emailSent:    emailResult.success,
     warning:      notice,
     message:      notice
@@ -2476,6 +2544,9 @@ const coerceEditable = (field, raw) => {
       : { error: `${field} is not a valid email address` };
   }
 
+  // B3: phones stored as +237 and nine digits (shared/studentValidation.js).
+  if (PHONE_FIELDS.includes(field)) return normalisePhone(raw, field);
+
   if (field === "dateOfBirth") {
     const v = String(raw).trim();
     // Stored as a string, so it is compared as one. Anchored to the format the
@@ -2616,23 +2687,23 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     });
   }
 
-  // ── Guard the one uniqueness this route can breach ────────────────────────
+  // No "another pupil already uses that email" check, on purpose.
   //
-  // email is unique per school for a student. Caught here with a readable
-  // message rather than as an E11000 the client would show raw.
-  if (changed.email) {
-    const clash = await Student.findOne({
-      schoolId,
-      email:     changed.email,
-      _id:       { $ne: student._id },
-      deletedAt: null,
-    }).select("_id").lean();
-    if (clash) {
-      return sendError(res, 409, "Another student in this school already uses that email address");
-    }
-  }
+  // A pupil's email is very often the parent's, and one parent has several
+  // children here (CLAUDE.md: one guardian, many children). Nothing needs it
+  // unique: a pupil signs in with their own admission number, Student.email
+  // carries no unique index, and the User model lets student accounts share an
+  // address. Refusing it here blocked the second child's correction with a 409.
 
   const nameBefore = resolveDisplayName(student);
+
+  // Detection and audit for the case where somebody else edited first. The
+  // write still proceeds — last-write-wins is preserved, exactly as /move does.
+  // Before the new values go onto the document: the snapshot is of the
+  // version being replaced.
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "edit",
+  });
 
   for (const [field, value] of Object.entries(changed)) student[field] = value;
 
@@ -2650,12 +2721,6 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     const finalName = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim();
     if (finalName) student.studentName = finalName;
   }
-
-  // Detection and audit for the case where somebody else edited first. The
-  // write still proceeds — last-write-wins is preserved, exactly as /move does.
-  const overwrote = await logOverwriteIfNeeded({
-    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "edit",
-  });
 
   student.updatedAt     = new Date();
   student.updatedBy     = req.user?._id  || null;
@@ -2697,10 +2762,26 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
     `by ${req.user?.name || req.user?._id}`
   );
 
+  // B3: a new date of birth outside the class level's usual ages is saved,
+  // and said so.
+  let warnings = [];
+  if (changed.dateOfBirth && student.classId) {
+    const School = getSchoolModel();
+    const [cls, school] = await Promise.all([
+      Class.findOne({ _id: String(student.classId) }).select("name").lean().catch(() => null),
+      School ? School.findById(String(student.schoolId)).select("settings.studentAgeRanges").lean().catch(() => null) : null,
+    ]);
+    const w = ageWarning(changed.dateOfBirth, cls?.name, school?.settings?.studentAgeRanges ?? null);
+    if (w) warnings = [w];
+  }
+
   return sendSuccess(res, {
     message:   "Student record updated.",
     changed:   Object.keys(changed),
-    overwrote: overwrote ? { id: overwrote._id } : null,
+    warnings,
+    // The helper's own shape — `{ id, … }`. This read `overwrote._id`, which
+    // never exists, so every edit's overwrite reached the client without an id.
+    overwrote,
     data:      student.toObject(),
   });
 }));
@@ -2791,7 +2872,16 @@ router.patch("/:id/restore", authenticate, canManage, asyncHandler(async (req, r
     await User.findByIdAndUpdate(student.userId, { $set: { isActive: true } }).catch(() => {});
   }
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || schoolId || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: `"${resolveDisplayName(student)}" has been restored`,
     data:    normaliseStudent(student.toObject()),
     overwrote,
@@ -2838,13 +2928,15 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   console.log(`[move] "${resolveDisplayName(student)}" ${prev} → ${student.classId}`);
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // The destination class's active structures apply to this student now;
-  // charges that already exist (e.g. a structure covering both classes) are
-  // skipped by the unique index. Never throws.
+  // The old class's charges for the year are voided and the destination
+  // class's apply now (payments stay with the student and count against the
+  // new ones); charges that already exist (e.g. a structure covering both
+  // classes) are skipped by the unique index. Never throws.
   const billing = await billStudentForClass({
     schoolId,
     student:  { _id: student._id, classId: student.classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2855,6 +2947,7 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" moved to ${className}`,
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    { ...normaliseStudent(student.toObject()), className },
     overwrote,
   });

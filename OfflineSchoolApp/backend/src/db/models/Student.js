@@ -199,6 +199,11 @@ const studentSchema = new mongoose.Schema(
     city:              { type: String, trim: true, default: null },
     state:             { type: String, trim: true, default: null },
     nationalId:        { type: String, trim: true, default: null },
+    // Pupil-entered on the phone's profile wizard. placeOfBirth is fill-only
+    // there, like dateOfBirth; isRepeating is the pupil's own answer to "are
+    // you repeating this year?", not the promotion decision.
+    placeOfBirth:      { type: String, trim: true, default: null },
+    isRepeating:       { type: Boolean,            default: false },
     bloodGroup:        { type: String,             default: null },
     medicalConditions: { type: String, trim: true, default: null },
     bio:               { type: String, trim: true, default: null },

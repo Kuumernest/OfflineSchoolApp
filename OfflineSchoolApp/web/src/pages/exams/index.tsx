@@ -9,6 +9,7 @@ import {
   Calendar, BarChart2, ChevronLeft, ChevronRight,
   X, MoreVertical,
   BookOpen, AlertTriangle,
+  Download, Printer, Archive, BarChart3, Pencil, PenLine, Trash2,
 } from "lucide-react";
 import {
   useExams,
@@ -21,8 +22,13 @@ import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
+import { type TileTone } from "@/config/sections";
+import { DASH_TINT, dashTint } from "@/config/dashboardTint";
+import { cn }                 from "@/utils/cn";
+import { PageIcon }           from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,11 +103,7 @@ const shortWeekdays = () => {
 
 const fmtDate = (d?: string | null) => {
   if (!d) return "—";
-  try {
-    return new Date(d + "T00:00:00").toLocaleDateString(currentLocale(), {
-      day: "numeric", month: "short", year: "numeric",
-    });
-  } catch { return d; }
+  return formatDay(d, d);
 };
 
 const daysUntil = (dateStr?: string | null) => {
@@ -151,13 +153,14 @@ const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
 const StatCard = ({
-  label, value, sub, icon: Icon, color, onClick, highlight,
+  label, value, sub, icon: Icon, tone, onClick, highlight,
 }: {
   label:      string;
   value:      number | string;
   sub?:       string;
   icon:       React.ElementType;
-  color:      string;
+  /** What the figure is about: exams amber, results slate. */
+  tone:       TileTone;
   onClick?:   () => void;
   highlight?: boolean;
 }) => (
@@ -179,25 +182,29 @@ const StatCard = ({
    */
   <button
     onClick={onClick}
-    className={`bg-white rounded-xl p-4 flex flex-col gap-2 shadow-sm
-      border transition-all text-left w-full
-      ${highlight
-        ? "border-primary-300 ring-2 ring-primary-100"
-        : "border-gray-100 hover:shadow-md hover:border-gray-200"
-      }`}
+    aria-pressed={highlight}
+    className={cn(
+      dashTint(tone).card,
+      "p-4 flex flex-col gap-2 text-left w-full",
+      // A tinted card keeps its coloured top edge on hover.
+      "transition duration-150 ease-[var(--ease-out-quiet)] hover:shadow-lift",
+      // The filter in force: a ring in the interaction accent.
+      highlight && "ring-2 ring-primary-600 ring-offset-2 ring-offset-canvas",
+    )}
   >
     <div className="flex items-center gap-3">
-      <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${color}`}>
+      <div className={cn("w-10 h-10 shrink-0 rounded-control flex items-center justify-center", dashTint(tone).box)}>
         <Icon className="w-5 h-5" />
       </div>
       {/* tabular-nums so the counts line up across the seven cards. */}
-      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums">{value}</p>
+      <p className={cn("text-[28px] font-bold leading-none tracking-tight tabular-nums", dashTint(tone).number)}>{value}</p>
     </div>
     <div className="min-w-0">
-      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
+      <p className="text-xs font-semibold leading-tight text-ink-muted">
         {label}
       </p>
-      {sub && <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{sub}</p>}
+      {/* ink-faint is under AA on a wash. */}
+      {sub && <p className="text-[11px] mt-0.5 leading-tight text-ink-muted">{sub}</p>}
     </div>
   </button>
 );
@@ -226,13 +233,15 @@ const AlertsPanel = ({
   };
 
   return (
-    <div className="fixed right-4 top-20 w-80 z-50 bg-white rounded-xl
-                    shadow-xl border border-gray-200 overflow-hidden">
+    <div className="fixed right-4 top-20 w-80 z-50 bg-surface rounded-xl
+                    shadow-xl border border-line overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3
-                      border-b border-gray-100 bg-gray-50">
+                      border-b border-line bg-accent-amber-soft">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-900">{t("exams.alerts")}</span>
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Bell className="w-4 h-4" />
+          </span>
+          <span className="text-sm font-semibold text-ink">{t("exams.alerts")}</span>
           {alerts.length > 0 && (
             <span className="bg-red-500 text-white text-xs rounded-full
                              w-5 h-5 flex items-center justify-center font-bold">
@@ -249,7 +258,7 @@ const AlertsPanel = ({
       <div className="max-h-80 overflow-y-auto">
         {!alerts.length ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-2xl mb-2">🎉</p>
+            <CheckCircle className="w-6 h-6 mx-auto mb-2 text-green-500" aria-hidden />
             <p className="text-sm text-gray-400">{t("exams.noAlerts")}</p>
           </div>
         ) : (
@@ -298,11 +307,11 @@ const QuickActionsMenu = ({
 
   const actions = [
     {
-      id: "schedule", icon: "➕", label: t("exams.qaSchedule"),
+      id: "schedule", icon: <Plus className="w-4 h-4" aria-hidden />, label: t("exams.qaSchedule"),
       onClick: () => { navigate("/exams/new"); onClose(); },
     },
     {
-      id: "export", icon: "📊", label: t("exams.qaExportCsv"),
+      id: "export", icon: <Download className="w-4 h-4" aria-hidden />, label: t("exams.qaExportCsv"),
       onClick: async () => {
         try {
           const res = await api.get("/exams/reports/results", {
@@ -322,19 +331,19 @@ const QuickActionsMenu = ({
       },
     },
     {
-      id: "print", icon: "🖨️", label: t("exams.qaPrintTimetable"),
+      id: "print", icon: <Printer className="w-4 h-4" aria-hidden />, label: t("exams.qaPrintTimetable"),
       onClick: () => { window.print(); onClose(); },
     },
     {
-      id: "archive", icon: "🗑️", label: t("exams.qaArchiveCompleted"),
+      id: "archive", icon: <Archive className="w-4 h-4" aria-hidden />, label: t("exams.qaArchiveCompleted"),
       onClick: () => { onArchiveCompleted(); onClose(); },
     },
     {
-      id: "cards", icon: "📋", label: t("exams.qaReportCards"),
+      id: "cards", icon: <FileText className="w-4 h-4" aria-hidden />, label: t("exams.qaReportCards"),
       onClick: () => { navigate("/reports/cards"); onClose(); },
     },
     {
-      id: "analytics", icon: "📈", label: t("results.analytics"),
+      id: "analytics", icon: <BarChart3 className="w-4 h-4" aria-hidden />, label: t("results.analytics"),
       onClick: () => { navigate("/exams/results"); onClose(); },
     },
   ];
@@ -389,9 +398,9 @@ const ExamRow = ({
   }, [menuOpen]);
 
   return (
-    <tr className="hover:bg-gray-50/60 transition-colors group">
+    <tr className="hover:bg-accent-blue-soft/70 transition-colors group">
       {/* # */}
-      <td className="px-4 py-3 text-xs text-gray-400 font-medium">
+      <td className="px-4 py-3 text-xs text-ink-muted font-medium">
         {index + 1}
       </td>
 
@@ -399,12 +408,12 @@ const ExamRow = ({
       <td className="px-4 py-3 min-w-[200px]">
         <button
           onClick={() => navigate(`/exams/${exam._id}`)}
-          className="font-semibold text-gray-900 text-sm hover:text-primary-600
+          className="font-semibold text-ink text-sm hover:text-primary-600
                      text-left transition-colors leading-snug"
         >
           {exam.name}
         </button>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs text-ink-muted mt-0.5">
           {examTypeLabel(t, exam.type)}
           {exam.term         ? ` · ${exam.term}`         : ""}
           {exam.academicYear ? ` · ${exam.academicYear}` : ""}
@@ -412,7 +421,7 @@ const ExamRow = ({
       </td>
 
       {/* Class */}
-      <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
+      <td className="px-4 py-3 text-sm text-ink-body max-w-[140px]">
         <span className="truncate block">
           {exam.classNames || exam.className || t("exams.allClasses")}
         </span>
@@ -420,9 +429,9 @@ const ExamRow = ({
 
       {/* Dates */}
       <td className="px-4 py-3">
-        <div className="text-sm text-gray-700">{fmtDate(exam.startDate)}</div>
+        <div className="text-sm text-ink">{fmtDate(exam.startDate)}</div>
         {exam.endDate && exam.endDate !== exam.startDate && (
-          <div className="text-xs text-gray-400">→ {fmtDate(exam.endDate)}</div>
+          <div className="text-xs text-ink-muted">→ {fmtDate(exam.endDate)}</div>
         )}
         {exam.status === "scheduled" && days !== null && days >= 0 && days <= 7 && (
           <div className={`text-xs font-semibold mt-0.5
@@ -502,17 +511,17 @@ const ExamRow = ({
                   <Link to={`/exams/${exam._id}?tab=details`}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     onClick={() => setMenuOpen(false)}>
-                    ✏️ {t("common.edit")}
+                    <Pencil className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.edit")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=marks`}
-                    className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+                    className="block px-4 py-2 text-sm text-primary-600 hover:bg-primary-50"
                     onClick={() => setMenuOpen(false)}>
-                    ✏️ {t("exams.enterMarks")}
+                    <PenLine className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.enterMarks")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=results`}
                     className="block px-4 py-2 text-sm text-green-600 hover:bg-green-50"
                     onClick={() => setMenuOpen(false)}>
-                    📊 {t("exams.viewResults")}
+                    <BarChart3 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.viewResults")}
                   </Link>
 
                   <hr className="my-1 border-gray-100" />
@@ -520,7 +529,7 @@ const ExamRow = ({
                     onClick={() => { onDelete(exam._id, exam.name); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-2 text-sm text-red-600
                                hover:bg-red-50">
-                    🗑️ {t("common.delete")}
+                    <Trash2 className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.delete")}
                   </button>
                 </div>
               )}
@@ -580,14 +589,17 @@ const CalendarView = ({
   const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className={cn("bg-surface rounded-xl border border-line shadow-card overflow-hidden", DASH_TINT.amber.edge)}>
       {/* Nav */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-line">
         <button onClick={prevMonth}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <h3 className="font-semibold text-gray-900 text-lg capitalize">
+        <h3 className="flex items-center gap-2 font-semibold text-ink text-lg capitalize">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Calendar className="h-4 w-4" />
+          </span>
           {monthLabel(year, month)}
         </h3>
         <button onClick={nextMonth}
@@ -597,10 +609,10 @@ const CalendarView = ({
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+      <div className="grid grid-cols-7 border-b border-line bg-accent-amber-soft">
         {shortWeekdays().map((label, i) => (
           <div key={i}
-            className="py-2 text-center text-xs font-semibold text-gray-400 uppercase">
+            className="py-2 text-center text-xs font-semibold text-accent-amber-deep uppercase">
             {label}
           </div>
         ))}
@@ -611,7 +623,7 @@ const CalendarView = ({
         {/* Blank cells */}
         {Array.from({ length: blanks }).map((_, i) => (
           <div key={`b${i}`}
-            className="min-h-[100px] border-b border-r border-gray-50 bg-gray-50/30" />
+            className="min-h-[100px] border-b border-r border-line bg-canvas" />
         ))}
 
         {/* Day cells */}
@@ -626,12 +638,12 @@ const CalendarView = ({
 
           return (
             <div key={day}
-              className={`min-h-[100px] border-b border-r border-gray-50 p-1.5
-                ${isToday ? "bg-blue-50/60" : "hover:bg-gray-50/60"} transition-colors`}>
+              className={`min-h-[100px] border-b border-r border-line p-1.5
+                ${isToday ? "bg-accent-blue-soft" : "hover:bg-accent-blue-soft/70"} transition-colors`}>
               {/* Day number */}
               <div className={`w-6 h-6 flex items-center justify-center
                 text-xs font-semibold mb-1 rounded-full
-                ${isToday ? "bg-primary-600 text-white" : "text-gray-600"}`}>
+                ${isToday ? "bg-primary-600 text-white" : "text-ink-body"}`}>
                 {day}
               </div>
 
@@ -650,7 +662,7 @@ const CalendarView = ({
                   );
                 })}
                 {dayExams.length > 3 && (
-                  <p className="text-xs text-gray-400 px-1">
+                  <p className="text-xs text-ink-muted px-1">
                     {t("exams.moreCount", { count: dayExams.length - 3 })}
                   </p>
                 )}
@@ -705,10 +717,12 @@ const TimelineView = ({
 
   if (!allDates.length) {
     return (
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <BarChart2 className="w-12 h-12 mb-3 text-gray-200" />
-          <p className="font-medium text-gray-500">{t("exams.noDates")}</p>
+      <div className={cn("bg-surface rounded-xl border border-line shadow-card", DASH_TINT.amber.edge)}>
+        <div className="flex flex-col items-center justify-center py-20 text-ink-muted">
+          <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.amber.box)} aria-hidden="true">
+            <BarChart2 className="w-6 h-6" />
+          </div>
+          <p className="font-medium text-ink">{t("exams.noDates")}</p>
           <p className="text-sm mt-1">{t("exams.addDates")}</p>
         </div>
       </div>
@@ -744,13 +758,13 @@ const TimelineView = ({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className={cn("bg-surface rounded-xl border border-line shadow-card overflow-hidden", DASH_TINT.amber.edge)}>
       <div className="overflow-x-auto">
         <div className="min-w-[640px]">
           {/* Month header */}
-          <div className="flex border-b border-gray-100 bg-gray-50">
+          <div className="flex border-b border-line bg-accent-amber-soft">
             <div className="w-36 shrink-0 px-4 py-3 text-xs font-semibold
-                            text-gray-400 uppercase tracking-wide">
+                            text-accent-amber-deep uppercase tracking-wide">
               {t("common.type")}
             </div>
             <div className="flex-1 relative h-10">
@@ -758,8 +772,8 @@ const TimelineView = ({
                 <div key={m.label}
                   className="absolute top-0 h-full flex items-center"
                   style={{ left: `${m.pct}%` }}>
-                  <div className="w-px h-full bg-gray-200" />
-                  <span className="ml-1 text-xs text-gray-400 whitespace-nowrap">
+                  <div className="w-px h-full bg-accent-amber/30" />
+                  <span className="ml-1 text-xs text-accent-amber-deep whitespace-nowrap">
                     {m.label}
                   </span>
                 </div>
@@ -770,8 +784,8 @@ const TimelineView = ({
           {/* Rows */}
           {byType.map(({ id, label, exams: typeExams }) => (
             <div key={id}
-              className="flex border-b border-gray-50 hover:bg-gray-50/40 group">
-              <div className="w-36 shrink-0 px-4 py-3 text-sm text-gray-700
+              className="flex border-b border-line hover:bg-accent-blue-soft/70 group">
+              <div className="w-36 shrink-0 px-4 py-3 text-sm text-ink
                               font-medium truncate">
                 {label}
               </div>
@@ -867,19 +881,19 @@ const ExamDetailSlideOver = ({
               { labelKey: "academic.passMark",     value: String(exam.passMark)                    },
             ].map(({ labelKey, value }) => (
               <div key={labelKey}>
-                <p className="text-xs text-gray-400 font-medium">{t(labelKey)}</p>
-                <p className="font-semibold text-gray-800 mt-0.5">{value || "—"}</p>
+                <p className="text-xs text-ink-muted font-medium">{t(labelKey)}</p>
+                <p className="font-semibold text-ink mt-0.5">{value || "—"}</p>
               </div>
             ))}
           </div>
 
           {/* Description */}
           {exam.description && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase mb-1">
+            <div className="bg-accent-slate-soft rounded-xl p-4">
+              <p className="text-xs font-semibold text-ink-muted uppercase mb-1">
                 {t("common.description")}
               </p>
-              <p className="text-sm text-gray-700 leading-relaxed">{exam.description}</p>
+              <p className="text-sm text-ink leading-relaxed">{exam.description}</p>
             </div>
           )}
 
@@ -928,8 +942,8 @@ const ExamDetailSlideOver = ({
           {canManage && (
             <button
               onClick={() => { navigate(`/exams/${exam._id}?tab=marks`); onClose(); }}
-              className="flex-1 py-2 bg-indigo-50 text-indigo-700 rounded-xl
-                         text-sm font-semibold hover:bg-indigo-100 transition-colors">
+              className="flex-1 py-2 bg-primary-50 text-primary-700 rounded-xl
+                         text-sm font-semibold hover:bg-primary-100 transition-colors">
               {t("exams.enterMarks")}
             </button>
           )}
@@ -1090,7 +1104,7 @@ export default function ExamsPage() {
     return [
       {
         id: "published", label: t("results.published"),
-        value: r.published ?? 0, color: "text-purple-600",
+        value: r.published ?? 0, color: "text-accent-slate-deep",
         // Published results belong to published exams; the list is where you
         // see them, and it is already on this page.
         go: (r.published ?? 0) > 0 ? () => setStatusFilter("published") : null,
@@ -1098,7 +1112,7 @@ export default function ExamsPage() {
       },
       {
         id: "pending", label: t("results.pending"),
-        value: r.pending ?? 0, color: "text-amber-600",
+        value: r.pending ?? 0, color: "text-warning-text",
         // Results computed but not published. The publish button lives on the
         // exam's own results tab, so go to the exam that is waiting; with more
         // than one, filter to the completed exams instead of picking for them.
@@ -1110,7 +1124,7 @@ export default function ExamsPage() {
       },
       {
         id: "missing", label: t("exams.missingGrades"),
-        value: r.missingGrades ?? 0, color: "text-red-600",
+        value: r.missingGrades ?? 0, color: "text-danger-text",
         // One unmarked pupil-subject. The mark is entered on the exam's marks
         // tab, which is the only place this number can honestly point.
         go: (r.missingGrades ?? 0) > 0 && missingExam
@@ -1120,7 +1134,8 @@ export default function ExamsPage() {
       },
       {
         id: "avg", label: t("exams.avgScore"),
-        value: `${r.averagePerformance ?? 0}%`, color: "text-green-600",
+        // On /20, over this school year's results (as the pass rate beside it).
+        value: `${Number(r.averagePerformance ?? 0).toFixed(2)}/20`, color: "text-accent-amber-deep",
         // The analytics page is where this figure is computed and broken down.
         go: (r.published ?? 0) + (r.pending ?? 0) > 0
           ? () => navigate("/exams/results")
@@ -1129,7 +1144,7 @@ export default function ExamsPage() {
       },
       {
         id: "passRate", label: t("exams.passRate"),
-        value: `${r.passRate ?? 0}%`, color: "text-primary-600",
+        value: `${r.passRate ?? 0}%`, color: "text-accent-slate-deep",
         go: (r.published ?? 0) + (r.pending ?? 0) > 0
           ? () => navigate("/exams/results")
           : null,
@@ -1267,11 +1282,14 @@ export default function ExamsPage() {
 
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("exams.title")}</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {t("exams.blurb")}
-          </p>
+        <div className="flex items-start gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">{t("exams.title")}</h1>
+            <p className="text-ink-muted text-sm mt-1">
+              {t("exams.blurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1290,7 +1308,7 @@ export default function ExamsPage() {
               className="relative p-2 border border-gray-200 rounded-xl bg-white
                          hover:bg-gray-50 transition-colors"
               title={t("exams.alerts")}>
-              <Bell className="w-4 h-4 text-gray-500" />
+              <Bell className={cn("w-4 h-4", DASH_TINT.amber.glyph)} />
               {alerts.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white
                                  text-xs rounded-full w-4 h-4 flex items-center
@@ -1357,45 +1375,50 @@ export default function ExamsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <StatCard
             label={t("common.total")}     value={d.total}
-            icon={FileText}   color="bg-gray-100 text-gray-600"
+            icon={FileText}   tone="exams"
             highlight={statusFilter === "all"}
             onClick={() => setStatusFilter("all")}
           />
           <StatCard
             label={t("examStatus.draft")}     value={d.draft}
-            icon={FileText}   color="bg-gray-100 text-gray-400"
+            icon={FileText}   tone="exams"
             highlight={statusFilter === "draft"}
             onClick={() => setStatusFilter("draft")}
           />
           <StatCard
             label={t("examStatus.scheduled")} value={d.scheduled}
-            icon={Clock}      color="bg-indigo-50 text-indigo-600"
+            icon={Clock}      tone="exams"
             highlight={statusFilter === "scheduled"}
             onClick={() => setStatusFilter("scheduled")}
           />
           <StatCard
             label={t("examStatus.ongoing")}   value={d.ongoing}
-            icon={AlertCircle}color="bg-amber-50 text-amber-600"
+            icon={AlertCircle}tone="exams"
             highlight={statusFilter === "ongoing"}
             onClick={() => setStatusFilter("ongoing")}
           />
           <StatCard
             label={t("examStatus.completed")} value={d.completed}
-            icon={CheckCircle}color="bg-green-50 text-green-600"
+            icon={CheckCircle}tone="exams"
             highlight={statusFilter === "completed"}
             onClick={() => setStatusFilter("completed")}
           />
           <StatCard
             label={t("results.published")} value={d.published}
-            icon={TrendingUp} color="bg-purple-50 text-purple-600"
+            icon={TrendingUp} tone="reports"
             highlight={statusFilter === "published"}
             onClick={() => setStatusFilter("published")}
           />
           <StatCard
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
-            icon={BookOpen}   color="bg-teal-50 text-teal-600"
-            sub={t("exams.schoolAvg")}
+            icon={BookOpen}   tone="reports"
+            sub={dashData?.dashboard?.results?.passRateScope
+              ? t("exams.passRateScope", {
+                  year: dashData.dashboard.results.passRateScope.academicYear,
+                  mark: dashData.dashboard.results.passRateScope.passMark,
+                })
+              : t("exams.schoolAvg")}
             onClick={() => navigate("/exams/results")}
           />
         </div>
@@ -1411,9 +1434,14 @@ export default function ExamsPage() {
                 results tab of the exam awaiting a publish, and the analytics
                 page for the two figures that page actually computes. */}
       {dashData?.dashboard?.results && (
-        <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
+        <div className={cn("bg-surface rounded-xl border border-line px-5 py-4 shadow-card", DASH_TINT.slate.edge)}>
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+                <BarChart3 className="h-4 w-4" />
+              </span>
+              {t("exams.resultsOverview")}
+            </h3>
             <div className="flex flex-wrap gap-6">
               {resultTiles.map((item) => (
                 <button
@@ -1429,7 +1457,7 @@ export default function ExamsPage() {
                   }`}
                 >
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
-                  <p className="text-xs text-gray-400 font-medium">{item.label}</p>
+                  <p className="text-xs text-ink-muted font-medium">{item.label}</p>
                 </button>
               ))}
             </div>
@@ -1438,7 +1466,7 @@ export default function ExamsPage() {
       )}
 
       {/* ── Filters Bar ─────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+      <div className="bg-surface rounded-xl border border-line shadow-card">
         {/* Primary filter row */}
         <div className="p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           {/* Search */}
@@ -1582,12 +1610,11 @@ export default function ExamsPage() {
 
         ) : filtered.length === 0 ? (
           <div className="text-center py-20">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center
-                            justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-gray-300" />
+            <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4", DASH_TINT.amber.box)}>
+              <FileText className="w-8 h-8" />
             </div>
-            <p className="font-semibold text-gray-700">{t("exams.none")}</p>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="font-semibold text-ink">{t("exams.none")}</p>
+            <p className="text-ink-muted text-sm mt-1">
               {activeFilterCount > 0
                 ? t("exams.adjustFilters")
                 : t("exams.createFirst")
@@ -1630,8 +1657,8 @@ export default function ExamsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 text-xs font-semibold text-gray-500
-                               uppercase tracking-wide border-b border-gray-100">
+                <tr className="bg-surface text-xs font-semibold text-ink-muted
+                               uppercase tracking-wide border-b border-line">
                   <th className="px-4 py-3 text-left w-8">#</th>
                   <th className="px-4 py-3 text-left">{t("academic.exam")}</th>
                   <th className="px-4 py-3 text-left">{t("academic.class")}</th>
@@ -1641,7 +1668,7 @@ export default function ExamsPage() {
                   <th className="px-4 py-3 text-left">{t("common.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-line">
                 {filtered.map((exam, i) => (
                   <ExamRow
                     key={exam._id}

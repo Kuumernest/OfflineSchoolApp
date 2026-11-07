@@ -16,8 +16,10 @@ import {
   updateSubjectDetailed,
 }                       from "@/services/class.service";
 import { useToast }     from "@/components/ui/Toast";
+import { coefficientCascadeNotice } from "../coefficientCascade";
 import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
+import { PageIcon }     from "@/components/ui/PageHeader";
 import type { Class, Teacher, Subject } from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -223,25 +225,8 @@ export default function EditSubjectPage() {
        * exams, it has to say so, because a silent cascade is the same problem
        * from the other side: averages that moved with nothing to show it.
        */
-      if (cascade && cascade.examSubjectsUpdated > 0) {
-        toast({
-          kind:  cascade.reprocessRequired ? "warning" : "success",
-          title: t("subjectsEdit.coeffAppliedTitle"),
-          message: [
-            t("subjectsEdit.coeffApplied", {
-              count: cascade.examSubjectsUpdated,
-              exams: cascade.examsAffected,
-            }),
-            cascade.skippedOverridden > 0
-              ? t("subjectsEdit.coeffSkippedOwn", { count: cascade.skippedOverridden })
-              : null,
-            cascade.skippedFinalised > 0
-              ? t("subjectsEdit.coeffSkippedFinal", { count: cascade.skippedFinalised })
-              : null,
-            cascade.reprocessRequired ? t("subjectsEdit.coeffReprocess") : null,
-          ].filter(Boolean).join(" "),
-        });
-      }
+      const notice = coefficientCascadeNotice(t, cascade);
+      if (notice) toast(notice);
       navigate("/subjects", { state: { updated: true } });
     },
     onError: (err: unknown) => {
@@ -307,7 +292,7 @@ export default function EditSubjectPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-50">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-500">{t("subjectsEdit.loading")}</p>
       </div>
     );
@@ -327,7 +312,7 @@ export default function EditSubjectPage() {
         </p>
         <button
           onClick={() => navigate("/subjects")}
-          className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+          className="mt-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
         >
           {t("subjectsEdit.back")}
         </button>
@@ -338,9 +323,9 @@ export default function EditSubjectPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
 
-      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
         <button
           type="button"
           onClick={handleDiscard}
@@ -350,9 +335,11 @@ export default function EditSubjectPage() {
           <ChevronLeft size={20} />
         </button>
 
+        <PageIcon />
+
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-gray-900">{t("subjectsEdit.title")}</h1>
-          <p className="truncate text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-ink">{t("subjectsEdit.title")}</h1>
+          <p className="truncate text-sm text-ink-muted">
             {subject?.name ?? t("subjectsEdit.subtitle")}
           </p>
         </div>
@@ -362,7 +349,7 @@ export default function EditSubjectPage() {
             type="button"
             onClick={handleSubmit}
             disabled={isBusy}
-            className="rounded-xl bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+            className="rounded-xl bg-primary-50 px-4 py-2 text-sm font-bold text-primary-600 hover:bg-primary-100 disabled:opacity-50 transition-colors"
           >
             {isBusy
               ? <RefreshCw size={14} className="animate-spin" />
@@ -415,8 +402,8 @@ export default function EditSubjectPage() {
                   errors.name
                     ? "border-red-400 bg-red-50"
                     : form.name.trim() !== originalForm.name.trim()
-                      ? "border-indigo-400 bg-indigo-50"
-                      : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"
+                      ? "border-primary-400 bg-primary-50"
+                      : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"
                 )}
               >
                 <BookOpen
@@ -461,8 +448,8 @@ export default function EditSubjectPage() {
                   "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
                   "text-gray-900 placeholder-gray-400 outline-none transition-colors",
                   form.code.trim() !== originalForm.code.trim()
-                    ? "border-indigo-300 bg-indigo-50"
-                    : "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                    ? "border-primary-300 bg-primary-50"
+                    : "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               />
             </Field>
@@ -490,8 +477,8 @@ export default function EditSubjectPage() {
                   errors.coefficient
                     ? "border-red-300 focus:border-red-500"
                     : form.coefficient.trim() !== originalForm.coefficient.trim()
-                      ? "border-indigo-300 bg-indigo-50"
-                      : "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                      ? "border-primary-300 bg-primary-50"
+                      : "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               />
             </Field>
@@ -504,8 +491,8 @@ export default function EditSubjectPage() {
                   errors.classId
                     ? "border-red-400 bg-red-50"
                     : form.classId !== originalForm.classId
-                      ? "border-indigo-300 bg-indigo-50"
-                      : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"
+                      ? "border-primary-300 bg-primary-50"
+                      : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"
                 )}
               >
                 <School
@@ -543,8 +530,8 @@ export default function EditSubjectPage() {
                   "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
                   "text-gray-900 outline-none transition-colors",
                   form.teacherId !== originalForm.teacherId
-                    ? "border-indigo-300 bg-indigo-50"
-                    : "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                    ? "border-primary-300 bg-primary-50"
+                    : "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               >
                 <option value="">
@@ -576,7 +563,7 @@ export default function EditSubjectPage() {
                 "text-sm font-bold text-white transition-colors",
                 isBusy || !hasChanges
                   ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {isBusy ? (

@@ -329,12 +329,21 @@ const { absoluteLogoUrl }  = require("../src/services/reportCardData.service");
 
 const seeded  = { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS };
 const fakeReq = { protocol: "https", headers: {}, get: () => "school.example.com" };
+
+// A logo that is really on disk: the resolver (print/imageSource.js) prints
+// no logo rather than a link to a file that is not there.
+const LOGO_DIR  = require("path").join(__dirname, "../src/uploads/logos");
+const LOGO_FILE = "check-report-card-logo.jpg";
+require("fs").mkdirSync(LOGO_DIR, { recursive: true });
+require("fs").writeFileSync(require("path").join(LOGO_DIR, LOGO_FILE),
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0]));
+process.on("exit", () => { try { require("fs").unlinkSync(require("path").join(LOGO_DIR, LOGO_FILE)); } catch {} });
 const tplOpts = {
   template:   seeded,
   schoolName: "GBHS Molyko",
   school: {
     name:  "GBHS Molyko",
-    logo:  absoluteLogoUrl("/uploads/logos/x.jpg", fakeReq),
+    logo:  absoluteLogoUrl(`/uploads/logos/${LOGO_FILE}`, fakeReq),
     motto: "Knowledge and Service",
   },
 };
@@ -368,11 +377,20 @@ check("and the school's motto",               seq.includes("Knowledge and Servic
 // a stored file became "data:image/png;base64,/uploads/logos/x.jpg" and no
 // browser would load it. The card printed with no logo and nothing said why.
 check("the logo is an absolute URL, used as the src",
-  seq.includes('src="https://school.example.com/uploads/logos/x.jpg"'), true);
+  seq.includes(`src="https://school.example.com/uploads/logos/${LOGO_FILE}"`), true);
 check("and is not wrapped in a base64 prefix it does not need",
   /base64,https/.test(seq), false);
 check("absoluteLogoUrl leaves a data URI alone",
   absoluteLogoUrl("data:image/png;base64,AAA", fakeReq), "data:image/png;base64,AAA");
+// The legacy shape: inline base64 with no prefix, which every school had
+// before logos became files. "/9j/" is how JPEG bytes always begin in base64,
+// so it was taken for a path and printed as https://host/9j/4AAQ… — a 404.
+const LEGACY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1,
+  ...Array(60).fill(7)]).toString("base64");
+check("a legacy inline JPEG logo becomes a data URI, not a URL on the host",
+  absoluteLogoUrl(LEGACY_JPEG, fakeReq), `data:image/jpeg;base64,${LEGACY_JPEG}`);
+check("a stored path whose file is gone is no logo, not a broken image",
+  absoluteLogoUrl("/uploads/logos/not-there.jpg", fakeReq), null);
 check("and a URL that is already absolute",
   absoluteLogoUrl("https://cdn.example/x.png", fakeReq), "https://cdn.example/x.png");
 
@@ -633,9 +651,10 @@ for (const lang of ["en", "fr"]) {
   check(`${lang}: and the French margin`,
     h.includes("République du Cameroun") &&
     h.includes("Ministère des Enseignements Secondaires"), true);
-  check(`${lang}: the regional delegation is named`,
+  // A9: the French column names the region in French, with its article.
+  check(`${lang}: the regional delegation is named, in each column's language`,
     h.includes("Regional Delegation of South West") &&
-    h.includes("Délégation Régionale de South West"), true);
+    h.includes("Délégation Régionale du Sud-Ouest"), true);
   check(`${lang}: and the divisional one`,
     h.includes("Divisional Delegation of Fako") &&
     h.includes("Délégation Départementale de Fako"), true);
@@ -804,7 +823,7 @@ check("a school's own template carries the watermark",
 check("under the template's content",
   watermarkOf(tplWm).at < tplWm.indexOf('class="report-wrapper"'), true);
 check("and the template's own header logo is unchanged",
-  /<img\s+src="https:\/\/school\.example\.com\/uploads\/logos\/x\.jpg"\s+class="school-logo"/
+  /<img\s+src="https:\/\/school\.example\.com\/uploads\/logos\/check-report-card-logo\.jpg"\s+class="school-logo"/
     .test(tplWm), true);
 check("the template's own CSS comes after the watermark's, so it can override it",
   tplWm.indexOf(".school-watermark {") < tplWm.indexOf(".report-wrapper {"), true);
@@ -818,6 +837,24 @@ check("a bare base64 logo is wrapped the way the header wraps it",
   watermarkOf(renderReportCard(payload(),
     { ...tplOpts, school: { name: "GBHS Molyko", logoBase64: "AAAA" } }).html)?.src,
   "data:image/png;base64,AAAA");
+
+console.log("--- on a phone and on paper ---");
+// A card opens in a fresh tab or a WebView. Without the viewport meta a phone
+// lays it out 980px wide and shows it postage-stamp sized.
+const builtinCard = render();
+const templateCard = renderReportCard(payload(), tplOpts).html;
+for (const [which, html] of [["built-in", builtinCard], ["template", templateCard]]) {
+  check(`${which}: a viewport meta, so a phone lays it out at its own width`,
+    /<meta name="viewport" content="width=device-width, initial-scale=1">/.test(html), true);
+  check(`${which}: A4 at 10mm, colour kept in print, screen-only controls hidden`,
+    [/@page \{ size: A4; margin: 10mm; \}/.test(html) || /@page\s*\{\s*size:\s*A4;\s*margin:\s*10mm;/.test(html),
+     /print-color-adjust: exact/.test(html),
+     /\.no-print, \.screen-only \{ display: none !important; \}/.test(html)], [true, true, true]);
+  check(`${which}: on a narrow screen the marks table scrolls inside itself`,
+    /@media screen and \(max-width: 600px\)[\s\S]*table \{ display: block; max-width: 100%; overflow-x: auto;/.test(html), true);
+}
+check("template: the phone rules come after the school's own CSS, so a template cannot undo them",
+  templateCard.lastIndexOf("@media screen and (max-width: 600px)") > templateCard.indexOf(".report-wrapper {"), true);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

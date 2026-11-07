@@ -102,7 +102,11 @@
     "error": "Erreur",
     "ok": "OK",
     "male": "Masculin",
-    "female": "Féminin"
+    "female": "Féminin",
+    "needsInternetTitle": "Pas de connexion internet",
+    "needsInternet": "Cette action nécessite une connexion internet. Connectez-vous et réessayez.",
+    "savedOnPhoneOnly": "Enregistré sur ce téléphone uniquement. La copie de l'école n'a pas été mise à jour car cela nécessite une connexion internet — enregistrez à nouveau une fois connecté.",
+    "notSentYet": "Pas encore envoyé"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -225,6 +229,7 @@
     "none": "Aucun résultat",
     "searchPh": "Rechercher par nom, numéro d'admission ou classe…",
     "gradeDistribution": "Répartition des notes",
+    "remarkDistribution": "Appréciations",
     "noGradeData": "Aucune donnée de notes",
     "scoreDistribution": "Répartition des scores",
     "passFailSplit": "Répartition réussite / échec",
@@ -249,15 +254,15 @@
       "retry": "Réessayer",
       "reportCard": "Bulletin",
       "myResults": "Mes résultats",
-      "shareTitle": "📋 Mon bulletin",
+      "shareTitle": "Mon bulletin",
       "examLabel": "Évaluation :",
       "scoreLabel": "Note :",
       "gradeLabel": "Mention :",
       "positionLabel": "Rang :",
       "resultLabel": "Résultat :",
       "inClass": "#{{pos}} de la classe",
-      "passFlag": "✅ ADMIS(E)",
-      "failFlag": "❌ AJOURNÉ(E)",
+      "passFlag": "ADMIS(E)",
+      "failFlag": "AJOURNÉ(E)",
       "passedWith": "Admis(e) avec {{pct}} %",
       "scoredNotPassed": "{{pct}} % — pas encore admis(e)",
       "shareFailed": "Échec du partage",
@@ -881,7 +886,7 @@
     "assignTeacher": "Affecter un enseignant",
     "loadFailed": "Impossible de charger les affectations",
     "byTeacher": "Par enseignant",
-    "brokenLinks": "Liens rompus",
+    "brokenLinks": "Attributions à corriger",
     "teachersAssigned": "Enseignants affectés",
     "classesCovered": "Classes couvertes",
     "totalLessons": "Total des cours",
@@ -1013,7 +1018,7 @@
     "gradeBands": "Barèmes de notation",
     "gpaSystem": "Système de moyenne pondérée",
     "gpaEnable": "Activer le suivi de la moyenne pondérée",
-    "passMarkPct": "Note de passage (%)",
+    "passMarkPct": "Note de passage (/20)",
     "minPct": "Min %",
     "maxPct": "Max %",
     "saveGrading": "Enregistrer le barème",
@@ -1115,6 +1120,10 @@
       "other": "{{count}} paiements en attente de synchronisation"
     },
     "pendingReceipt": "Reçu en attente",
+    "provisionalReceipt": "Reçu provisoire",
+    "provisionalReceiptHint": "Ce paiement n'a pas encore atteint le serveur de l'école. Le reçu portera la mention PROVISOIRE ; le reçu officiel sera disponible après la synchronisation du téléphone.",
+    "printProvisional": "Reçu provisoire",
+    "provisionalRef": "Réf. provisoire {{ref}}",
     "recordedOffline": "Enregistré sur cet appareil. Il sera transmis au serveur lors de la prochaine synchronisation, avec le numéro de reçu.",
     "classesLoading": "Chargement des classes…",
     "classesFailed": "Impossible de charger les classes",
@@ -1492,7 +1501,153 @@
     "arrived": "Arrivé",
     "left": "Parti",
     "noGateScan": "Aucun passage au portail",
-    "gateBlurb": "Heures enregistrées au portail de l’école."
+    "gateBlurb": "Heures enregistrées au portail de l’école.",
+    "chooseRecipient": "À qui souhaitez-vous écrire ?",
+    "noRecipients": "Personne n'est disponible pour recevoir un message.",
+    "writeMessage": "Écrire un message…",
+    "messageDeleted": "Ce message a été supprimé",
+    "todayAttendance": "Présence du jour",
+    "noPeriodsToday": "Aucun relevé de créneau pour aujourd'hui",
+    "attendanceBySubject": "Présence par matière",
+    "general": "Général",
+    "nav": {
+      "home": "Accueil",
+      "results": "Résultats",
+      "attendance": "Présences",
+      "fees": "Frais",
+      "messages": "Messages",
+      "main": "Sections du portail"
+    },
+    "home": {
+      "title": "Vos enfants",
+      "subtitle": "L’essentiel en un coup d’œil, une fiche par enfant.",
+      "latestResult": "Dernier résultat",
+      "noResults": "Aucun résultat publié pour l’instant",
+      "outOf": "/20",
+      "rank": "{{position}} sur {{outOf}}",
+      "up": "+{{delta}} par rapport à la {{exam}}",
+      "down": "−{{delta}} par rapport à la {{exam}}",
+      "same": "Identique à la {{exam}}",
+      "attendanceMonth": "Présences ce mois-ci",
+      "daysPresent": "Présent {{present}} jours sur {{marked}}",
+      "noRegister": "Aucun appel fait ce mois-ci",
+      "balance": "Solde des frais",
+      "paidUp": "À jour",
+      "dueOn": "Échéance le {{date}}",
+      "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
+      "overdueSince": "En retard depuis le {{date}}",
+      "nextExam": "Prochain examen",
+      "noExam": "Aucun examen prévu",
+      "startsOn": "Début le {{date}}",
+      "latestNews": "Dernières nouvelles de l’école",
+      "seeAll": "Tout voir",
+      "viewChild": "Ouvrir {{name}}",
+      "empty": "Aucun enfant n’est encore lié à ce code.",
+      "emptyHint": "Demandez au secrétariat de l’école de les ajouter.",
+      "refresh": "Actualiser"
+    },
+    "childSwitcher": "Choisir un enfant",
+    "account": "Compte",
+    "resultsScreen": {
+      "title": "Résultats",
+      "trend": "Évolution de la moyenne",
+      "trendLabel": "Moyenne sur 20 de chaque résultat publié, du plus ancien au plus récent",
+      "showTable": "Afficher sous forme de tableau",
+      "exam": "Examen",
+      "average": "Moyenne",
+      "term": "Trimestre {{term}} · {{year}}",
+      "subject": "Matière",
+      "mark": "Note /20",
+      "coef": "Coef.",
+      "remark": "Appréciation",
+      "rank": "{{position}} sur {{outOf}}",
+      "passed": "Admis",
+      "belowPass": "Sous la moyenne",
+      "absent": "Absent",
+      "published": "Publié le {{date}}",
+      "reportCard": "Bulletin (PDF)",
+      "reportCardHint": "Ouvre la fenêtre d’impression : choisissez « Enregistrer au format PDF ».",
+      "notIssued": "L’école n’a pas encore délivré ce bulletin.",
+      "empty": "Aucun résultat publié pour l’instant",
+      "emptyHint": "Les résultats apparaissent ici dès que l’école les publie.",
+      "chooseTerm": "Choisir un trimestre",
+      "openFailed": "Impossible d’ouvrir le bulletin. Vérifiez votre connexion et réessayez."
+    },
+    "attendanceScreen": {
+      "title": "Présences",
+      "prevMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "rate": "Taux de présence",
+      "rateHint": "Présent, sur tous les appels faits ce mois-ci",
+      "marked": {
+        "one": "{{count}} appel fait",
+        "other": "{{count}} appels faits"
+      },
+      "present": "Présent",
+      "absent": "Absent",
+      "late": "En retard",
+      "excused": "Excusé",
+      "partial": "Absent en partie",
+      "noRecord": "Pas d’appel",
+      "calendar": "Calendrier",
+      "legend": "Légende",
+      "days": "Jour par jour",
+      "arrived": "Arrivé à {{time}}",
+      "left": "Parti à {{time}}",
+      "bySubject": "Par matière",
+      "empty": "Aucun appel fait en {{month}}",
+      "emptyHint": "Les jours apparaissent ici dès que l’école fait l’appel.",
+      "weekdays": [
+        "Lun",
+        "Mar",
+        "Mer",
+        "Jeu",
+        "Ven"
+      ]
+    },
+    "feesScreen": {
+      "title": "Frais",
+      "balance": "Solde à payer",
+      "paidUp": "Tout est réglé",
+      "paidUpHint": "Rien n’est dû pour {{name}} pour le moment.",
+      "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
+      "overdueSince": "Le paiement était dû le {{date}}",
+      "dueOn": "Prochain paiement le {{date}}",
+      "charged": "Facturé",
+      "waived": "Remise",
+      "paid": "Payé",
+      "charges": "Ce que l’école a facturé",
+      "noDueDate": "Sans échéance",
+      "dueBy": "Échéance le {{date}}",
+      "payments": "Paiements",
+      "noPayments": "Aucun paiement enregistré pour l’instant",
+      "receipt": "Reçu",
+      "receiptFor": "Reçu {{no}}",
+      "reversal": "Annulation",
+      "plan": "Échéancier",
+      "instalment": "Versement {{seq}}",
+      "empty": "Aucun frais enregistré pour l’instant",
+      "emptyHint": "Les frais apparaissent ici dès que l’école les facture.",
+      "receiptFailed": "Impossible d’ouvrir le reçu. Vérifiez votre connexion et réessayez."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Tout marquer comme lu",
+      "new": "Nouveau",
+      "about": "Concerne {{names}}",
+      "you": "Vous",
+      "send": "Envoyer",
+      "back": "Retour aux messages",
+      "writeTo": "Écrire à un enseignant ou au secrétariat",
+      "noConversationsHint": "Commencez une conversation avec l’enseignant de votre enfant ou le secrétariat.",
+      "noNoticesHint": "Les absences, rappels de frais et résultats publiés apparaissent ici.",
+      "noNewsHint": "Les annonces de l’école apparaissent ici.",
+      "tabMessages": "Messages",
+      "tabNotices": "Avis",
+      "tabNews": "Actualités"
+    }
   },
   "codes": {
     "title": "Accès parents",
@@ -1637,7 +1792,7 @@
     "notMatchErr": "Les mots de passe ne correspondent pas.",
     "failed": "Échec de la mise à jour du mot de passe.",
     "genericError": "Une erreur est survenue. Veuillez réessayer.",
-    "successTitle": "Mot de passe défini ! 🎉",
+    "successTitle": "Mot de passe défini !",
     "successBody": "Votre mot de passe a été enregistré. Bienvenue à bord !",
     "letsGo": "C'est parti",
     "signOutTitle": "Déconnexion",
@@ -2265,7 +2420,7 @@
     "labelEnrollmentNo": "N° de matricule",
     "labelTempPassword": "Mot de passe temporaire",
     "btnCopy": "Copier",
-    "credentialsHint": "📱 Communiquez ces informations à l'élève. Le mot de passe temporaire ci-dessus ne sert qu'à la première connexion — l'élève définira ensuite le sien.",
+    "credentialsHint": "Communiquez ces informations à l'élève. Le mot de passe temporaire ci-dessus ne sert qu'à la première connexion — l'élève définira ensuite le sien.",
     "copyLabelEnrollment": "Numéro de matricule",
     "copyLabelPassword": "Mot de passe",
     "errLoadFailed": "Échec du chargement des candidatures. Tirez vers le bas pour réessayer.",
@@ -2299,7 +2454,7 @@
     "btnRetry": "Réessayer",
     "emptyTitle": "Tout est à jour !",
     "emptySubtitle": "Aucune candidature en attente pour le moment. Les nouvelles demandes apparaîtront ici.",
-    "approvedTitle": "Approbation réussie 🎉",
+    "approvedTitle": "Approbation réussie",
     "reviewSubtitle": "Approuvez ou rejetez cette candidature",
     "offlineBanner": "Approuvée hors ligne — le compte de l'élève sera créé dès la reconnexion.",
     "emailSentBanner": "Les identifiants ont été envoyés par e-mail à l'élève.",
@@ -2454,7 +2609,7 @@
       "other": "{{count}} à venir"
     },
     "emptyClassesTitle": "Aucun cours prévu aujourd'hui",
-    "emptyClassesSub": "Profitez de votre journée libre ! ☕",
+    "emptyClassesSub": "Profitez de votre journée libre !",
     "nowBadge": "EN COURS",
     "subjectFallback": "Matière",
     "classFallback": "Classe",
@@ -2505,7 +2660,7 @@
       "other": "{{count}} devoirs à rendre très bientôt !"
     },
     "urgentView": "Voir →",
-    "sectionPinned": "📌 Épinglées",
+    "sectionPinned": "Épinglées",
     "sectionTodaySchedule": "Cours du jour",
     "sectionQuickAccess": "Accès rapide",
     "sectionHomework": "Devoirs",
@@ -2649,7 +2804,7 @@
     "skipBody": "Vous pourrez compléter votre profil plus tard dans les Paramètres.",
     "skipConfirm": "Ignorer",
     "cancel": "Annuler",
-    "savedTitle": "Profil enregistré ! 🎉",
+    "savedTitle": "Profil enregistré !",
     "savedBody": "Votre profil a bien été mis à jour.",
     "continueBtn": "Continuer",
     "errorTitle": "Erreur",
@@ -2733,7 +2888,7 @@
     "cancel": "Annuler",
     "sessionErrorTitle": "Erreur de session",
     "sessionErrorBody": "Votre session a expiré. Veuillez vous reconnecter.",
-    "savedTitle": "Profil enregistré ! 🎉",
+    "savedTitle": "Profil enregistré !",
     "savedBody": "Votre profil a bien été configuré.",
     "continueBtn": "Continuer",
     "saveFailedTitle": "Échec de l'enregistrement",
@@ -2855,8 +3010,8 @@
   "studentAdd": {
     "title": "Ajouter un élève",
     "headerSubOnline": "Enregistré localement, puis synchronisé",
-    "headerSubOffline": "📴 Hors ligne — synchronisation à la reconnexion",
-    "offlineBanner": "📴 Vous êtes hors ligne. L'élève sera enregistré sur cet appareil, puis synchronisé automatiquement à la reconnexion.",
+    "headerSubOffline": "Hors ligne — synchronisation à la reconnexion",
+    "offlineBanner": "Vous êtes hors ligne. L'élève sera enregistré sur cet appareil, puis synchronisé automatiquement à la reconnexion.",
     "directEnrollment": "Inscription directe",
     "directEnrollmentNote": "enregistrement sur l'appareil, puis synchronisation avec le serveur. Fonctionne aussi hors ligne !",
     "syncPending": "Enregistré localement — synchronisation…",
@@ -2885,12 +3040,12 @@
     "summaryEmailSent": "E-mail envoyé",
     "summaryStatus": "Statut",
     "pendingSync": "Synchronisation en attente…",
-    "emailSentYes": "✅ Envoyé",
-    "emailSentNo": "❌ Non envoyé",
-    "statusSavedOffline": "📱 Enregistré hors ligne",
+    "emailSentYes": "Envoyé",
+    "emailSentNo": "Non envoyé",
+    "statusSavedOffline": "Enregistré hors ligne",
     "credTitle": "Communiquer les identifiants",
-    "credEnrollmentLabel": "📋 Matricule (identifiant)",
-    "credPasswordLabel": "🔑 Mot de passe temporaire",
+    "credEnrollmentLabel": "Matricule (identifiant)",
+    "credPasswordLabel": "Mot de passe temporaire",
     "copy": "Copier",
     "copied": "✓ Copié",
     "credHint": "L'élève doit changer ce mot de passe à la première connexion.",
@@ -2901,7 +3056,7 @@
     "sectionContact": "Coordonnées",
     "sectionGuardian": "Tuteur / Parent",
     "loadingClasses": "Chargement des classes…",
-    "noClasses": "⚠ Aucune classe trouvée. ",
+    "noClasses": "Aucune classe trouvée.",
     "addClassFirst": "Créez d'abord une classe",
     "selectClass": "Choisir la classe",
     "selectClassPlaceholder": "Choisir une classe…",
@@ -3012,7 +3167,9 @@
     "movedMessage": "{{name}} a été déplacé(e) vers {{className}}.",
     "moveFailed": "Échec du déplacement.",
     "error": "Erreur",
-    "ok": "OK"
+    "ok": "OK",
+    "changePending": "Enregistré sur ce téléphone. La modification est envoyée à l'école automatiquement dès qu'il y a une connexion.",
+    "changeRefused": "L'école n'a pas accepté une modification de cet élève. Ouvrez Modifications en attente pour voir pourquoi, puis réessayez ou abandonnez-la."
   },
   "studentSettings": {
     "title": "Paramètres",
@@ -3052,7 +3209,7 @@
     "profileCompleteCheck": "Profil complet ✓",
     "tapToCompleteSetup": "Touchez pour compléter",
     "changePassword": "Changer le mot de passe",
-    "passwordChangeRequired": "⚠️ Changement de mot de passe requis",
+    "passwordChangeRequired": "Changement de mot de passe requis",
     "updateLoginPassword": "Modifier votre mot de passe de connexion",
     "updateLoginPasswordBelow": "Modifiez ci-dessous votre mot de passe de connexion.",
     "mustSetNewPassword": "Vous devez définir un nouveau mot de passe pour continuer.",
@@ -3065,7 +3222,7 @@
     "passwordsMatch": "✓ Les mots de passe correspondent",
     "passwordsNoMatch": "✗ Les mots de passe ne correspondent pas",
     "saveNewPassword": "Enregistrer le mot de passe",
-    "pwdChangedTitle": "Mot de passe modifié ✅",
+    "pwdChangedTitle": "Mot de passe modifié",
     "pwdChangedBody": "Votre mot de passe a bien été mis à jour.",
     "errCurrentRequired": "Veuillez saisir votre mot de passe actuel.",
     "errMinLength": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
@@ -3508,7 +3665,7 @@
     "card": {
       "live": "En ligne",
       "draft": "Brouillon",
-      "noClass": "⚠ Aucune classe attribuée — modifiez pour corriger",
+      "noClass": "Aucune classe attribuée — modifiez pour corriger",
       "statQuestions": "Questions",
       "statTime": "Durée",
       "statResponses": "Réponses",
@@ -3616,8 +3773,8 @@
     "sourceQuiz": "Quiz",
     "marks": "{{obtained}} / {{total}} points",
     "minutes": "⏱ {{minutes}} min",
-    "quizPassed": "✅ Réussi",
-    "quizFailed": "❌ Échoué",
+    "quizPassed": "Réussi",
+    "quizFailed": "Échoué",
     "subjectStats": "Moy. {{avg}} %  ·  {{pass}} % de réussite",
     "tabs": {
       "grouped": "Par classe",
@@ -3653,10 +3810,10 @@
       "scoreRanges": "Tranches de notes"
     },
     "sections": {
-      "overall": "📊 Performance globale",
-      "exam": "📄 Performance aux examens",
-      "quiz": "🧪 Performance aux quiz",
-      "perClass": "🏫 Détail par classe"
+      "overall": "Performance globale",
+      "exam": "Performance aux examens",
+      "quiz": "Performance aux quiz",
+      "perClass": "Détail par classe"
     },
     "detail": {
       "student": "Élève",
@@ -3671,8 +3828,8 @@
       "questions": "Questions",
       "remarks": "Appréciation",
       "status": "Statut",
-      "yes": "Oui ✅",
-      "no": "Non ❌"
+      "yes": "Oui",
+      "no": "Non"
     },
     "assessmentFallback": "Évaluation"
   },
@@ -3793,7 +3950,7 @@
     "errLoadData": "Échec du chargement. Vérifiez votre connexion réseau.",
     "errCreate": "Échec de la création de l'attribution",
     "failedTitle": "Attribution échouée",
-    "successTitle": "✅ Réussi !",
+    "successTitle": "Réussi !",
     "successBody": {
       "one": "{{count}} matière attribuée à {{teacher}}",
       "other": "{{count}} matières attribuées à {{teacher}}"
@@ -3868,7 +4025,7 @@
     "dropZoneSub": "%{formats} · Max %{max} Mo",
     "titlePlaceholder": "ex. : Chapitre 3 — %{type}",
     "descriptionPlaceholder": "Facultatif — de quoi parle ce contenu ?",
-    "tipsTitle": "📌 Conseils de téléversement",
+    "tipsTitle": "Conseils de téléversement",
     "tip1": "Vérifiez que le fichier est bien nommé et lisible",
     "tip2": "Compressez les fichiers volumineux avant de les téléverser si possible",
     "tip3": "Vérifiez que la matière et la classe sont correctes",
@@ -3914,10 +4071,15 @@
       "one": "%{count} note hors plage (0–%{max}).",
       "other": "%{count} notes hors plage (0–%{max})."
     },
-    "savedTitle": "✅ Enregistré",
+    "savedTitle": "Enregistré",
     "savedBody": {
       "one": "Notes enregistrées pour %{count} élève.",
       "other": "Notes enregistrées pour %{count} élèves."
+    },
+    "savedOfflineTitle": "Enregistré sur ce téléphone",
+    "savedOfflineBody": {
+      "one": "Les notes de %{count} élève sont enregistrées sur ce téléphone et seront envoyées automatiquement dès que vous serez de nouveau connecté.",
+      "other": "Les notes de %{count} élèves sont enregistrées sur ce téléphone et seront envoyées automatiquement dès que vous serez de nouveau connecté."
     },
     "enterAnotherSubject": "Saisir une autre matière",
     "done": "Terminé",
@@ -3958,7 +4120,18 @@
     "examFallback": "Évaluation",
     "screenTitle": "Matières de l'évaluation",
     "headerSubEntry": "%{exam} · %{class}",
-    "headerSubList": "%{exam} — choisir une matière"
+    "headerSubList": "%{exam} — choisir une matière",
+    "rowPending": "Enregistré sur le téléphone · en attente d'envoi",
+    "rowAttention": "À vérifier",
+    "pendingBanner": {
+      "one": "%{count} note est enregistrée sur ce téléphone et attend d'être envoyée.",
+      "other": "%{count} notes sont enregistrées sur ce téléphone et attendent d'être envoyées."
+    },
+    "attentionBanner": {
+      "one": "%{count} note n'a pas pu être envoyée et doit être vérifiée.",
+      "other": "%{count} notes n'ont pas pu être envoyées et doivent être vérifiées."
+    },
+    "reviewPending": "Vérifier"
   },
   "examResults": {
     "title": "Résultats de l'évaluation",
@@ -4029,7 +4202,7 @@
     "reissuedRevived": "Le bulletin a été restauré et remplacé par une nouvelle copie.",
     "reissuedFresh": "La copie du parent reflète désormais les notes actuelles.",
     "reissueFailed": "Échec de la réédition",
-    "shareTitle": "📋 BULLETIN",
+    "shareTitle": "BULLETIN",
     "shareStudent": "Élève :",
     "shareAdmission": "Matricule :",
     "shareClass": "Classe :",
@@ -4550,6 +4723,7 @@
     "tabAll": "Toutes"
   },
   "msgMobile": {
+    "unavailable": "Cette conversation ne vous est pas accessible.",
     "title": "Messages",
     "syncNote": "Conversations enregistrées — aucune connexion",
     "conversation": "Conversation",
@@ -4615,7 +4789,7 @@
     "mon11": "déc.",
     "ok": "OK",
     "errorTitle": "Erreur",
-    "savedTitle": "✅ Enregistré",
+    "savedTitle": "Enregistré",
     "saveFailed": "Échec de l'enregistrement",
     "pleaseTryAgain": "Veuillez réessayer.",
     "nothingToSave": "Rien à enregistrer",
@@ -4764,6 +4938,7 @@
     "noClass": "Sans classe",
     "gpa": "GPA",
     "percentage": "Pourcentage",
+    "average20": "Moyenne /20",
     "passFail": "Admis/Échec",
     "breakdown": "Détail par matière",
     "colSubject": "Matière",
@@ -5085,7 +5260,7 @@
     "markAllColon": "Tout marquer :",
     "nothingTitle": "Rien à enregistrer",
     "markOneFirst": "Marquez au moins un élève avant d’enregistrer.",
-    "savedTitle": "✅ Présences enregistrées",
+    "savedTitle": "Présences enregistrées",
     "saveFailedTitle": "Enregistrement échoué",
     "tryAgain": "Veuillez réessayer.",
     "unmarkedTitle": "Élèves non saisis",
@@ -5186,10 +5361,18 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 modification sur ce téléphone a été enregistrée par un autre compte. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+      "other": "{{count}} modifications sur ce téléphone ont été enregistrées par un autre compte. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom."
+    },
+    "heldOwnerless": {
+      "one": "1 modification a été enregistrée par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée sur ce téléphone et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+      "other": "{{count}} modifications ont été enregistrées par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées sur ce téléphone et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent."
+    },
     "listTitle": "Modifications écrasées",
     "listBlurb": "Vos modifications remplacées par d’autres administrateurs",
     "loading": "Chargement…",
-    "banner": "Voici les modifications que vous avez faites et qui ont ensuite été remplacées par d’autres administrateurs. Touchez-en une pour voir la différence.",
+    "banner": "Vos modifications remplacées ensuite par d’autres administrateurs, les plus récentes d’abord. Les modifications que vous avez remplacées suivent. Touchez-en une pour voir la différence.",
     "bannerLine2": "Touchez-en une pour voir la différence.",
     "allClear": "Tout est en ordre !",
     "allClearSub": "Aucune de vos modifications n’a été écrasée par un autre administrateur.",
@@ -5254,7 +5437,7 @@
       "one": "Marquer {{count}} écrasement comme vu ? L'alerte du tableau de bord disparaîtra.",
       "other": "Marquer les {{count}} écrasements comme vus ? L'alerte du tableau de bord disparaîtra."
     },
-    "discardBody": "« {{label}} » sera définitivement retiré de la file d'envoi. La modification reste sur cet appareil mais n'atteindra jamais le serveur.",
+    "discardBody": "« {{label}} » sera retiré de la file d'envoi et annulé sur cet appareil : l'enregistrement revient à ce que le serveur possède (un élément créé ici et jamais envoyé est supprimé). Cette action est irréversible.",
     "attemptCount": {
       "one": "{{count}} tentative",
       "other": "{{count}} tentatives"
@@ -5269,7 +5452,15 @@
       "other": "{{count}} conflits"
     },
     "failedCount": "{{count}} en échec",
-    "retryAll": "Tout réessayer ({{count}})"
+    "retryAll": "Tout réessayer ({{count}})",
+    "lostRow": "La modification de {{name}} a remplacé la vôtre du {{when}}",
+    "wonRow": "Vous avez remplacé la modification de {{name}} du {{when}}",
+    "unnamed": "{{type}} sans nom",
+    "thisRecord": "cet enregistrement",
+    "editOf": "Modification de {{name}}",
+    "changesCount": "Modifications ({{count}})",
+    "theirVersion": "Sa version",
+    "yourWin": "Vous avez remplacé cette modification. Elle était de {{name}}, qui en est informé(e)."
   },
   "assignList": {
     "title": "Attributions",
@@ -5447,7 +5638,7 @@
     "resubmit": "Remettre à nouveau",
     "resubmitTitle": "Remettre à nouveau ?",
     "resubmitBody": "Cela remplacera votre remise précédente. Continuer ?",
-    "submittedTitle": "✅ Remis !",
+    "submittedTitle": "Remis !",
     "submittedBody": "Votre devoir a été remis avec succès.",
     "submitFailed": "Remise impossible. Veuillez réessayer.",
     "writeFirst": "Écrivez votre réponse avant de remettre.",
@@ -5570,6 +5761,8 @@
     "noSubjectMatch": "Aucune matière trouvée",
     "noSubjects": "Aucune matière attribuée",
     "noSubjectsSub": "Contactez l’administration pour obtenir des matières",
+    "subjectsNeverLoaded": "Vos matières ne sont pas encore sur ce téléphone",
+    "subjectsNeverLoadedSub": "Connectez-vous à internet une fois pour charger vos matières. Ensuite, vous pourrez les choisir hors ligne.",
     "pickClasses": "Quelles classes y ont accès ?",
     "pickClassesSub": "Sélectionnez une ou plusieurs classes pour ce contenu",
     "noClasses": "Aucune classe trouvée",
@@ -5725,7 +5918,7 @@
     "sTeachers": "Enseignants",
     "hUnassigned": "Non attribués",
     "sClasses": "Classes",
-    "sSubjects": "Matières",
+    "sSubjects": "Matières par classe",
     "hAssigned": "Attribuées",
     "hNotices": "Annonces",
     "hPeriods": "Périodes",
@@ -5752,9 +5945,18 @@
     "alertNoTimetable": {
       "one": "{{count}} classe sans emploi du temps ({{pct}} %)",
       "other": "{{count}} classes sans emploi du temps ({{pct}} %)"
+    },
+    "hNoTeacher": "Sans enseignant",
+    "alertClassSubjectsUnassigned": {
+      "one": "{{count}} matière-classe sans enseignant",
+      "other": "{{count}} matières-classes sans enseignant"
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 modification sur ce téléphone n’est pas à vous d’envoyer",
+      "other": "{{count}} modifications sur ce téléphone ne sont pas à vous d’envoyer"
+    },
     "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer",
     "needAttention": {
       "one": "1 modification requiert votre attention",
@@ -5769,7 +5971,15 @@
       "one": "Envoi d'1 modification…",
       "other": "Envoi de {{count}} modifications…"
     },
-    "syncing": "Synchronisation…"
+    "syncing": "Synchronisation…",
+    "needsSignIn": {
+      "zero": "Votre session a pris fin — reconnectez-vous pour continuer la synchronisation",
+      "one": "Reconnectez-vous pour envoyer 1 modification en attente",
+      "other": "Reconnectez-vous pour envoyer {{count}} modifications en attente"
+    },
+    "signInCta": "Se connecter",
+    "staleNotice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité",
+    "staleWarning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité"
   },
   "svcErr": {
     "titleRequired": "Le titre est obligatoire",
@@ -5872,7 +6082,9 @@
     "noOfflineAccountEnrollment": "Aucun compte hors ligne trouvé pour ce numéro de matricule",
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
-    "invalidCredentials": "Identifiants invalides"
+    "invalidCredentials": "Identifiants invalides",
+    "deviceFullOfAccounts": "Ce téléphone contient déjà des modifications non envoyées de cinq autres comptes. L’un d’eux doit se connecter et les envoyer avant qu’un autre compte puisse utiliser ce téléphone.",
+    "appUpdateRequired": "Mettez l’application à jour pour continuer la synchronisation. Les données de cette école demandent désormais une version plus récente de l’application."
   },
   "syncStep": {
     "prepare": "Préparation",
@@ -5954,7 +6166,8 @@
     "edit": "Corriger la fiche",
     "guardianPhone": "Téléphone du parent",
     "alternatePhone": "Autre téléphone",
-    "city": "Ville"
+    "city": "Ville",
+    "queuedNote": "Elle est envoyée à l'école automatiquement dès qu'il y a une connexion."
   },
   "teacherHw": {
     "title": "Devoirs",
@@ -6058,7 +6271,7 @@
     "RECENT_DECLINE": "Les résultats récents ont diminué",
     "SUDDEN_PERFORMANCE_CHANGE": "Un changement récent de résultats a été observé",
     "PERSISTENT_UNDERPERFORMANCE": "Les résultats restent sous la note de passage",
-    "SUBJECT_STRENGTH": "Un point fort se dessine dans cette matière",
+    "SUBJECT_STRENGTH": "De bons résultats récents dans cette matière",
     "SUSTAINED_IMPROVEMENT": "Une amélioration durable a été observée",
     "CONSISTENT_STRENGTH": "Résultats élevés et réguliers",
     "INSUFFICIENT_ACADEMIC_EVIDENCE": "Preuves scolaires encore insuffisantes",
@@ -7283,5 +7496,81 @@
     "RULE_FIXED": "Cette règle est la même pour toutes les écoles et ne peut pas être modifiée.",
     "PROMOTION_RUN_EXISTS": "Une proposition de passage de l'année a été faite à partir de ces résultats. Supprimez d'abord le brouillon, ou annulez la proposition.",
     "CLASS_REQUIRED": "Choisissez une classe : la publication s'annule classe par classe."
+  },
+  "schoolPick": {
+    "title": "Choisir un établissement",
+    "blurb": "Un super administrateur travaille dans un établissement à la fois. Choisissez celui à gérer sur ce téléphone.",
+    "search": "Rechercher par nom, code ou ville",
+    "none": "Aucun établissement trouvé.",
+    "loadFailed": "Impossible de charger les établissements. Vérifiez votre connexion.",
+    "current": "Établissement : {{name}}",
+    "leave": "Quitter",
+    "change": "Changer d’établissement",
+    "inSchool": "Établissement : {{name}}",
+    "pendingUploads": "Des modifications de ce téléphone n’ont pas encore été envoyées. Synchronisez-les avant de changer d’établissement, sinon elles seraient envoyées au mauvais établissement.",
+    "openPending": "Voir les modifications en attente",
+    "failed": "Impossible de changer d’établissement."
+  },
+  "logoutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "body": {
+      "one": "Vous avez 1 modification pas encore envoyée. Si vous vous déconnectez, elle sera envoyée à votre prochaine connexion sur ce téléphone.",
+      "other": "Vous avez {{count}} modifications pas encore envoyées. Si vous vous déconnectez, elles seront envoyées à votre prochaine connexion sur ce téléphone."
+    },
+    "signOut": "Se déconnecter"
+  },
+  "localData": {
+    "preparingTitle": "Préparation de vos données sur ce téléphone",
+    "preparingBody": "Ce téléphone est partagé : votre école garde désormais les données de chaque personne séparément. Vos données se téléchargent une seule fois ; rien de ce que vous avez enregistré sur ce téléphone n’est perdu.",
+    "preparingSkip": "Utiliser l’application maintenant",
+    "preparingStopping": "Arrêt en cours…",
+    "reviewTitle": "Modifications en attente",
+    "reviewIntro": "Ces modifications ont été enregistrées sur ce téléphone sans indiquer leur auteur. Elles sont conservées ici en entier et ne sont envoyées au nom de personne tant que quelqu’un n’a pas décidé à qui elles appartiennent.",
+    "reviewAdminOnly": "Seul un administrateur connecté sur ce téléphone peut décider de leur sort.",
+    "reviewEmpty": "Aucune modification n’est en attente sur ce téléphone.",
+    "reviewLink": {
+      "one": "1 modification sur ce téléphone attend une décision",
+      "other": "{{count}} modifications sur ce téléphone attendent une décision"
+    },
+    "statusHeld": "En attente",
+    "statusAssigned": "Attribuée à un compte",
+    "statusPlaced": "Avec son compte",
+    "heldSince": "En attente depuis le {{date}}",
+    "assign": "Attribuer à un compte",
+    "assignTitle": "À qui appartient cette modification ?",
+    "assignBody": "Choisissez le compte qui l’a faite. Elle sera envoyée la prochaine fois que cette personne sera connectée sur ce téléphone.",
+    "assignConfirmTitle": "Attribuer cette modification ?",
+    "assignConfirmBody": "Cette modification sera enregistrée comme faite par {{name}} et envoyée depuis son compte.",
+    "sendAsMe": "Envoyer en mon nom",
+    "sendAsMeTitle": "Envoyer cette modification en votre nom ?",
+    "sendAsMeBody": "Elle sera enregistrée sur le serveur comme faite par vous, même si quelqu’un d’autre l’a faite. Ne le faites que si vous êtes sûr que c’est juste.",
+    "saveCopy": "Enregistrer une copie",
+    "actionFailed": "Impossible de le faire. Rien n’a été modifié.",
+    "legacyTitle": "Anciennes données partagées sur ce téléphone",
+    "gateOk": "Tout leur contenu est pris en compte. Elles peuvent être supprimées.",
+    "gateNotMigrated": "Ce téléphone n’est pas encore passé aux données par personne.",
+    "gateTooSoon": "Elles sont conservées 30 jours après le passage ({{days}} pour l’instant).",
+    "gateAlreadyDeleted": "Elles ont déjà été supprimées.",
+    "gateUnplaced": "Certaines modifications ne sont pas encore avec leur compte.",
+    "gateWaitingOwner": "Certaines modifications attendent que leur compte se connecte sur ce téléphone.",
+    "gateUploadsPending": "Certains fichiers n’ont pas encore été envoyés.",
+    "gateInUse": "Quelqu’un sur ce téléphone les utilise encore.",
+    "deleteLegacy": "Supprimer les anciennes données",
+    "deleteLegacyTitle": "Supprimer les anciennes données partagées ?",
+    "deleteLegacyBody": "Chaque modification est avec son compte ou dans la liste en attente. Cette action est irréversible."
+  },
+  "staffNo": {
+    "label": "Matricule",
+    "labelLong": "Matricule",
+    "pending": "En attente — attribué par l'établissement à la synchronisation",
+    "none": "Pas encore attribué",
+    "fromSchool": "Attribué par l'établissement. Il ne peut pas être modifié sur le téléphone."
+  },
+  "updateRequired": {
+    "title": "Mettez l’application à jour pour continuer la synchronisation",
+    "bodyServer": "Les données de votre école demandent désormais une version plus récente de cette application. Installez la dernière version, puis rouvrez l’application.",
+    "bodyLocal": "Une version plus récente de cette application a enregistré les données de ce téléphone. Cette version ne peut pas les lire sans risque. Installez la dernière version pour continuer.",
+    "kept": "Rien n’a été supprimé. Votre travail enregistré et les modifications non envoyées restent sur ce téléphone et seront envoyés après la mise à jour.",
+    "checkAgain": "Vérifier à nouveau"
   }
 }

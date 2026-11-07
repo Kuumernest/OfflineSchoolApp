@@ -1,0 +1,227 @@
+# Pre-launch QA fixes (launch 1 Nov 2026)
+
+Branch: `fix/launch-readiness`. One commit per numbered item, tagged with the
+item number. Every calculation fix gets a check script in `backend/scripts/`
+wired into `npm run check:all`. Ask the project owner before changing a
+calculation rule beyond what is written here.
+
+To resume: `git log master..HEAD --oneline`, then the first unticked item below.
+
+Rules already decided: coefficients always applied; an absent subject is
+removed with its coefficient; CA on/off per school; grading is /20.
+
+## Rule: one guardian, many children (owner, 2026-10-27)
+
+A parent/guardian can have several children at the school. Siblings sharing
+the same guardian name, email or phone is normal, valid data — not a duplicate
+and not test data. Every change must keep this true: no uniqueness on guardian
+email/phone across pupils; one portal code can cover several children and the
+parent can switch between them; "code covers no student" only for zero
+children; fees and overdue are per child while the parent sees all of them;
+cleanup clears only explicitly listed fake addresses. Checked across the whole
+branch on 2026-10-27 — only D1 broke it (fixed). `check:siblings` (a guardian
+with three children) and the family-of-three case in `check:portalcodes` guard
+it. Also in the repo's `CLAUDE.md`.
+
+## Decisions from the owner (2026-10-27)
+
+- A8: several teachers on one class-subject are allowed; every screen lists them all.
+- B2: school hours and periods are each school's own setting — no fixed defaults; warn when they disagree.
+- B3: age range warning: Form 1 = 9–14; each level up the minimum rises 1 year and the maximum 2 (Upper Sixth 15–26). Option (b), confirmed 2026-10-27.
+
+- D1: superseded the same day — a shared email is NOT test data (siblings share a guardian). Only clearly fake addresses listed in the script are cleared; other shared addresses are reported, grouped by guardian (owner, 2026-10-27).
+
+- Overdue rule (fix approved by owner 2026-10-27): a family is overdue when the first charge its payments have not covered is past due, not when the earliest charge on the account is. See C6.
+
+## Phase A — wrong numbers (fix first)
+
+- [x] **A1** Class positions: rank denominator = pupils in that class with results (Term Results page and printed report card; find where "50" comes from). — `52088d7`
+- [x] **A2** One term average everywhere: sum(mark × coef) / sum(coef of subjects with marks); shared in `shared/`, used by term results, report card, analytics, exports; same for annual. — `3fb211c`
+- [x] **A3** One outstanding-balance function (no voided payments, current academic year) on Fees > Outstanding, Financial reports, Platform dashboard. — `0846dd5`
+- [x] **A4** One pass rate: average ≥ school pass mark on /20, denominator = pupils with results, same exam/term/year scope. — `ccfaf44`
+- [x] **A5** /20 everywhere on results analytics, exams overview, Students to watch; no GPA, no letter grades; the school's remark scale. — `shared/examAnalytics.js`
+- [x] **A6** Rankings per class: class filter on exam analytics, rank within class; bottom-5 sorted ascending and numbered consistently. — `shared/examAnalytics.js` topAndBottom
+- [x] **A7** Marks progress "2/0 entered": denominator = enrolled pupils in the class. — exam submissions now carry `totalStudents`
+- [x] **A8** Teacher assignments: one source of truth (class-subject assignment) for Subjects page, exam marks screen, report card. — `shared/classSubjectTeachers.js`
+- [x] **A9** French report header: all 10 region names translated; remark typo "Faire" → "Fair". — regions in `shared/officialHeader.js`; "Faire" is in a school's saved grading scale (data, not code) → repaired by the Phase D script after go-ahead
+
+## Phase B — validation rules
+
+- [x] **B1** Timetable: no lessons in Break/non-teaching rows; only a teacher assigned to that class+subject; Wednesday column width. — `shared/timetableRules.js`; existing bad slots listed by the Phase D report
+- [x] **B2** School hours: one source of truth between Settings and Periods; warn on conflict; header counts teaching periods only. — both stay school-set (owner); warning on Settings + Periods; dashboard counts teaching periods only
+- [x] **B3** Student validation (frontend + backend): DOB not in future, age range per class level (warn, configurable); Cameroon phones → +237 + 9 digits; one system-generated admission number format for new pupils, report existing mismatches (don't rewrite). — `shared/studentValidation.js`; admission format was already single (admissionNumber.service.js), mismatches go in the Phase D report
+- [x] **B4** Flag unassigned class-subjects on Dashboard and Teachers page; relabel "Subjects: 105" as class-subject pairs or show distinct subjects. — `classSubjectCoverage`; `GET /admin/class-subjects/unassigned`
+- [x] **B5** Year pickers on Progression and Academic structure default to the school's current academic year. — `useSchoolYear` reads `currentAcademicYear` from school-info
+
+## Phase C — UX fixes (after A and B)
+
+- [x] **C1** Fee account page header: student's name and class.
+- [x] **C2** Loading states/skeletons instead of blank tables; report card speed (~3s each); batch class print (bulk query, no N+1). — measured: a card is 23 queries (constant per pupil); time was sequential round trips
+- [x] **C3** Attendance "–" instead of 0% when nobody was marked; 7-day chart counts school days only. — `schoolDaysOnly`, `dayRate` in shared/attendance.js
+- [x] **C4** Remove developer wording from school-facing screens; Intelligence review pilot section Super Admin only.
+- [x] **C5** Class intelligence: no change flag with < 3 data points; never "declined" and "strength emerging" for one subject; no duplicated phrasing. — `minChangeObservations` in shared/intelligence/subjectInsights.js; a fall already called a decline is not repeated as a sudden change; "strength is emerging" reworded (it echoed the "emerging" confidence badge)
+- [x] **C6** Students to watch: fee debt only when overdue. — watchlist reads `feeReminders.candidates({ mode: "overdue" })`, the same rule as Fee reminders (due date passed, plan behind, or undated this year); `check:watchfees`. **Fixed 2026-10-27 (owner's go-ahead):** the rule took the earliest due date of *any* charge, so a family that paid First Term and owed a Second Term not yet due was overdue since First Term's date (found while building the parent portal). Now `feeReminders.firstUnpaid`: payments and waivers settle charges in due-date order (an undated charge counts as due today), and the first charge not covered gives the deadline. Plans unchanged. Reminders, Students to watch, To do and the portal all read it. `check:overdue` (the old rule fails 8 of its 15 checks)
+- [x] **C7** Consistency: shared DD/MM/YYYY + HH:mm formatter; line icons only; one primary button colour; Admissions vs Applications; class-name casing; Fees group header "Form 5 – 5 owing".
+  - [x] dates — `shared/dateFormat.js` (web `fmt.date`/`fmt.dateTime`/`utils/formatDate`; mobile copy in `mobile/src/i18n/format.js`); `web: check:dates`
+  - [x] Admissions vs Applications — the screen is "Admissions" everywhere (page title, dashboard card, banner, search); `/students/applications` redirects there
+  - [x] class-name casing — class group headings no longer upper-case the name ("FORM 5" → "Form 5")
+  - [x] Fees group header — "Form 5 – 5 owing"
+  - [x] line icons only — colour emoji used as icons replaced by lucide line icons (exams, results, report cards, assignments, subjects, teachers, applications); emoji removed from web + mobile strings; `web: check:icons`
+  - [x] one primary button colour — 26 hand-made indigo/blue/purple filled buttons and 11 green "main action" buttons now `primary-*`; green kept only for approve / publish / copied (`success`); `web: check:buttons`
+- [x] **C8** Portal access: "Last opened" column ("Never" when null); guardian names; flag access codes linked to no student. — the column header read "Never opened"; `GET /documents/guardian-access` now returns `guardianNames` (from the children's records, shown when no label) and `linkedToNoStudent` (badge + count banner); `check:portalcodes`
+- [x] **C9** Settings: broken school logo; Cameroon school types (Collège / Lycée, general/technical); pass mark label "/20". — Settings fetched school-info without `includeLogo`, so an inline-stored logo came back null; a logo file that 404s now falls back (Settings, portal); types `college_general|college_technical|lycee_general|lycee_technical` (+ primary, comprehensive, other), printed header follows; old JHS/SHS values still validate; `check:schooltypes`
+- [x] **C10** Student profile: results, attendance, fee balance, guardian contact. — `GET /admin/students/:id/overview` (studentOverview.service: published results on /20 with class position, last 30 days' attendance, current-year balance — fees only with `fees.view`); `StudentOverviewCard` on the profile; `check:studentoverview`
+- [x] **C11** Notifications: action items (marks awaiting approval, unpublished exams, overdue fees). — `GET /admin/action-items` (actionItems.service), counted live and per permission (`exams.manage`, `results.publish`, `fees.view`); a "To do" block at the top of the bell panel (no longer counted in the badge since 2026-10-30: the badge is the panel's unread count, so it clears when the panel says "All read"); `check:actionitems`
+- [x] **C12** Report templates: 3 ready-made layouts + toggles; raw HTML as advanced. — Classic / Compact / Clear (`print/reportPresets.js`: the shipped template's HTML, CSS-only differences, so every section switch works on each); `GET /templates/presets`, `POST /templates/presets/:id/use`; Templates page leads with the layouts and links to the section switches (Settings → Report layout, now reachable by `?section=reportLayout`); HTML templates moved under "Advanced"; `check:reportpresets`
+
+## Phase D — test data (prepare only, do NOT run)
+
+- [x] **D1** Cleanup script with dry-run: student "Bin Laden", "Testing testing" announcement, pupils sharing one test email; report Kena Academy (7 students, 0 teachers) and exams with no dates. Show dry-run output and wait for go-ahead before deleting. — `scripts/phase-d-cleanup.js` (`npm run cleanup:phased`, dry run by default, `-- --apply` to write). On apply: soft-deletes the test pupil (and deactivates their login) and the test announcement, clears only clearly fake addresses (`FAKE_EMAILS` / `FAKE_DOMAINS` / `test@…` in the script) from a pupil's email or guardian email (the pupils stay), "Faire" → "Fair" (A9). Report only: other addresses shared by several pupils, grouped by guardian (siblings — review, never cleared), Kena Academy counts, undated exams, B1 timetable breaches, B3 old-shape admission numbers. `check:phased`. **Not yet run against the real database** — no `MONGODB_URI` in this shell; the owner runs the dry run and gives the go-ahead
+
+- [x] **D2** Delete Green Valley Academy (all test data — owner, 2026-10-27): `scripts/delete-school.js` (`npm run school:delete -- --school <id or exact name>`), dry run by default (count per collection, logins, portal codes, files). `--apply` asks for the exact school name, refuses a name matching several schools, runs in a transaction on a replica set (otherwise in order, school record last). Sweeps every collection with the school's `schoolId` (read from the database, so none is missed), plus exam marks of its exams/pupils, its staff and pupil logins (never Super Admin), their idempotency keys and sync logs, and uploaded files no remaining record points to. A portal code that also covers a child elsewhere is kept, unlinked from the deleted children and filed under the remaining child's school. Platform stats are built from the school list, so the school just drops out (tested). `check:deleteschool` (two schools + a duplicate name); transaction path checked by hand on an in-memory replica set. **Not applied** — owner runs the dry run first
+  - Schools to delete (owner, 2026-10-27): **Green Valley Academy** (`6a4ccbfac10ad6faa189bd85`; real dry run: ~4,600 documents, 72 students, 88 logins, 9 uploaded files) and **Kena Academy** (test data: 0 teachers, 2 undated exams, a portal code shared with a Green Valley child). Delete Green Valley first — the shared code is unlinked and moves to Kena — then Kena, which takes the code with it.
+  - Deleting both leaves zero schools and a working platform: Super Admin logs in, dashboard / performance / filters / school list load empty with zero totals, a new school can be created — `check:deleteallschools`.
+  - Uploaded files are removed from wherever they live — GridFS in the same database (always checked, whatever driver the machine running the script is set to), the bucket if `STORAGE_BUCKET` is set, else the local disk — so `--apply` can run from any machine with the same `MONGODB_URI`. It also removes logo and photo files named after the school or its pupils that no record points to any more (a replaced logo), and every GridFS file filed under the school. The dry run prints how many GridFS files and MB that is.
+
+## Phase E — launch blockers found after Phase D
+
+- [x] **E1** Uploaded files lost on every Render deploy (2026-10-27: Render redeployed master at ~22:13 UTC and `/uploads/logos/6a4ccbfac10ad6faa189bd85-ad40837113a2.jpg` went 404 — QA's "broken school logo"). Every upload now goes through `backend/src/storage/fileStore.js`: a local-disk driver (development) and an S3-compatible bucket driver (Cloudflare R2), configured by `STORAGE_*` env vars. Writers moved: school logos, student photos (staff and the pupil's own), admission documents (multipart and base64), teacher content, message attachments. Records keep their `/uploads/...` URLs; `src/storage/serveUploads.js` (moved out of `server.js`) redirects them to a signed bucket URL, or to `STORAGE_PUBLIC_URL` for logos. The message signature gate and the closed `/uploads/applications` stay in front. A missing logo or photo is answered with a grey placeholder image instead of a broken image. Printed documents and receipts load logos and photos from the bucket before embedding them. D2 deletes the school's files from the bucket. `npm run uploads:to-bucket` copies files still on a disk into the bucket. `check:filestore` (mocked bucket). **Files already lost on Render cannot be recovered** — they show the placeholder until uploaded again.
+  - 2026-10-28: no R2 (Cloudflare asks for a card). Production now keeps uploads in **MongoDB GridFS** (`uploads.files` / `uploads.chunks`, a third driver; the default with `NODE_ENV=production` and no `STORAGE_BUCKET` — **nothing to set on Render**). Each file records its school. Logos are shrunk to ≤ 512 px WebP, photos to ≤ 400 px JPEG, quality 80, metadata stripped; over 5 MB or not an image is refused. One gate (`src/storage/fileAccess.js`) for `/uploads/...` and the new `/files/:id`: logos public; photos, attachments and teacher content need a login of the file's school, a Super Admin, or a signed link (printed report cards sign the photo link; `GET /api/files/signed-link` for the phone's browser). `REQUIRE_MEDIA_SIGNATURE` is no longer read. D2 removes the school's GridFS files and counts them in the dry run. `npm run uploads:usage` — MB per school against Atlas's 512 MB. `check:gridfs` (49 checks). The bucket stays available: set `STORAGE_BUCKET` + `STORAGE_*` and `npm run uploads:to-bucket`.
+
+## Feature — teacher staff numbers (owner, 2026-11-03)
+
+- [x] **F1** Every teacher has a staff number `CODE-STF-NNN` (school code, ≥ 3 digits, grows past 999), like a pupil's admission number. Issued by the **server only** (`backend/src/services/staffNumber.service.js`): one sequence per school, next = one past the highest number in that shape already held in the school (overrides included), taken from a counter so simultaneous creates never collide; a create that fails after taking a number leaves a **gap, never a duplicate**. `users.staffNo`, unique per school (partial index `schoolId_staffNo_unique_present`, built and checked at boot by `src/db/ensureStaffNoIndex.js`).
+  - Numbered in the request that creates the teacher (console, or a phone's offline create when it syncs — the phone shows "pending" until then). A replayed create returns the number it already has and takes none; a removed teacher brought back keeps theirs.
+  - Administrators can change it: `PUT /admin/teachers/:id` with `staffNo` (teachers.manage). Trimmed, upper-cased, ≤ 32 of `A-Z 0-9 - / . _`; cannot be cleared; 409 if another member of staff in the school has it; one in the generated shape moves the sequence past it; audited (`teacher.staffNoChanged`). Web console edit form only (online-only on the desktop); the phone shows it read-only.
+  - **Existing teachers are numbered at server boot** (oldest first per school, deactivated included; never touches a teacher with a number; skipped while the unique index is missing). Nothing to run on deploy. To preview or apply by hand: `npm run staffno:backfill` (dry run) / `npm run staffno:backfill -- --apply`; a second run reports 0 without a number.
+  - Delivered in the teacher list/detail, sign-in and `/auth/me`, `/teacher/profile`, the phone's `/sync/pull` (not to pupils) and the desktop's `/sync/changes`; a "Staff no." column on the payroll export. The phone stores it in `users.staff_no` (additive column). The Staff ID a teacher used to type on the phone (never stored by the server) is no longer asked for or shown; old typed values stay in `teacher_profiles.staff_id`.
+  - Checks: backend `check:staffno`, web `check:staffno`, mobile `scripts/check-staff-number.js` (in `npm run check`).
+
+## Bug — teacher profile "disappears" (owner, 2026-11-05)
+
+- [x] **P1** The server never stored a teacher's profile: `PUT /teacher/profile` kept name and email and answered 200 for the other 21 fields, so the profile lived only in one phone's SQLite (`teacher_self_profile`). The phone's settings and setup screens read the server first, took its reply (no `data`, no profile) for the profile, and showed blanks whenever the phone was online; re-saving that blank form overwrote the only copy.
+  - Server: `users.teacherProfile` (`backend/src/services/teacherProfile.service.js`), written field by field; a blank never clears a stored value (only `clearFields` does); `profileCompleted: true` is never undone by an omitted value. `GET /teacher/profile` returns it under `data` (and still `teacher`). A save without `name` keeps the name.
+  - Phone: `TeacherProfile.loadProfile` merges the server's copy with the phone's field by field, saves what the server adds, and queues (outbox, `teacher-profile:<id>`) a profile only the phone has — so existing phone-only profiles reach the server the first time the dashboard, settings or setup opens online. A failed online save is queued. A blank never overwrites a stored value locally either.
+  - Profile setup (teacher and pupil) signed the user out on the next launch: `setUser(user)` without a token wrote an empty token. Now `updateUser`.
+  - Per-user stores: the account's own `teacher_self_profile` / `student_profiles` row is copied across at the switch (`placeOwnProfile`).
+  - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
+  - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
+
+## Bug — a deleted exam's marks still counted (2026-11-06)
+
+- [x] **P1** Deleting an exam only stamps `deletedAt` on the Exam; its `ResultSummary` rows stay live, and readers that went to the summaries directly still counted them.
+  - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
+  - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
+  - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+- [x] **P1** The remaining direct readers (2026-11-07): intelligence review (`reviewCases.liveCohort`), class analysis (`analysisRuns` evidence for the worker), transcripts (`GET /documents/transcript/:studentId`) and a teacher's class results (`GET /teacher/results`, StudentScore rows) drop a deleted exam's rows through one helper, `backend/src/services/deletedExams.service.js` (the portal's `withoutDeletedExams`, moved there). Missing exam rows are still kept.
+  - Desktop offline class insights (`handlers/intelligence.js` `historyFor`) drop summaries whose mirrored exam carries `deletedAt`, as the server does.
+  - The portal's `/results/:summaryId/report-card` already refused a deleted exam's card (above).
+  - Checks: backend `check:deletedexameverywhere` (in `check:all`); desktop `check:intel-deleted` (in `npm run check`).
+- [ ] Not changed: the staff report card `GET /results/:examId/student/:studentId/reportcard` still serves a deleted exam (its exam lookup has no `deletedAt` filter), and what deleting a PUBLISHED exam should do (retract, keep, archive) — both need a product decision.
+
+## Bug — Students to watch called the whole balance overdue (2026-11-06)
+
+- [x] **P1** The fee flag on Students to watch printed what a family owes as "(overdue)": Eunice Ashu "owes FCFA 145,000 (overdue)" while the Fees page said 145,000 owed, 50,000 overdue; Alain Onana 200,000 against 105,000.
+  - Both screens already read one calculation (`arrears.service` → `shared/arrears.js`); the watch list carried only the balance. The `fees_outstanding` signal now carries `balance` and `overdue`, and the web line reads "Owes X, of which Y is overdue" ("all of it overdue" when it is; plain "Owes X" if no overdue figure) — `web/src/utils/feeFlag.ts`.
+  - The 1/2-point weight is the overdue part over what was billed (the threshold always said "overdue only"): Eunice 1 point (was 2), Alain 2.
+  - Checks: backend `check:watchoverdue` (in `check:all`; Eunice, Alain, and a paid-up sibling on the same guardian), `check:watchfees` updated; web `check:feeflag`.
+
+## Bug — the parent portal and fee reminders called the whole balance overdue (2026-11-07)
+
+- [x] **P1** Same mistake as the watch list, on the parent's side: portal Home and Fees (web and phone) coloured the whole balance "Overdue"; `GET /portal/fees/reminders` decided "overdue" on its own — every dated charge the day after its date, even one paid in full; the fee reminder message under "Overdue school fees" quoted only the balance.
+  - One per-charge rule in `shared/arrears.js`: `chargeStatuses` (payments settle the oldest due charge first; a charge is overdue only while something is unpaid on it). `feePosition` now sums it, and the portal lists it.
+  - `/portal/home` cards carry `fees.overdue`; `/portal/fees/reminders` carries the account's `overdue`/`isOverdue` from `arrears.service` (the Fees page's figure) and each charge's `unpaid`; on an active plan no single charge is late (the plan's dates govern). Days late counted as Fee reminders counts them.
+  - Web and phone: the pill reads "of which X is overdue" when only part is late, "Overdue" when all of it is or the figure is missing (`overdueShare`, web `utils/feeFlag.ts`, phone `utils/overdueShare.js`).
+  - The reminder carries `overdue`; the message reads "…balance of 145,000, of which 50,000 is overdue" (en/fr).
+  - Checks: backend `check:portaloverdue` (in `check:all`; one guardian, three children); web `check:feeflag` (extended); mobile `scripts/check-portal-overdue.js` (in `npm run check`).
+- [ ] Desktop offline arrears count overdue FAMILIES one per child (`desktop/src/main/api/handlers/fees.js`). The server groups siblings by portal access code (`familyCount`), but `GuardianAccess` is deliberately not mirrored to the desktop (a stale copy of who may see a child must not exist), and grouping by shared guardian name/email/phone is forbidden (CLAUDE.md). Needs a decision: mirror a non-sensitive family link (e.g. a family id on Student, or a studentIds-only projection of access codes), or show no family count offline.
+
+## Bug — Students to watch did not say which exam a flag rests on (2026-11-07)
+
+- [x] **P2** "Failed the last exam (8/20, pass mark 10)", "Average fell 14 → 7" and "3 subjects failed" named no exam, so a teacher could not check them — and "the last exam" is exactly what changes when an exam is deleted or re-run.
+  - `earlyWarning.service`: `failed_exam`, `grade_drop` and `subjects_failed` carry `exam: { examId, name, date }` (one exam read for the whole list); a drop also carries `fromExam`. An exam whose row is gone is still named by id, with no name or date.
+  - Web: each such flag ends "· 2nd Sequence, 10 Oct 2026" or, for a drop, "· 1st Sequence → 2nd Sequence, 10 Oct 2026" (`web/src/utils/watchSource.ts`, `watch.source.*` en/fr).
+  - Checks: backend `check:watchsource` (in `check:all`); web `check:watchsource`.
+
+## Bug — "Failed to fetch dynamically imported module" (2026-11-06)
+
+- [x] **P2** Every web page is its own chunk, loaded on first navigation through a bare `lazy(() => import(...))`. One failed request for that chunk — a flaky connection, or a deploy that replaced the chunk names — crashed the route, and the route's error box showed the browser's raw "Failed to fetch dynamically imported module".
+  - All 65 routes in `web/src/App.tsx` load through `lazyPage`, which retries the import (`web/src/utils/lazyWithRetry.ts`, `retryImport`): 3 attempts, 400 ms then 800 ms apart.
+  - If the chunk still cannot be fetched (usually after a deploy), `RouteErrorBoundary` recognises it (`isChunkLoadError`) and shows "This page could not be loaded" with a **Reload** button, in place of the error text; the sidebar stays. Button only — no automatic reload, so no reload loop. Strings `error.chunkTitle` / `chunkBody` / `chunkReload` in en and fr. Applies to the desktop app too (it serves the built web app).
+  - Checks: web `check:chunkretry` (36 checks: fails twice then loads → resolves; always fails → rejects after 3; no bare `lazy(() => import(` left in App.tsx; the boundary and both locales). Fails 17 of 19 on the old code.
+
+## Bug — portal unread badge, section URLs, tab title (2026-11-06)
+
+- [x] **P1** The web portal's Messages tab showed an unread badge of 1 over "No conversations yet". `/portal/me` sent unread threads and unread notices as two numbers, the client added them for the badge, and the section always opened on Conversations — so one unread notice (a gate scan, an absence) was a 1 over an empty list. The thread count itself agreed with the list (both `comms.listFor`).
+  - Server: one `unreadSummary` (`backend/src/routes/portal.routes.js`) counts unread threads (`comms.listFor`, the `/messages/conversations` query, one per-thread `unreadIn`) and unread notices (`noticeFilters`, the `/notifications` filter). `/me` returns `unread: { messages, notices, total }` (`unreadMessages` / `unreadNotices` kept for the phone); `/notifications` takes its threads and counts from it and adds `unreadTotal`. Family-wide, as the section is: threads belong to the guardian, notices to every child on the code.
+  - Web: the badge is `unread.total`; Messages opens on Notices when the only unread is notices (`src/utils/portalRoutes.ts`), read once on opening so reading a notice does not switch tab.
+- [x] **P2** Portal sections were in-page state: a refresh went back to Home, no link could open a section, back left the portal. Now `/portal/results`, `/portal/attendance`, `/portal/fees`, `/portal/messages` (Home stays `/portal`); `App.tsx` mounts `/portal/*`, the page reads the section from the URL, an unknown sub-path goes to `/portal`. Sign-in and the session-expired screen still gate every path, and sign-in lands on the section in the URL; signing out goes to `/portal`. The child switcher is unchanged (state, kept across sections). Desktop `app://school/portal/...` already serves `index.html` (no change); Cloudflare Pages serves `index.html` for unknown paths while the build has no `404.html` (docs/17) — no hosting change.
+- [x] **P2** The browser tab now reads the school's name (from `/portal/me`) in the portal, and what it said before when the name is unknown or on leaving.
+  - Checks: backend `check:portalunread` (in `check:all`), web `check:portalroutes`; `check:staffgate` and `check:dashcolours` follow the route to `/portal/*`.
+
+## Feature — first-run defaults (2026-11-06)
+
+- [x] **P2** A new school's expense book was empty, so "Record expense" stayed disabled until somebody invented a category. Now it starts with **utilities, maintenance, stationery, transport, events** (`label` English + `labelFr` French: Services publics, Entretien, Fournitures de bureau, Transport, Événements), from `backend/src/services/expenseCategories.service.js`.
+  - Seeded by `POST /api/super-admin/schools` (best effort) and on `GET /api/finance/expense-categories` for a school that has **never had a category** — soft-deleted rows count, so a school that retired a default (or made its own) is never re-seeded. A school that does not exist is never seeded.
+  - Ids are a function of (school, code) (uuid v5) and `(schoolId, code)` is unique, so concurrent first reads seed once. Server-side only: the desktop does not seed its mirror (five queued POSTs would 409 and block the outbox); the rows reach it through the sync feed.
+  - Web Expenses page shows `labelFr` to a French reader (`web/src/utils/categoryLabel.ts`), falling back to `label`.
+  - Nothing to run on deploy: existing schools with no categories get them on their next read of the list.
+- [x] **P2** Announcements: **Parents** audience in the web composer (administrators; teachers keep students / their classes, which already reach those pupils' parents). The server already stored `audience: "parents"` and the guardian portal already read it (`audienceMatch({ audience: "parents" })`).
+  - `PUT /api/announcements/:id` changed `audience` but not `audiences`, which readers match on, so an Everyone notice edited to Parents still reached pupils and teachers. PUT now recomputes `audiences` like POST, clears `targetClasses` off a non-class audience, and answers 400 to an unknown audience or `class` with no classes.
+  - Not done: the phone's composer has no Parents option yet.
+- Checks: backend `check:expensedefaults`, `check:announceparents` (both in `check:all`); web `check:firstrun`.
+
+## Bug — exam analytics open on one class (2026-11-06)
+
+- [x] **P1** The exam analytics page (`/exams/results`) opened on the first class of an exam sat by several, so the student count and pass rate covered 10 pupils (Form 1) under a title naming four classes, while Term Results counted all 40.
+  - Web: the class filter starts on **All classes** (`web/src/utils/resultsScope.ts`); a chosen class shows "Showing Form 1 only" with "Show all classes" on every section. Stats, pass rate, subject figures, top/bottom 5 and rankings all read the same class. No export on the page.
+  - Server: `getRankings` applies the class to every scope — "Rank by School" with Form 1 chosen listed the whole school. Form 1's pupils keep their school positions. The desktop mirror already did this.
+  - Rankings past 100 pupils: the route pages (`?page=`, `total`, `totalPages`, still cut in the database) and the tab shows Prev/Next like Term Results; "N students" is the table's total, so it agrees with the overview. `_id` breaks position ties so no pupil repeats or drops at a page boundary; with every class, class rankings come grouped by class (Form 1 < Form 2 < Form 10). Desktop mirror pages the same way. Search covers the shown page only (the page says so).
+  - Checks: backend `check:resultsclassscope`, `check:rankingspaging` (both in `check:all`); web `check:resultsscope`; desktop `check-results.js` (paging).
+
+## Bug — flaky mobile check: offline teacher delete (2026-11-07)
+
+- [x] **P2** `mobile/scripts/check-teacher-unsent-delete.js` case 4b failed in CI on two PRs (#74, #78) and passed on rerun: "the DELETE went first" saw two DELETEs, "a DELETE is queued behind it" found an empty outbox, the teacher stayed active.
+  - Cause, in the check: the phone's own "push soon after a local change" (`SyncManager._schedulePush`, 3 s after a save) fired mid-case on a slow runner and ran its own backfill + drain beside the case's raw `MutationQueue.processPending()` — two drains sent the DELETE twice, and the backfill dropped the queued create. Forcing that push to fire at once failed 4b (and case 6) on every run.
+  - Not an app bug: the app reaches `processPending` only through the single-flight `MutationQueue.drain()`.
+  - Fix: the check holds the background push (and the one-off start-up sync) off after its first sync, so the scripted cases are the only driver; the trigger stays covered by `check-sync-triggers.js`. 8/8 runs pass under CPU load, and the forced-race variant now passes.
+
+## Launch order
+
+1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
+2. Merge PR #39 into master.
+2b. Uploads (E1): nothing to set — after the deploy the boot log must say `Uploads → MongoDB GridFS`. Make sure Render has no `STORAGE_DRIVER=local` and no `STORAGE_BUCKET` left over. Re-upload Green Valley's logo if it is kept. Check the size now and then: `npm run uploads:usage`.
+3. Deploy.
+4. Back up the production database: Atlas → Backup → take snapshot, or `mongodump --uri "$MONGODB_URI" --out backup-2026-10-31`. Confirm the backup finished before going on.
+5. D2, Green Valley Academy — dry run, read the counts, then apply (asks for the exact name):
+   `npm run -s school:delete -- --school "Green Valley Academy"`
+   `npm run -s school:delete -- --school 6a4ccbfac10ad6faa189bd85 --apply`
+6. D2, Kena Academy — dry run, then apply:
+   `npm run -s school:delete -- --school "Kena Academy"`
+   `npm run -s school:delete -- --school "Kena Academy" --apply`
+7. Delete the 9 uploaded files on the server (paths printed by the Green Valley dry run, under `backend/uploads/`), unless step 5 ran on the server and reported them removed.
+8. Create the new clean test school: `npm run -s seed:test-school` — "Ecole Test Bilingue" (code ETEST): 4 classes, 8 teachers covering every class-subject, a clash-free timetable, 40 pupils with four multi-child guardians, Sequences 1–2 marked (1 published), two weeks of attendance, fees paid / part-paid / overdue, one announcement. Prints the head teacher, a teacher and a three-child parent sign-in once; refuses if the school exists. `check:seedtestschool`.
+9. Check: `npm run -s cleanup:phased` dry run should list nothing; the platform dashboard shows only the new school.
+
+Pass `MONGODB_URI` with `read -rs MONGODB_URI && export MONGODB_URI` so the connection string is not echoed or kept in shell history.
+
+## Final
+
+- [x] Run all suites; open PR listing what was fixed and what was skipped and why. — PR #39. 2026-10-27: backend `npm run check:all` green in one uninterrupted run (125 scripts, exit 0) after fixing what the first runs found: C11's action-items route reachable by a teacher (now `fees.view`); stale expectations from A5 (statistics on /20, `check:panel`) and C5 (one fall said once: calibration fixture re-recorded with S16 added, `check:pilot-readiness`); an unused import from C7 (web lint). Web: 13/15 checks green; `check:l10n` (1) and `check:print` (3) fail identically on master — see Notes.
+
+## Notes / skipped
+
+- A5: Term and Annual Results showed `overallGrade`, which for schools on the shipped bands is a US letter (A+…F); replaced with the stored remark. The bands themselves (and their `gpaPoints`) were left in the data model.
+- A8: Form 1 English has two active assignments (Mr Buh, Mr Kum); every screen shows both — allowed (owner, 2026-10-27).
+- B2: the dashboard period-count fix (exclude breaks) has no automated test — the admin dashboard endpoint has no fixture harness yet.
+- B3: mobile add/edit student forms have no inline check yet; the server normalises or refuses what they send.
+- C2: no true server-side bulk print endpoint yet. A card already reads its class in a constant 23 queries (measured); the cost was ~20 sequential round trips per card and one card at a time. Fixed by parallel reads within a card and 4 cards in flight. A single bulk endpoint would cut further; follow-up if prints are still slow on the real database.
+- C4: the pilot section is hidden in the UI for everyone but Super Admin; the server's pilot endpoints still accept any role holding the `insights.pilot` permission (changing role permissions is a policy call — not done).
+- C5: the rules changed but `ENGINE_VERSION` stays "1.0.0" — pilot reviews are filed under that version; bumping it (so pre- and post-C5 reviews are told apart) is the owner's call.
+- C7: `web/scripts/check-localization.mjs` has one failure that predates this branch's C7 work ("the exam page offers Unpublish while any class's results are out") — not a date issue; left for the final suite run.
+- Web `check:print`: 3 failures (window populated after the card request; batch HTML collected; no card counted before its HTML) — identical on master with master's files, so they predate this branch; the checks look for source patterns in `reports/cards.tsx` that an earlier refactor changed. Left for a follow-up. Web `lint`: one warning in `LoginPage.tsx` (React Compiler skip), untouched by this branch.
+- C7: `web/src/pages/students/applications/index.tsx` (and `components/applications/*`) is no longer routed — the old address redirects to Admissions. Left in place; delete in a follow-up.
+- C7: icons and button colour were done on web; the mobile app already uses Ionicons line icons (its emoji were in strings, now removed) — its button colours were not audited.
+- C9: schools that saved JHS / SHS / vocational / university keep that value (shown as a selected chip) until someone picks a Cameroon type — not rewritten automatically.
+- C11: action items are recounted on the panel's 60 s poll; the overdue-fees count reads the whole school's fee ledger each time. Fine at this size — cache it if a large school's database feels it.
+- C12: a layout's look was checked through its CSS and the section gates, not by printing a card in a browser — worth one visual print of each before the first issue.

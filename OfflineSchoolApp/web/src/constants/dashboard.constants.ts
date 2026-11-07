@@ -16,6 +16,8 @@ import {
   BarChart3,
   type LucideIcon,
 } from "lucide-react";
+import type { TileTone } from "@/config/sections";
+import type { DashAccent } from "@/config/dashboardTint";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -28,6 +30,13 @@ export interface QuickAction {
   labelKey: string;
   icon:     LucideIcon;
   path:     string;
+  /**
+   * The page's highlighted action (Create exam): the same tinted card as the
+   * others, with a blue border and a ringed icon. There is no solid tile.
+   */
+  primary?: boolean;
+  /** The action's colour — its card wash and icon square (config/dashboardTint.ts). */
+  accent:   DashAccent;
 }
 
 export interface Module {
@@ -41,14 +50,24 @@ export interface Module {
   descKey:     string;
   icon:        LucideIcon;
   href:        string;
+  /** What the module is about — picks its icon box accent. */
+  tone:        TileTone;
 }
 
 export interface HealthMetric {
   key:             string;
   label:           string;
   icon:            LucideIcon;
-  /** Renders in the danger tone when the value is above zero. */
+  /** What the count is about — picks its icon box accent. */
+  tone:            TileTone;
+  /**
+   * A count that is a problem when above zero. White at zero; above zero it
+   * takes the `alert` status tint (default: error).
+   */
   alertOnNonZero?: boolean;
+  alert?:          "warning" | "error";
+  /** A count that is always shown in a status tint (notices → info). */
+  semantic?:       "info";
 }
 
 // ─────────────────────────────────────────────────────────
@@ -60,15 +79,15 @@ export interface HealthMetric {
 // colour or weight, and put a cartoon next to a table of student records —
 // they were the single loudest thing making this screen look unserious.
 export const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Add student",       labelKey: "quickActions.addStudent",       icon: GraduationCap,  path: "/students/new"                },
-  { label: "Add teacher",       labelKey: "quickActions.addTeacher",       icon: Users,          path: "/teachers/new"                },
-  { label: "Create exam",       labelKey: "quickActions.createExam",       icon: FileText,       path: "/exams/new"                   },
-  { label: "Take attendance",   labelKey: "quickActions.takeAttendance",   icon: ClipboardCheck, path: "/attendance"                  },
-  { label: "Post announcement", labelKey: "quickActions.postAnnouncement", icon: Megaphone,      path: "/announcements"               },
-  { label: "View reports",      labelKey: "quickActions.viewReports",      icon: BarChart3,      path: "/reports"                     },
-  { label: "Add class",         labelKey: "quickActions.addClass",         icon: School,         path: "/classes"                     },
-  { label: "Assign teacher",    labelKey: "quickActions.assignTeacher",    icon: GitBranch,      path: "/teachers/assignments/assign" },
-  { label: "Report templates",  labelKey: "quickActions.reportTemplates",  icon: LayoutTemplate, path: "/reports/templates"           },
+  { label: "Add student",       labelKey: "quickActions.addStudent",       icon: GraduationCap,  path: "/students/new", accent: "blue" },
+  { label: "Add teacher",       labelKey: "quickActions.addTeacher",       icon: Users,          path: "/teachers/new", accent: "violet" },
+  { label: "Create exam",       labelKey: "quickActions.createExam",       icon: FileText,       path: "/exams/new", primary: true, accent: "blue" },
+  { label: "Take attendance",   labelKey: "quickActions.takeAttendance",   icon: ClipboardCheck, path: "/attendance", accent: "green" },
+  { label: "Post announcement", labelKey: "quickActions.postAnnouncement", icon: Megaphone,      path: "/announcements", accent: "sky" },
+  { label: "View reports",      labelKey: "quickActions.viewReports",      icon: BarChart3,      path: "/reports", accent: "slate" },
+  { label: "Add class",         labelKey: "quickActions.addClass",         icon: School,         path: "/classes", accent: "indigo" },
+  { label: "Assign teacher",    labelKey: "quickActions.assignTeacher",    icon: GitBranch,      path: "/teachers/assignments/assign", accent: "violet" },
+  { label: "Report templates",  labelKey: "quickActions.reportTemplates",  icon: LayoutTemplate, path: "/reports/templates", accent: "teal" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -84,6 +103,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.classes",
     descKey:     "modules.classesDesc",    icon:        School,
     href:        "/classes",
+    tone:        "classes",
   },
   {
     id:          "subjects",
@@ -92,6 +112,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.subjects",
     descKey:     "modules.subjectsDesc",    icon:        BookOpen,
     href:        "/subjects",
+    tone:        "subjects",
   },
   {
     id:          "teachers",
@@ -100,14 +121,16 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.teachers",
     descKey:     "modules.teachersDesc",    icon:        Users,
     href:        "/teachers",
+    tone:        "teachers",
   },
   {
     id:          "applications",
-    title:       "Applications",
+    title:       "Admissions",
     description: "Review student applications",
     titleKey:    "modules.applications",
     descKey:     "modules.applicationsDesc",    icon:        GraduationCap,
     href:        "/students/admissions",
+    tone:        "students",
   },
   {
     id:          "students",
@@ -116,6 +139,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.students",
     descKey:     "modules.studentsDesc",    icon:        Users,
     href:        "/students",
+    tone:        "students",
   },
   {
     id:          "assignments",
@@ -124,6 +148,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.assignments",
     descKey:     "modules.assignmentsDesc",    icon:        GitBranch,
     href:        "/teachers/assignments",
+    tone:        "teachers",
   },
   {
     id:          "periods",
@@ -132,6 +157,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.periods",
     descKey:     "modules.periodsDesc",    icon:        Clock,
     href:        "/periods",
+    tone:        "timetable",
   },
   {
     id:          "timetable",
@@ -140,6 +166,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.timetable",
     descKey:     "modules.timetableDesc",    icon:        Clock,
     href:        "/timetable",
+    tone:        "timetable",
   },
   {
     id:          "attendance",
@@ -148,6 +175,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.attendance",
     descKey:     "modules.attendanceDesc",    icon:        Calendar,
     href:        "/attendance",
+    tone:        "attendance",
   },
   {
     id:          "exams",
@@ -156,6 +184,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.exams",
     descKey:     "modules.examsDesc",    icon:        Trophy,
     href:        "/exams",
+    tone:        "exams",
   },
   {
     id:          "announcements",
@@ -164,6 +193,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.announcements",
     descKey:     "modules.announcementsDesc",    icon:        Megaphone,
     href:        "/announcements",
+    tone:        "comms",
   },
   {
     id:          "report-templates",
@@ -172,6 +202,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.reportTemplates",
     descKey:     "modules.reportTemplatesDesc",    icon:        LayoutTemplate,
     href:        "/reports/templates",
+    tone:        "reports",
   },
   {
     id:          "settings",
@@ -180,6 +211,7 @@ export const ALL_MODULES: Module[] = [
     titleKey:    "modules.settings",
     descKey:     "modules.settingsDesc",    icon:        Settings,
     href:        "/settings",
+    tone:        "settings",
   },
 ];
 
@@ -189,25 +221,25 @@ export const ALL_MODULES: Module[] = [
 
 export const HEALTH_METRIC_ROWS: HealthMetric[][] = [
   [
-    { key: "pendingApplications", label: "Pending Apps",  icon: FileText                       },
-    { key: "approvedStudents",    label: "Students",      icon: GraduationCap                       },
-    { key: "totalTeachers",       label: "Teachers",      icon: Users                       },
-    { key: "unassignedTeachers",  label: "Unassigned",    icon: Users, alertOnNonZero: true },
+    { key: "pendingApplications", label: "Pending Apps",  tone: "students", icon: FileText, alertOnNonZero: true, alert: "warning" },
+    { key: "approvedStudents",    label: "Students",      tone: "students", icon: GraduationCap },
+    { key: "totalTeachers",       label: "Teachers",      tone: "teachers", icon: Users },
+    { key: "unassignedTeachers",  label: "Unassigned",    tone: "teachers", icon: Users, alertOnNonZero: true },
   ],
   [
-    { key: "totalClasses",        label: "Classes",       icon: School                       },
-    { key: "totalSubjects",       label: "Subjects",      icon: BookOpen                       },
-    { key: "assignedSubjects",    label: "Assigned",      icon: GitBranch                       },
-    { key: "activeAnnouncements", label: "Notices",       icon: Megaphone                       },
+    { key: "totalClasses",        label: "Classes",        tone: "classes",  icon: School },
+    { key: "totalSubjects",       label: "Class-subjects", tone: "subjects", icon: BookOpen },
+    { key: "unassignedClassSubjects", label: "No teacher", tone: "subjects", icon: GitBranch, alertOnNonZero: true },
+    { key: "activeAnnouncements", label: "Notices",        tone: "comms",    icon: Megaphone, semantic: "info" },
   ],
   [
-    { key: "totalPeriods",             label: "Periods",      icon: Clock                       },
-    { key: "incompleteTimetableSlots", label: "No Timetable", icon: Calendar, alertOnNonZero: true },
-    { key: "timetableConflicts",       label: "Conflicts",    icon: FileText, alertOnNonZero: true },
-    { key: "classesWithoutSubjects",   label: "No Subjects",  icon: School, alertOnNonZero: true },
+    { key: "totalPeriods",             label: "Teaching periods", tone: "timetable", icon: Clock },
+    { key: "incompleteTimetableSlots", label: "No Timetable", tone: "timetable", icon: Calendar, alertOnNonZero: true },
+    { key: "timetableConflicts",       label: "Conflicts",    tone: "timetable", icon: FileText, alertOnNonZero: true },
+    { key: "classesWithoutSubjects",   label: "No Subjects",  tone: "subjects",  icon: School, alertOnNonZero: true },
   ],
   [
-    { key: "totalReportTemplates", label: "Templates",   icon: LayoutTemplate },
-    { key: "defaultTemplateSet",   label: "Has Default", icon: LayoutTemplate },
+    { key: "totalReportTemplates", label: "Templates",   tone: "reports", icon: LayoutTemplate },
+    { key: "defaultTemplateSet",   label: "Has Default", tone: "reports", icon: LayoutTemplate },
   ],
 ];

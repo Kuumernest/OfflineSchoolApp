@@ -4,9 +4,13 @@
 const Student             = require("../db/models/Student");
 const Class               = require("../db/models/Class");
 const Homework            = require("../db/models/Homework");
+const Exam                = require("../db/models/Exam");
 const { StudentAttendance } = require("../db/models/Attendance");
-const { balancesFor }     = require("./fees.service");
+const { candidates: overdueFees } = require("./feeReminders.service");
 const academicHistory     = require("./intelligence/academicHistory.service");
+const { passMarkOf }      = require("./passMark.service");
+const { sequenceFigureOn20 } = require("../../../shared/academicRules");
+const { summaryPasses }   = require("../../../shared/passRate");
 const { displayName, byName } = require("../utils/studentName");
 
 /**
@@ -64,11 +68,11 @@ const THRESHOLDS = {
   minAttendanceMarks: 5,     // fewer marked days than this says nothing yet
   absenceRate:  [[0.30, 3], [0.15, 2], [0.08, 1]],
   lateCount:    5,
-  gradeDropPct: 10,          // percentage points between the last two exams
+  gradeDropPoints: 2,        // marks /20 between the last two exams (was 10 percentage points)
   subjectsFailed: 3,
   minHomework:  2,
   homeworkMissRate: [[0.5, 2], [0.25, 1]],
-  feeRatio:     0.5,         // owing half or more of what was billed
+  feeRatio:     0.5,         // OVERDUE half or more of what was billed
 };
 
 const TIER = (score) => (score >= 5 ? "high" : score >= 3 ? "medium" : "low");
@@ -78,7 +82,7 @@ const TIER = (score) => (score >= 5 ? "high" : score >= 3 ? "medium" : "low");
  * students: [{ studentId, name, enrollmentNo, classId, className, score, tier,
  *              signals: [{ code, points, data }] }]
  */
-const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
+const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date() }) => {
   const sinceKey = dayKey(new Date(Date.now() - days * 86_400_000));
   const todayKey = dayKey(new Date());
 
@@ -91,7 +95,9 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
   const ids = students.map((s) => String(s._id));
   const classNames = new Map(classes.map((c) => [String(c._id), c.name]));
 
-  const [attendanceAgg, history, homework, balances] = await Promise.all([
+  const passMark = await passMarkOf(schoolId);
+
+  const [attendanceAgg, history, homework, overdue] = await Promise.all([
     // One row per (student, status) in the window.
     StudentAttendance.aggregate([
       { $match: { schoolId, studentId: { $in: ids }, date: { $gte: sinceKey } } },
@@ -100,6 +106,8 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
     // Published only: an unpublished summary is a draft nobody has signed off,
     // and flagging a child over it would leak marks the school has not issued.
     // Continuous assessment excluded and ordered academically — see the header.
+    // Deleted exams skipped (the loader's default): their marks are not a
+    // reason to watch a child.
     academicHistory.publishedHistory({ schoolId, studentIds: ids }),
     // Homework due inside the window. dueDate is a day string, so string
     // comparison is date comparison.
@@ -107,9 +115,14 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
       schoolId, isPublished: true, deletedAt: null,
       dueDate: { $gte: sinceKey, $lte: todayKey },
     }).select("classId dueDate submissions.studentId").lean(),
-    // All-time balance, deliberately not scoped to a year: a family two terms
-    // behind is more of a warning sign, not less.
-    balancesFor({ schoolId, studentIds: ids }),
+    // Fee debt only once it is OVERDUE (C6): a family that owes this term's
+    // fees before their due date is not a pupil to watch. Owed and overdue are
+    // the Fees page's pair — both read arrears.service (shared/arrears.js)
+    // through Fee reminders — so the screens never disagree: due dates,
+    // payment plans, undated charges and all. The school's current year, as
+    // the Fees page reads it.
+    overdueFees({ schoolId, mode: "overdue", asOf })
+      .then((rows) => new Map(rows.map((r) => [String(r.studentId), r]))),
   ]);
 
   // ── Fold the raw rows into per-student shapes ───────────────────────────────
@@ -127,6 +140,21 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
   // last two entries are the two most recent sittings.
   const lastTwoResults = new Map();
   for (const [id, results] of history) lastTwoResults.set(id, results.slice(-2));
+
+  // The exam each mark-based flag rests on, so the flag can say which one and
+  // when ("Failed the last exam — 2nd Sequence, 10 Oct"). One read for the
+  // whole list; the history loader does not carry names.
+  const markExamIds = [...new Set([...lastTwoResults.values()].flat()
+    .map((r) => (r.examId ? String(r.examId) : null)).filter(Boolean))];
+  const examById = new Map((markExamIds.length
+    ? await Exam.find({ _id: { $in: markExamIds }, schoolId }).select("_id name startDate").lean()
+    : []).map((e) => [String(e._id), e]));
+  /** { examId, name, date } for a summary's exam; name/date null when the exam row is gone. */
+  const sourceOf = (summary) => {
+    if (!summary?.examId) return null;
+    const e = examById.get(String(summary.examId));
+    return { examId: String(summary.examId), name: e?.name ?? null, date: e?.startDate ?? null };
+  };
 
   const homeworkByClass = new Map(); // classId → [{submitted:Set}]
   for (const hw of homework) {
@@ -161,34 +189,43 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
     const results = lastTwoResults.get(id) ?? [];
     const latest = results[results.length - 1];
     if (latest) {
-      if (latest.isPassing === false) {
+      // On /20 (shared/academicRules sequenceFigureOn20) and judged against
+      // the school's pass mark (shared/passRate) — not a percentage, and not
+      // a stored flag one writer set against a fixed 10.
+      const latest20 = sequenceFigureOn20(latest);
+      if (summaryPasses(latest, passMark) === false) {
         signals.push({
           code: "failed_exam", points: 2,
           data: {
             term: latest.term ?? null, academicYear: latest.academicYear ?? null,
-            percentage: latest.percentage ?? null,
+            average: latest20 == null ? null : Math.round(latest20 * 100) / 100,
+            passMark,
           },
+          exam: sourceOf(latest),
         });
       }
       const previous = results.length === 2 ? results[0] : null;
+      const previous20 = previous ? sequenceFigureOn20(previous) : null;
       if (
-        previous &&
-        typeof previous.percentage === "number" &&
-        typeof latest.percentage === "number" &&
-        previous.percentage - latest.percentage >= THRESHOLDS.gradeDropPct
+        previous20 != null && latest20 != null &&
+        previous20 - latest20 >= THRESHOLDS.gradeDropPoints
       ) {
         signals.push({
           code: "grade_drop", points: 2,
           data: {
-            from: Math.round(previous.percentage * 10) / 10,
-            to:   Math.round(latest.percentage * 10) / 10,
+            from: Math.round(previous20 * 100) / 100,
+            to:   Math.round(latest20 * 100) / 100,
           },
+          // The drop is to the latest exam; the earlier one is named too.
+          exam: sourceOf(latest),
+          fromExam: sourceOf(previous),
         });
       }
       if ((latest.subjectsFailed ?? 0) >= THRESHOLDS.subjectsFailed) {
         signals.push({
           code: "subjects_failed", points: 1,
           data: { count: latest.subjectsFailed },
+          exam: sourceOf(latest),
         });
       }
     }
@@ -208,13 +245,19 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
       }
     }
 
-    const money = balances.get(id);
-    if (money && money.balance > 0) {
-      const billed = money.charged - money.waived;
-      const heavy = billed > 0 && money.balance / billed >= THRESHOLDS.feeRatio;
+    const money = overdue.get(id);
+    if (money && money.overdue > 0) {
+      // `balance` is everything owed this year; `overdue` the part of it past
+      // its due date — the Fees page's "owed" and "overdue". The flag used to
+      // print the balance as "(overdue)": 145,000 for a family 50,000 late.
+      // The weight is the overdue part too: next month's fees are not a
+      // reason to watch a pupil harder. billed is net of waivers: what is
+      // owed plus what has been paid.
+      const billed = money.balance + money.paid;
+      const heavy = billed > 0 && money.overdue / billed >= THRESHOLDS.feeRatio;
       signals.push({
         code: "fees_outstanding", points: heavy ? 2 : 1,
-        data: { balance: money.balance, billed },
+        data: { balance: money.balance, overdue: money.overdue, billed, daysOverdue: money.daysOverdue },
       });
     }
 

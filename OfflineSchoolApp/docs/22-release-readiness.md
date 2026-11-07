@@ -209,7 +209,7 @@ compare rows within a run; the table below is run 1 except where marked.
 | Item | Status |
 |---|---|
 | Configuration | IMPLEMENTED: `mobile/eas.json` (development APK on the LAN API, preview APK, production app bundle with remote versioning and auto-increment); `app.json` has package `com.myschoolonthemove.app`, version 1.0.0, icon/splash/adaptive icon, plugins for router, sqlite, secure store |
-| `EXPO_PUBLIC_API_URL` | Named per profile in `eas.json`; production and preview hosts are placeholders to fill at build time. A release bundle refuses to start without it (`src/services/api.js`); the LAN fallback applies only when unset in development |
+| `EXPO_PUBLIC_API_URL` | Named per profile in `eas.json`; preview, production and production-apk point at `https://offlineschool-app.onrender.com/api` (2026-10-28). A release bundle refuses to start without it (`src/services/api.js`); the LAN fallback applies only when unset in development |
 | `expo config --type public` | VERIFIED: resolves without error |
 | `expo-doctor` | 18/21 checks pass. Failed: (1) config schema check — needs the Expo API, unreachable from this machine; (2) missing required peer `expo-constants` for `expo-router` — **fixed, declared and locked**; (3) version drift: TypeScript 5.8.3 vs expected ~6.0, `expo` 57.0.12 vs 57.0.23 and 17 other SDK 57 packages a patch behind — **NOT upgraded here**; run `npx expo install --check` on a build machine and rerun the mobile chain |
 | EAS build | **NOT TESTED / BLOCKER for a release artifact**: `eas-cli` is not installed, there is no Expo account session, no Android SDK and no Java on this machine. `eas build --profile production --platform android` must run on a machine with an Expo login (cloud build needs no local SDK) |

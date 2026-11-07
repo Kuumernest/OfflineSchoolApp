@@ -30,8 +30,11 @@ import { errorText } from "../../src/utils/appError";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatTime } from "../../src/i18n/format";
 
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
+import { COLORS, ACCENT, SEMANTIC } from "../../src/theme/colors";
+
 const C = {
-  primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
+  primary: COLORS.primary, primaryBg: COLORS.primaryLight, white: COLORS.surface,
 
   // The outgoing bubble, and deliberately not `primary`.
   //
@@ -55,10 +58,11 @@ const C = {
   // and on the old bubble the only colours that cleared the floor were all
   // within a shade of each other. This is the gap that was missing.
   sent: "#1E3A8A",
-  gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray300: "#D1D5DB", gray400: "#9CA3AF", gray500: "#6B7280",
-  gray700: "#374151", gray900: "#111827",
-  danger: "#DC2626", dangerBg: "#FEF2F2",
+  // The neutrals are the app's theme under this screen's old names.
+  gray50: COLORS.page, gray100: COLORS.border, gray200: COLORS.border,
+  gray300: COLORS.textMuted, gray400: COLORS.textSubtle, gray500: COLORS.textSecondary,
+  gray700: COLORS.text, gray900: COLORS.text,
+  danger: COLORS.danger, dangerBg: SEMANTIC.error.bg,
 };
 
 // In the app's language, not the phone's (a French app on an English phone
@@ -148,6 +152,9 @@ export default function ThreadScreen() {
   // A read-only conversation (an archived class group, a broadcast) takes no
   // replies: the server refuses them (403), so no composer is offered.
   const [readOnly, setReadOnly] = useState(false);
+  // The server answered "not found": not a thread this person is in. Its
+  // stored copy has been deleted; say so rather than show an empty thread.
+  const [gone,     setGone]     = useState(false);
   // The header under the status bar and the composer above the navigation
   // bar: Android draws edge-to-edge, iOS has the notch and home indicator.
   const pad = useScreenInsets({ top: 0, bottom: 0 });
@@ -175,7 +182,8 @@ export default function ThreadScreen() {
   }, [id]);
 
   const refresh = useCallback(async () => {
-    await MessageService.syncMessages(id, myId);
+    const res = await MessageService.syncMessages(id, myId);
+    if (res?.gone) { setGone(true); setMessages([]); setLoading(false); return; }
     await loadLocal();
     // Fetch the other participant's read state for read receipts.
     const readState = await MessageService.getParticipantReadState(id);
@@ -341,6 +349,10 @@ export default function ThreadScreen() {
           {item.state === "failed" && (
             <TouchableOpacity onPress={() => handleRetry(item._id)} hitSlop={8} accessibilityRole="button">
               <Text style={s.failedNote}>{t("msgMobile.failedNote")}</Text>
+              {/* Why: the server's reason, kept by the outbox. Without it a
+                  refused message looked like a bad connection, and tapping
+                  retry failed the same way every time. */}
+              {!!item.error && <Text style={s.failedReason}>{item.error}</Text>}
             </TouchableOpacity>
           )}
         </View>
@@ -360,7 +372,10 @@ export default function ThreadScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.conversation")}</Text>
+        <View style={s.headerTitleRow}>
+          <HeaderIcon size={32} style={s.headerIcon} />
+          <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.conversation")}</Text>
+        </View>
         <View style={s.backBtn} />
       </View>
 
@@ -378,7 +393,8 @@ export default function ThreadScreen() {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={s.emptyText}>{t("msgMobile.emptyThread")}</Text>
+              <IconSquare icon="chatbubbles-outline" accent="sky" size={56} radius={16} />
+              <Text style={s.emptyText}>{t(gone ? "msgMobile.unavailable" : "msgMobile.emptyThread")}</Text>
             </View>
           }
         />
@@ -407,7 +423,7 @@ export default function ThreadScreen() {
         </View>
       )}
 
-      {readOnly ? (
+      {gone ? null : readOnly ? (
         <View style={[s.readOnlyBar, { paddingBottom: 10 + pad.paddingBottom }]}>
           <Text style={s.readOnlyText}>{t("msgMobile.readOnlyNote")}</Text>
         </View>
@@ -465,7 +481,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.gray200,
   },
   backBtn:     { width: 40, alignItems: "center" },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: C.gray900, textAlign: "center" },
+  headerTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  headerIcon:  { marginRight: 8 },
+  headerTitle: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: C.gray900, textAlign: "center" },
 
   listContent: { padding: 12, gap: 8 },
 
@@ -483,7 +501,7 @@ const s = StyleSheet.create({
   bubbleDeleted: { backgroundColor: C.gray100, borderColor: C.gray200 },
   bubbleFailed:  { backgroundColor: C.danger },
 
-  senderName: { fontSize: 11, fontWeight: "700", color: C.gray500, marginBottom: 2 },
+  senderName: { fontSize: 11, fontWeight: "700", color: ACCENT.sky.deep, marginBottom: 2 },
 
   bubbleText:        { fontSize: 15, color: C.gray900, lineHeight: 20 },
   bubbleTextMine:    { color: C.white },
@@ -495,6 +513,7 @@ const s = StyleSheet.create({
   bubbleTimeMine: { color: "#BFDBFE" },
 
   failedNote: { fontSize: 10, color: C.white, marginTop: 3, textDecorationLine: "underline" },
+  failedReason: { fontSize: 10, color: C.white, marginTop: 2, opacity: 0.9 },
 
   readOnlyBar: {
     backgroundColor: C.white, paddingHorizontal: 16, paddingTop: 12,
@@ -502,8 +521,8 @@ const s = StyleSheet.create({
   },
   readOnlyText: { fontSize: 13, color: C.gray500, textAlign: "center" },
 
-  empty:     { alignItems: "center", paddingTop: 60 },
-  emptyText: { fontSize: 13, color: C.gray400 },
+  empty:     { alignItems: "center", paddingTop: 60, gap: 10 },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary },
 
   composer: {
     flexDirection: "row", alignItems: "flex-end", gap: 8,

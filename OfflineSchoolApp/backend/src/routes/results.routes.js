@@ -198,6 +198,7 @@ router.get(
 );
 
 // Printable HTML — single shared rendering engine (web batch print + mobile PDF)
+// ?issue=1 marks an actual print and archives the card; without it, a preview.
 router.get(
   "/:examId/student/:studentId/reportcard/html",
   readRoles,

@@ -76,10 +76,10 @@ const ICON: Record<ToastKind, typeof CheckCircle2> = {
 };
 
 const ICON_COLOR: Record<ToastKind, string> = {
-  success: "text-success",
-  error:   "text-danger",
-  warning: "text-warning",
-  info:    "text-info",
+  success: "text-success-text",
+  error:   "text-danger-text",
+  warning: "text-warning-text",
+  info:    "text-info-text",
 };
 
 // A toast sits on top of the page, so it keeps a solid surface and a hairline
@@ -211,30 +211,43 @@ function ConfirmDialog({
   onResolve: (result: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const ref       = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
+  // A native modal <dialog>, like components/ui/Modal. A confirm asked from
+  // inside an open Modal ("discard this lesson?") has to paint above it, and
+  // a Modal is in the browser's top layer with the rest of the page made
+  // inert: no z-index can lift a div over it, and nothing in the div could be
+  // clicked. A dialog opened later sits above it in the top layer instead.
   useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
     cancelRef.current?.focus();
   }, []);
 
+  // Escape answers "no". The native cancel event goes to the topmost dialog
+  // only, so it no longer also closes the Modal underneath.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onResolve(false);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const dialog = ref.current;
+    if (!dialog) return;
+    const onCancel = (e: Event) => { e.preventDefault(); onResolve(false); };
+    dialog.addEventListener("cancel", onCancel);
+    return () => dialog.removeEventListener("cancel", onCancel);
   }, [onResolve]);
 
   const isDanger = options.kind === "danger";
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-[2px]"
-      onClick={() => onResolve(false)}
+    <dialog
+      ref={ref}
+      // A click on the backdrop lands on the dialog itself.
+      onClick={(e) => { if (e.target === ref.current) onResolve(false); }}
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-card border border-line bg-surface p-0 shadow-raise backdrop:bg-ink/40 backdrop:backdrop-blur-[2px]"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-message"
     >
       <div
-        className="w-full max-w-sm rounded-card border border-line bg-surface p-5 shadow-raise animate-in fade-in zoom-in-95 duration-150"
-        onClick={(e) => e.stopPropagation()}
+        className="p-5 animate-in fade-in zoom-in-95 duration-150"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
@@ -247,9 +260,9 @@ function ConfirmDialog({
           )}
         >
           {isDanger ? (
-            <AlertCircle className="h-4.5 w-4.5 text-danger" />
+            <AlertCircle className="h-4.5 w-4.5 text-danger-text" />
           ) : (
-            <AlertTriangle className="h-4.5 w-4.5 text-warning" />
+            <AlertTriangle className="h-4.5 w-4.5 text-warning-text" />
           )}
         </div>
 
@@ -284,7 +297,7 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

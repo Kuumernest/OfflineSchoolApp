@@ -16,8 +16,11 @@ import api                              from "../../../../../../src/services/api
 import ReportCard                       from "../../../../components/ReportCard";
 import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../../../src/utils/appError";
+import { needsInternetFailureText, requireOnline } from "../../../../../../src/hooks/useNeedsInternet";
 import { formatDecimal } from "../../../../../../src/i18n/format";
 import { recalculateClass, CONFIRM } from "../../../../../../src/services/reportCardCalc.service";
+import { COLORS, ACCENT, SEMANTIC, statusBadge } from "../../../../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -66,10 +69,12 @@ function SubjectEditor({ subject }) {
   const { t }      = useTranslation();
   const isAbsent   = subject.isAbsent || subject.isExempt;
   const scoreColor = isAbsent
-    ? C.gray400
-    : subject.isPassing === true  ? C.success
-    : subject.isPassing === false ? C.error
-    : C.gray700;
+    ? COLORS.textSecondary
+    : subject.isPassing === true  ? SEMANTIC.success.text
+    : subject.isPassing === false ? SEMANTIC.error.text
+    : COLORS.text;
+  // Absent is bad news; exempt is excused (info).
+  const absentTone = statusBadge(subject.isAbsent ? "error" : "info");
 
   return (
     <View style={se.row}>
@@ -81,8 +86,8 @@ function SubjectEditor({ subject }) {
           <Text style={se.teacher}>{subject.teacherName}</Text>
         )}
         {isAbsent && (
-          <View style={se.absentBadge}>
-            <Text style={se.absentText}>
+          <View style={[se.absentBadge, { backgroundColor: absentTone.bg, borderColor: absentTone.border }]}>
+            <Text style={[se.absentText, { color: absentTone.text }]}>
               {subject.isAbsent
                 ? t("exams.absent")
                 : t("studentResult.exempt")}
@@ -133,21 +138,21 @@ const se = StyleSheet.create({
     paddingVertical:   10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: COLORS.border,
     gap:               6,
   },
   nameCol:     { flex: 1.8 },
-  name:        { fontSize: 13, fontWeight: "600", color: C.gray900 },
-  teacher:     { fontSize: 10, color: C.gray400, marginTop: 1 },
+  name:        { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  teacher:     { fontSize: 10, color: COLORS.textSecondary, marginTop: 1 },
   absentBadge: {
     marginTop:         3,
     alignSelf:         "flex-start",
-    backgroundColor:   C.gray100,
+    borderWidth:       1,
     borderRadius:      4,
     paddingHorizontal: 5,
     paddingVertical:   1,
   },
-  absentText:  { fontSize: 9, fontWeight: "700", color: C.gray500 },
+  absentText:  { fontSize: 9, fontWeight: "700" },
   scoreCol: {
     flex:          0.8,
     flexDirection: "row",
@@ -155,7 +160,7 @@ const se = StyleSheet.create({
     gap:           2,
   },
   score:    { fontSize: 14, fontWeight: "700" },
-  maxScore: { fontSize: 10, color: C.gray400 },
+  maxScore: { fontSize: 10, color: COLORS.textSecondary },
   coeffCol: { flex: 0.7, alignItems: "center" },
   // Read-only since the agreed calculation (the school's coefficient), so
   // plain text rather than an input's box; and no fixed width: at 360 px
@@ -166,11 +171,11 @@ const se = StyleSheet.create({
     paddingHorizontal: 2,
     fontSize:          13,
     fontWeight:        "700",
-    color:             C.primary,
+    color:             ACCENT.slate.deep,
     textAlign:         "center",
   },
   coeffDisabled: {
-    color:           C.gray400,
+    color:           COLORS.textSecondary,
   },
   normCol: {
     flex:           0.8,
@@ -180,7 +185,7 @@ const se = StyleSheet.create({
     gap:            1,
   },
   norm:        { fontSize: 13, fontWeight: "700" },
-  normLabel:   { fontSize: 10, color: C.gray400 },
+  normLabel:   { fontSize: 10, color: COLORS.textSecondary },
   weightedCol: { flex: 0.8, alignItems: "flex-end" },
   weighted:    { fontSize: 13, fontWeight: "600" },
 });
@@ -197,12 +202,14 @@ function SummaryBar({ computed, outOf }) {
     average, isPassing, totalCoefficients,
     subjectsPassed, subjectsFailed,
   } = computed;
-  const color = isPassing == null ? C.gray500 : isPassing ? C.success : C.error;
+  // Pass / fail is the bar's meaning: its status tint; no verdict yet, slate.
+  const tone  = isPassing == null ? null : SEMANTIC[isPassing ? "success" : "error"];
+  const color = tone ? tone.text : ACCENT.slate.deep;
 
   return (
     <View style={[sb.bar, {
-      borderColor:     color + "40",
-      backgroundColor: color + "08",
+      borderColor:     tone ? tone.icon + "40" : COLORS.border,
+      backgroundColor: tone ? tone.bg : ACCENT.slate.wash,
     }]}>
       <View style={sb.item}>
         <Text style={[sb.val, { color }]} numberOfLines={1} adjustsFontSizeToFit>{average != null ? formatDecimal(average, 2) : "—"}</Text>
@@ -210,21 +217,21 @@ function SummaryBar({ computed, outOf }) {
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
-        <Text style={[sb.val, { color: C.primary }]}>{totalCoefficients}</Text>
+        <Text style={[sb.val, { color: ACCENT.slate.deep }]}>{totalCoefficients}</Text>
         <Text style={sb.lbl}>{t("studentResult.totalCoeff")}</Text>
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
-        <Text style={[sb.val, { color: C.success }]}>{subjectsPassed ?? 0}</Text>
+        <Text style={[sb.val, { color: SEMANTIC.success.text }]}>{subjectsPassed ?? 0}</Text>
         <Text style={sb.lbl}>{t("studentResult.passed")}</Text>
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
-        <Text style={[sb.val, { color: C.error }]}>{subjectsFailed ?? 0}</Text>
+        <Text style={[sb.val, { color: SEMANTIC.error.text }]}>{subjectsFailed ?? 0}</Text>
         <Text style={sb.lbl}>{t("studentResult.failed")}</Text>
       </View>
       <View style={sb.divider} />
-      <View style={[sb.badge, { backgroundColor: color + "18" }]}>
+      <View style={[sb.badge, { backgroundColor: tone ? tone.box : COLORS.surface }]}>
         <Text style={[sb.badgeText, { color }]}>
           {isPassing == null ? "—" : isPassing ? t("studentResult.pass") : t("studentResult.fail")}
         </Text>
@@ -246,8 +253,8 @@ const sb = StyleSheet.create({
   },
   item:    { alignItems: "center", flex: 1 },
   val:     { fontSize: 16, fontWeight: "800" },
-  lbl:     { fontSize: 9, color: C.gray500, marginTop: 2, fontWeight: "600" },
-  divider: { width: 1, height: 28, backgroundColor: C.gray200 },
+  lbl:     { fontSize: 9, color: COLORS.textSecondary, marginTop: 2, fontWeight: "600" },
+  divider: { width: 1, height: 28, backgroundColor: COLORS.border },
   badge: {
     borderRadius:      8,
     paddingHorizontal: 10,
@@ -302,7 +309,9 @@ export default function StudentReportCardScreen() {
       }
     } catch (err) {
       console.error("loadReportCard:", err.message);
-      setError(errorText(t, err));
+      // The report card is computed by the server (online-only): offline,
+      // say that rather than "Network Error".
+      setError(needsInternetFailureText(t, err));
     } finally {
       setLoading(false);
     }
@@ -363,7 +372,8 @@ export default function StudentReportCardScreen() {
     }
   }, [examId, studentId, loadReportCard, t]);
 
-  const handleCalculate = useCallback(() => {
+  const handleCalculate = useCallback(async () => {
+    if (!(await requireOnline(t))) return;
     Alert.alert(
       t(CONFIRM.title),
       t(CONFIRM.body),
@@ -384,7 +394,8 @@ export default function StudentReportCardScreen() {
    * act that supersedes it — confirmed first, because it replaces a document
    * a parent may already be holding.
    */
-  const handleReissue = useCallback(() => {
+  const handleReissue = useCallback(async () => {
+    if (!(await requireOnline(t))) return;
     Alert.alert(
       t("studentResult.reissueTitle"),
       t("studentResult.reissueBody"),
@@ -411,7 +422,7 @@ export default function StudentReportCardScreen() {
               const res = err?.response?.data;
               Alert.alert(
                 t("studentResult.reissueFailed"),
-                res?.detail || res?.error || errorText(t, err)
+                res?.detail || res?.error || needsInternetFailureText(t, err)
               );
             } finally {
               setReissuing(false);
@@ -527,7 +538,7 @@ export default function StudentReportCardScreen() {
   if (!reportData) {
     return (
       <View style={s.centered}>
-        <Ionicons name="document-outline" size={48} color={C.gray200} />
+        <IconSquare icon="document-outline" accent="slate" size={56} radius={16} />
         <Text style={s.emptyText}>{t("studentResult.noScores")}</Text>
         <Text style={s.emptySub}>{t("studentResult.noScoresSub")}</Text>
         <TouchableOpacity style={s.grayBtn} onPress={() => router.back()}>
@@ -556,9 +567,10 @@ export default function StudentReportCardScreen() {
             onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={24} color={C.gray900} />
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
 
+          <HeaderIcon icon="stats-chart" accent="slate" style={s.headerIcon} />
           <View style={s.headerCenter}>
             <Text style={s.headerTitle} numberOfLines={1}>
               {reportData.studentName || t("results.my.reportCard")}
@@ -631,9 +643,7 @@ export default function StudentReportCardScreen() {
             {/* Student info */}
             <View style={s.card}>
               <View style={s.studentRow}>
-                <View style={s.studentAvatar}>
-                  <Ionicons name="person" size={22} color={C.primary} />
-                </View>
+                <IconSquare icon="person" accent="blue" size={48} radius={14} />
                 <View style={s.studentInfo}>
                   <Text style={s.studentName}>
                     {reportData.studentName || t("studentResult.unknownStudent")}
@@ -652,7 +662,10 @@ export default function StudentReportCardScreen() {
 
             {/* The school's calculation: nothing to set here (docs/39 §21.1) */}
             <View style={s.card}>
-              <Text style={s.cardTitle}>{t("studentResult.calcSettings")}</Text>
+              <View style={s.cardTitleRow}>
+                <IconSquare icon="calculator" accent="slate" size={28} />
+                <Text style={s.cardTitle}>{t("studentResult.calcSettings")}</Text>
+              </View>
               <Text style={s.settingHint}>{t("studentResult.calcFixedHint")}</Text>
             </View>
 
@@ -661,7 +674,10 @@ export default function StudentReportCardScreen() {
 
             {/* Subject table */}
             <View style={s.card}>
-              <Text style={s.cardTitle}>{t("studentResult.subjectMarks")}</Text>
+              <View style={s.cardTitleRow}>
+                <IconSquare icon="book" accent="slate" size={28} />
+                <Text style={s.cardTitle}>{t("studentResult.subjectMarks")}</Text>
+              </View>
 
               <View style={s.tableHead}>
                 <Text style={[s.th, { flex: 1.8 }]}>
@@ -728,6 +744,7 @@ export default function StudentReportCardScreen() {
                 result={reportCardResult}
                 exam={examObj}
                 schoolName={user?.schoolName || user?.school?.name}
+                schoolLogo={user?.school?.logo || user?.schoolLogo || null}
                 examId={String(examId)}
                 studentId={String(studentId)}
                 schoolId={schoolId}
@@ -736,11 +753,7 @@ export default function StudentReportCardScreen() {
               />
             ) : (
               <View style={s.centered}>
-                <Ionicons
-                  name="calculator-outline"
-                  size={48}
-                  color={C.gray200}
-                />
+                <IconSquare icon="calculator-outline" accent="slate" size={56} radius={16} />
                 <Text style={s.emptyText}>
                   {t("studentResult.noReportCard")}
                 </Text>
@@ -770,19 +783,19 @@ export default function StudentReportCardScreen() {
 // ─────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.gray50 },
+  container: { flex: 1, backgroundColor: COLORS.page },
   centered: {
     flex:            1,
     alignItems:      "center",
     justifyContent:  "center",
     gap:             12,
     padding:         24,
-    backgroundColor: C.gray50,
+    backgroundColor: COLORS.page,
   },
-  loadingText: { fontSize: 14, color: C.gray500 },
-  errorText:   { fontSize: 14, color: C.error, textAlign: "center" },
-  emptyText:   { fontSize: 16, fontWeight: "700", color: C.gray900 },
-  emptySub:    { fontSize: 13, color: C.gray500, textAlign: "center" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary },
+  errorText:   { fontSize: 14, color: SEMANTIC.error.text, textAlign: "center" },
+  emptyText:   { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySub:    { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 
   primaryBtn: {
     backgroundColor:   C.primary,
@@ -805,22 +818,23 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   C.white,
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: C.gray100,
+    borderBottomColor: COLORS.border,
     gap:               10,
   },
   headerBack: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: C.gray100,
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
-  headerTitle:  { fontSize: 16, fontWeight: "700", color: C.gray900 },
-  headerSub:    { fontSize: 11, color: C.gray500, marginTop: 2 },
+  headerTitle:  { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   shareBtn:     { padding: 8 },
 
   tabBar: {
@@ -847,35 +861,29 @@ const s = StyleSheet.create({
   scrollContent: { padding: 16, gap: 14 },
 
   card: {
-    backgroundColor: C.white,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    16,
     padding:         16,
     borderWidth:     1,
-    borderColor:     C.gray200,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   cardTitle: {
     fontSize:     14,
     fontWeight:   "700",
-    color:        C.gray900,
-    marginBottom: 12,
+    color:        COLORS.text,
   },
 
   studentRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  studentAvatar: {
-    width:           48,
-    height:          48,
-    borderRadius:    14,
-    backgroundColor: C.primaryBg,
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
   studentInfo: { flex: 1 },
-  studentName: { fontSize: 16, fontWeight: "700", color: C.gray900 },
-  studentMeta: { fontSize: 12, color: C.gray500, marginTop: 3 },
+  studentName: { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  studentMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 3 },
 
   settingsRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   settingItem: { flex: 1 },
@@ -898,25 +906,25 @@ const s = StyleSheet.create({
     backgroundColor:   C.primaryBg,
     textAlign:         "center",
   },
-  settingHint: { fontSize: 11, color: C.gray400, lineHeight: 16 },
+  settingHint: { fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
 
   tableHead: {
     flexDirection:     "row",
     paddingVertical:   8,
     paddingHorizontal: 12,
-    backgroundColor:   C.gray50,
+    backgroundColor:   COLORS.surface,
     borderRadius:      6,
     marginBottom:      4,
   },
   th: {
     fontSize:      10,
     fontWeight:    "700",
-    color:         C.gray500,
+    color:         COLORS.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   emptyTable:     { alignItems: "center", paddingVertical: 24 },
-  emptyTableText: { fontSize: 13, color: C.gray400 },
+  emptyTableText: { fontSize: 13, color: COLORS.textSecondary },
 
   liveRow: { flexDirection: "row", justifyContent: "space-around" },
 

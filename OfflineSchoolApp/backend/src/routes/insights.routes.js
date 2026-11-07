@@ -710,6 +710,7 @@ router.post("/reviews", requirePermission("insights.review"), asyncHandler(async
     classifications: found.classifications,
     review:          req.body.review,
     reviewedBy:      actor,
+    reviewerRole:    req.user.role ?? null,
     pilotRunId:      openPilot ? String(openPilot._id) : null,
     pilotKind:       openPilot ? openPilot.kind : null,
   });

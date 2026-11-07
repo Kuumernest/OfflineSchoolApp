@@ -60,6 +60,8 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }   from "@/i18n/format";
 import { cn }          from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import type { LucideIcon } from "lucide-react";
 
 import { fetchReport, fetchExpenses, fetchRuns } from "@/services/finance.service";
 import { fetchOutstanding } from "@/services/fee.service";
@@ -86,7 +88,7 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger"
+      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text"
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
@@ -99,14 +101,26 @@ function PanelHeader({
   title,
   to,
   linkLabel,
+  icon: Icon,
+  accent = "teal",
 }: {
   title:      string;
   to?:        string;
   linkLabel?: string;
+  /** A small solid icon square before the title. */
+  icon?:      LucideIcon;
+  accent?:    DashAccent;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+        {Icon && (
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)} aria-hidden="true">
+            <Icon className="h-4 w-4" />
+          </span>
+        )}
+        {title}
+      </h2>
       {to && (
         <Link
           to={to}
@@ -228,6 +242,7 @@ export default function BursarDashboardPage() {
           value={fmt.money(arrears?.billed ?? 0)}
           subtitle={t("bursarDashboard.expectedNote")}
           icon={Wallet}
+          tone="finance"
         />
         <StatCard
           title={t("bursarDashboard.collected")}
@@ -243,15 +258,19 @@ export default function BursarDashboardPage() {
               : t("bursarDashboard.rate", { rate: arrears.collectionRate })
           }
           icon={TrendingUp}
+          tone="finance"
         />
         <StatCard
           title={t("bursarDashboard.outstanding")}
           value={fmt.money(arrears?.outstanding ?? 0)}
           subtitle={t("bursarDashboard.owingStudents", { count: owingCount })}
           subtitleColor={
-            (arrears?.outstanding ?? 0) > 0 ? "text-warning" : undefined
+            (arrears?.outstanding ?? 0) > 0
+              ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning-text"
+              : undefined
           }
           icon={TrendingDown}
+          tone="finance"
           href="/fees"
         />
         <StatCard
@@ -259,6 +278,7 @@ export default function BursarDashboardPage() {
           value={fmt.money(arrears?.waived ?? 0)}
           subtitle={t("bursarDashboard.waivedNote")}
           icon={Users}
+          tone="finance"
         />
       </div>
 
@@ -268,17 +288,17 @@ export default function BursarDashboardPage() {
           anybody looked at it. Absent entirely in a school with no thresholds
           set — see the note at the top of the file. */}
       {approvalsInUse && (
-        <Card>
+        <Card className={DASH_TINT.amber.edge}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+              <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {t("bursarDashboard.approvalsTitle")}
               </div>
               <div className="mt-1 flex items-baseline gap-2">
                 <span
                   className={cn(
                     "font-display text-[22px] leading-tight",
-                    pendingApprovals > 0 ? "text-warning" : "text-ink"
+                    pendingApprovals > 0 ? "text-warning-text" : "text-ink"
                   )}
                 >
                   {pendingApprovals}
@@ -319,16 +339,18 @@ export default function BursarDashboardPage() {
       <Card>
         <PanelHeader
           title={t("bursarDashboard.todayTitle")}
+          icon={Wallet}
+          accent="teal"
           to="/finance/reports"
           linkLabel={t("bursarDashboard.fullReport")}
         />
-        <p className="mt-1 text-xs text-ink-faint">
+        <p className="mt-1 text-xs text-ink-muted">
           {t("bursarDashboard.todayNote")}
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+            <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("bursarDashboard.collectedToday")}
             </div>
             <div className="mt-1 font-display text-[22px] leading-tight text-ink">
@@ -340,7 +362,7 @@ export default function BursarDashboardPage() {
           </div>
 
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+            <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("bursarDashboard.spentToday")}
             </div>
             <div className="mt-1 font-display text-[22px] leading-tight text-ink">
@@ -355,13 +377,13 @@ export default function BursarDashboardPage() {
           </div>
 
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+            <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("bursarDashboard.netToday")}
             </div>
             <div
               className={cn(
                 "mt-1 font-display text-[22px] leading-tight",
-                (flow?.net ?? 0) < 0 ? "text-danger" : "text-ink"
+                (flow?.net ?? 0) < 0 ? "text-danger-text" : "text-ink"
               )}
             >
               {fmt.money(flow?.net ?? 0)}
@@ -376,6 +398,8 @@ export default function BursarDashboardPage() {
         <Card>
           <PanelHeader
             title={t("bursarDashboard.arrearsTitle")}
+            icon={AlertCircle}
+            accent="red"
             to="/fees"
             linkLabel={t("bursarDashboard.seeAll", { total: owingCount })}
           />
@@ -418,7 +442,7 @@ export default function BursarDashboardPage() {
                           </span>
                         )}
                       </Td>
-                      <Td numeric className="font-medium text-warning">
+                      <Td numeric className="font-medium text-warning-text">
                         {fmt.money(row.balance)}
                       </Td>
                     </Tr>
@@ -433,6 +457,8 @@ export default function BursarDashboardPage() {
         <Card>
           <PanelHeader
             title={t("bursarDashboard.expensesTitle")}
+            icon={TrendingDown}
+            accent="teal"
             to="/finance/expenses"
             linkLabel={t("bursarDashboard.recordExpense")}
           />
@@ -459,7 +485,7 @@ export default function BursarDashboardPage() {
                     <Tr key={e._id}>
                       <Td>
                         <div className="flex items-center gap-2">
-                          <Receipt className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+                          <Receipt className="h-3.5 w-3.5 shrink-0 text-accent-teal-solid" aria-hidden="true" />
                           <span className="truncate">
                             {e.description || e.vendor || t("bursarDashboard.untitledExpense")}
                           </span>
@@ -485,6 +511,8 @@ export default function BursarDashboardPage() {
       <Card>
         <PanelHeader
           title={t("bursarDashboard.payrollTitle")}
+          icon={Users}
+          accent="teal"
           to="/finance/payroll"
           linkLabel={t("bursarDashboard.openPayroll")}
         />
@@ -492,7 +520,7 @@ export default function BursarDashboardPage() {
         {lastRun ? (
           <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <span className="inline-flex items-center gap-2 text-ink">
-              <CalendarClock className="h-4 w-4 text-ink-faint" aria-hidden="true" />
+              <CalendarClock className="h-4 w-4 text-accent-teal-solid" aria-hidden="true" />
               {fmt.monthLabel(lastRun.periodMonth)}
             </span>
             <span className="text-ink-muted">
@@ -505,10 +533,10 @@ export default function BursarDashboardPage() {
               className={cn(
                 "rounded-full px-2 py-0.5 text-xs font-medium",
                 lastRun.status === "confirmed"
-                  ? "bg-success-soft text-success"
+                  ? "bg-success-soft text-success-text"
                   : lastRun.status === "reversed"
-                    ? "bg-danger-soft text-danger"
-                    : "bg-warning-soft text-warning"
+                    ? "bg-danger-soft text-danger-text"
+                    : "bg-warning-soft text-warning-text"
               )}
             >
               {t(`bursarDashboard.runStatus.${lastRun.status}`)}

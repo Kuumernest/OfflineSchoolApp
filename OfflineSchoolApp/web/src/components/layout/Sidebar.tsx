@@ -1,13 +1,14 @@
 // web/src/components/layout/Sidebar.tsx
-import { useState, useEffect }          from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation }                from "react-i18next";
-import { NavLink, useLocation }         from "react-router-dom";
+import { Link, useLocation }           from "react-router-dom";
 import { ChevronRight, GraduationCap, X } from "lucide-react";
 import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
-import { sectionForPath, NAV_GROUPS, groupIndexFor } from "@/config/sections";
+import { NAV_GROUPS, groupIndexFor } from "@/config/sections";
 import { useUser, useActiveSchool }     from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
 import { roleLabel }                    from "@/utils/roleLabel";
+import { activeNavPath }                from "@/utils/activeNav";
 import { type UserRole }                from "@/types";
 
 // ─────────────────────────────────────────────────────────
@@ -28,8 +29,9 @@ const hasAccess = (item: NavItem, role: UserRole, inSchool: boolean) => {
   return item.platform ? true : inSchool;
 };
 
-const isParentActive = (item: NavItem, pathname: string) =>
-  item.children?.some((c) => c.path && pathname.startsWith(c.path)) ?? false;
+/** A group is active when it holds the one active entry. */
+const isParentActive = (item: NavItem, activePath: string | null) =>
+  Boolean(activePath) && (item.children?.some((c) => c.path === activePath) ?? false);
 
 /**
  * Translate a nav entry, falling back to its English label.
@@ -62,40 +64,39 @@ const firstPath = (item: NavItem): string | undefined =>
 function SingleItem({
   item,
   depth = 0,
+  activePath,
 }: {
-  item:   NavItem;
-  depth?: number;
+  item:       NavItem;
+  depth?:     number;
+  activePath: string | null;
 }) {
   const navLabel = useNavLabel();
   if (!item.path) return null;
 
+  // Decided once for the whole rail (utils/activeNav.ts), not per link by
+  // prefix — NavLink's own matching lit /students and /students/admissions
+  // together, and every other pair where one entry is the other's prefix.
+  const isActive = item.path === activePath;
+
   return (
-    <NavLink
+    <Link
       to={item.path}
-      // Both are prefixes of every page beneath them; match them exactly so
-      // only the page actually open is highlighted.
-      end={item.path === "/dashboard" || item.path === "/platform"}
-      className={({ isActive }) =>
-        cn(
-          ROW,
-          isActive
-            ? "bg-primary-600 text-nav-text-active"
-            : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
-        )
-      }
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        ROW,
+        isActive
+          ? "bg-nav-active text-nav-text-active hover:bg-nav-active-hover"
+          : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
+      )}
     >
-      {({ isActive }) => (
         <>
           {depth === 0 ? (
-            /* The icon carries its section's colour when the row is at rest,
-               and turns white when the row is the one you are on. That is the
-               whole of the wayfinding: nineteen destinations that used to be
-               nineteen identical grey glyphs now differ before you read them.
-               See config/sections.ts. */
+            /* Icons share the row's text colour; only the active row is
+               coloured (the brand blue behind a white icon). */
             <item.icon
               className={cn(
                 "h-[18px] w-[18px] shrink-0 transition-colors",
-                isActive ? "text-white" : sectionForPath(item.path ?? "").navIcon
+                isActive ? "text-nav-text-active" : "text-nav-text group-hover:text-nav-text-active"
               )}
               aria-hidden="true"
             />
@@ -108,7 +109,7 @@ function SingleItem({
                 "ml-1 h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
                 isActive
                   ? "bg-nav-text-active"
-                  : "bg-nav-line group-hover:bg-nav-text"
+                  : "bg-nav-text-muted group-hover:bg-nav-text"
               )}
               aria-hidden="true"
             />
@@ -120,8 +121,7 @@ function SingleItem({
             </span>
           )}
         </>
-      )}
-    </NavLink>
+    </Link>
   );
 }
 
@@ -133,14 +133,15 @@ function GroupItem({
   item,
   role,
   inSchool,
+  activePath,
 }: {
-  item:     NavItem;
-  role:     UserRole;
-  inSchool: boolean;
+  item:       NavItem;
+  role:       UserRole;
+  inSchool:   boolean;
+  activePath: string | null;
 }) {
-  const { pathname } = useLocation();
   const navLabel     = useNavLabel();
-  const active       = isParentActive(item, pathname);
+  const active       = isParentActive(item, activePath);
   const [open, setOpen] = useState(active);
 
   // Navigating into a section from outside the rail — a dashboard tile, a deep
@@ -177,14 +178,14 @@ function GroupItem({
         <item.icon
           className={cn(
             "h-[18px] w-[18px] shrink-0 transition-colors",
-            active ? "text-white" : sectionForPath(firstPath(item) ?? "").navIcon
+            active ? "text-nav-text-active" : "text-nav-text group-hover:text-nav-text-active"
           )}
           aria-hidden="true"
         />
         <span className="flex-1 truncate text-left">{navLabel(item)}</span>
         <ChevronRight
           className={cn(
-            "h-3.5 w-3.5 shrink-0 text-nav-line transition-transform duration-150",
+            "h-3.5 w-3.5 shrink-0 text-nav-text-muted transition-transform duration-150",
             "group-hover:text-nav-text",
             open && "rotate-90"
           )}
@@ -201,7 +202,7 @@ function GroupItem({
             aria-hidden="true"
           />
           {visibleChildren.map((child) => (
-            <SingleItem key={child.path} item={child} depth={1} />
+            <SingleItem key={child.path} item={child} depth={1} activePath={activePath} />
           ))}
         </div>
       )}
@@ -231,6 +232,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   // listing it here cannot loop.
   useEffect(() => { onClose(); }, [pathname, onClose]);
 
+  // Among the entries this person is shown: a page under an entry they cannot
+  // see should light its visible parent, not nothing.
+  const activePath = useMemo(() => {
+    const paths = NAV_ITEMS.filter((i) => hasAccess(i, role, inSchool)).flatMap((i) => [
+      i.path,
+      ...(i.children ?? []).filter((c) => hasAccess(c, role, inSchool)).map((c) => c.path),
+    ]);
+    return activeNavPath(pathname, paths);
+  }, [pathname, role, inSchool]);
+
   const initial = user?.name?.charAt(0).toUpperCase() ?? "?";
 
   return (
@@ -255,7 +266,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         {/* Brand — same 56px as the top bar, so the two align across the seam */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-nav-line px-4">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-primary-600">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-nav-active">
             <GraduationCap className="h-4 w-4 text-white" aria-hidden="true" />
           </div>
           <p className="truncate font-display text-[17px] text-nav-text-active">
@@ -292,15 +303,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             return (
               <div key={group.labelKey} className={cn(gi > 0 && "mt-5")}>
                 <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase
-                              tracking-[0.1em] text-nav-text/70">
+                              tracking-[0.1em] text-nav-text-muted">
                   {t(group.labelKey, { defaultValue: group.label })}
                 </p>
                 <div className="space-y-0.5">
                   {items.map((item) =>
                     item.children ? (
-                      <GroupItem key={item.label} item={item} role={role} inSchool={inSchool} />
+                      <GroupItem key={item.label} item={item} role={role} inSchool={inSchool} activePath={activePath} />
                     ) : (
-                      <SingleItem key={item.path} item={item} />
+                      <SingleItem key={item.path} item={item} activePath={activePath} />
                     )
                   )}
                 </div>

@@ -13,39 +13,43 @@ import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { currentLocale }   from "../../../src/i18n";
-import { errorText } from "../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS as THEME, ACCENT, SEMANTIC, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, Badge, EmptyState } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
 const COLORS = {
-  primary:   "#2563EB",
-  primaryBg: "#EFF6FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   THEME.primary,
+  primaryBg: THEME.primaryLight,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   THEME.border,
+  gray200:   THEME.border,
+  gray400:   THEME.textSubtle,
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
 // Keys are the stored status values and must not change; only the label is
 // localised, via the shared examStatus namespace.
 const STATUS_META = {
-  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
-  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.approved"  },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
-  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
+  completed: { tone: "success",     labelKey: "examStatus.completed" },
+  published: { tone: "success",     labelKey: "examStatus.published" },
+  approved:  { tone: "success",     labelKey: "examStatus.approved"  },
+  ongoing:   { tone: "info",        labelKey: "examStatus.ongoing"   },
+  scheduled: { tone: "warning",     labelKey: "examStatus.scheduled" },
+  draft:     { tone: "warning",     labelKey: "examStatus.draft"     },
+  archived:  { accent: "slate",     labelKey: "examStatus.archived"  },
 };
 
 const REPORTABLE_STATUSES = new Set([
@@ -178,7 +182,7 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
       {/* Header */}
       <View style={styles.cardHeader}>
         <View style={styles.cardIconBg}>
-          <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+          <Ionicons name="document-text-outline" size={18} color={THEME.onPrimary} />
         </View>
         <View style={styles.cardHeaderText}>
           <Text style={styles.examName} numberOfLines={1}>{item.name}</Text>
@@ -188,11 +192,13 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
             </Text>
           )}
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusMeta.bg }]}>
-          <Text style={[styles.statusText, { color: statusMeta.color }]}>
-            {t(statusMeta.labelKey)}
-          </Text>
-        </View>
+        <Badge
+          label={t(statusMeta.labelKey)}
+          tone={statusMeta.tone}
+          accent={statusMeta.accent}
+          style={styles.statusBadge}
+          textStyle={styles.statusText}
+        />
       </View>
 
       {/* Stats row */}
@@ -220,7 +226,7 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, {
-                color: item.passRate >= 70 ? COLORS.success : COLORS.warning,
+                color: item.passRate >= 70 ? SEMANTIC.success.text : SEMANTIC.warning.text,
               }]}>
                 {item.passRate}%
               </Text>
@@ -357,7 +363,7 @@ export default function ExamReportsScreen() {
       setSource(src);
     } catch (err) {
       console.error("[ExamReports] fetchReports error:", err.message);
-      setError(errorText(t, err));
+      setError(needsInternetErrorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -399,6 +405,7 @@ export default function ExamReportsScreen() {
           >
             <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
           </TouchableOpacity>
+          <HeaderIcon style={styles.headerIcon} />
           <Text style={styles.headerTitle}>{t("reportList.title")}</Text>
         </View>
         <View style={styles.centered}>
@@ -422,6 +429,7 @@ export default function ExamReportsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerTitle}>{t("reportList.title")}</Text>
           {source === "sqlite" && (
@@ -462,7 +470,7 @@ export default function ExamReportsScreen() {
       {/* Error banner */}
       {!!error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
+          <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => fetchReports()}>
             <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -492,19 +500,17 @@ export default function ExamReportsScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="document-outline" size={56} color={COLORS.gray200} />
-            <Text style={styles.emptyTitle}>
-              {filter !== "all"
-                ? t("reportList.noFilteredExams", { status: t(`examStatus.${filter}`) })
-                : t("reportList.emptyTitle")}
-            </Text>
-            <Text style={styles.emptyText}>
-              {filter !== "all"
-                ? t("reportList.switchToAllHint")
-                : t("reportList.emptyBody")}
-            </Text>
-            {filter === "all" ? (
+          <EmptyState
+            icon="document-outline"
+            kind="reports"
+            title={filter !== "all"
+              ? t("reportList.noFilteredExams", { status: t(`examStatus.${filter}`) })
+              : t("reportList.emptyTitle")}
+            message={filter !== "all"
+              ? t("reportList.switchToAllHint")
+              : t("reportList.emptyBody")}
+            style={styles.empty}
+            action={filter === "all" ? (
               <TouchableOpacity
                 style={styles.emptyAction}
                 onPress={() => router.push("/admin/reports/generate")}
@@ -517,14 +523,14 @@ export default function ExamReportsScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[styles.emptyAction, { backgroundColor: COLORS.gray500 }]}
+                style={[styles.emptyAction, { backgroundColor: ACCENT.slate.solid }]}
                 onPress={() => setFilter("all")}
                 activeOpacity={0.7}
               >
                 <Text style={styles.emptyActionText}>{t("reportList.showAll")}</Text>
               </TouchableOpacity>
             )}
-          </View>
+          />
         }
       />
     </View>
@@ -559,6 +565,7 @@ const styles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon: { marginRight: 0 },
   headerTextWrap: {
     flex:          1,
     flexDirection: "row",
@@ -570,7 +577,7 @@ const styles = StyleSheet.create({
     fontSize:          10,
     fontWeight:        "700",
     color:             COLORS.warning,
-    backgroundColor:   "#FEF3C7",
+    backgroundColor:   COLORS.warningBg,
     paddingHorizontal: 6,
     paddingVertical:   2,
     borderRadius:      6,
@@ -586,10 +593,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
-  filterBtn:        { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.gray100 },
-  filterBtnActive:  { backgroundColor: COLORS.primaryBg },
-  filterText:       { fontSize: 13, fontWeight: "600", color: COLORS.gray500 },
-  filterTextActive: { color: COLORS.primary },
+  filterBtn:        { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border },
+  filterBtnActive:  { backgroundColor: ACCENT.slate.wash, borderColor: ACCENT.slate.base },
+  filterText:       { fontSize: 13, fontWeight: "600", color: THEME.textSecondary },
+  filterTextActive: { color: ACCENT.slate.deep },
 
   countBar: {
     flexDirection:     "row",
@@ -611,23 +618,25 @@ const styles = StyleSheet.create({
     gap:             8,
     margin:          16,
     padding:         12,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    10,
     borderWidth:     1,
-    borderColor:     "#FECACA",
+    borderColor:     statusBadge("error").border,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
   retryText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
 
   list: { padding: 16, gap: 12, paddingBottom: 40 },
 
   card: {
-    backgroundColor: COLORS.white,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    16,
     padding:         16,
     borderWidth:     1,
-    borderColor:     COLORS.gray200,
-    shadowColor:     "#000",
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
+    shadowColor:     THEME.shadow,
     shadowOffset:    { width: 0, height: 1 },
     shadowOpacity:   0.05,
     shadowRadius:    6,
@@ -639,7 +648,7 @@ const styles = StyleSheet.create({
     width:           40,
     height:          40,
     borderRadius:    10,
-    backgroundColor: COLORS.primaryBg,
+    backgroundColor: ACCENT.slate.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
@@ -656,16 +665,16 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: COLORS.gray50,
+    backgroundColor: THEME.surface,
     borderRadius:    10,
     padding:         10,
   },
   statItem:   { flex: 1, alignItems: "center" },
-  statValue:  { fontSize: 16, fontWeight: "800", color: COLORS.gray900 },
+  statValue:  { fontSize: 16, fontWeight: "800", color: ACCENT.slate.deep },
   statLabel: {
     fontSize:      9,
     fontWeight:    "600",
-    color:         COLORS.gray400,
+    color:         THEME.textSecondary,
     textTransform: "uppercase",
     marginTop:     2,
   },
@@ -690,7 +699,7 @@ const styles = StyleSheet.create({
     borderRadius:      6,
     backgroundColor:   COLORS.successBg,
     borderWidth:       1,
-    borderColor:       "#A7F3D0",
+    borderColor:       statusBadge("success").border,
   },
   generateChipText: { fontSize: 11, fontWeight: "700", color: COLORS.success },
   viewBtn: {

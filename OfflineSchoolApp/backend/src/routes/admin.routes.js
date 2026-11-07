@@ -10,6 +10,10 @@ const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
+const { teachersFor, coverageFor } = require("../services/classSubjectTeacher.service");
+const { currentAcademicYearOf } = require("../../../shared/academicYear");
+const { checkAgeRanges } = require("../../../shared/studentValidation");
+const { dayRate } = require("../../../shared/attendance");
 const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -31,8 +35,17 @@ const { cascadeCoefficient, coefficientOf } =
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch((err) => next(err));
 
+// Documents inside any payload leave as their presentation — title, type and
+// a signed, short-lived link — exactly as the students router sends them.
+// This router answered the console's and the phone's admissions screens with
+// the stored record instead: a /uploads/applications URL that server.js
+// closes to everyone, and the file's path on the server's disk. Opening either
+// failed, so staff could not preview any document an applicant had sent.
 const sendSuccess = (res, data, status = 200) =>
-  res.status(status).json({ success: true, ...data });
+  res.status(status).json({
+    success: true,
+    ...require("../utils/applicationDocuments").redactDocumentsDeep(res.req, data),
+  });
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
@@ -198,6 +211,8 @@ const parseCoefficient = (raw) => {
 // a local mirror when there is no connection and must return the identical
 // shape. See OfflineSchoolApp/shared/students.js for why it is not copied.
 const { normaliseStudentDoc } = require("../../../shared/students");
+const { nextAdmissionNo } = require("../services/admissionNumber.service");
+const staffNumbers = require("../services/staffNumber.service");
 
 // ─── Multi-collection student helpers ────────────────────────────────────────
 
@@ -666,8 +681,10 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
         // deletedAt and leaves isActive untouched — so without the clause every
         // retired period stayed in this count. The mobile local calculation
         // already excludes deleted rows, which made the two dashboards disagree.
+        // Teaching periods only (B2): a Break is a row on the grid, not a
+        // period a lesson can go in. Counting breaks said 9 where there were 8.
         return Period.countDocuments(
-          addNotDeleted({ ...baseQuery, isActive: true })
+          addNotDeleted({ ...baseQuery, isActive: true, isBreak: { $ne: true } })
         );
       } catch { return 0; }
     })(),
@@ -684,6 +701,12 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     Math.max(0, totalTeachers - assignedTeacherIds.length);
   const classesWithoutSubjects =
     Math.max(0, totalClasses - allClassesWithSubjects.length);
+
+  // Class-subject coverage (B4): "Subjects" was the class-subject pairs, and
+  // nothing said how many had no teacher.
+  const coverage = schoolId
+    ? await coverageFor(schoolId).catch(() => null)
+    : null;
 
   const assignedSubjects =
     allClassesWithSubjects.length > 0
@@ -732,7 +755,9 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     totalTeachers,
     unassignedTeachers,
     totalClasses,
-    totalSubjects,
+    totalSubjects:           coverage ? coverage.classSubjects : totalSubjects,
+    distinctSubjects:        coverage ? coverage.distinctSubjects : null,
+    unassignedClassSubjects: coverage ? coverage.unassigned.length : 0,
     assignedSubjects,
     totalAssignments,
     incompleteTimetableSlots,
@@ -1024,24 +1049,11 @@ router.get("/exams/stats", requirePermission("dashboard.view"), asyncHandler(asy
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
-  let Exam = null;
-  try { Exam = require("../db/models/Exam"); } catch { /* optional */ }
-
-  if (!Exam) {
-    return sendSuccess(res, {
-      total: 0, ongoing: 0, completed: 0, draft: 0, scheduled: 0,
-    });
-  }
-
-  const [total, ongoing, completed, draft, scheduled] = await Promise.all([
-    Exam.countDocuments({ schoolId, deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "ongoing",   deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "completed", deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "draft",     deletedAt: null }),
-    Exam.countDocuments({ schoolId, status: "scheduled", deletedAt: null }),
-  ]);
-
-  return sendSuccess(res, { total, ongoing, completed, draft, scheduled });
+  // Every status, from the same count the exams page shows. This listed four
+  // of the six, so published and archived exams were in the total and in no
+  // segment.
+  const { countExamsByStatus } = require("../services/examStatusCounts.service");
+  return sendSuccess(res, await countExamsByStatus({ schoolId: String(schoolId), deletedAt: null }));
 }));
 
 router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
@@ -1098,12 +1110,9 @@ router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandle
     const todayLate    = countOf("late");
     const todayExcused = countOf("excused");
 
-    // The roster is the denominator, so a day nobody marked reads as 0% of a
-    // known number of pupils rather than 0% of nothing — and `unmarked` is
-    // what tells the two apart.
-    const rate = totalStudents > 0
-      ? Math.round((todayPresent / totalStudents) * 100)
-      : 0;
+    // The roster is the denominator. A day nobody marked has no rate (C3):
+    // null, shown "–", rather than 0%, which reads as everyone absent.
+    const rate = dayRate(todayPresent, records.length, totalStudents);
 
     return sendSuccess(res, {
       todayPresent,
@@ -1148,7 +1157,46 @@ router.get("/teachers", requirePermission("teachers.view"), asyncHandler(async (
 }));
 
 router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
-  const { id, name, email, schoolId } = req.body;
+  const { name, email, schoolId } = req.body;
+  const id = req.body.id ?? req.body._id;
+
+  // A create carrying an id that already names an account is a REPLAY, never a
+  // create. Phones keep the id they made offline and send it here; an old build
+  // could still POST a teacher it had already synced (pulled without
+  // _synced_at, then edited). Before this guard that POST fell through to the
+  // email claim below and, for a removed teacher, reactivated them with a new
+  // password and a welcome email — a removal undone by a retry nobody saw.
+  //
+  // Answered before validation on purpose: a replay must settle whatever the
+  // body says, and it changes NOTHING — not isActive, not the password, not
+  // the name or email, and no mail. Only an id that is new (or absent) may go
+  // on to the email claim, so the console's deliberate re-add by email of a
+  // removed teacher — which sends no id, or a fresh one — works as before.
+  const clientId = id == null ? "" : String(id).trim();
+  if (clientId) {
+    const already = await User.findById(clientId)
+      .select("-password -tempPassword").lean();
+    if (already) {
+      const ownSchool = resolveSchoolId(req, schoolId);
+      const sameTenant = String(already.schoolId ?? "") === String(ownSchool ?? "");
+      if (already.role !== "teacher" || !sameTenant) {
+        // Another school's account, or a pupil/bursar/admin: refused with
+        // nothing changed and nothing about the row disclosed.
+        return sendError(res, 409, "An account with this id already exists");
+      }
+      console.log(`↩️  Teacher create replayed: ${already._id} (unchanged)`);
+      return sendSuccess(res, {
+        data:         already,
+        teacher:      already,
+        serverId:     String(already._id),
+        clientId,
+        replay:       true,
+        deduplicated: true,
+        message:      "This teacher already exists",
+      });
+    }
+  }
+
   if (!name?.trim() || !email) {
     return sendError(res, 400, "name and email are required");
   }
@@ -1174,6 +1222,9 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
     const { user, tempPassword: restoredPassword } = await restoreStaffAccount({
       doc: claim.restore, name,
     });
+    // A teacher coming back keeps the number on their old paperwork; one who
+    // somehow never had one is given one now, as a new teacher would be.
+    if (!user.staffNo) user.staffNo = await staffNumbers.ensureStaffNo(user._id);
 
     const restoreEmail = await sendEmailSafe({
       to:       emailClean,
@@ -1218,7 +1269,14 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
   };
   if (id) userData._id = String(id).trim();
 
-  const teacher = await User.create(userData);
+  // Numbered in the same request, by the server: a phone's offline create
+  // gets its number here, when it syncs, never on the device. The number is
+  // taken first; if the create then fails it is a gap, never a duplicate, and
+  // a clash with the unique index takes the next one (staffNumber.service).
+  const teacher = await staffNumbers.withStaffNo(
+    resolvedSchoolId,
+    (staffNo) => User.create({ ...userData, staffNo })
+  );
 
   const emailResult = await sendEmailSafe({
     to:       emailClean,
@@ -1283,12 +1341,59 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
     updateFields.schoolId = String(schoolId).trim();
   }
 
-  const teacher = await User.findOneAndUpdate(
-    { ...getTenantQuery(req, req.params.id), role: "teacher" },
-    updateFields,
-    { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
-  );
+  // The staff number, overridden by an administrator (this route is
+  // teachers.manage, which only administrators hold and cannot be delegated).
+  // Only when the body names it: a phone's queued edit sends name and email
+  // alone and must never touch it. It cannot be cleared — every teacher has
+  // one — and must be free within the school. One in the generated shape
+  // moves the sequence past it, so the next generated number does not clash.
+  let staffNoChange = null;
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "staffNo")) {
+    const parsed = staffNumbers.normaliseStaffNo(req.body.staffNo);
+    if (parsed.error) return sendError(res, 400, parsed.error, { code: "STAFF_NO_INVALID" });
+    const current = await User.findOne({ ...getTenantQuery(req, req.params.id), role: "teacher" })
+      .select("schoolId staffNo").lean();
+    if (!current) return sendError(res, 404, "Teacher not found");
+    const school = updateFields.schoolId ?? current.schoolId;
+    if (parsed.value !== current.staffNo || updateFields.schoolId) {
+      const holder = await User.findOne({
+        schoolId: school, staffNo: parsed.value, _id: { $ne: String(current._id) },
+      }).select("name").lean();
+      if (holder) {
+        return sendError(res, 409,
+          `Staff number ${parsed.value} is already used by ${holder.name || "another member of staff"}`,
+          { code: "STAFF_NO_TAKEN" });
+      }
+      updateFields.staffNo = parsed.value;
+      staffNoChange = { school, before: current.staffNo ?? null, after: parsed.value };
+    }
+  }
+
+  let teacher;
+  try {
+    teacher = await User.findOneAndUpdate(
+      { ...getTenantQuery(req, req.params.id), role: "teacher" },
+      updateFields,
+      { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
+    );
+  } catch (err) {
+    // Taken between the check above and this write.
+    if (staffNumbers.isStaffNoClash(err)) {
+      return sendError(res, 409, `Staff number ${updateFields.staffNo} is already used`,
+        { code: "STAFF_NO_TAKEN" });
+    }
+    throw err;
+  }
   if (!teacher) return sendError(res, 404, "Teacher not found");
+
+  if (staffNoChange && staffNoChange.before !== staffNoChange.after) {
+    await staffNumbers.noteStaffNo(staffNoChange.school, staffNoChange.after);
+    await recordAudit(req, {
+      action: "teacher.staffNoChanged", schoolId: staffNoChange.school,
+      resource: { type: "user", id: teacher._id, label: teacher.email },
+      before: { staffNo: staffNoChange.before }, after: { staffNo: staffNoChange.after },
+    });
+  }
 
   console.log(`✅ Teacher updated: ${teacher.name}`);
   return sendSuccess(res, { data: teacher.toObject() });
@@ -1597,6 +1702,17 @@ router.get("/classes/:classId/subjects", requirePermission("subjects.view"), asy
 // SECTION 7 — SUBJECTS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// The class-subjects no active assignment covers, for the Teachers page (B4).
+router.get("/class-subjects/unassigned", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+  const cov = await coverageFor(schoolId);
+  return sendSuccess(res, {
+    classSubjects: cov.classSubjects, distinctSubjects: cov.distinctSubjects,
+    unassigned: cov.unassigned, total: cov.unassigned.length,
+  });
+}));
+
 router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
   const schoolId    = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
@@ -1621,50 +1737,42 @@ router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (
   ];
   const allSubjectIds = rawSubjects.map((s) => String(s._id));
 
-  const [classRecords, assignments] = await Promise.all([
+  // The teacher is the class-subject assignment's, read the one way every
+  // screen reads it (services/classSubjectTeacher.service.js, A8): the active
+  // assignments of this subject in this class. It took the first assignment
+  // found for the subject — active or not — and fell back to a stored name.
+  const [classRecords, teacherOf] = await Promise.all([
     allClassIds.length > 0
       ? Class.find({ _id: { $in: allClassIds } })
           .select("name section level")
           .lean()
       : [],
-    TeacherAssignment.find({ subject: { $in: allSubjectIds } })
-      .populate("teacher", "name email")
-      .lean(),
+    teachersFor({ schoolId: schoolId || rawSubjects[0]?.schoolId, subjectIds: allSubjectIds }),
   ]);
 
   const classMap = new Map(classRecords.map((c) => [String(c._id), c]));
-
-  const subjectTeacherMap = new Map();
-  for (const a of assignments) {
-    const sid = String(a.subject?._id || a.subject || "");
-    if (!sid || subjectTeacherMap.has(sid)) continue;
-    const t = a.teacher;
-    if (t) {
-      subjectTeacherMap.set(sid, {
-        _id:   String(t._id || t),
-        name:  t.name  || "",
-        email: t.email || "",
-      });
-    }
-  }
 
   const subjects = rawSubjects.map((s) => {
     const canonicalClassId = s.class || s.classId || null;
     const classRecord      = canonicalClassId
       ? classMap.get(String(canonicalClassId)) || null
       : null;
-    const teacher = subjectTeacherMap.get(String(s._id)) || null;
+    const assigned = teacherOf(canonicalClassId, s._id);
+    const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
     return {
-      ...s,
+      // normaliseSubject, so a subject from before the coefficient field lists
+      // as 1 here as it does on every other read, rather than as nothing.
+      ...normaliseSubject(s),
       class:    canonicalClassId,
       classId:  canonicalClassId,
       classObj: classRecord
         ? { _id: String(classRecord._id), ...classRecord }
         : null,
-      teacherId:   teacher?._id  || s.teacherId  || s.teacher_id || null,
-      teacher_id:  teacher?._id  || s.teacher_id || s.teacherId  || null,
-      teacherName: teacher?.name || s.teacherName || null,
+      teacherId:   teacher?._id  || null,
+      teacher_id:  teacher?._id  || null,
+      teacherIds:  assigned?.teacherIds ?? [],
+      teacherName: teacher?.name || null,
       teacher:     teacher       || null,
     };
   });
@@ -1878,17 +1986,10 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
     to:        coefficientOf(subject),
   });
 
-  const assignment = await TeacherAssignment.findOne({
-    subject: String(subject._id),
-  }).populate("teacher", "name email").lean();
-
-  const teacher = assignment?.teacher
-    ? {
-        _id:   String(assignment.teacher._id),
-        name:  assignment.teacher.name  || "",
-        email: assignment.teacher.email || "",
-      }
-    : null;
+  // The class-subject assignment, as the Subjects list reads it (A8).
+  const subjectClassId = subject.classId || subject.class || null;
+  const assigned = (await teachersFor({ schoolId: subject.schoolId, subjectIds: [String(subject._id)] }))(subjectClassId, subject._id);
+  const teacher  = assigned ? { ...assigned.teachers[0], name: assigned.teacherName } : null;
 
   console.log(`✅ Subject updated: ${subject.name}`);
   return sendSuccess(res, {
@@ -2285,47 +2386,9 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
   let enrollmentNo = existingEnrollmentNo;
 
   if (!enrollmentNo) {
-    const school     = await School.findById(resolvedSchoolId).lean().catch(() => null);
-    const schoolCode =
-      school?.code?.trim().toUpperCase().slice(0, 5) ||
-      (resolvedSchoolId || "SCH")
-        .replace(/[^A-Z0-9]/gi, "")
-        .slice(0, 3)
-        .toUpperCase() ||
-      "SCH";
-    const year   = new Date().getFullYear();
-    const prefix = `${schoolCode}/${year}/`;
-
-    // Highest existing sequence across both collections AND both identifier
-    // fields.
-    //
-    // This used to search `admissionNo` only. Records exist whose number lives
-    // solely in `enrollmentNo` — students approved before the two fields were
-    // written together — and they were invisible here, so the generator would
-    // hand out a number that was already in use and the approval would then
-    // fail on the unique index. Matching on either field is what stops that.
-    const numberQuery = {
-      $or: [
-        { admissionNo:  { $regex: `^${prefix}` } },
-        { enrollmentNo: { $regex: `^${prefix}` } },
-      ],
-    };
-
-    const [studentRows, appRows] = await Promise.all([
-      S   ? S.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => [])   : [],
-      App ? App.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => []) : [],
-    ]);
-
-    let nextSeq = 1;
-    for (const row of [...studentRows, ...appRows]) {
-      for (const value of [row.admissionNo, row.enrollmentNo]) {
-        if (!value || !String(value).startsWith(prefix)) continue;
-        const seq = parseInt(String(value).slice(prefix.length), 10);
-        if (!isNaN(seq) && seq >= nextSeq) nextSeq = seq + 1;
-      }
-    }
-
-    enrollmentNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+    // The same generator as every other admission path, so an applicant and a
+    // pupil added directly get numbers of one shape from one sequence.
+    enrollmentNo = await nextAdmissionNo(resolvedSchoolId);
     console.log(`[approve] Generated enrollment number: ${enrollmentNo}`);
   }
 
@@ -2729,7 +2792,16 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
   );
   if (!student) return sendError(res, 404, "Student not found");
 
+  // Back in their class, so back on its fees: anything applied to the class
+  // while they were suspended is raised now. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+
   return sendSuccess(res, {
+    feesRaised: billing.raised,
     message: "Student restored",
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
@@ -2783,14 +2855,17 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   if (!student) return sendError(res, 404, "Student not found");
 
   // ── Bill the new class ─────────────────────────────────────────────────────
-  // Joining a class mid-year is joining its fees. Active structures covering
-  // the destination class apply now; anything the student was already billed
-  // for (including by a structure that covers both old and new class) is
-  // skipped by the unique index. Never throws.
+  // Joining a class mid-year is joining its fees. The old class's charges for
+  // the year are voided (payments stay with the student and count against the
+  // new ones), and active structures covering the destination class apply
+  // now; anything the student was already billed for (including by a
+  // structure that covers both old and new class) is skipped by the unique
+  // index. Never throws.
   const billing = await billStudentForClass({
     schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
     student:  { _id: student._id, classId },
     raisedBy: req.user?._id ? String(req.user._id) : null,
+    leavingOtherClasses: true,
   });
   if (billing.raised > 0) {
     console.log(
@@ -2803,6 +2878,7 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
     // definition and the reply has to carry the new class's name.
     message: "Student moved to new class",
     feesRaised: billing.raised,
+    feesVoided: billing.voided,
     data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));
@@ -2847,46 +2923,8 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
     return sendSuccess(res, { enrollmentNo: existing });
   }
 
-  // Generate a new one
-  const school     = await School.findById(resolvedSchoolId).lean().catch(() => null);
-  const schoolCode =
-    school?.code?.trim().toUpperCase().slice(0, 5) ||
-    (resolvedSchoolId || "SCH")
-      .replace(/[^A-Z0-9]/gi, "")
-      .slice(0, 3)
-      .toUpperCase() ||
-    "SCH";
-  const year   = new Date().getFullYear();
-  const prefix = `${schoolCode}/${year}/`;
-
-  const latestNos = await Promise.all([
-    S
-      ? S.find({ admissionNo: { $regex: `^${prefix}` } })
-          .sort({ admissionNo: -1 })
-          .limit(1)
-          .lean()
-          .catch(() => [])
-      : [],
-    App
-      ? App.find({ admissionNo: { $regex: `^${prefix}` } })
-          .sort({ admissionNo: -1 })
-          .limit(1)
-          .lean()
-          .catch(() => [])
-      : [],
-  ]);
-
-  let nextSeq = 1;
-  for (const results of latestNos) {
-    if (results.length > 0) {
-      const last  = results[0].admissionNo || "";
-      const parts = last.split("/");
-      const seq   = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(seq) && seq >= nextSeq) nextSeq = seq + 1;
-    }
-  }
-
-  const enrollmentNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  // Generate a new one — services/admissionNumber.service.js, as everywhere.
+  const enrollmentNo = await nextAdmissionNo(resolvedSchoolId);
 
   // Persist it to whichever collection the student is in
   const updateFields = {
@@ -2913,6 +2951,42 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
   );
 
   return sendSuccess(res, { enrollmentNo });
+}));
+
+// GET /admin/action-items — what is waiting on this reader (C11): marks to
+// approve, results to publish, overdue fees. Each only for a role that can act.
+// Gated on fees.view: every holder of any item's capability holds it (admins
+// hold all three, frozen; exams.manage and results.publish cannot be
+// delegated; a bursar has fees.view), and a teacher does not — no admin route
+// is reachable by a teacher (check:admin). Each item still checks its own.
+router.get("/action-items", requirePermission("fees.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendSuccess(res, { items: [] });
+  const permissions = require("../services/permissions.service");
+  const [marks, publish, fees] = await Promise.all([
+    permissions.can(req.user, "exams.manage"),
+    permissions.can(req.user, "results.publish"),
+    permissions.can(req.user, "fees.view"),
+  ]);
+  const items = await require("../services/actionItems.service")
+    .actionItemsFor({ schoolId: String(schoolId), can: { marks, publish, fees } });
+  return sendSuccess(res, { items });
+}));
+
+// GET /admin/students/:id/overview — the profile's results, attendance, fee
+// balance and guardian contact in one read (C10). Fees only for a caller who
+// may see fees; the rest is what students.viewFull already shows.
+router.get("/students/:id/overview", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
+  const S = getStudent();
+  const student = S && await S.findOne(getTenantQuery(req, req.params.id))
+    .select("schoolId guardianName guardianPhone guardianEmail").lean();
+  if (!student) return sendError(res, 404, "Student not found");
+
+  const withFees = await require("../services/permissions.service").can(req.user, "fees.view");
+  const data = await require("../services/studentOverview.service").overviewFor({
+    schoolId: String(student.schoolId), student, withFees,
+  });
+  return sendSuccess(res, { overview: data });
 }));
 
 router.get("/students/:id", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
@@ -3657,8 +3731,10 @@ router.put("/settings/profile", requirePermission("settings.manage"), asyncHandl
     if (!isValidEmail(emailClean)) {
       return sendError(res, 400, "A valid email is required");
     }
+    // Staff addresses only, as claimStaffEmail: a pupil account may carry it
+    // because this member of staff is also a parent at the school.
     const taken = await User.findOne({
-      email: emailClean, _id: { $ne: userId },
+      email: emailClean, _id: { $ne: userId }, role: { $ne: ROLES.STUDENT },
     }).lean();
     if (taken) return sendError(res, 409, "Email already in use");
     updates.email = emailClean;
@@ -3905,32 +3981,31 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "postalCode schoolType termSystem registrationNumber foundedYear " +
     "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
-    "schoolDays schoolStartTime schoolEndTime defaultLanguage";
+    "schoolDays schoolStartTime schoolEndTime defaultLanguage settings.academicYear settings.studentAgeRanges";
+
+  // By the id as the account holds it, whatever the school's _id type
+  // (utils/schoolById.js): findById threw for a string _id.
+  const { findSchoolById, matchId } = require("../utils/schoolById");
 
   if (includeLogo) {
-    const school = await School.findById(schoolId)
-      .select(`${LIGHT_FIELDS} logo`)
-      .lean();
+    const school = await findSchoolById(schoolId, `${LIGHT_FIELDS} logo`);
     if (!school) return sendError(res, 404, "School not found");
+    // The school's current year, by the one rule (B5): its own setting, else
+    // the calendar's — what every year picker opens on.
+    school.currentAcademicYear = currentAcademicYearOf(school);
     return sendSuccess(res, {
       school: { ...school, logoLen: logoFingerprint(school.logo) },
     });
   }
 
-  // School._id is a Mongoose ObjectId and aggregate() does not auto-cast,
-  // so the id must be cast explicitly or $match silently returns nothing —
-  // which would report logoLen 0 and make a client believe there is no logo.
-  const mongoose = require("mongoose");
-  const objectId = mongoose.Types.ObjectId.isValid(String(schoolId))
-    ? new mongoose.Types.ObjectId(String(schoolId))
-    : null;
-
-  const [school, meta] = await Promise.all([
-    School.findById(schoolId).select(LIGHT_FIELDS).lean(),
-    objectId ? probeLogo(objectId) : Promise.resolve(null),
-  ]);
-
+  // aggregate() does not cast, so the logo is probed on the _id exactly as
+  // the found document holds it (an ObjectId, or a string) — a cast guessed
+  // from the account's id made $match find nothing for a string _id, and a
+  // client read that as "no logo".
+  const school = await findSchoolById(schoolId, LIGHT_FIELDS);
   if (!school) return sendError(res, 404, "School not found");
+  const meta = await probeLogo(matchId(school));
+  school.currentAcademicYear = currentAcademicYearOf(school);
 
   // A migrated school stores a short URL, so the probe already carries the
   // whole value and there is nothing to withhold. A legacy inline logo stays
@@ -3964,7 +4039,16 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     region, division,
     academicYearStart, academicYearEnd, nextTermResumption, schoolDays,
     schoolStartTime, schoolEndTime, removeLogo, defaultLanguage,
+    studentAgeRanges,
   } = req.body;
+
+  // B3: the school's own age range per class level, or null for the defaults.
+  let ageRanges;
+  if (studentAgeRanges !== undefined) {
+    const r = checkAgeRanges(studentAgeRanges);
+    if (r.error) return sendError(res, 400, r.error);
+    ageRanges = r.value;
+  }
 
   // The language every report card of the school prints in (docs/41 §7).
   if (defaultLanguage !== undefined && !["en", "fr"].includes(defaultLanguage)) {
@@ -4007,6 +4091,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(schoolDays       !== undefined && { schoolDays                            }),
     ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
     ...(schoolEndTime    !== undefined && { schoolEndTime                         }),
+    ...(ageRanges        !== undefined && { "settings.studentAgeRanges": ageRanges }),
     ...(applicationsOpen !== undefined && { applicationsOpen                      }),
     ...(defaultLanguage  !== undefined && { defaultLanguage                       }),
   };
@@ -4017,7 +4102,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
   let previousLogo = null;
   if (logoBase64) {
     try {
-      const saved = logoStorage.saveLogoFromBase64(schoolId, logoBase64);
+      const saved = await logoStorage.saveLogoFromBase64(schoolId, logoBase64);
       const current = await School.findById(schoolId).select("logo").lean();
       previousLogo = current?.logo || null;
       updateFields.logo = saved.publicPath;
@@ -4034,7 +4119,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     // because previousLogo is null.
     const current = await School.findById(schoolId).select("logo").lean();
     if (current?.logo && logoStorage.isLogoReference(current.logo)) {
-      logoStorage.deleteLogoFile(current.logo);
+      await logoStorage.deleteLogoFile(current.logo);
     }
     updateFields.logo = null;
   }
@@ -4069,7 +4154,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
   // only if it is genuinely a different file.
   if (previousLogo && previousLogo !== updateFields.logo &&
       logoStorage.isLogoReference(previousLogo)) {
-    logoStorage.deleteLogoFile(previousLogo);
+    await logoStorage.deleteLogoFile(previousLogo);
   }
 
   return sendSuccess(res, { school });

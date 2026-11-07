@@ -33,6 +33,7 @@ import { fetchWithFallback } from "../utils/syncHelpers";
 import { API }               from "./apiEndpoints";
 import api                   from "./api";
 import { appError }          from "../utils/appError";
+import { ensurePupilSyncColumns, queuedPupilIds } from "../db/pupilSync";
 
 // ═══════════════════════════════════════════════════════════════════════
 // SECTION 1 — SCHEMA  (unchanged)
@@ -196,17 +197,20 @@ const generateLocalEnrollmentNo = async (db, schoolCode, year) => {
       const col  = cols.includes("enrollmentNo") ? "enrollmentNo"
                  : cols.includes("enrollment_no") ? "enrollment_no" : null;
       if (col) {
-        const row = await db.getFirstAsync(
-          `SELECT ${col} AS enrollmentNo FROM students
-           WHERE  ${col} LIKE ? ORDER BY ${col} DESC LIMIT 1`,
+        // The highest by number, not by text: 0010 (an older four-digit
+        // number) sorts below 009 as a string.
+        const rows = await db.getAllAsync(
+          `SELECT ${col} AS enrollmentNo FROM students WHERE ${col} LIKE ?`,
           [`${prefix}%`]
         );
-        if (row?.enrollmentNo) {
-          const parts  = row.enrollmentNo.split("-");
-          const lastNo = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastNo)) {
-            return `${prefix}${String(lastNo + 1).padStart(4, "0")}`;
-          }
+        const lastNo = Math.max(0, ...rows.map((r) => {
+          const parts = String(r.enrollmentNo).split("-");
+          return parseInt(parts[parts.length - 1], 10) || 0;
+        }));
+        if (lastNo > 0) {
+          // Three digits at least, as the server's generator
+          // (backend/src/services/admissionNumber.service.js) issues them.
+          return `${prefix}${String(lastNo + 1).padStart(3, "0")}`;
         }
       }
     } catch (err) {
@@ -618,9 +622,15 @@ const markLocalDecision = async (
 ) => {
   try {
     if (!(await tableExists(db, "students"))) return;
+    await ensurePupilSyncColumns(db);
     const cols = await getTableColumns(db, "students");
     const ts   = new Date().toISOString();
-    const vals = { status, updated_at: ts, _synced: synced ? 1 : 0 };
+    // `_local_decision` is what the backfill sends (student-decision): set
+    // only when the decision was made here and has not reached the server.
+    const vals = {
+      status, updated_at: ts, _synced: synced ? 1 : 0,
+      _local_decision: synced ? null : status,
+    };
 
     if (status === "approved") {
       vals.approved_at = ts; vals.reviewed_at = ts; vals.is_active = 1;
@@ -643,18 +653,23 @@ const markLocalDecision = async (
 
 const cacheApplicationsLocally = async (db, records, schoolId) => {
   if (!(await tableExists(db, "students"))) return 0;
+  await ensurePupilSyncColumns(db);
   const cols = await getTableColumns(db, "students");
   const ts   = new Date().toISOString();
   let synced = 0;
+  // A pupil with an unsent change keeps the phone's copy (the pull rule).
+  const busy = await queuedPupilIds(db);
 
   for (const app of records) {
     if (!app.id) continue;
+    if (busy.has(String(app.id))) continue;
 
     const local = await db.getFirstAsync(
-      `SELECT status FROM students WHERE id = ? LIMIT 1`, [app.id]
+      `SELECT status, _synced FROM students WHERE id = ? LIMIT 1`, [app.id]
     ).catch(() => null);
 
     if (local && local.status !== "pending") continue;
+    if (local && Number(local._synced) !== 1) continue;
 
     const candidate = {
       id:              app.id,
@@ -1007,10 +1022,7 @@ export const StudentApplicationsService = {
 
     if (!(await tableExists(db, "students"))) return;
 
-    const cols = await getTableColumns(db, "students");
-    if (!cols.includes("_synced")) {
-      await safeAddColumn(db, "students", "_synced", "INTEGER DEFAULT 0");
-    }
+    await ensurePupilSyncColumns(db);
 
     try {
       const { backfillOutbox } = require("./syncBackfill.service");

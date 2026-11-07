@@ -58,6 +58,7 @@ const OFFICE_ROLES = ["super_admin", "school_admin", "bursar"];
 const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("../../../../../shared/gradeScale");
 // Continuous assessment, from the one module the server validates against.
 const CA = require("../../../../../shared/caAssessment");
+const { currentAcademicYearOf } = require("../../../../../shared/academicYear");
 
 /**
  * gradingType's enum, from GradingConfig.js.
@@ -192,6 +193,8 @@ module.exports = [
       if (!school) return null;
 
       const info = {
+        // B5: the school's current year, by the server's rule.
+        currentAcademicYear: currentAcademicYearOf(school),
         name:               school.name               || null,
         code:               school.code               || null,
         address:            school.address             || null,

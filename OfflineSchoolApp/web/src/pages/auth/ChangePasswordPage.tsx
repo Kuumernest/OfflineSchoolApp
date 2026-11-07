@@ -16,8 +16,11 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { changePassword } from "@/services/auth.service";
 import { useAuthStore } from "@/store/auth.store";
+import { useSignOut } from "@/hooks/useSignOut";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { DASH_TINT } from "@/config/dashboardTint";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +57,7 @@ export default function ChangePasswordPage() {
   const { toast } = useToast();
 
   const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const signOut = useSignOut();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword,     setNewPassword]     = useState("");
@@ -108,13 +111,11 @@ export default function ChangePasswordPage() {
 
         {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center mx-auto">
-            <KeyRound className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="mt-4 text-xl font-semibold text-gray-900">
+          <PageIcon icon={KeyRound} accent="slate" className="mx-auto h-12 w-12 rounded-xl" />
+          <h1 className="mt-4 text-xl font-semibold text-ink">
             {t("changePassword.choose")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {user?.name
               ? `${t("changePassword.welcomeName", { name: user.name })} `
               : ""}
@@ -128,7 +129,7 @@ export default function ChangePasswordPage() {
             e.preventDefault();
             if (canSubmit) mutation.mutate();
           }}
-          className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4"
+          className={cn("bg-surface rounded-xl border border-line shadow-card p-6 space-y-4", DASH_TINT.slate.edge)}
         >
           <Field
             label={
@@ -221,7 +222,7 @@ export default function ChangePasswordPage() {
         {/* Escape hatch: a user on the wrong account is otherwise stuck here,
             because every other route redirects back to this one. */}
         <button
-          onClick={() => { logout(); navigate("/login", { replace: true }); }}
+          onClick={async () => { if (await signOut()) navigate("/login", { replace: true }); }}
           className="mt-4 w-full inline-flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
         >
           <LogOut className="w-3.5 h-3.5" />

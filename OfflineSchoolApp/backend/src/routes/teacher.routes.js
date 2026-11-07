@@ -8,6 +8,7 @@ const fs      = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
 const User              = require("../db/models/User");
+const { buildProfileUpdate, profileResponse } = require("../services/teacherProfile.service");
 const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
@@ -16,6 +17,7 @@ const TeacherAssignment = require("../db/models/TeacherAssignment");
 // MULTER SETUP
 // ═════════════════════════════════════════════════════════════════════════════
 
+const { getStore } = require("../storage/fileStore");
 let multer;
 try {
   multer = require("multer");
@@ -90,16 +92,22 @@ for (const [contentType, mimes] of Object.entries(ALLOWED_MIMES)) {
   }
 }
 
+// Teacher content is stored in the app's own MongoDB (GridFS), and the Atlas
+// free tier holds 512 MB for everything — one 500 MB video would fill it. So
+// every type stops at 20 MB: enough for notes, a syllabus, a photo of the
+// board or a short clip recorded at low quality.
+const MAX_CONTENT_BYTES = 20 * 1024 * 1024;
+
 const MAX_FILE_SIZES = {
-  video:    500 * 1024 * 1024,
-  audio:    100 * 1024 * 1024,
-  image:     10 * 1024 * 1024,
-  syllabus:  50 * 1024 * 1024,
-  notes:     50 * 1024 * 1024,
-  document:  50 * 1024 * 1024,
+  video:    MAX_CONTENT_BYTES,
+  audio:    MAX_CONTENT_BYTES,
+  image:    MAX_CONTENT_BYTES,
+  syllabus: MAX_CONTENT_BYTES,
+  notes:    MAX_CONTENT_BYTES,
+  document: MAX_CONTENT_BYTES,
 };
 
-const DEFAULT_MAX_SIZE = 100 * 1024 * 1024;
+const DEFAULT_MAX_SIZE = MAX_CONTENT_BYTES;
 
 let _multerInstance = null;
 
@@ -173,7 +181,7 @@ const getMulterInstance = () => {
   _multerInstance = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 500 * 1024 * 1024, files: 1 },
+    limits: { fileSize: MAX_CONTENT_BYTES, files: 1 },
   });
 
   return _multerInstance;
@@ -186,7 +194,7 @@ const multerForContent = (req, res, next) => {
   instance.single("file")(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ success: false, error: "File exceeds the maximum allowed size." });
+        return res.status(413).json({ success: false, error: `File too large. Maximum: ${MAX_CONTENT_BYTES / 1024 / 1024} MB` });
       }
       if (err.code === "LIMIT_UNEXPECTED_FILE") {
         return res.status(400).json({ success: false, error: 'Unexpected field name. Use field name "file".' });
@@ -223,17 +231,30 @@ const multerForContent = (req, res, next) => {
           error:   `File too large for type "${type}". Maximum: ${mb} MB`,
         });
       }
+
+      // Into the file store before the route sees it: on Render the local
+      // disk is rebuilt on every deploy (storage/fileStore.js).
+      return getStore().adoptLocal(req.file.path, {
+        contentType: req.file.mimetype, schoolId: req.user?.schoolId ?? null,
+      })
+        .then(() => next())
+        .catch((e) => {
+          console.error("[content] could not store the upload:", e.message);
+          deleteUploadedFile(req.file.path);
+          res.status(503).json({ success: false, error: "The file could not be stored. Try again." });
+        });
     }
 
     next();
   });
 };
 
+// The file, wherever it now lives: the local copy multer wrote and, once
+// adopted, the stored one. Fire and forget, as before.
 const deleteUploadedFile = (filePath) => {
   if (!filePath) return;
-  fs.unlink(filePath, (e) => {
-    if (e && e.code !== "ENOENT") console.warn("[deleteUploadedFile]", e.message);
-  });
+  getStore().removeLocalPath(filePath)
+    .catch((e) => console.warn("[deleteUploadedFile]", e.message));
 };
 
 const buildFileUrl = (req, absolutePath) => {
@@ -806,6 +827,9 @@ router.get("/profile", asyncHandler(async (req, res) => {
 
   return res.json({
     success:     true,
+    // The teacher's own profile, flattened, as the phone's profile screens
+    // read it (res.data.data). `teacher` stays for older builds.
+    data:        profileResponse(teacher),
     teacher,
     assignments: enrichedAssignments,
     summary: {
@@ -2004,7 +2028,10 @@ router.get("/results", asyncHandler(async (req, res) => {
   const { classId, examId } = req.query;
   if (classId) filter.classId = String(classId).trim();
   if (examId)  filter.examId  = String(examId).trim();
-  const scores = (await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean())
+  // A deleted exam's marks are not class results (its scores stay live when
+  // the exam is deleted) — services/deletedExams.service.
+  const { withoutDeletedExams } = require("../services/deletedExams.service");
+  const scores = (await withoutDeletedExams(schoolId, await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean()))
     .filter((sc) => pairs.has(`${String(sc.classId)}|${String(sc.subjectId)}`));
   if (!scores.length) return res.json({ success: true, results: [] });
 
@@ -2040,27 +2067,53 @@ router.get("/results", asyncHandler(async (req, res) => {
 // PROFILE — update
 // ═════════════════════════════════════════════════════════════════════════════
 
+/*
+ * Saves the teacher's name, email and their own profile (teacherProfile).
+ *
+ * The profile fields used to be dropped here — only name and email were kept,
+ * and the reply was still 200 — so a teacher's profile lived in one phone's
+ * SQLite only. Now each field in services/teacherProfile.service.js is stored,
+ * one by one: a field sent blank never clears a stored value (older builds
+ * post the whole form, often half-empty), only `clearFields` does.
+ */
 router.put("/profile", asyncHandler(async (req, res) => {
   const teacherId       = resolveTeacherId(req);
   const { name, email } = req.body;
 
-  if (!name?.trim()) return res.status(400).json({ message: "name is required" });
+  // A name, when sent, may not be blank. A save of profile fields alone (a
+  // phone uploading a profile it held offline) leaves the name as it is.
+  if (name !== undefined && !String(name ?? "").trim()) {
+    return res.status(400).json({ message: "name is required" });
+  }
+  const profile = buildProfileUpdate(req.body);
+  if (name === undefined && !email && !profile.touched) {
+    return res.status(400).json({ message: "Nothing to update" });
+  }
 
-  const updates = { name: name.trim() };
+  const updates = {};
+  if (name !== undefined) updates.name = String(name).trim();
+  Object.assign(updates, profile.set);
 
   if (email) {
     const emailClean = email.toLowerCase().trim();
-    const taken = await User.findOne({ email: emailClean, _id: { $ne: teacherId } }).lean();
+    // Staff addresses only: a pupil account may carry this one because the
+    // teacher is also a parent here (siblings share it; see User.js).
+    const taken = await User.findOne({
+      email: emailClean, _id: { $ne: teacherId }, role: { $ne: "student" },
+    }).lean();
     if (taken) return res.status(409).json({ message: "Email already in use" });
     updates.email = emailClean;
   }
 
-  const teacher = await User.findByIdAndUpdate(teacherId, updates, {
+  const update = Object.keys(profile.unset).length
+    ? { $set: updates, $unset: profile.unset }
+    : { $set: updates };
+  const teacher = await User.findByIdAndUpdate(teacherId, update, {
     returnDocument: 'after', runValidators: true, select: "-password -tempPassword",
   });
 
   if (!teacher) return res.status(404).json({ message: "Teacher not found" });
-  return res.json({ success: true, data: teacher.toObject() });
+  return res.json({ success: true, data: { ...teacher.toObject(), ...profileResponse(teacher) } });
 }));
 
 router.put("/profile/password", asyncHandler(async (req, res) => {
@@ -2109,9 +2162,10 @@ router.get("/school/info", asyncHandler(async (req, res) => {
     const LIGHT_FIELDS =
       "name code address city state country phone email website motto updatedAt";
 
-    const school = await School.findById(schoolId)
-      .select(includeLogo ? `${LIGHT_FIELDS} logo` : LIGHT_FIELDS)
-      .lean();
+    // By the id as the account holds it, whatever the school's _id type
+    // (utils/schoolById.js): findById threw for a string _id.
+    const { findSchoolById, matchId } = require("../utils/schoolById");
+    const school = await findSchoolById(schoolId, includeLogo ? `${LIGHT_FIELDS} logo` : LIGHT_FIELDS);
 
     if (!school) return res.status(404).json({ success: false, message: "School not found" });
 
@@ -2130,17 +2184,17 @@ router.get("/school/info", asyncHandler(async (req, res) => {
     // Probe what the logo is without transferring the image. When the value
     // is a short reference (a migrated school's URL) the head IS the whole
     // value, so it comes back for free; a legacy base64 blob stays put.
-    const mongoose    = require("mongoose");
     const logoStorage = require("../utils/logoStorage");
     const HEAD = 512;
 
     let logoLen = null;
     let logoUrl = null;
 
-    if (mongoose.Types.ObjectId.isValid(String(schoolId))) {
+    // aggregate() does not cast: probe on the _id as the found document holds it.
+    if (matchId(school) != null) {
       try {
         const rows = await School.aggregate([
-          { $match: { _id: new mongoose.Types.ObjectId(String(schoolId)) } },
+          { $match: { _id: matchId(school) } },
           { $project: {
               logoLen: { $strLenBytes: { $trim: { input: { $ifNull: ["$logo", ""] } } } },
               logoHead: {

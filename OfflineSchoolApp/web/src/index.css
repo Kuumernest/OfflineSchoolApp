@@ -51,195 +51,204 @@
   --text-lg:      1.125rem;
   --text-lg--line-height:   1.625rem;
 
-  /* ── The neutral ramp, pointed at the measured ink ──────────────────────────
-     The ink tokens below were chosen against contrast ratios. Then the pages
-     went and used Tailwind's stock greys instead — 245 uses of `text-gray-400`
-     and 254 of `text-gray-500`. Stock grey-400 is #9ca3af: 2.79:1 on white,
-     which fails AA outright and is most of why the interface reads as faded.
+  /* ── Neutral ramp: cool slate ──────────────────────────────────────────────
+     Pages use stock `text-gray-400/500` in ~500 places. Stock gray-400 is
+     2.79:1 on white, so the ramp is redefined here: 400 and 500 are slate-500
+     and slate-600, legible where they already stand. The pale end is slate
+     surfaces and lines. */
+  --color-gray-50:  #F8FAFC;
+  --color-gray-100: #F1F5F9;
+  --color-gray-200: #E2E8F0;
+  --color-gray-300: #CBD5E1;
+  --color-gray-400: #64748B;   /* 4.76:1 white, 4.55:1 canvas */
+  --color-gray-500: #475569;   /* 7.58:1 white */
+  --color-gray-600: #334155;
+  --color-gray-700: #1E293B;
+  --color-gray-800: #172033;
+  --color-gray-900: #0F172A;
+  --color-gray-950: #020617;
 
-     So the scale itself is redefined onto the ink ramp. Every existing
-     `text-gray-400` in the app becomes legible where it stands, with no page
-     touched — which is the only honest way to fix five hundred call sites.
+  /* ── Brand ─────────────────────────────────────────────────────────────────
+     One blue carries interaction: primary buttons, the active nav item, focus,
+     links. Kept under `primary-*` because ~40 pages use it. White on 600 is
+     5.17:1, on 700 6.70:1. */
+  --color-primary:       #2563EB;
+  --color-primary-dark:  #1E40AF;
+  --color-primary-light: #EFF6FF;
 
-     The pale end keeps its job as surfaces and lines and barely moves; it is
-     the text end that had to change. */
-  --color-gray-50:  #f6f7fa;
-  --color-gray-100: #eceef4;
-  --color-gray-200: #dfe2eb;
-  --color-gray-300: #c3c9d6;
-  --color-gray-400: #6d768c;   /* was #9ca3af (2.79:1) → 5.28:1 */
-  --color-gray-500: #545e75;   /* was #6b7280 (4.83:1) → 7.24:1 */
-  --color-gray-600: #3f485c;
-  --color-gray-700: #2c3446;
-  --color-gray-800: #1a2132;
-  --color-gray-900: #0d1220;
-  --color-gray-950: #070a13;
+  --color-primary-50:  #EFF6FF;
+  --color-primary-100: #DBEAFE;
+  --color-primary-200: #BFDBFE;
+  --color-primary-300: #93C5FD;
+  --color-primary-400: #60A5FA;
+  --color-primary-500: #3B82F6;
+  --color-primary-600: #2563EB;  /* primary action */
+  --color-primary-700: #1D4ED8;  /* its hover */
+  --color-primary-800: #1E40AF;
+  --color-primary-900: #1E3A8A;
+  --color-primary-950: #172554;
 
-  /* ── Accent ────────────────────────────────────────────────────────────────
-     ONE hue carries interaction: primary buttons, the active nav item, focus
-     rings, links. Everything else is neutral. Anything that is coloured but
-     not interactive is either status (below) or a mistake.
+  --color-focus: #2563EB;
 
-     Kept under the `primary-*` name because ~34 pages already reference it —
-     renaming would have been a rename, not a redesign.
+  /* ── Surfaces & lines ──────────────────────────────────────────────────────
+     Neutral: a near-white page, white cards, one hairline border. */
+  --color-canvas:        #F8FAFC;
+  --color-surface:       #FFFFFF;
+  --color-surface-muted: #F8FAFC;
 
-     Deep indigo rather than a mid blue. A saturated blue button is the default
-     of every bootstrapped admin panel; taking the accent darker and quieter is
-     most of why an interface reads as expensive. It also buys contrast: white
-     on this passes AA comfortably at any size. */
-  --color-primary-50:  #eef1ff;
-  --color-primary-100: #e0e5ff;
-  --color-primary-200: #c6cfff;
-  --color-primary-300: #a3b0fd;
-  --color-primary-400: #7f8bf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;  /* primary action */
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #2f2b7f;
-  --color-primary-950: #1e1b4b;
-
-  /* ── Section colour ────────────────────────────────────────────────────────
-     One accent for actions is correct and was also the whole palette, so every
-     area of a 44-entry app looked identical to every other. Colour is the
-     cheapest wayfinding there is: a person who has seen the fees screen twice
-     should recognise it from the corner of their eye before reading a word.
-
-     So each section of the navigation carries a hue, used on its nav icon, its
-     page header and its stat tiles — and nowhere else. It marks WHERE you are.
-     It never marks what something means: that is what status colour is for,
-     and mixing the two is how a colourful interface stops being readable.
-
-     `-soft` is the tint a card or tile sits on; `-line` its border; the base is
-     text and icon weight, all of them AA on white. */
-  --color-sec-students:      #0f766e;   /* teal    */
-  --color-sec-students-soft: #eaf6f4;
-  --color-sec-students-line: #b9dedb;
-
-  --color-sec-teachers:      #0369a1;   /* sky     */
-  --color-sec-teachers-soft: #eaf4fb;
-  --color-sec-teachers-line: #b6dbf0;
-
-  --color-sec-academic:      #6d28d9;   /* violet  */
-  --color-sec-academic-soft: #f2edfd;
-  --color-sec-academic-line: #d9c9f7;
-
-  --color-sec-exams:         #4f46e5;   /* indigo  */
-  --color-sec-exams-soft:    #eef1ff;
-  --color-sec-exams-line:    #c9d0fb;
-
-  --color-sec-finance:       #a16207;   /* amber   */
-  --color-sec-finance-soft:  #fdf6e7;
-  --color-sec-finance-line:  #f0dfb4;
-
-  --color-sec-attendance:    #15803d;   /* green   */
-  --color-sec-attendance-soft: #edf7f0;
-  --color-sec-attendance-line: #bfe3ca;
-
-  --color-sec-reports:       #be123c;   /* rose    */
-  --color-sec-reports-soft:  #fdeef2;
-  --color-sec-reports-line:  #f7c9d5;
-
-  --color-sec-comms:         #a21caf;   /* fuchsia */
-  --color-sec-comms-soft:    #fbeefb;
-  --color-sec-comms-line:    #efc7ee;
-
-  --color-sec-settings:      #475569;   /* slate   */
-  --color-sec-settings-soft: #f1f3f7;
-  --color-sec-settings-line: #d3d9e3;
-
-  /* ── Surfaces ──────────────────────────────────────────────────────────────
-     A faintly cool canvas under pure-white cards. The gap between them is
-     small on purpose: enough that a card lifts, not so much that the page
-     reads as grey. */
-  --color-canvas:        #f4f5f8;
-  --color-surface:       #ffffff;
-  --color-surface-muted: #fafbfc;
-
-  /* ── Lines ─────────────────────────────────────────────────────────────────
-     Finer and cooler than stock grey. Borders are the most repeated element in
-     a dense UI, so a line that is a shade too dark makes every screen look
-     ruled rather than composed. */
-  --color-line:        #e9ebf0;
-  --color-line-strong: #d5d9e2;
+  --color-line:        #E2E8F0;
+  --color-line-strong: #CBD5E1;
 
   /* ── Ink ───────────────────────────────────────────────────────────────────
-     Four steps, each with a job. The darkest is a blue-black, not #000 — pure
-     black on white glares, and the slight hue ties the text to the accent.
-
-     Every step clears WCAG AA (4.5:1) against all three surfaces, checked, not
-     assumed. The faintest step is deliberately less faint than it wants to be:
-     it carries timestamps, placeholders and the header meta line, which are
-     real content. A pale grey there looks refined in a mockup and is unreadable
-     on a laptop at an angle — measured 2.59:1 before this was corrected. */
-  --color-ink:       #0d1220;  /* headings, table values      — 18.68:1 */
-  --color-ink-body:  #343d4f;  /* body copy                   — 10.90:1 */
-  --color-ink-muted: #4f5a70;  /* labels, secondary text      —  6.93:1 */
-  --color-ink-faint: #666f84;  /* placeholders, timestamps    —  5.03:1 */
+     Contrast on white / on the canvas:
+       ink         text, headings, figures   17.85 / 17.06
+       ink-body    body copy                 10.35 /  9.90
+       ink-muted   secondary text, labels     7.58 /  7.24
+       ink-faint   timestamps, meta           4.76 /  4.55
+       ink-placeholder  2.56 — placeholders, disabled and decorative marks
+                   ONLY; never text somebody needs to read. */
+  --color-ink:             #0F172A;
+  --color-ink-body:        #334155;
+  --color-ink-muted:       #475569;
+  --color-ink-faint:       #64748B;
+  --color-ink-placeholder: #94A3B8;
 
   /* ── Navigation rail ───────────────────────────────────────────────────────
-     Near-black with a blue cast, so the rail reads as a solid architectural
-     edge rather than a dark grey panel. */
-  --color-nav-bg:          #101728;
-  --color-nav-raised:      #1c2438;
-  --color-nav-line:        #2a3350;
-  /* Was #8e98ae — 4.4:1 on the rail, under AA, and the rail is where somebody
-     scans for a word they half-remember. */
-  --color-nav-text:        #b4bed6;
-  --color-nav-text-active: #ffffff;
+     nav-text on the rail 11.95:1. nav-text-muted is 3.73:1 — group
+     headings, dividers and idle chevrons/dots only, never a destination's
+     name. The active row is the brand blue (white on it 5.17). */
+  --color-nav-bg:          #111827;
+  --color-nav-raised:      #1F2937;   /* hover row, avatar */
+  --color-nav-line:        #1F2937;
+  --color-nav-text:        #CBD5E1;
+  --color-nav-text-muted:  #64748B;
+  --color-nav-text-active: #FFFFFF;
+  --color-nav-active:       #2563EB;
+  --color-nav-active-hover: #1D4ED8;
+
+  /* ── Header ────────────────────────────────────────────────────────────── */
+  --color-header-bg:             #FFFFFF;
+  --color-header-line:           #E2E8F0;
+  --color-header-text:           #0F172A;
+  --color-header-text-secondary: #64748B;   /* 4.76:1 */
+  --color-header-search:         #F8FAFC;
+  --color-header-search-line:    #E2E8F0;
+
+  /* ── School context bar (operator inside a school) ─────────────────────────
+     Informational, so the brand's pale blue — not a warning. Text 9.52:1. */
+  --color-context-bg:   #EFF6FF;
+  --color-context-line: #BFDBFE;
+  --color-context-icon: #2563EB;
+  --color-context-text: #1E3A8A;
+
+  /* ── Icon accents ──────────────────────────────────────────────────────────
+     Stat and module cards are white; only the icon box is tinted, so a row of
+     counts is told apart without becoming a row of coloured cards. Same kind,
+     same accent as mobile (see config/sections.ts for the mapping). Icon on
+     its box: blue 4.75 · indigo 5.62 · violet 5.20 · slate 6.92 · teal 3.59
+     (all above the 3:1 a graphic needs; the label beside it is ink). */
+  --color-accent-blue:        #2563EB;
+  --color-accent-blue-soft:   #EFF6FF;
+  --color-accent-indigo:      #4F46E5;
+  --color-accent-indigo-soft: #EEF2FF;
+  --color-accent-violet:      #7C3AED;
+  --color-accent-violet-soft: #F5F3FF;
+  --color-accent-slate:       #475569;
+  --color-accent-slate-soft:  #F1F5F9;
+  --color-accent-teal:        #0D9488;
+  --color-accent-teal-soft:   #F0FDFA;
+  --color-accent-amber:       #D97706;
+  --color-accent-amber-soft:  #FFFBEB;
+  --color-accent-green:       #16A34A;
+  --color-accent-green-soft:  #F0FDF4;
+  --color-accent-sky:         #0284C7;
+  --color-accent-sky-soft:    #F0F9FF;
+  --color-accent-red:         #DC2626;
+  --color-accent-red-soft:    #FEF2F2;
+
+  /* ── Dashboard tinted cards ────────────────────────────────────────────────
+     The school dashboard's cards (config/dashboardTint.ts) take a soft wash
+     (-soft), a 3px top edge (the base colour), a solid icon square (-solid,
+     white glyph) and the figure in a deeper shade (-deep). Measured, WCAG:
+       -deep on -soft:  blue 8.01 · indigo 8.88 · violet 8.19 · slate 13.35 ·
+                        teal 7.27 · amber 6.84 · green 6.81 · sky 7.09 · red 7.60
+       white on -solid: blue 5.17 · indigo 6.29 · violet 5.70 · slate 7.58 ·
+                        teal 5.47 · amber 5.02 · green 5.02 · sky 5.93 · red 6.47
+       Every icon square is -solid with a white glyph; there is no pale square.
+       ink-muted on -soft ≥ 6.78. ink-faint is NOT used on a wash (4.26 on
+       indigo-soft), so words on a tinted card are ink-muted. */
+  --color-accent-blue-solid:   #2563EB;
+  --color-accent-blue-deep:    #1E40AF;
+  --color-accent-indigo-solid: #4F46E5;
+  --color-accent-indigo-deep:  #3730A3;
+  --color-accent-violet-solid: #7C3AED;
+  --color-accent-violet-deep:  #5B21B6;
+  --color-accent-slate-solid:  #475569;
+  --color-accent-slate-deep:   #1E293B;
+  --color-accent-teal-solid:   #0F766E;
+  --color-accent-teal-deep:    #115E59;
+  --color-accent-amber-solid:  #B45309;
+  --color-accent-amber-deep:   #92400E;
+  --color-accent-green-solid:  #15803D;
+  --color-accent-green-deep:   #166534;
+  --color-accent-sky-solid:    #0369A1;
+  --color-accent-sky-deep:     #075985;
+  --color-accent-red-solid:    #B91C1C;
+  --color-accent-red-deep:     #991B1B;
 
   /* ── Status ────────────────────────────────────────────────────────────────
-     Colour here MEANS something. Reserved for state, never for decoration.
-     Deep text on a pale tint, so a status pill sits at the same visual weight
-     as the ink around it instead of flaring. */
-  --color-success:      #047857;
-  --color-success-soft: #e6f6ef;
-  --color-success-line: #b0e0c8;
+     Colour that MEANS something, never decoration. Per status:
+       base   icons, bars, dots, borders
+       -soft  the pale card / banner / pill tint
+       -box   an icon box on that tint
+       -line  its border
+       -text  words on white or on the tint (all ≥ 6.8:1)
+     Use `-text` for words: warning (#D97706, 3.19:1) and success (#16A34A,
+     3.30:1) are too light to read as text on white. The warning icon on its
+     box is 2.86:1, so it always sits beside -text words that carry the
+     meaning. `success-solid` is the filled success button (white 5.02). */
+  --color-success:       #16A34A;
+  --color-success-soft:  #F0FDF4;
+  --color-success-box:   #DCFCE7;
+  --color-success-line:  #BBF7D0;
+  --color-success-text:  #166534;
+  --color-success-solid: #15803D;
 
-  --color-warning:      #b45309;
-  --color-warning-soft: #fdf3e3;
-  --color-warning-line: #f3dcae;
+  --color-warning:      #D97706;
+  --color-warning-soft: #FFFBEB;
+  --color-warning-box:  #FEF3C7;
+  --color-warning-line: #FDE68A;
+  --color-warning-text: #92400E;
 
-  --color-danger:       #b91c1c;
-  --color-danger-soft:  #fdecec;
-  --color-danger-line:  #f6c9c6;
+  --color-danger:       #DC2626;
+  --color-danger-soft:  #FEF2F2;
+  --color-danger-box:   #FEE2E2;
+  --color-danger-line:  #FECACA;
+  --color-danger-text:  #991B1B;
 
-  --color-info:         #1d4ed8;
-  --color-info-soft:    #eaf0fe;
-  --color-info-line:    #c4d4fa;
+  --color-info:         #2563EB;
+  --color-info-soft:    #EFF6FF;
+  --color-info-box:     #DBEAFE;
+  --color-info-line:    #BFDBFE;
+  --color-info-text:    #1E40AF;
 
   /* ── Radius ────────────────────────────────────────────────────────────────
-     Two values, not five. Controls are tighter than the containers holding
-     them, which is what stops a dense layout looking like a pile of pills. */
+     Controls are tighter than the containers holding them. */
   --radius-control: 0.5rem;    /* buttons, inputs, badges */
-  --radius-card:    0.75rem;   /* cards, panels, dropdowns */
+  --radius-card:    0.75rem;   /* cards, panels, dropdowns, stat cards */
 
   /* ── Elevation ─────────────────────────────────────────────────────────────
-     Two-part shadows: a tight contact shadow that seats the element, plus a
-     wide diffuse one for the light. A single blurred drop shadow is the tell
-     of a cheap interface — real objects cast both.
+     Neutral slate shadows, kept faint: the border does the separating. */
+  --shadow-card:  0 1px 2px 0 rgb(15 23 42 / 0.04);
 
-     Tinted with the ink hue rather than black, so shadows sit in the palette
-     instead of greying it. */
-  /* The leading `inset` line is a 1px highlight along the top edge — the
-     difference between a rectangle and something with a surface, the same
-     trick a physical bezel plays catching light on its upper lip. It is baked
-     into the token rather than applied as an arbitrary utility because
-     Tailwind's class scanner stops at the comma in `[box-shadow:a,b]`, so
-     that version silently emitted nothing. */
-  --shadow-card:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-                  0 1px 1px 0 rgb(13 18 32 / 0.03),
-                  0 2px 6px -2px rgb(13 18 32 / 0.05);
-
-  /* Hover/active lift for an interactive card. */
-  --shadow-lift:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-                  0 1px 2px 0 rgb(13 18 32 / 0.04),
-                  0 6px 16px -6px rgb(13 18 32 / 0.10);
+  /* Hover lift for an interactive card. */
+  --shadow-lift:  0 1px 2px 0 rgb(15 23 42 / 0.04),
+                  0 4px 12px -4px rgb(15 23 42 / 0.10);
 
   /* Genuinely floating: dropdowns, modals, toasts. */
-  --shadow-raise: 0 1px 2px 0 rgb(13 18 32 / 0.04),
-                  0 4px 12px -4px rgb(13 18 32 / 0.06),
-                  0 16px 40px -12px rgb(13 18 32 / 0.14);
+  --shadow-raise: 0 1px 2px 0 rgb(15 23 42 / 0.04),
+                  0 4px 12px -4px rgb(15 23 42 / 0.06),
+                  0 16px 40px -12px rgb(15 23 42 / 0.14);
 
   /* Motion: a gentle deceleration, and durations short enough to feel
      immediate. Anything past ~200ms on a hover reads as lag, not polish. */
@@ -287,7 +296,7 @@
   /* One focus treatment for the whole app. Visible on keyboard, absent on
      mouse — the browser's :focus-visible does that discrimination for us. */
   :focus-visible {
-    outline: 2px solid var(--color-primary-600);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
     border-radius: var(--radius-control);
   }
@@ -330,14 +339,14 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: #d5d9e2;
+    background-color: var(--color-line-strong);
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #b4bac7;
+    background-color: var(--color-gray-300);
   }
 }
 
