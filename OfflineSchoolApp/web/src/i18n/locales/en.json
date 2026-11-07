@@ -3228,6 +3228,12 @@
       "subjects_failed": "{{count}} subjects failed",
       "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
       "fees_outstanding": "Owes {{balance}} (overdue)"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {

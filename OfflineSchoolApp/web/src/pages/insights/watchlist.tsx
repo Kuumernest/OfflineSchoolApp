@@ -24,6 +24,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { useFormat }    from "@/i18n/format";
+import { watchSource }  from "@/utils/watchSource";
 import { cn }           from "@/utils/cn";
 import { DASH_TINT }    from "@/config/dashboardTint";
 import { fetchClasses } from "@/services/class.service";
@@ -79,6 +80,16 @@ export default function WatchlistPage() {
 
   /** One signal, in the reader's language, with the numbers filled in. */
   const signalText = (s: WatchSignal): string => {
+    const text = signalWords(s);
+    // Which exam a mark-based flag rests on, and when (utils/watchSource).
+    const src = watchSource(s);
+    if (!src) return text;
+    return `${text} · ${t(`watch.source.${src.key}`, {
+      exam: src.exam, from: src.from, date: src.date ? fmt.date(src.date) : "",
+    })}`;
+  };
+
+  const signalWords = (s: WatchSignal): string => {
     if (s.code === "fees_outstanding") {
       return t("watch.sig.fees_outstanding", {
         balance: fmt.money(Number(s.data.balance ?? 0)),

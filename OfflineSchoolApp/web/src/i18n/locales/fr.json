@@ -3228,6 +3228,12 @@
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
       "fees_outstanding": "Doit {{balance}} (en retard)"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {
