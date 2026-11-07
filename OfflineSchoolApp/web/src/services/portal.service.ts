@@ -293,7 +293,8 @@ export interface PortalHomeChild extends PortalStudent {
     previousAverage: number | null; previousExamName: string | null;
   } | null;
   attendance: { from: string; present: number; marked: number; rate: number | null };
-  fees: { balance: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
+  /** balance: everything owed; overdue: the part past its due date (0 when none). */
+  fees: { balance: number; overdue?: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
   nextExam: { name: string; startDate: string; endDate: string | null } | null;
 }
 
