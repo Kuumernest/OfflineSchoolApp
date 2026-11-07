@@ -31,11 +31,13 @@ import {
 } from "@/services/finance.service";
 import type { SpendMethod } from "@/types/finance.types";
 import { useAttemptId } from "@/hooks/useAttemptId";
+import { categoryLabel } from "@/utils/categoryLabel";
 
 const METHODS: SpendMethod[] = ["cash", "mobile_money", "bank", "cheque", "other"];
 
 export default function ExpensesPage() {
-  const { t }    = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang     = i18n.resolvedLanguage ?? i18n.language;
   const fmt      = useFormat();
   const qc       = useQueryClient();
   const { toast, confirm } = useToast();
@@ -210,7 +212,7 @@ export default function ExpensesPage() {
                   <Tr key={e._id}>
                     <Td className="text-ink-muted">{fmt.dateShort(e.incurredAt)}</Td>
                     <Td className="font-medium text-ink">
-                      {byId.get(e.categoryId)?.label ?? e.categoryId}
+                      {categoryLabel(byId.get(e.categoryId), lang) ?? e.categoryId}
                     </Td>
                     <Td className="text-ink-muted">{e.description ?? "—"}</Td>
                     <Td className="text-ink-muted">{e.vendor ?? "—"}</Td>
@@ -269,7 +271,7 @@ export default function ExpensesPage() {
               value={form.categoryId}
               onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
               placeholder={t("expenses.category")}
-              options={categories.map((c) => ({ value: c._id, label: c.label }))}
+              options={categories.map((c) => ({ value: c._id, label: categoryLabel(c, lang) ?? c.label }))}
             />
           </FormField>
 

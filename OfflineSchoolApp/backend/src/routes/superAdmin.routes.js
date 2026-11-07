@@ -20,6 +20,7 @@ const mail                     = require("../services/email.transport");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
 const { YEAR_FORMAT }                         = require("../services/rankingScope.service");
 const { resolveOfflineSettings } = require("../services/offlineSettings.service");
+const { ensureDefaultExpenseCategories } = require("../services/expenseCategories.service");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
 const { parseFilters, computePlatformStats, availableFilters } =
@@ -223,6 +224,15 @@ router.post("/schools", canManage, asyncHandler(async (req, res) => {
   }
 
   const id = String(school._id);
+
+  // Its expense book opens with the usual headings rather than empty. Best
+  // effort: the first read of the categories seeds them if this fails.
+  try {
+    await ensureDefaultExpenseCategories(id);
+  } catch (err) {
+    console.error(`Default expense categories for school ${id} failed:`, err.message);
+  }
+
   await recordAudit(req, {
     action: "school.created", schoolId: id, schoolName: school.name,
     resource: { type: "school", id, label: school.name },

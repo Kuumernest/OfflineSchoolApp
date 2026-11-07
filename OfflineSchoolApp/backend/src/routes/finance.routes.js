@@ -27,6 +27,7 @@ const {
 
 const financeReports = require("../services/financeReports.service");
 const approvals      = require("../services/approvals.service");
+const { ensureDefaultExpenseCategories } = require("../services/expenseCategories.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -111,6 +112,11 @@ const canSetSalary = requirePermission("payroll.setSalary");
 router.get("/expense-categories", canReadExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
+
+  // A school that has never had a category gets the defaults on its first
+  // read — schools created before seeding-on-creation existed, or one whose
+  // creation-time seed failed. A no-op for every school that has (or had) any.
+  await ensureDefaultExpenseCategories(schoolId);
 
   const rows = await ExpenseCategory.find({ schoolId, deletedAt: null })
     .sort({ label: 1 }).lean();
