@@ -266,6 +266,12 @@ export interface PortalMe {
   unreadMessages?: number;
   /** Notices this guardian has not opened yet: the Messages badge counts them too. */
   unreadNotices?: number;
+  /**
+   * The Messages section's unread, counted by the server from the same
+   * queries its two tabs list (Conversations, Notices). `total` is the
+   * section's badge; see utils/portalRoutes messagesBadge.
+   */
+  unread?: { messages: number; notices: number; total: number };
 }
 
 export const fetchMe = async (studentId?: string | null): Promise<PortalMe> =>

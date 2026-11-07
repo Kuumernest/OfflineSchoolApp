@@ -150,6 +150,15 @@ it. Also in the repo's `CLAUDE.md`.
   - If the chunk still cannot be fetched (usually after a deploy), `RouteErrorBoundary` recognises it (`isChunkLoadError`) and shows "This page could not be loaded" with a **Reload** button, in place of the error text; the sidebar stays. Button only — no automatic reload, so no reload loop. Strings `error.chunkTitle` / `chunkBody` / `chunkReload` in en and fr. Applies to the desktop app too (it serves the built web app).
   - Checks: web `check:chunkretry` (36 checks: fails twice then loads → resolves; always fails → rejects after 3; no bare `lazy(() => import(` left in App.tsx; the boundary and both locales). Fails 17 of 19 on the old code.
 
+## Bug — portal unread badge, section URLs, tab title (2026-11-06)
+
+- [x] **P1** The web portal's Messages tab showed an unread badge of 1 over "No conversations yet". `/portal/me` sent unread threads and unread notices as two numbers, the client added them for the badge, and the section always opened on Conversations — so one unread notice (a gate scan, an absence) was a 1 over an empty list. The thread count itself agreed with the list (both `comms.listFor`).
+  - Server: one `unreadSummary` (`backend/src/routes/portal.routes.js`) counts unread threads (`comms.listFor`, the `/messages/conversations` query, one per-thread `unreadIn`) and unread notices (`noticeFilters`, the `/notifications` filter). `/me` returns `unread: { messages, notices, total }` (`unreadMessages` / `unreadNotices` kept for the phone); `/notifications` takes its threads and counts from it and adds `unreadTotal`. Family-wide, as the section is: threads belong to the guardian, notices to every child on the code.
+  - Web: the badge is `unread.total`; Messages opens on Notices when the only unread is notices (`src/utils/portalRoutes.ts`), read once on opening so reading a notice does not switch tab.
+- [x] **P2** Portal sections were in-page state: a refresh went back to Home, no link could open a section, back left the portal. Now `/portal/results`, `/portal/attendance`, `/portal/fees`, `/portal/messages` (Home stays `/portal`); `App.tsx` mounts `/portal/*`, the page reads the section from the URL, an unknown sub-path goes to `/portal`. Sign-in and the session-expired screen still gate every path, and sign-in lands on the section in the URL; signing out goes to `/portal`. The child switcher is unchanged (state, kept across sections). Desktop `app://school/portal/...` already serves `index.html` (no change); Cloudflare Pages serves `index.html` for unknown paths while the build has no `404.html` (docs/17) — no hosting change.
+- [x] **P2** The browser tab now reads the school's name (from `/portal/me`) in the portal, and what it said before when the name is unknown or on leaving.
+  - Checks: backend `check:portalunread` (in `check:all`), web `check:portalroutes`; `check:staffgate` and `check:dashcolours` follow the route to `/portal/*`.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.

@@ -13,7 +13,8 @@
 // server's communication policy — teachers, the office, and their own child —
 // so nothing here filters the list it is handed.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { LogOut, LogIn, Wallet, GraduationCap, CalendarCheck, MessageSquare, Home, AlertCircle, HelpCircle } from "lucide-react";
@@ -24,15 +25,19 @@ import { FormField, Input } from "@/components/ui/FormField";
 import { cn }          from "@/utils/cn";
 import { PageIcon }    from "@/components/ui/PageHeader";
 import { resolveLogoSrc } from "@/utils/logoSrc";
-import { HomeScreen, type PortalScreen } from "./HomeScreen";
+import { HomeScreen } from "./HomeScreen";
 import { ResultsScreen } from "./ResultsScreen";
 import { AttendanceScreen } from "./AttendanceScreen";
 import { FeesScreen } from "./FeesScreen";
-import { MessagesScreen, type MsgView } from "./MessagesScreen";
+import { MessagesScreen } from "./MessagesScreen";
 import { ChildAvatar, LanguageToggle, Skeleton } from "./ui";
 import {
   portalLogin, portalLogout, hasPortalSession, setPortalSession, fetchMe,
 } from "@/services/portal.service";
+import {
+  portalPath, portalScreenFromPath, messagesBadge, messagesLanding, portalTitle,
+  PORTAL_BASE, type PortalScreen,
+} from "@/utils/portalRoutes";
 
 export default function ParentPortalPage() {
   const { t } = useTranslation();
@@ -40,8 +45,13 @@ export default function ParentPortalPage() {
 
   // A session, not an access token: the client renews the latter on its own.
   const [signedIn, setSignedIn] = useState(hasPortalSession());
-  const [screen, setScreen]     = useState<PortalScreen>("home");
-  const [msgView, setMsgView]   = useState<MsgView>("messages");
+
+  // The section is the URL (utils/portalRoutes), not state: a refresh or a
+  // shared link lands on it, and back/forward moves between sections. Null
+  // is a path under /portal that names no section, sent back to Home below.
+  const { pathname } = useLocation();
+  const navigate     = useNavigate();
+  const screen       = portalScreenFromPath(pathname);
   // Null means "whichever the server picks first" — what a one-child parent
   // gets, and never has to think about.
   const [childId, setChildId]   = useState<string | null>(null);
@@ -56,6 +66,8 @@ export default function ParentPortalPage() {
     setSignedIn(false);
     setChildId(null);
     qc.clear();
+    // The next parent on this device starts at Home, not on this one's Fees.
+    navigate(PORTAL_BASE, { replace: true });
   };
 
   const meQ = useQuery({
@@ -72,6 +84,16 @@ export default function ParentPortalPage() {
 
   // Across every thread, from the one query that runs on every tab.
   const unreadMessages = meQ.data?.unreadMessages ?? 0;
+
+  // The tab names the school while the portal is open — the tab a parent
+  // has among a dozen others — and says what it said before when the school
+  // is not known yet (signed out, or /me still loading), and again on leaving.
+  const schoolName  = meQ.data?.school?.name ?? null;
+  const [baseTitle] = useState(() => document.title);
+  useEffect(() => {
+    document.title = portalTitle(schoolName, baseTitle);
+    return () => { document.title = baseTitle; };
+  }, [schoolName, baseTitle]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +112,11 @@ export default function ParentPortalPage() {
     }
   };
 
+  // A path under /portal that names no section: Home, not a blank page.
+  if (screen === null) return <Navigate to={PORTAL_BASE} replace />;
+
   // ── Sign in ────────────────────────────────────────────────────────────────
+  // At whatever section the URL names: once signed in, the parent is on it.
   if (!signedIn) {
     return (
       <div className="flex min-h-screen flex-col bg-canvas">
@@ -187,14 +213,16 @@ export default function ParentPortalPage() {
     { key: "results",    label: t("portal.nav.results"),    icon: <GraduationCap className="h-5 w-5" /> },
     { key: "attendance", label: t("portal.nav.attendance"), icon: <CalendarCheck className="h-5 w-5" /> },
     { key: "fees",       label: t("portal.nav.fees"),       icon: <Wallet className="h-5 w-5" /> },
+    // The server's total of what the section lists (unread threads and
+    // notices), the same count its two tabs show.
     { key: "messages",   label: t("portal.nav.messages"),   icon: <MessageSquare className="h-5 w-5" />,
-      badge: unreadMessages + unreadNotices },
+      badge: messagesBadge(meQ.data) },
   ];
 
   /** From a Home card: that child, that screen. */
   const open = (id: string, next: PortalScreen) => {
     if (id) setChildId(id);
-    setScreen(next);
+    if (next !== screen) navigate(portalPath(next));
     window.scrollTo({ top: 0 });
   };
 
@@ -300,7 +328,7 @@ export default function ParentPortalPage() {
             tomorrow. The delivery status is shown only when the school tried
             and has not managed it yet. */}
         {screen === "messages" && (
-          <MessagesScreen view={msgView} onView={setMsgView} children={children}
+          <MessagesScreen initialView={messagesLanding(meQ.data)} children={children}
             unreadMessages={unreadMessages} unreadNotices={unreadNotices} />
         )}
       </main>

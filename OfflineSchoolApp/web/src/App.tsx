@@ -230,7 +230,10 @@ export default function App() {
         their own screen. The portal carries its own token and its own sign-in,
         so a staff session here is simply irrelevant rather than a conflict.
       */}
-      <Route path="/portal" element={page(<ParentPortalPage />)} />
+      {/* Its sections are paths under it (/portal/results, /attendance,
+          /fees, /messages — utils/portalRoutes), so a refresh or a link lands
+          on the section, and back/forward moves between them. */}
+      <Route path="/portal/*" element={page(<ParentPortalPage />)} />
 
       {/* Where a printed document's QR code points; public, like the portal. */}
       <Route path="/verify"       element={page(<VerifyPage />)} />
