@@ -3227,7 +3227,9 @@
       "grade_drop": "Moyenne passée de {{from}} à {{to}} /20",
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
-      "fees_outstanding": "Doit {{balance}} (en retard)"
+      "fees_outstanding": "Doit {{balance}}, dont {{overdue}} en retard",
+      "fees_outstanding_all": "Doit {{balance}}, entièrement en retard",
+      "fees_owed": "Doit {{balance}}"
     }
   },
   "verif": {

@@ -71,7 +71,7 @@ const THRESHOLDS = {
   subjectsFailed: 3,
   minHomework:  2,
   homeworkMissRate: [[0.5, 2], [0.25, 1]],
-  feeRatio:     0.5,         // owing half or more of what was billed (overdue only)
+  feeRatio:     0.5,         // OVERDUE half or more of what was billed
 };
 
 const TIER = (score) => (score >= 5 ? "high" : score >= 3 ? "medium" : "low");
@@ -113,11 +113,11 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
       dueDate: { $gte: sinceKey, $lte: todayKey },
     }).select("classId dueDate submissions.studentId").lean(),
     // Fee debt only once it is OVERDUE (C6): a family that owes this term's
-    // fees before their due date is not a pupil to watch. "Overdue" is the
-    // Fee reminders answer, read from the same function, so the two screens
-    // never disagree — due dates, payment plans, undated charges and all.
-    // Balances are all-time: a family two terms behind is more of a warning
-    // sign, not less.
+    // fees before their due date is not a pupil to watch. Owed and overdue are
+    // the Fees page's pair — both read arrears.service (shared/arrears.js)
+    // through Fee reminders — so the screens never disagree: due dates,
+    // payment plans, undated charges and all. The school's current year, as
+    // the Fees page reads it.
     overdueFees({ schoolId, mode: "overdue", asOf })
       .then((rows) => new Map(rows.map((r) => [String(r.studentId), r]))),
   ]);
@@ -223,13 +223,18 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
     }
 
     const money = overdue.get(id);
-    if (money && money.balance > 0) {
-      // billed net of waivers: what is owed plus what has been paid.
+    if (money && money.overdue > 0) {
+      // `balance` is everything owed this year; `overdue` the part of it past
+      // its due date — the Fees page's "owed" and "overdue". The flag used to
+      // print the balance as "(overdue)": 145,000 for a family 50,000 late.
+      // The weight is the overdue part too: next month's fees are not a
+      // reason to watch a pupil harder. billed is net of waivers: what is
+      // owed plus what has been paid.
       const billed = money.balance + money.paid;
-      const heavy = billed > 0 && money.balance / billed >= THRESHOLDS.feeRatio;
+      const heavy = billed > 0 && money.overdue / billed >= THRESHOLDS.feeRatio;
       signals.push({
         code: "fees_outstanding", points: heavy ? 2 : 1,
-        data: { balance: money.balance, billed, daysOverdue: money.daysOverdue },
+        data: { balance: money.balance, overdue: money.overdue, billed, daysOverdue: money.daysOverdue },
       });
     }
 
