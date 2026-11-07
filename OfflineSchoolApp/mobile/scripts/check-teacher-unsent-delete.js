@@ -191,6 +191,30 @@ const check = (label, actual, expected) => {
   check("the administrator signs in online", await login(phone, "head@drop.test"), true);
   await sync(phone);
 
+  // The cases below drive the outbox themselves, one step at a time. The
+  // phone's own "push soon after a local change" (SyncManager._schedulePush,
+  // 3 s after any save) is a second driver: on a slow machine it fired in the
+  // middle of a case and ran a drain of its own — backfill included — beside
+  // the case's raw processPending. Case 4b then saw its DELETE sent twice and
+  // its queued create dropped by the backfill, a failure that came and went
+  // with CI load. Forcing that push to fire at once fails 4b and 6 every
+  // time; holding it off is what makes these cases deterministic.
+  //
+  // The trigger itself is checked in check-sync-triggers.js. Here it is held
+  // off for the rest of the run (every push is armed through
+  // PUSH_DEBOUNCE_MS), with any timer already armed and the one-off start-up
+  // sync. The five-minute periodic tick outlasts this script and is left.
+  const holdBackgroundSync = () => {
+    const { SyncManager } = phone.load("src/services/syncManager");
+    SyncManager.PUSH_DEBOUNCE_MS = 3_600_000;
+    if (SyncManager._pushTimer)   { clearTimeout(SyncManager._pushTimer);   SyncManager._pushTimer   = null; }
+    if (SyncManager._initTimeout) { clearTimeout(SyncManager._initTimeout); SyncManager._initTimeout = null; }
+    return SyncManager;
+  };
+  const held = holdBackgroundSync();
+  check("the phone's background push is held off for the scripted cases",
+    [held.PUSH_DEBOUNCE_MS, held._pushTimer, held._initTimeout], [3_600_000, null, null]);
+
   // ═════════════════════════════════════════════════════════════════════════
   console.log("--- 1. created offline, never queued, deleted ---");
   {
