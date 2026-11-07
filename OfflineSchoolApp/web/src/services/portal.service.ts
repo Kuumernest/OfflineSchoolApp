@@ -266,6 +266,12 @@ export interface PortalMe {
   unreadMessages?: number;
   /** Notices this guardian has not opened yet: the Messages badge counts them too. */
   unreadNotices?: number;
+  /**
+   * The Messages section's unread, counted by the server from the same
+   * queries its two tabs list (Conversations, Notices). `total` is the
+   * section's badge; see utils/portalRoutes messagesBadge.
+   */
+  unread?: { messages: number; notices: number; total: number };
 }
 
 export const fetchMe = async (studentId?: string | null): Promise<PortalMe> =>
@@ -293,7 +299,8 @@ export interface PortalHomeChild extends PortalStudent {
     previousAverage: number | null; previousExamName: string | null;
   } | null;
   attendance: { from: string; present: number; marked: number; rate: number | null };
-  fees: { balance: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
+  /** balance: everything owed; overdue: the part past its due date (0 when none). */
+  fees: { balance: number; overdue?: number; isOverdue: boolean; dueDate: string | null; daysOverdue: number } | null;
   nextExam: { name: string; startDate: string; endDate: string | null } | null;
 }
 

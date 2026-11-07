@@ -403,7 +403,10 @@
     "goDash": "Retour au tableau de bord",
     "pageProblem": "Cette page a rencontré un problème",
     "reload": "Recharger l'application",
-    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page."
+    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page.",
+    "chunkTitle": "Cette page n'a pas pu être chargée",
+    "chunkBody": "L'application a peut-être été mise à jour, ou la connexion a été interrompue. Rechargez pour obtenir la dernière version.",
+    "chunkReload": "Recharger"
   },
   "staffOnly": {
     "signOut": "Se déconnecter",
@@ -3031,6 +3034,7 @@
       "paidUp": "À jour",
       "dueOn": "Échéance le {{date}}",
       "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
       "overdueSince": "En retard depuis le {{date}}",
       "nextExam": "Prochain examen",
       "noExam": "Aucun examen prévu",
@@ -3105,6 +3109,7 @@
       "paidUp": "Tout est réglé",
       "paidUpHint": "Rien n’est dû pour {{name}} pour le moment.",
       "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
       "overdueSince": "Le paiement était dû le {{date}}",
       "dueOn": "Prochain paiement le {{date}}",
       "charged": "Facturé",
@@ -3228,7 +3233,15 @@
       "grade_drop": "Moyenne passée de {{from}} à {{to}} /20",
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
-      "fees_outstanding": "Doit {{balance}} (en retard)"
+      "fees_outstanding": "Doit {{balance}}, dont {{overdue}} en retard",
+      "fees_outstanding_all": "Doit {{balance}}, entièrement en retard",
+      "fees_owed": "Doit {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {

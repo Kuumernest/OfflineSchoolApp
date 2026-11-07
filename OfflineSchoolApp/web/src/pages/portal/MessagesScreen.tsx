@@ -48,11 +48,17 @@ const NOTICE_META: Record<string, { icon: React.ReactNode; tone: string; labelKe
   default:             { icon: <Bell className="h-4 w-4" />,          tone: "bg-accent-sky-solid text-white",    labelKey: "portal.noticeOther" },
 };
 
-export function MessagesScreen({ view, onView, children, unreadMessages, unreadNotices }: {
-  view: MsgView; onView: (v: MsgView) => void; children: PortalStudent[];
+export function MessagesScreen({ initialView, children, unreadMessages, unreadNotices }: {
+  /**
+   * The tab to open on: the one holding what the section's badge counted
+   * (utils/portalRoutes messagesLanding). Read once, when the section opens —
+   * reading a notice must not move the parent to another tab under them.
+   */
+  initialView: MsgView; children: PortalStudent[];
   unreadMessages: number; unreadNotices: number;
 }) {
   const { t } = useTranslation();
+  const [view, onView] = useState<MsgView>(initialView);
   const tabs: [MsgView, string, number][] = [
     ["messages", t("portal.messagesScreen.tabMessages"), unreadMessages],
     ["notices", t("portal.messagesScreen.tabNotices"), unreadNotices],
