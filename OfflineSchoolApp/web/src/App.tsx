@@ -15,7 +15,7 @@
 //   single boundary at the layout level would unmount the sidebar and topbar
 //   on every navigation, making the whole shell flicker.
 
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ComponentType } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import ProtectedRoute   from "@/components/auth/ProtectedRoute";
@@ -26,89 +26,103 @@ import RouteErrorBoundary from "@/components/layout/RouteErrorBoundary";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth.store";
 import { type UserRole } from "@/types";
+import { retryImport } from "@/utils/lazyWithRetry";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LAZY PAGES
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LoginPage        = lazy(() => import("@/pages/LoginPage"));
-const ChangePassword   = lazy(() => import("@/pages/auth/ChangePasswordPage"));
-const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
-const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPage"));
-const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
-const ClassIntelPage   = lazy(() => import("@/pages/insights/class-intelligence"));
-const IntelReviewPage  = lazy(() => import("@/pages/insights/intelligence-review"));
-const StrengthsPage    = lazy(() => import("@/pages/insights/student-strengths"));
+/**
+ * React.lazy, with the chunk fetched again before giving up.
+ *
+ * A page imported straight through lazy crashed the route with "Failed to
+ * fetch dynamically imported module" the first time one request for its chunk
+ * failed. retryImport tries a few times with a short backoff; if the chunk is
+ * really gone (a deploy renamed it), RouteErrorBoundary offers a reload.
+ * Every page below goes through this — scripts/check-chunk-retry.mjs holds it.
+ */
+function lazyPage<P extends object>(load: () => Promise<{ default: ComponentType<P> }>) {
+  return lazy(() => retryImport(load));
+}
 
-const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
-const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
-const AddStudentPage   = lazy(() => import("@/pages/students/AddStudentPage"));
-const EditStudentPage  = lazy(() => import("@/pages/students/EditStudentPage"));
-const AdmissionsPage   = lazy(() => import("@/pages/students/AdmissionsPage"));
+const LoginPage        = lazyPage(() => import("@/pages/LoginPage"));
+const ChangePassword   = lazyPage(() => import("@/pages/auth/ChangePasswordPage"));
+const DashboardPage    = lazyPage(() => import("@/pages/dashboard/DashboardPage"));
+const BursarDashboard  = lazyPage(() => import("@/pages/dashboard/BursarDashboardPage"));
+const WatchlistPage    = lazyPage(() => import("@/pages/insights/watchlist"));
+const ClassIntelPage   = lazyPage(() => import("@/pages/insights/class-intelligence"));
+const IntelReviewPage  = lazyPage(() => import("@/pages/insights/intelligence-review"));
+const StrengthsPage    = lazyPage(() => import("@/pages/insights/student-strengths"));
 
-const TeachersPage     = lazy(() => import("@/pages/teachers/TeachersPage"));
-const AddTeacherPage   = lazy(() => import("@/pages/teachers/AddTeacherPage"));
-const EditTeacherPage  = lazy(() => import("@/pages/teachers/EditTeacherPage"));
+const StudentsPage     = lazyPage(() => import("@/pages/students/StudentsPage"));
+const StudentDetail    = lazyPage(() => import("@/pages/students/StudentDetailPage"));
+const AddStudentPage   = lazyPage(() => import("@/pages/students/AddStudentPage"));
+const EditStudentPage  = lazyPage(() => import("@/pages/students/EditStudentPage"));
+const AdmissionsPage   = lazyPage(() => import("@/pages/students/AdmissionsPage"));
 
-const AssignmentsPage  = lazy(() => import("@/pages/assignments/index"));
-const AssignPage       = lazy(() => import("@/pages/assignments/assign"));
-const AssignmentDetail = lazy(() => import("@/pages/assignments/[id]"));
+const TeachersPage     = lazyPage(() => import("@/pages/teachers/TeachersPage"));
+const AddTeacherPage   = lazyPage(() => import("@/pages/teachers/AddTeacherPage"));
+const EditTeacherPage  = lazyPage(() => import("@/pages/teachers/EditTeacherPage"));
 
-const ClassesPage      = lazy(() => import("@/pages/classes/ClassesPage"));
-const SubjectsPage     = lazy(() => import("@/pages/subjects/index"));
-const AddSubjectPage   = lazy(() => import("@/pages/subjects/add/index"));
-const EditSubjectPage  = lazy(() => import("@/pages/subjects/edit/index"));
+const AssignmentsPage  = lazyPage(() => import("@/pages/assignments/index"));
+const AssignPage       = lazyPage(() => import("@/pages/assignments/assign"));
+const AssignmentDetail = lazyPage(() => import("@/pages/assignments/[id]"));
 
-const TimetablePage    = lazy(() => import("@/pages/timetable/index"));
-const PeriodsPage      = lazy(() => import("@/pages/periods/index"));
+const ClassesPage      = lazyPage(() => import("@/pages/classes/ClassesPage"));
+const SubjectsPage     = lazyPage(() => import("@/pages/subjects/index"));
+const AddSubjectPage   = lazyPage(() => import("@/pages/subjects/add/index"));
+const EditSubjectPage  = lazyPage(() => import("@/pages/subjects/edit/index"));
 
-const AttendancePage   = lazy(() => import("@/pages/attendance/index"));
-const AttendanceReport = lazy(() => import("@/pages/attendance/reports/index"));
+const TimetablePage    = lazyPage(() => import("@/pages/timetable/index"));
+const PeriodsPage      = lazyPage(() => import("@/pages/periods/index"));
 
-const ExamsPage        = lazy(() => import("@/pages/exams/index"));
-const CreateExamPage   = lazy(() => import("@/pages/exams/create/index"));
-const ExamDetailPage   = lazy(() => import("@/pages/exams/[id]/index"));
-const ExamResultsPage  = lazy(() => import("@/pages/exams/results/index"));
-const TermResultsPage  = lazy(() => import("@/pages/exams/term-results/index"));
-const AnnualResultsPage = lazy(() => import("@/pages/exams/annual-results/index"));
+const AttendancePage   = lazyPage(() => import("@/pages/attendance/index"));
+const AttendanceReport = lazyPage(() => import("@/pages/attendance/reports/index"));
 
-const AnnouncementsPage = lazy(() => import("@/pages/announcements/index"));
-const MessagesPage      = lazy(() => import("@/pages/messages/index"));
-const MessageAuditPage  = lazy(() => import("@/pages/messages/audit"));
+const ExamsPage        = lazyPage(() => import("@/pages/exams/index"));
+const CreateExamPage   = lazyPage(() => import("@/pages/exams/create/index"));
+const ExamDetailPage   = lazyPage(() => import("@/pages/exams/[id]/index"));
+const ExamResultsPage  = lazyPage(() => import("@/pages/exams/results/index"));
+const TermResultsPage  = lazyPage(() => import("@/pages/exams/term-results/index"));
+const AnnualResultsPage = lazyPage(() => import("@/pages/exams/annual-results/index"));
 
-const ReportsOverview  = lazy(() => import("@/pages/reports/index"));
-const ReportCardsPage  = lazy(() => import("@/pages/reports/cards"));
-const TemplatesPage    = lazy(() => import("@/pages/reports/templates"));
-const TemplateBuilder  = lazy(() => import("@/pages/reports/builder"));
-const TemplatePreview  = lazy(() => import("@/pages/reports/preview"));
+const AnnouncementsPage = lazyPage(() => import("@/pages/announcements/index"));
+const MessagesPage      = lazyPage(() => import("@/pages/messages/index"));
+const MessageAuditPage  = lazyPage(() => import("@/pages/messages/audit"));
 
-const SettingsPage     = lazy(() => import("@/pages/settings/SettingsPage"));
+const ReportsOverview  = lazyPage(() => import("@/pages/reports/index"));
+const ReportCardsPage  = lazyPage(() => import("@/pages/reports/cards"));
+const TemplatesPage    = lazyPage(() => import("@/pages/reports/templates"));
+const TemplateBuilder  = lazyPage(() => import("@/pages/reports/builder"));
+const TemplatePreview  = lazyPage(() => import("@/pages/reports/preview"));
 
-const ApprovalsPage    = lazy(() => import("@/pages/approvals/index"));
-const FeesPage         = lazy(() => import("@/pages/fees/index"));
-const FeeStructures    = lazy(() => import("@/pages/fees/structures"));
-const StudentFees      = lazy(() => import("@/pages/fees/student"));
-const ExpensesPage     = lazy(() => import("@/pages/finance/expenses"));
-const SalariesPage     = lazy(() => import("@/pages/finance/salaries"));
-const PayrollPage      = lazy(() => import("@/pages/finance/payroll"));
-const FinanceReports   = lazy(() => import("@/pages/finance/reports"));
-const PromotionPage    = lazy(() => import("@/pages/promotion/index"));
-const ProgressionPage  = lazy(() => import("@/pages/promotion/progression"));
-const DocumentsPage    = lazy(() => import("@/pages/documents/index"));
-const ExportsPage      = lazy(() => import("@/pages/exports/index"));
-const PortalCodesPage  = lazy(() => import("@/pages/portal/codes"));
-const ParentPortalPage = lazy(() => import("@/pages/portal/index"));
-const VerifyPage       = lazy(() => import("@/pages/verify/index"));
-const NotFoundPage     = lazy(() => import("@/pages/NotFoundPage"));
+const SettingsPage     = lazyPage(() => import("@/pages/settings/SettingsPage"));
+
+const ApprovalsPage    = lazyPage(() => import("@/pages/approvals/index"));
+const FeesPage         = lazyPage(() => import("@/pages/fees/index"));
+const FeeStructures    = lazyPage(() => import("@/pages/fees/structures"));
+const StudentFees      = lazyPage(() => import("@/pages/fees/student"));
+const ExpensesPage     = lazyPage(() => import("@/pages/finance/expenses"));
+const SalariesPage     = lazyPage(() => import("@/pages/finance/salaries"));
+const PayrollPage      = lazyPage(() => import("@/pages/finance/payroll"));
+const FinanceReports   = lazyPage(() => import("@/pages/finance/reports"));
+const PromotionPage    = lazyPage(() => import("@/pages/promotion/index"));
+const ProgressionPage  = lazyPage(() => import("@/pages/promotion/progression"));
+const DocumentsPage    = lazyPage(() => import("@/pages/documents/index"));
+const ExportsPage      = lazyPage(() => import("@/pages/exports/index"));
+const PortalCodesPage  = lazyPage(() => import("@/pages/portal/codes"));
+const ParentPortalPage = lazyPage(() => import("@/pages/portal/index"));
+const VerifyPage       = lazyPage(() => import("@/pages/verify/index"));
+const NotFoundPage     = lazyPage(() => import("@/pages/NotFoundPage"));
 
 // The platform: above any school. super_admin only — see navigation.ts.
-const PlatformDashboard    = lazy(() => import("@/pages/platform/PlatformDashboardPage"));
-const PlatformSchools      = lazy(() => import("@/pages/platform/SchoolsPage"));
-const PlatformSchoolDetail = lazy(() => import("@/pages/platform/SchoolDetailPage"));
-const PlatformPerformance  = lazy(() => import("@/pages/platform/PerformancePage"));
-const PlatformReports      = lazy(() => import("@/pages/platform/ReportsPage"));
-const PlatformAudit        = lazy(() => import("@/pages/platform/AuditLogPage"));
-const PlatformSettings     = lazy(() => import("@/pages/platform/PlatformSettingsPage"));
+const PlatformDashboard    = lazyPage(() => import("@/pages/platform/PlatformDashboardPage"));
+const PlatformSchools      = lazyPage(() => import("@/pages/platform/SchoolsPage"));
+const PlatformSchoolDetail = lazyPage(() => import("@/pages/platform/SchoolDetailPage"));
+const PlatformPerformance  = lazyPage(() => import("@/pages/platform/PerformancePage"));
+const PlatformReports      = lazyPage(() => import("@/pages/platform/ReportsPage"));
+const PlatformAudit        = lazyPage(() => import("@/pages/platform/AuditLogPage"));
+const PlatformSettings     = lazyPage(() => import("@/pages/platform/PlatformSettingsPage"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
