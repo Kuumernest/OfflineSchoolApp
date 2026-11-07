@@ -810,6 +810,7 @@
       "all": "Everyone",
       "teachers": "Teachers only",
       "students": "Students only",
+      "parents": "Parents only",
       "class": "Specific classes"
     },
     "priorityOpt": {
