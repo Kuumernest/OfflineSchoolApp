@@ -237,6 +237,50 @@ const GUARDIAN_NOTICE_KINDS = [
   "announcement",
 ];
 
+/** Unread messages in one thread, for THIS guardian. The one definition. */
+const unreadIn = (c, me) => {
+  const mine = (c.participants || []).find(
+    (p) => p.kind === "guardian" && String(p.id) === String(me.id)
+  );
+  return Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+};
+
+/**
+ * What the Messages section has unread, counted from the same queries its
+ * lists are built from.
+ *
+ * The section's badge is the sum of its two counted tabs: Conversations
+ * (`messages`, from comms.listFor — the query /messages/conversations lists)
+ * and Notices (`notices`, from noticeFilters — the filter /notifications
+ * lists). Both are counted here, once, and every route that reports an unread
+ * number takes it from here — so the badge can never count something the
+ * section has no row for.
+ *
+ * Family-wide, like the section: threads belong to the guardian, not to a
+ * child, and every child's notices are listed together, each saying whose it
+ * is.
+ *
+ * Best-effort per half: a messaging fault must not take out the screen that
+ * shows a child's fees.
+ */
+async function unreadSummary(req) {
+  const me = comms.principalFromRequest(req);
+  const [threads, notices] = await Promise.all([
+    comms.listFor(me, { limit: 50 }).catch(() => []),
+    (async () => {
+      const { unread } = noticeFilters({
+        schoolId:      req.portal.schoolId,
+        studentIds:    req.portal.studentIds ?? [req.portal.studentId],
+        accessId:      req.portal.accessId,
+        noticesSeenAt: req.portal.noticesSeenAt,
+      });
+      return Notification.countDocuments(unread);
+    })().catch(() => 0),
+  ]);
+  const messages = threads.reduce((n, c) => n + unreadIn(c, me), 0);
+  return { me, threads, messages, notices, total: messages + notices };
+}
+
 /**
  * The school heading, EVERY child this code covers, and which one is selected.
  *
@@ -254,47 +298,21 @@ router.get("/me", asyncHandler(async (req, res) => {
     .select("name").lean();
   const className = new Map(classes.map((c) => [String(c._id), c.name]));
 
-  // How many unread messages are waiting.
+  // What the Messages section has unread — its badge.
   //
   // Here rather than only on /notifications because this is the one endpoint
   // every screen loads, whatever tab it is showing — and a badge that needs a
   // second request to a tab the parent has not opened is a badge no client
-  // draws. A parent had no indication anywhere that a message had arrived; the
-  // count existed and nothing carried it to a place it could be seen.
+  // draws.
   //
-  // Read-only and best-effort: a messaging fault must not take out the screen
-  // that shows a child's fees.
-  const unreadMessages = await (async () => {
-    try {
-      const me      = comms.principalFromRequest(req);
-      const threads = await comms.listFor(me, { limit: 50 });
-      return threads.reduce((total, c) => {
-        const mine = (c.participants || []).find(
-          (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-        );
-        return total + Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
-      }, 0);
-    } catch {
-      return 0;
-    }
-  })();
-
-  // School notices that arrived since this parent last opened the tab. Same
-  // reasoning as unreadMessages: it rides on the one request every screen
-  // makes, because a badge that needs a request to the tab it is about is a
-  // badge nobody can draw before the parent has already gone there.
-  const unreadNotices = await (async () => {
-    try {
-      const { unread } = noticeFilters({
-        schoolId, studentIds,
-        accessId:      req.portal.accessId,
-        noticesSeenAt: req.portal.noticesSeenAt,
-      });
-      return await Notification.countDocuments(unread);
-    } catch {
-      return 0;
-    }
-  })();
+  // `unread.total` is THE badge. It used to be left to the client to add
+  // unreadMessages and unreadNotices, while the section opened on
+  // Conversations: one unread gate notice gave the tab a 1 and a screen that
+  // said "No conversations yet". The two halves are still sent, separately,
+  // so the section can open on the tab that holds what is unread.
+  const unread = await unreadSummary(req);
+  const unreadMessages = unread.messages;
+  const unreadNotices  = unread.notices;
 
   return res.json({
     success: true,
@@ -307,6 +325,7 @@ router.get("/me", asyncHandler(async (req, res) => {
       selectedId: String(student._id),
       unreadMessages,
       unreadNotices,
+      unread: { messages: unread.messages, notices: unread.notices, total: unread.total },
       student: {
         _id:          String(student._id),
         name:         displayName(student) || null,
@@ -538,7 +557,7 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Each row carries the child it concerns so the card can say whose it is.
   const forChildren = (studentIds ?? [studentId]).map(String);
 
-  const { all: notificationFilter, unread: unreadFilter } = noticeFilters({
+  const { all: notificationFilter } = noticeFilters({
     schoolId, studentIds: forChildren, accessId,
     noticesSeenAt: req.portal.noticesSeenAt,
   });
@@ -564,15 +583,15 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // gets it, the ordering is decided once, and the unread total below exists
   // at all — a client cannot badge a tab it has to fetch two endpoints to
   // count.
-  const me       = comms.principalFromRequest(req);
-  const threads  = await comms.listFor(me, { limit: 50 }).catch(() => []);
+  //
+  // The threads and both unread counts come from unreadSummary, the one that
+  // /me badges the section from, so this list and that badge cannot drift.
+  const summary = await unreadSummary(req);
+  const { me, threads } = summary;
 
   const messageNotices = threads
     .map((c) => {
-      const mine = (c.participants || []).find(
-        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-      );
-      const unread = Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+      const unread = unreadIn(c, me);
       if (unread < 1) return null;
 
       const others = (c.participants || []).filter(
@@ -608,7 +627,7 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Counted against the marker rather than a flag per row: a notice has no
   // per-guardian read state, and giving it one would mean a write for every
   // card a parent scrolls past.
-  const unreadNotices = await Notification.countDocuments(unreadFilter);
+  const unreadNotices = summary.notices;
 
   // Which of the listed rows this guardian has read, so the card can show it.
   // Computed against the same floor the count uses, or a card could look
@@ -654,12 +673,14 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     // What a badge needs, counted once on the side that can count it.
-    unread: messageNotices.reduce((n, m) => n + m.unread, 0),
+    unread: summary.messages,
     // School notices that arrived since this parent last opened the tab, which
     // is what the tab's own badge counts. Deliberately NOT including the
     // unread-thread rows above: those are counted by the Messages badge, and a
     // number that appears in two places at once is a number nobody trusts.
     unreadNotices,
+    // The section's badge, the same number /me carries as unread.total.
+    unreadTotal: summary.total,
     data: rows,
   });
 }));
@@ -922,10 +943,6 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     data: rows.map((c) => {
-      const mine = (c.participants || []).find(
-        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
-      );
-
       // Everyone on the thread except this guardian.
       //
       // A direct thread carries no title — it is named for the other person,
@@ -955,7 +972,8 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
         lastMessageAt:      c.lastMessageAt,
         lastMessagePreview: c.lastMessagePreview,
         isArchived:         c.isArchived,
-        unread: Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0)),
+        // The same per-thread count the section's badge sums (unreadSummary).
+        unread: unreadIn(c, me),
       };
     }),
   });

@@ -19,8 +19,7 @@ import { PageIcon } from "@/components/ui/PageHeader";
 import { fetchHome, type PortalHomeChild } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { ordinal, on20 } from "./format";
-
-export type PortalScreen = "home" | "results" | "attendance" | "fees" | "messages";
+import type { PortalScreen } from "@/utils/portalRoutes";
 
 export function HomeScreen({ onOpen }: { onOpen: (childId: string, screen: PortalScreen) => void }) {
   const { t } = useTranslation();

@@ -223,7 +223,7 @@ const app = read("src/App.tsx");
 const identity = read("src/config/pageIdentity.ts");
 const prefixes = [...identity.matchAll(/^\s*"(\/[^"]*)":/gm)].map((m) => m[1]);
 const routes = [...app.matchAll(/path="(\/[^"]*)"/g)].map((m) => m[1])
-  .filter((r) => !["/login", "/portal", "/verify", "/verify/:code"].includes(r));
+  .filter((r) => !["/login", "/portal", "/portal/*", "/verify", "/verify/:code"].includes(r));
 const unmapped = routes.filter((r) => !prefixes.some((p) => r === p || r.startsWith(`${p}/`)));
 check("every console route has a header colour and icon", [...new Set(unmapped)], []);
 const table = read("src/components/ui/DataTable.tsx");

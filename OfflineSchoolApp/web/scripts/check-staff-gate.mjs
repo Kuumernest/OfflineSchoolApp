@@ -46,7 +46,8 @@ check("the only route before the gate is /change-password",
   [...between.matchAll(/path="([^"]+)"/g)].map((m) => m[1]), ["/change-password"]);
 const before = app.slice(0, protectedStart);
 check("/login and the parent portal stay outside ProtectedRoute",
-  [/path="\/login"/.test(before), /path="\/portal"/.test(before)], [true, true]);
+  // /portal/*: the portal's sections are paths under it (check-portal-routes).
+  [/path="\/login"/.test(before), /path="\/portal\/\*"/.test(before)], [true, true]);
 const pagesUnderGate = [...app.slice(gateAt).matchAll(/path="(\/[^"]*)"/g)].map((m) => m[1]);
 check("deep links from the report are under the gate",
   ["/students/new", "/exams/new", "/exams/:id", "/dashboard"].filter((p) => !pagesUnderGate.includes(p)), []);
