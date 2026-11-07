@@ -54,6 +54,7 @@ const comms         = require("../services/communication/conversation.service");
 const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
 const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
@@ -358,7 +359,7 @@ router.get("/home", asyncHandler(async (req, res) => {
   const monthStart = `${today.slice(0, 7)}-01`;
   const reminders  = require("../services/feeReminders.service");
 
-  const [classes, summaries, marks, owing, ledgers, exams, news] = await Promise.all([
+  const [classes, allSummaries, marks, owing, ledgers, exams, news] = await Promise.all([
     Class.find({ _id: { $in: classIds }, schoolId }).select("name").lean(),
     ResultSummary.find({ schoolId, studentId: { $in: ids }, isPublished: true, deletedAt: null })
       .select("studentId examId academicYear term average classPosition totalInClass publishedAt")
@@ -377,6 +378,7 @@ router.get("/home", asyncHandler(async (req, res) => {
   ]);
 
   const className = new Map(classes.map((c) => [String(c._id), c.name]));
+  const summaries = await withoutDeletedExams(schoolId, allSummaries);
   const examName  = await examNamesFor(schoolId, summaries);
   const owingById = new Map(owing.map((r) => [String(r.studentId), r]));
 
@@ -834,11 +836,12 @@ router.get("/receipt/:paymentId", asyncHandler(async (req, res) => {
 router.get("/results", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
 
-  const rows = await ResultSummary.find({
+  const rows = await withoutDeletedExams(schoolId, await ResultSummary.find({
     schoolId, studentId, isPublished: true, deletedAt: null,
   // Newest first within a term too: two sequences share term 1, and Home's
-  // "latest result" must be the one this list leads with.
-  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean();
+  // "latest result" must be the one this list leads with. A deleted exam's
+  // result is dropped here as it is on Home.
+  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean());
   const examName = await examNamesFor(schoolId, rows);
 
   return res.json({
@@ -892,7 +895,9 @@ router.get("/results/:summaryId/report-card", asyncHandler(async (req, res) => {
     deletedAt:   null,
   }).select("examId term academicYear").lean();
 
-  if (!summary) {
+  // A deleted exam's result is not on /results, so its card is not served
+  // either — even to someone who kept the summary id.
+  if (!summary || !(await withoutDeletedExams(schoolId, [summary])).length) {
     return res.status(404).json({
       success: false,
       error:   "Result not found",

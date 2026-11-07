@@ -107,6 +107,18 @@ it. Also in the repo's `CLAUDE.md`.
   - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
   - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
 
+## Bug — a deleted exam's marks still counted (2026-11-06)
+
+- [x] **P1** Deleting an exam only stamps `deletedAt` on the Exam; its `ResultSummary` rows stay live, and readers that went to the summaries directly still counted them.
+  - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
+  - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
+  - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+- [x] **P1** The remaining direct readers (2026-11-07): intelligence review (`reviewCases.liveCohort`), class analysis (`analysisRuns` evidence for the worker), transcripts (`GET /documents/transcript/:studentId`) and a teacher's class results (`GET /teacher/results`, StudentScore rows) drop a deleted exam's rows through one helper, `backend/src/services/deletedExams.service.js` (the portal's `withoutDeletedExams`, moved there). Missing exam rows are still kept.
+  - Desktop offline class insights (`handlers/intelligence.js` `historyFor`) drop summaries whose mirrored exam carries `deletedAt`, as the server does.
+  - The portal's `/results/:summaryId/report-card` already refused a deleted exam's card (above).
+  - Checks: backend `check:deletedexameverywhere` (in `check:all`); desktop `check:intel-deleted` (in `npm run check`).
+- [ ] Not changed: the staff report card `GET /results/:examId/student/:studentId/reportcard` still serves a deleted exam (its exam lookup has no `deletedAt` filter), and what deleting a PUBLISHED exam should do (retract, keep, archive) — both need a product decision.
+
 ## Bug — Students to watch called the whole balance overdue (2026-11-06)
 
 - [x] **P1** The fee flag on Students to watch printed what a family owes as "(overdue)": Eunice Ashu "owes FCFA 145,000 (overdue)" while the Fees page said 145,000 owed, 50,000 overdue; Alain Onana 200,000 against 105,000.
