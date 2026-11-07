@@ -179,6 +179,13 @@ it. Also in the repo's `CLAUDE.md`.
   - Rankings past 100 pupils: the route pages (`?page=`, `total`, `totalPages`, still cut in the database) and the tab shows Prev/Next like Term Results; "N students" is the table's total, so it agrees with the overview. `_id` breaks position ties so no pupil repeats or drops at a page boundary; with every class, class rankings come grouped by class (Form 1 < Form 2 < Form 10). Desktop mirror pages the same way. Search covers the shown page only (the page says so).
   - Checks: backend `check:resultsclassscope`, `check:rankingspaging` (both in `check:all`); web `check:resultsscope`; desktop `check-results.js` (paging).
 
+## Bug — flaky mobile check: offline teacher delete (2026-11-07)
+
+- [x] **P2** `mobile/scripts/check-teacher-unsent-delete.js` case 4b failed in CI on two PRs (#74, #78) and passed on rerun: "the DELETE went first" saw two DELETEs, "a DELETE is queued behind it" found an empty outbox, the teacher stayed active.
+  - Cause, in the check: the phone's own "push soon after a local change" (`SyncManager._schedulePush`, 3 s after a save) fired mid-case on a slow runner and ran its own backfill + drain beside the case's raw `MutationQueue.processPending()` — two drains sent the DELETE twice, and the backfill dropped the queued create. Forcing that push to fire at once failed 4b (and case 6) on every run.
+  - Not an app bug: the app reaches `processPending` only through the single-flight `MutationQueue.drain()`.
+  - Fix: the check holds the background push (and the one-off start-up sync) off after its first sync, so the scripted cases are the only driver; the trigger stays covered by `check-sync-triggers.js`. 8/8 runs pass under CPU load, and the forced-race variant now passes.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
