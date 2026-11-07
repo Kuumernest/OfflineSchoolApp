@@ -403,6 +403,10 @@ router.get("/home", asyncHandler(async (req, res) => {
         rate: days.length ? Math.round((present / days.length) * 100) : null },
       fees: ledgers[i] ? {
         balance: ledgers[i].totals?.balance ?? 0,
+        // The part of it past its due date, by the school's rule — the Fees
+        // page's "overdue". The card says "owes X, of which Y is overdue";
+        // it used to colour the whole balance overdue.
+        overdue: due?.isOverdue ? (due?.overdue ?? 0) : 0,
         isOverdue: Boolean(due?.isOverdue), dueDate: due?.earliestDue ?? null, daysOverdue: due?.daysOverdue ?? 0,
       } : null,
       nextExam: next ? { name: next.name, startDate: next.startDate, endDate: next.endDate ?? null } : null,
@@ -449,24 +453,36 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
   const balance = totalCharged - totalWaived - totalPaid;
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   // Check for an active payment plan
   const plan = await PaymentPlan.findOne({
     schoolId, studentId, status: "active", deletedAt: null,
   }).lean();
 
-  // Build reminders from undischarged charges with due dates
+  // How much of the account is late, by the one rule every screen reads
+  // (arrears.service → shared/arrears): the Fees page's owed and overdue,
+  // for the school's current year. This endpoint used to decide on its own.
+  const { arrearsFor } = require("../services/arrears.service");
+  const { chargeStatuses } = require("../../../shared/arrears");
+  const { daysBetween, DUE_SOON_DAYS_MS } = require("../services/feeReminders.service");
+  const { rows: [account] } = await arrearsFor({ schoolId, onlyStudentIds: [String(studentId)], asOf: now });
+
+  // Each charge as payments settle it (oldest due first): a charge whose date
+  // has passed is overdue only while something is still unpaid on it. It
+  // used to be "overdue" the day after its date even when paid in full. On
+  // an active plan the plan's dates govern, so no single charge is late.
+  const settled = new Map(chargeStatuses(charges, totalPaid, now).map((x) => [String(x.charge._id), x]));
   const reminders = charges
     .filter((c) => c.dueDate && !c.voidedAt)
     .map((c) => {
       const dueDate = new Date(c.dueDate);
-      const isOverdue = dueDate < today;
-      const daysOverdue = isOverdue
-        ? Math.floor((today - dueDate) / 86_400_000)
-        : 0;
-      const isDueSoon = !isOverdue &&
-        dueDate <= new Date(today.getTime() + 14 * 86_400_000);
+      const st = settled.get(String(c._id));
+      const unpaid = st?.unpaid ?? 0;
+      const isOverdue = !plan && Boolean(st?.isOverdue);
+      // Counted as Fee reminders counts them (feeReminders.daysBetween).
+      const daysOverdue = isOverdue ? daysBetween(now, dueDate) : 0;
+      const isDueSoon = !isOverdue && unpaid > 0 && !st?.isLate &&
+        dueDate.getTime() <= now.getTime() + DUE_SOON_DAYS_MS;
 
       return {
         chargeId:    c._id,
@@ -475,6 +491,8 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
         amount:      c.amount,
         waivedAmount: c.waivedAmount ?? 0,
         netAmount:   c.amount - (c.waivedAmount ?? 0),
+        /** What payments have not covered on this charge. */
+        unpaid,
         dueDate:     c.dueDate,
         isOverdue,
         isDueSoon,
@@ -488,6 +506,9 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
     success: true,
     data: {
       balance,
+      /** The part past its due date (the Fees page's figure), 0 when none. */
+      overdue:   account?.isOverdue ? account.overdue : 0,
+      isOverdue: Boolean(account?.isOverdue),
       totalCharged,
       totalWaived,
       totalPaid,

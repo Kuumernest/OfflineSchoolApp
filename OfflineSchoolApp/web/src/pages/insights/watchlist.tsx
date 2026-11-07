@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }    from "@/i18n/format";
 import { cn }           from "@/utils/cn";
+import { feeFlag }      from "@/utils/feeFlag";
 import { DASH_TINT }    from "@/config/dashboardTint";
 import { fetchClasses } from "@/services/class.service";
 import {
@@ -80,8 +81,12 @@ export default function WatchlistPage() {
   /** One signal, in the reader's language, with the numbers filled in. */
   const signalText = (s: WatchSignal): string => {
     if (s.code === "fees_outstanding") {
-      return t("watch.sig.fees_outstanding", {
-        balance: fmt.money(Number(s.data.balance ?? 0)),
+      // Owed and overdue, as the Fees page shows them — the balance is not
+      // all overdue unless it is (utils/feeFlag).
+      const f = feeFlag(s.data);
+      return t(`watch.sig.${f.key}`, {
+        balance: fmt.money(f.balance),
+        overdue: fmt.money(f.overdue ?? 0),
       });
     }
     return t(`watch.sig.${s.code}`, { ...s.data } as Record<string, unknown>);
