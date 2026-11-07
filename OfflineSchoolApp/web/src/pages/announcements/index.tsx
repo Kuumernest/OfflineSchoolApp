@@ -53,6 +53,7 @@ import {
   PRIORITIES,
   allowedAudiences,
   canPin,
+  isAdminRole,
 } from "@/types/announcement.types";
 import type {
   Announcement,
@@ -492,8 +493,8 @@ export default function AnnouncementsPage() {
               label={t("announcements.audience")}
               required
               hint={
-                audiences.length < 4
-                  ? "Teachers can post to students or their own classes."
+                !isAdminRole(role)
+                  ?"Teachers can post to students or their own classes."
                   : undefined
               }
             >

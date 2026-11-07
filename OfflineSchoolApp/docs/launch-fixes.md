@@ -159,6 +159,18 @@ it. Also in the repo's `CLAUDE.md`.
 - [x] **P2** The browser tab now reads the school's name (from `/portal/me`) in the portal, and what it said before when the name is unknown or on leaving.
   - Checks: backend `check:portalunread` (in `check:all`), web `check:portalroutes`; `check:staffgate` and `check:dashcolours` follow the route to `/portal/*`.
 
+## Feature — first-run defaults (2026-11-06)
+
+- [x] **P2** A new school's expense book was empty, so "Record expense" stayed disabled until somebody invented a category. Now it starts with **utilities, maintenance, stationery, transport, events** (`label` English + `labelFr` French: Services publics, Entretien, Fournitures de bureau, Transport, Événements), from `backend/src/services/expenseCategories.service.js`.
+  - Seeded by `POST /api/super-admin/schools` (best effort) and on `GET /api/finance/expense-categories` for a school that has **never had a category** — soft-deleted rows count, so a school that retired a default (or made its own) is never re-seeded. A school that does not exist is never seeded.
+  - Ids are a function of (school, code) (uuid v5) and `(schoolId, code)` is unique, so concurrent first reads seed once. Server-side only: the desktop does not seed its mirror (five queued POSTs would 409 and block the outbox); the rows reach it through the sync feed.
+  - Web Expenses page shows `labelFr` to a French reader (`web/src/utils/categoryLabel.ts`), falling back to `label`.
+  - Nothing to run on deploy: existing schools with no categories get them on their next read of the list.
+- [x] **P2** Announcements: **Parents** audience in the web composer (administrators; teachers keep students / their classes, which already reach those pupils' parents). The server already stored `audience: "parents"` and the guardian portal already read it (`audienceMatch({ audience: "parents" })`).
+  - `PUT /api/announcements/:id` changed `audience` but not `audiences`, which readers match on, so an Everyone notice edited to Parents still reached pupils and teachers. PUT now recomputes `audiences` like POST, clears `targetClasses` off a non-class audience, and answers 400 to an unknown audience or `class` with no classes.
+  - Not done: the phone's composer has no Parents option yet.
+- Checks: backend `check:expensedefaults`, `check:announceparents` (both in `check:all`); web `check:firstrun`.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.

@@ -813,6 +813,7 @@
       "all": "Tout le monde",
       "teachers": "Enseignants uniquement",
       "students": "Élèves uniquement",
+      "parents": "Parents uniquement",
       "class": "Classes précises"
     },
     "priorityOpt": {
