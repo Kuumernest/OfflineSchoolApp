@@ -63,6 +63,7 @@ const IntelligenceAnalysisRun = require("../../db/models/IntelligenceAnalysisRun
 const Student           = require("../../db/models/Student");
 const Exam              = require("../../db/models/Exam");
 const ResultSummary     = require("../../db/models/ResultSummary");
+const { withoutDeletedExams } = require("../deletedExams.service");
 const GradingConfig     = require("../../db/models/GradingConfig");
 const AcademicStructure = require("../../db/models/AcademicStructure");
 const Intervention      = require("../../db/models/Intervention");
@@ -250,7 +251,7 @@ const loadEvidence = async (scope) => {
   const { schoolId } = scope;
   const students = await Student.find(studentFilterOf(scope)).select("_id classId").lean();
   const ids = students.map((s) => String(s._id));
-  const [exams, summaries, gradingConfig, academicStructure, interventions] = await Promise.all([
+  const [exams, liveAndDeleted, gradingConfig, academicStructure, interventions] = await Promise.all([
     Exam.find({ schoolId, deletedAt: null })
       .select("_id type academicYear term sequenceNumber startDate parentExamId").lean(),
     ids.length
@@ -264,6 +265,8 @@ const loadEvidence = async (scope) => {
           .select("_id studentId subjectId status createdAt startedAt").lean()
       : [],
   ]);
+  // As reviewCases.liveCohort: a deleted exam's summaries are not evidence.
+  const summaries = await withoutDeletedExams(schoolId, liveAndDeleted);
   return { students, exams, summaries, gradingConfig, academicStructure, interventions };
 };
 

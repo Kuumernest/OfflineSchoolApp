@@ -82,9 +82,9 @@ const main = async () => {
 
   console.log("\n--- what the flag says ---");
   check("owing all of an overdue bill → 2 points, with the days overdue",
-    [fee("ama")?.points, fee("ama")?.data], [2, { balance: 60000, billed: 60000, daysOverdue: 10 }]);
+    [fee("ama")?.points, fee("ama")?.data], [2, { balance: 60000, overdue: 60000, billed: 60000, daysOverdue: 10 }]);
   check("owing a fifth of it → 1 point, billed counts what was paid",
-    [fee("cho")?.points, fee("cho")?.data], [1, { balance: 20000, billed: 100000, daysOverdue: 10 }]);
+    [fee("cho")?.points, fee("cho")?.data], [1, { balance: 20000, overdue: 20000, billed: 100000, daysOverdue: 10 }]);
   check("an undated bill this year is overdue at once",
     fee("dan")?.points, 2);
 

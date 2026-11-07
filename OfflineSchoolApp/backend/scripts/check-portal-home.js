@@ -9,7 +9,8 @@
  *     ama  Form 1  two published results (12.5 then 14.25), one draft;
  *                  9 of 10 days present this month; owes 30,000, due 5 days ago
  *     bih  Form 3  nothing published; no register this month; paid up
- *     cho  Form 1  one result; owes 20,000, due in 10 days
+ *     cho  Form 1  one result; owes 20,000, due in 10 days. A newer published
+ *                  result from an exam since deleted is not her latest.
  *   dan, another family's child in Form 1, is never on her Home.
  *   Form 1's next exam starts in 6 days; a past exam is not "next".
  *   Notices list newest first.
@@ -57,7 +58,8 @@ const SRC = path.join(__dirname, "..", "src");
   const exam = (_id, name, offset, status = "published") => ({ _id, schoolId: sid, classId: "f1", classIds: ["f1"], name,
     type: "test", academicYear: YEAR, term: 1, startDate: iso(days(offset)), status, deletedAt: null });
   await C("Exam").insertMany([exam("x1", "1st Sequence", -40), exam("x2", "2nd Sequence", -10), exam("x9", "Old test", -2, "scheduled"),
-    exam("x3", "3rd Sequence", 6, "scheduled")]);
+    exam("x3", "3rd Sequence", 6, "scheduled"),
+    { ...exam("xd", "Deleted test", -3, "archived"), deletedAt: days(-1) }]);
   const result = (studentId, examId, average, position, published, ago) => M("ResultSummary").create({
     examId, studentId, classId: "f1", schoolId: sid, academicYear: YEAR, term: "1", average, classPosition: position,
     totalInClass: 30, isPublished: published, publishedAt: published ? days(-ago) : null, calcVersion: "exam-process/3",
@@ -66,6 +68,7 @@ const SRC = path.join(__dirname, "..", "src");
   await result("ama", "x2", 14.25, 4, true, 5);
   await result("ama", "x3", 18, 1, false, 0);
   await result("cho", "x2", 11, 15, true, 5);
+  await result("cho", "xd", 3, 30, true, 2);
   await result("dan", "x2", 17, 2, true, 5);
 
   const monthStart = `${iso(now).slice(0, 7)}-01`;
@@ -127,6 +130,15 @@ const SRC = path.join(__dirname, "..", "src");
   check("the same figure Results leads with", card("ama").latest?.average, amaResults[0].average);
   check("Results now names the exam", amaResults.map((r) => r.examName).sort(), ["1st Sequence", "2nd Sequence"]);
   check("one result: no previous to compare with", [card("cho").latest?.average, card("cho").latest?.previousAverage], [11, null]);
+  check("a deleted exam's result is neither latest nor previous",
+    [card("cho").latest?.examName, card("cho").latest?.previousExamName], ["2nd Sequence", null]);
+  const choResults = (await get("/results?studentId=cho")).body.data;
+  check("Results leaves the deleted exam out too, and leads with Home's figure",
+    [choResults.map((r) => r.examName), choResults[0]?.average], [["2nd Sequence"], card("cho").latest?.average]);
+  const deletedId = String((await M("ResultSummary").findOne({ studentId: "cho", examId: "xd" }).lean())._id);
+  await M("GeneratedReport").collection.insertOne({ schoolId: sid, examId: "xd", studentId: "cho", renderedHtml: "<p>card</p>", deletedAt: null });
+  const deletedCard = await get(`/results/${deletedId}/report-card?studentId=cho`);
+  check("a deleted exam's report card is not served, even by its id", deletedCard.status, 404);
   check("nothing published: no latest result", card("bih").latest, null);
 
   console.log("\n--- attendance this month: as Attendance shows it ---");
