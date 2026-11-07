@@ -114,6 +114,16 @@ it. Also in the repo's `CLAUDE.md`.
   - The 1/2-point weight is the overdue part over what was billed (the threshold always said "overdue only"): Eunice 1 point (was 2), Alain 2.
   - Checks: backend `check:watchoverdue` (in `check:all`; Eunice, Alain, and a paid-up sibling on the same guardian), `check:watchfees` updated; web `check:feeflag`.
 
+## Bug — the parent portal and fee reminders called the whole balance overdue (2026-11-07)
+
+- [x] **P1** Same mistake as the watch list, on the parent's side: portal Home and Fees (web and phone) coloured the whole balance "Overdue"; `GET /portal/fees/reminders` decided "overdue" on its own — every dated charge the day after its date, even one paid in full; the fee reminder message under "Overdue school fees" quoted only the balance.
+  - One per-charge rule in `shared/arrears.js`: `chargeStatuses` (payments settle the oldest due charge first; a charge is overdue only while something is unpaid on it). `feePosition` now sums it, and the portal lists it.
+  - `/portal/home` cards carry `fees.overdue`; `/portal/fees/reminders` carries the account's `overdue`/`isOverdue` from `arrears.service` (the Fees page's figure) and each charge's `unpaid`; on an active plan no single charge is late (the plan's dates govern). Days late counted as Fee reminders counts them.
+  - Web and phone: the pill reads "of which X is overdue" when only part is late, "Overdue" when all of it is or the figure is missing (`overdueShare`, web `utils/feeFlag.ts`, phone `utils/overdueShare.js`).
+  - The reminder carries `overdue`; the message reads "…balance of 145,000, of which 50,000 is overdue" (en/fr).
+  - Checks: backend `check:portaloverdue` (in `check:all`; one guardian, three children); web `check:feeflag` (extended); mobile `scripts/check-portal-overdue.js` (in `npm run check`).
+- [ ] Desktop offline arrears count overdue FAMILIES one per child (`desktop/src/main/api/handlers/fees.js`). The server groups siblings by portal access code (`familyCount`), but `GuardianAccess` is deliberately not mirrored to the desktop (a stale copy of who may see a child must not exist), and grouping by shared guardian name/email/phone is forbidden (CLAUDE.md). Needs a decision: mirror a non-sensitive family link (e.g. a family id on Student, or a studentIds-only projection of access codes), or show no family count offline.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
