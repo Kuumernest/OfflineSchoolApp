@@ -114,6 +114,13 @@ it. Also in the repo's `CLAUDE.md`.
   - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
   - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
 
+## Bug — Students to watch did not say which exam a flag rests on (2026-11-07)
+
+- [x] **P2** "Failed the last exam (8/20, pass mark 10)", "Average fell 14 → 7" and "3 subjects failed" named no exam, so a teacher could not check them — and "the last exam" is exactly what changes when an exam is deleted or re-run.
+  - `earlyWarning.service`: `failed_exam`, `grade_drop` and `subjects_failed` carry `exam: { examId, name, date }` (one exam read for the whole list); a drop also carries `fromExam`. An exam whose row is gone is still named by id, with no name or date.
+  - Web: each such flag ends "· 2nd Sequence, 10 Oct 2026" or, for a drop, "· 1st Sequence → 2nd Sequence, 10 Oct 2026" (`web/src/utils/watchSource.ts`, `watch.source.*` en/fr).
+  - Checks: backend `check:watchsource` (in `check:all`); web `check:watchsource`.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
