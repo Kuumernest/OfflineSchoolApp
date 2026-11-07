@@ -403,7 +403,10 @@
     "goDash": "Retour au tableau de bord",
     "pageProblem": "Cette page a rencontré un problème",
     "reload": "Recharger l'application",
-    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page."
+    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page.",
+    "chunkTitle": "Cette page n'a pas pu être chargée",
+    "chunkBody": "L'application a peut-être été mise à jour, ou la connexion a été interrompue. Rechargez pour obtenir la dernière version.",
+    "chunkReload": "Recharger"
   },
   "staffOnly": {
     "signOut": "Se déconnecter",

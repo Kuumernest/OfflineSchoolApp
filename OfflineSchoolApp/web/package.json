@@ -33,7 +33,8 @@
     "check:createids": "node scripts/check-create-ids.mjs",
     "check:dashcolours": "node scripts/check-dashboard-colours.mjs",
     "check:feeflag": "node scripts/check-fee-flag.mjs",
-    "check:watchsource": "node scripts/check-watch-source.mjs"
+    "check:watchsource": "node scripts/check-watch-source.mjs",
+    "check:chunkretry": "node scripts/check-chunk-retry.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

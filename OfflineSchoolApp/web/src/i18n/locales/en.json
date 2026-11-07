@@ -403,7 +403,10 @@
     "goDash": "Back to dashboard",
     "pageProblem": "This page ran into a problem",
     "reload": "Reload the app",
-    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again."
+    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again.",
+    "chunkTitle": "This page could not be loaded",
+    "chunkBody": "The app may have been updated, or the connection dropped. Reload to get the latest version.",
+    "chunkReload": "Reload"
   },
   "staffOnly": {
     "signOut": "Sign out",
