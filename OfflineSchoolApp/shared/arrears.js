@@ -64,6 +64,30 @@ const settleOrder = (charges, asOf) => {
 const isLate = (c, asOf) => !c.dueDate || endOfDay(c.dueDate) < asOf;
 
 /**
+ * Each charge with what is left unpaid on it and whether it is past due, in
+ * the order payments settle them (oldest due date first, undated as now).
+ *
+ * The one place a charge is called overdue: a charge whose date has passed
+ * but which the payments made have covered is NOT overdue. feePosition sums
+ * these; the parent portal lists them.
+ *
+ * @param {Array<{amount:number, waivedAmount?:number, dueDate?:Date|null, createdAt?:Date}>} charges
+ * @param {number} paid
+ * @param {Date}   [asOf]
+ * @returns {Array<{charge:object, net:number, unpaid:number, isLate:boolean, isOverdue:boolean}>}
+ */
+function chargeStatuses(charges, paid, asOf = new Date()) {
+  let left = paid;
+  return settleOrder(charges, asOf).map((c) => {
+    const net    = netOf(c);
+    const unpaid = Math.max(0, net - left);
+    left = Math.max(0, left - net);
+    const late = isLate(c, asOf);
+    return { charge: c, net, unpaid, isLate: late, isOverdue: late && unpaid > 0 };
+  });
+}
+
+/**
  * The first charge a family's payments have not covered, or null.
  *
  * @param {Array<{amount:number, waivedAmount?:number, dueDate?:Date|null, createdAt?:Date}>} charges
@@ -157,17 +181,13 @@ function feePosition({ charges = [], paid = 0, plan = null, asOf = new Date() })
   }
 
   // Payments go to the oldest charges first, so the late ones are covered
-  // before anything not yet due.
-  let left = paid;
+  // before anything not yet due (chargeStatuses).
   let overdue = 0;
   let overdueSince = null;
   let nextDue = null;
-  for (const c of settleOrder(charges, asOf)) {
-    const net    = netOf(c);
-    const unpaid = Math.max(0, net - left);
-    left = Math.max(0, left - net);
+  for (const { charge: c, unpaid, isLate: late } of chargeStatuses(charges, paid, asOf)) {
     if (unpaid === 0) continue;
-    if (isLate(c, asOf)) {
+    if (late) {
       overdue += unpaid;
       // An undated charge is late with no date to quote; the first dated
       // late one is the date a reminder names.
@@ -216,4 +236,4 @@ function familyCount(studentIds, accesses = []) {
   return new Set(ids.map(find)).size;
 }
 
-module.exports = { endOfDay, firstUnpaid, planStatus, feePosition, familyCount };
+module.exports = { endOfDay, firstUnpaid, chargeStatuses, planStatus, feePosition, familyCount };

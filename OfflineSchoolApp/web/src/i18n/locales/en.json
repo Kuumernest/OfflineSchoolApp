@@ -406,7 +406,10 @@
     "goDash": "Back to dashboard",
     "pageProblem": "This page ran into a problem",
     "reload": "Reload the app",
-    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again."
+    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again.",
+    "chunkTitle": "This page could not be loaded",
+    "chunkBody": "The app may have been updated, or the connection dropped. Reload to get the latest version.",
+    "chunkReload": "Reload"
   },
   "staffOnly": {
     "signOut": "Sign out",
@@ -813,6 +816,7 @@
       "all": "Everyone",
       "teachers": "Teachers only",
       "students": "Students only",
+      "parents": "Parents only",
       "class": "Specific classes"
     },
     "priorityOpt": {
@@ -3033,6 +3037,7 @@
       "paidUp": "Paid up",
       "dueOn": "Due {{date}}",
       "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} overdue",
       "overdueSince": "Overdue since {{date}}",
       "nextExam": "Next exam",
       "noExam": "No exam scheduled",
@@ -3107,6 +3112,7 @@
       "paidUp": "All paid up",
       "paidUpHint": "Nothing is owed for {{name}} at the moment.",
       "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} is overdue",
       "overdueSince": "Payment was due on {{date}}",
       "dueOn": "Next payment due {{date}}",
       "charged": "Charged",
@@ -3230,7 +3236,15 @@
       "grade_drop": "Average fell {{from}} → {{to}} /20",
       "subjects_failed": "{{count}} subjects failed",
       "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
-      "fees_outstanding": "Owes {{balance}} (overdue)"
+      "fees_outstanding": "Owes {{balance}}, of which {{overdue}} is overdue",
+      "fees_outstanding_all": "Owes {{balance}}, all of it overdue",
+      "fees_owed": "Owes {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {
