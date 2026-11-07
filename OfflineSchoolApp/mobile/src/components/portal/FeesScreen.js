@@ -21,6 +21,7 @@ import { ACCENT, TONE_EDGE } from "../../theme/colors";
 import { IconSquare } from "../Tinted";
 import { Card, CardTitle, Skeleton, EmptyState, said } from "./ui";
 import { C, TAP } from "./theme";
+import { overdueShare } from "../../utils/overdueShare";
 
 // The payment methods the catalogues word; anything else is shown as sent.
 const METHODS = ["cash", "mobile_money", "bank", "cheque", "waiver", "other"];
@@ -66,7 +67,11 @@ export default function FeesScreen({ data, loading, plan, status, childName, pri
               {overdue ? (
                 <View style={[s.pill, s.pillDanger]}>
                   <Ionicons name="alert-circle-outline" size={14} color={C.danger} />
-                  <Text style={[s.pillText, { color: C.danger }]}>{t("portal.feesScreen.overdue")}</Text>
+                  <Text style={[s.pillText, { color: C.danger }]}>
+                    {overdueShare(totals.balance, status?.overdue) === "part"
+                      ? t("portal.feesScreen.overdueOfIt", { amount: formatMoney(Number(status?.overdue)) })
+                      : t("portal.feesScreen.overdue")}
+                  </Text>
                 </View>
               ) : null}
             </View>

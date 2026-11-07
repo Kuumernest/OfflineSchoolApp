@@ -20,6 +20,7 @@ import { fetchHome, type PortalHomeChild } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { ordinal, on20 } from "./format";
 import type { PortalScreen } from "@/utils/portalRoutes";
+import { overdueShare } from "@/utils/feeFlag";
 
 export function HomeScreen({ onOpen }: { onOpen: (childId: string, screen: PortalScreen) => void }) {
   const { t } = useTranslation();
@@ -129,7 +130,10 @@ function ChildCard({ child, index, onOpen }: {
               <p className={cn("text-xl font-semibold tabular-nums", child.fees.isOverdue ? "text-danger-text" : "text-accent-teal-deep")}>{fmt.money(child.fees.balance)}</p>
               {child.fees.isOverdue ? (
                 <span className="mt-1 inline-flex items-center rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger-text">
-                  {t("portal.home.overdue")}
+                  {/* "of which Y is overdue" — never the whole balance called late */}
+                  {overdueShare(child.fees.balance, child.fees.overdue) === "part"
+                    ? t("portal.home.overdueOfIt", { amount: fmt.money(Number(child.fees.overdue)) })
+                    : t("portal.home.overdue")}
                 </span>
               ) : child.fees.dueDate ? (
                 <p className="text-sm text-ink-body">{t("portal.home.dueOn", { date: fmt.date(child.fees.dueDate) })}</p>

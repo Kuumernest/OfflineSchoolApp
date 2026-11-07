@@ -12,6 +12,7 @@ const Class         = require("../db/models/Class");
 const Enrollment    = require("../db/models/Enrollment");
 const ResultSummary = require("../db/models/ResultSummary");
 const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
 const { averageOutOf20 } = require("../../../shared/reportCard");
 
 const { buildClassListHtml }  = require("../print/classList");
@@ -350,13 +351,16 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Student not found" });
   }
 
-  const [enrollments, summaries] = await Promise.all([
+  const [enrollments, allSummaries] = await Promise.all([
     Enrollment.find({ schoolId, studentId: req.params.studentId, deletedAt: null })
       .sort({ academicYear: 1 }).lean(),
     ResultSummary.find({
       schoolId, studentId: req.params.studentId, isPublished: true, deletedAt: null,
     }).sort({ academicYear: 1, term: 1 }).lean(),
   ]);
+  // A deleted exam's result is not on the record: its summary stays live when
+  // the exam is deleted, and a transcript is the last place to print it.
+  const summaries = await withoutDeletedExams(schoolId, allSummaries);
 
   // Group results under the year they belong to. Years come from BOTH sources:
   // a year with enrollment but no published results still belongs on the record

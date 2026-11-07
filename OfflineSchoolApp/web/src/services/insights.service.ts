@@ -4,6 +4,7 @@
 // joining and scoring; this file only names the shapes.
 
 import api from "@/services/api";
+import type { ExamSource } from "@/utils/watchSource";
 import { fetchClasses } from "@/services/class.service";
 
 export type WatchTier = "high" | "medium" | "low";
@@ -22,6 +23,10 @@ export interface WatchSignal {
   points: number;
   /** The numbers behind the signal — the client owns the wording. */
   data:   Record<string, number | string | null>;
+  /** The exam a mark-based flag rests on (failed_exam, grade_drop, subjects_failed). */
+  exam?:     ExamSource | null;
+  /** grade_drop only: the earlier exam the average fell from. */
+  fromExam?: ExamSource | null;
 }
 
 export interface WatchStudent {

@@ -54,6 +54,7 @@ const comms         = require("../services/communication/conversation.service");
 const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
 const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
@@ -377,7 +378,7 @@ router.get("/home", asyncHandler(async (req, res) => {
   const monthStart = `${today.slice(0, 7)}-01`;
   const reminders  = require("../services/feeReminders.service");
 
-  const [classes, summaries, marks, owing, ledgers, exams, news] = await Promise.all([
+  const [classes, allSummaries, marks, owing, ledgers, exams, news] = await Promise.all([
     Class.find({ _id: { $in: classIds }, schoolId }).select("name").lean(),
     ResultSummary.find({ schoolId, studentId: { $in: ids }, isPublished: true, deletedAt: null })
       .select("studentId examId academicYear term average classPosition totalInClass publishedAt")
@@ -396,6 +397,7 @@ router.get("/home", asyncHandler(async (req, res) => {
   ]);
 
   const className = new Map(classes.map((c) => [String(c._id), c.name]));
+  const summaries = await withoutDeletedExams(schoolId, allSummaries);
   const examName  = await examNamesFor(schoolId, summaries);
   const owingById = new Map(owing.map((r) => [String(r.studentId), r]));
 
@@ -420,6 +422,10 @@ router.get("/home", asyncHandler(async (req, res) => {
         rate: days.length ? Math.round((present / days.length) * 100) : null },
       fees: ledgers[i] ? {
         balance: ledgers[i].totals?.balance ?? 0,
+        // The part of it past its due date, by the school's rule — the Fees
+        // page's "overdue". The card says "owes X, of which Y is overdue";
+        // it used to colour the whole balance overdue.
+        overdue: due?.isOverdue ? (due?.overdue ?? 0) : 0,
         isOverdue: Boolean(due?.isOverdue), dueDate: due?.earliestDue ?? null, daysOverdue: due?.daysOverdue ?? 0,
       } : null,
       nextExam: next ? { name: next.name, startDate: next.startDate, endDate: next.endDate ?? null } : null,
@@ -466,24 +472,36 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
   const balance = totalCharged - totalWaived - totalPaid;
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   // Check for an active payment plan
   const plan = await PaymentPlan.findOne({
     schoolId, studentId, status: "active", deletedAt: null,
   }).lean();
 
-  // Build reminders from undischarged charges with due dates
+  // How much of the account is late, by the one rule every screen reads
+  // (arrears.service → shared/arrears): the Fees page's owed and overdue,
+  // for the school's current year. This endpoint used to decide on its own.
+  const { arrearsFor } = require("../services/arrears.service");
+  const { chargeStatuses } = require("../../../shared/arrears");
+  const { daysBetween, DUE_SOON_DAYS_MS } = require("../services/feeReminders.service");
+  const { rows: [account] } = await arrearsFor({ schoolId, onlyStudentIds: [String(studentId)], asOf: now });
+
+  // Each charge as payments settle it (oldest due first): a charge whose date
+  // has passed is overdue only while something is still unpaid on it. It
+  // used to be "overdue" the day after its date even when paid in full. On
+  // an active plan the plan's dates govern, so no single charge is late.
+  const settled = new Map(chargeStatuses(charges, totalPaid, now).map((x) => [String(x.charge._id), x]));
   const reminders = charges
     .filter((c) => c.dueDate && !c.voidedAt)
     .map((c) => {
       const dueDate = new Date(c.dueDate);
-      const isOverdue = dueDate < today;
-      const daysOverdue = isOverdue
-        ? Math.floor((today - dueDate) / 86_400_000)
-        : 0;
-      const isDueSoon = !isOverdue &&
-        dueDate <= new Date(today.getTime() + 14 * 86_400_000);
+      const st = settled.get(String(c._id));
+      const unpaid = st?.unpaid ?? 0;
+      const isOverdue = !plan && Boolean(st?.isOverdue);
+      // Counted as Fee reminders counts them (feeReminders.daysBetween).
+      const daysOverdue = isOverdue ? daysBetween(now, dueDate) : 0;
+      const isDueSoon = !isOverdue && unpaid > 0 && !st?.isLate &&
+        dueDate.getTime() <= now.getTime() + DUE_SOON_DAYS_MS;
 
       return {
         chargeId:    c._id,
@@ -492,6 +510,8 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
         amount:      c.amount,
         waivedAmount: c.waivedAmount ?? 0,
         netAmount:   c.amount - (c.waivedAmount ?? 0),
+        /** What payments have not covered on this charge. */
+        unpaid,
         dueDate:     c.dueDate,
         isOverdue,
         isDueSoon,
@@ -505,6 +525,9 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
     success: true,
     data: {
       balance,
+      /** The part past its due date (the Fees page's figure), 0 when none. */
+      overdue:   account?.isOverdue ? account.overdue : 0,
+      isOverdue: Boolean(account?.isOverdue),
       totalCharged,
       totalWaived,
       totalPaid,
@@ -834,11 +857,12 @@ router.get("/receipt/:paymentId", asyncHandler(async (req, res) => {
 router.get("/results", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
 
-  const rows = await ResultSummary.find({
+  const rows = await withoutDeletedExams(schoolId, await ResultSummary.find({
     schoolId, studentId, isPublished: true, deletedAt: null,
   // Newest first within a term too: two sequences share term 1, and Home's
-  // "latest result" must be the one this list leads with.
-  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean();
+  // "latest result" must be the one this list leads with. A deleted exam's
+  // result is dropped here as it is on Home.
+  }).sort({ academicYear: -1, term: -1, publishedAt: -1 }).lean());
   const examName = await examNamesFor(schoolId, rows);
 
   return res.json({
@@ -892,7 +916,9 @@ router.get("/results/:summaryId/report-card", asyncHandler(async (req, res) => {
     deletedAt:   null,
   }).select("examId term academicYear").lean();
 
-  if (!summary) {
+  // A deleted exam's result is not on /results, so its card is not served
+  // either — even to someone who kept the summary id.
+  if (!summary || !(await withoutDeletedExams(schoolId, [summary])).length) {
     return res.status(404).json({
       success: false,
       error:   "Result not found",

@@ -115,9 +115,17 @@ const TEMPLATES = {
     const days = Number(d.daysOverdue) || 0;
     const late = Boolean(d.isOverdue);
 
+    // Owed and, when only part of it is late, how much: "145,000, of which
+    // 50,000 is overdue" — the Fees page's two figures. A message under an
+    // "Overdue school fees" subject used to quote the whole balance, next
+    // term's fees included, as if all of it were late.
+    const overdue = Number(d.overdue);
+    const partLate = late && Number.isFinite(overdue) && overdue > 0 && overdue < Number(d.balance);
     const opening = en
-      ? `<b>${esc(d.studentName)}</b> has an outstanding fee balance of <b>${money(d.balance, lang)}</b>.`
-      : `<b>${esc(d.studentName)}</b> a un solde de frais impayés de <b>${money(d.balance, lang)}</b>.`;
+      ? `<b>${esc(d.studentName)}</b> has an outstanding fee balance of <b>${money(d.balance, lang)}</b>` +
+        (partLate ? `, of which <b>${money(overdue, lang)}</b> is overdue.` : ".")
+      : `<b>${esc(d.studentName)}</b> a un solde de frais impayés de <b>${money(d.balance, lang)}</b>` +
+        (partLate ? `, dont <b>${money(overdue, lang)}</b> en retard.` : ".");
 
     // No due date at all: the plain balance notice, which is what this template
     // said before it learned about deadlines.

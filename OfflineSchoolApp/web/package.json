@@ -32,6 +32,9 @@
     "check:staffno": "node scripts/check-staff-number.mjs",
     "check:createids": "node scripts/check-create-ids.mjs",
     "check:dashcolours": "node scripts/check-dashboard-colours.mjs",
+    "check:feeflag": "node scripts/check-fee-flag.mjs",
+    "check:watchsource": "node scripts/check-watch-source.mjs",
+    "check:chunkretry": "node scripts/check-chunk-retry.mjs",
     "check:portalroutes": "node scripts/check-portal-routes.mjs"
   },
   "dependencies": {
