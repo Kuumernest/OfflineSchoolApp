@@ -187,7 +187,8 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
     [decline?.studentName, decline?.className, decline?.enrollmentNo], ["Pupil A1", "Form 3A", "A1"]);
   check("evidence is carried separately from the engine's interpretation",
     [decline.marks.length, decline.metrics !== null, decline.classifications.map((k) => k.code), decline.explanation.length > 0],
-    [3, true, ["academic_decline", "sudden_performance_change"], true]);
+    // C5: the slide is said once, as a decline — not again as a sudden change.
+    [3, true, ["academic_decline"], true]);
   check("and the form starts empty, with the temporal block the codes call for",
     [decline.review.classificationAppropriate, decline.review.dataQuality, "temporal" in decline.review], [null, [], true]);
   check("the marks are strings a teacher can read, not raw documents",
@@ -211,7 +212,7 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   const reviewA = r.body.data;
   check("→ 201, attributed, under the engine version, with the SERVER's classifications",
     [r.status, reviewA.reviewedBy, reviewA.engineVersion, reviewA.classifications.map((k) => k.code), reviewA.version],
-    [201, "teach-a", "1.0.0", ["academic_decline", "sudden_performance_change"], 1]);
+    [201, "teach-a", "1.0.0", ["academic_decline"], 1]);
   check("the data-quality codes are stored", reviewA.review.dataQuality, ["assessment_unusually_difficult"]);
   check("it persists on the review collection",
     (await IntelligenceReview.findById(reviewA._id).lean())?.review?.classificationAppropriate, "PARTIALLY");

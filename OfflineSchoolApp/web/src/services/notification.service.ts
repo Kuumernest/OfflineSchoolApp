@@ -184,6 +184,47 @@ async function fetchMessageNotifications(limit = 20): Promise<Notification[]> {
   }
 }
 
+/**
+ * Edits of yours that somebody else replaced, as notifications.
+ *
+ * Student records are last-write-wins; the server records each overwrite and
+ * names the person whose edit was lost (GET /sync/overwrites/mine). Only the
+ * signed-in user's own, unseen ones. Reading one in the bell marks it seen on
+ * the server, which also clears it on that person's phone.
+ *
+ * Derived like messages, for the same reason: the Notification collection is
+ * the delivery queue to families, not a staff inbox.
+ */
+async function fetchOverwriteNotifications(
+  t: (key: string, params?: Record<string, unknown>) => string,
+  limit = 20,
+): Promise<Notification[]> {
+  try {
+    const { data } = await api.get("/sync/overwrites/mine", { params: { unseen: 1, limit } });
+    const list: Record<string, unknown>[] = data?.data?.overwrites ?? data?.overwrites ?? [];
+    return list.map((o) => {
+      const who     = String(o.overwrittenByName ?? "") || t("notifications.overwriteSomeone");
+      const student = String(o.entityName ?? "");
+      const deleted = o.newAction === "delete";
+      return {
+        _id:       `overwrite-${String(o.id)}`,
+        title:     t("notifications.overwriteTitle"),
+        body:      t(deleted ? "notifications.overwriteBodyDeleted" : "notifications.overwriteBody", { name: who, student }),
+        type:      "system" as const,
+        priority:  "high" as const,
+        isRead:    false,
+        createdAt: String(o.overwrittenAt ?? o.createdAt ?? ""),
+        // A deleted pupil has no page to go to.
+        link:      deleted || !o.entityId ? "" : `/students/${encodeURIComponent(String(o.entityId))}`,
+      };
+    });
+  } catch (err) {
+    // An older server without the route, or a blip: the bell still works.
+    console.warn("[Notifications] Overwrites fetch failed:", err);
+    return [];
+  }
+}
+
 // ─── Priority sort weight ─────────────────────────────────────────────────────
 const PRIORITY_WEIGHT: Record<Notification["priority"], number> = {
   urgent: 4,
@@ -200,17 +241,18 @@ export async function fetchNotifications(
   t: (key: string, params?: Record<string, unknown>) => string = (k) => k,
 ): Promise<NotificationListResponse> {
   // Fetch all sources in parallel
-  const [announcementNotifs, alertNotifs, messageNotifs] = await Promise.all([
+  const [announcementNotifs, alertNotifs, messageNotifs, overwriteNotifs] = await Promise.all([
     fetchAnnouncementNotifications(schoolId, limit),
     fetchSystemAlerts(schoolId, t),
     fetchMessageNotifications(limit),
+    fetchOverwriteNotifications(t, limit),
   ]);
 
   // Merge: alerts first, then messages, then announcements. Messages sit
   // above announcements because one is addressed to you by a person and the
   // other is addressed to everybody; the sort below reorders by unread and
   // priority anyway, and this only settles ties.
-  const allNotifications = [...alertNotifs, ...messageNotifs, ...announcementNotifs].sort(
+  const allNotifications = [...alertNotifs, ...overwriteNotifs, ...messageNotifs, ...announcementNotifs].sort(
     (a, b) => {
       // Unread first
       if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
@@ -255,6 +297,17 @@ export async function markAsRead(notificationId: string): Promise<boolean> {
   // be posted to /announcements/message-<id>/read, which is a 404.
   if (notificationId.startsWith("message-")) return true;
 
+  // An overwritten edit: seen is recorded against the overwrite itself.
+  if (notificationId.startsWith("overwrite-")) {
+    try {
+      await api.post(`/sync/overwrites/${encodeURIComponent(notificationId.slice("overwrite-".length))}/seen`);
+      return true;
+    } catch (err) {
+      console.warn("[Notifications] Mark overwrite seen failed:", err);
+      return false;
+    }
+  }
+
   try {
     // POST, not PATCH, and /announcements rather than /admin/announcements.
     await api.post(`/announcements/${notificationId}/read`);
@@ -272,10 +325,38 @@ export async function markAllAsRead(schoolId: string): Promise<number> {
   try {
     // schoolId must be in the body — the handler destructures req.body and
     // would otherwise 500, or match every school if it got through.
-    const { data } = await api.post("/announcements/read-all", { schoolId });
-    return Number((data as Record<string, unknown>)?.marked ?? 0);
+    const [{ data }, overwrites] = await Promise.all([
+      api.post("/announcements/read-all", { schoolId }),
+      // The caller's own overwritten edits, which the bell also lists.
+      api.post("/sync/overwrites/seen-all").catch(() => null),
+    ]);
+    const extra = Number((overwrites?.data as { data?: { marked?: number } } | undefined)?.data?.marked ?? 0);
+    return Number((data as Record<string, unknown>)?.marked ?? 0) + extra;
   } catch (err) {
     console.warn("[Notifications] Mark all as read failed:", err);
     return -1;
+  }
+}
+// ─── Action items (C11) ──────────────────────────────────────────────────────
+// Counted live by the server from the records, so an item goes away when the
+// work is done. Only items this reader can act on are returned.
+
+export interface ActionItem {
+  key:     "marksAwaitingApproval" | "resultsUnpublished" | "overdueFees";
+  count:   number;
+  link:    string;
+  /** Overdue fees: the amount past due (not the late pupils' whole balances). */
+  amount?: number;
+  /** Overdue fees: the families those pupils belong to. */
+  families?: number;
+}
+
+export async function fetchActionItems(schoolId: string): Promise<ActionItem[]> {
+  try {
+    const { data } = await api.get("/admin/action-items", { params: { schoolId } });
+    return data?.items ?? data?.data?.items ?? [];
+  } catch {
+    // A failed count must not break the bell; the stored notifications still show.
+    return [];
   }
 }

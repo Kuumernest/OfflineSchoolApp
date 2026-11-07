@@ -57,6 +57,9 @@ const ensureSchema = (db) =>
       await safeAddColumn(db, TABLE, "_synced_at", "TEXT");
       await safeAddColumn(db, TABLE, "created_at", "TEXT");
       await safeAddColumn(db, TABLE, "updated_at", "TEXT");
+      // The server's copy, kept when an offline change first touches a clean
+      // row, so a discarded change is undone on the spot (see keepServerImage).
+      await safeAddColumn(db, TABLE, "server_image", "TEXT");
 
       console.log("[periods] Schema verified");
     },
@@ -121,6 +124,29 @@ const normalizeFromDb = (row) => {
  * Pipeline: server → normalizeFromApi → normalizeFromDb → UI
  */
 const normalizeFromServer = (p) => normalizeFromDb(normalizeFromApi(p));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 3b — THE SERVER'S COPY, FOR UNDOING AN UNSENT CHANGE
+//
+// A clean row (dirty = 0) is what the server holds: it came from a pull, or a
+// send settled it. The first offline change to it copies those columns into
+// `server_image`; later changes leave the copy alone, and a pull that writes
+// the row replaces it whole (INSERT OR REPLACE), copy included. So a discard
+// on the pending-changes screen can put the row back without a network.
+//
+// A separate statement that may fail on its own: a table rebuilt without the
+// column (SyncManager's old-shape migration) must not stop the change itself.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const IMAGE_COLUMNS = ["name", "starttime", "endtime", "sortorder", "isbreak", "isactive", "version", "updated_at"];
+
+const keepServerImage = (db, id) =>
+  db.runAsync(
+    `UPDATE ${TABLE}
+        SET server_image = json_object(${IMAGE_COLUMNS.map((c) => `'${c}', ${c}`).join(", ")})
+      WHERE id = ? AND COALESCE(dirty, 0) = 0`,
+    [id]
+  ).catch(() => {});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 4 — SERVICE
@@ -307,6 +333,7 @@ export const PeriodsService = {
     await ensureSchema(db);
     const now = new Date().toISOString();
 
+    await keepServerImage(db, id);
     await db.runAsync(
       `UPDATE ${TABLE}
        SET name       = COALESCE(?, name),
@@ -356,6 +383,10 @@ export const PeriodsService = {
     const next = row.isactive ? 0 : 1;
     const now  = new Date().toISOString();
 
+    // Sent as the period's whole record (isActive stated, not "flip"), by the
+    // backfill's period spec as PUT /admin/periods/:id: a replay or a second
+    // offline toggle cannot then land as the opposite of what the phone shows.
+    await keepServerImage(db, id);
     await db.runAsync(
       `UPDATE ${TABLE}
        SET isactive  = ?,
@@ -385,8 +416,12 @@ export const PeriodsService = {
     const b   = all[swapIndex];
     const now = new Date().toISOString();
 
-    // Swap sort orders atomically
+    // Swap sort orders atomically. Offline, each row's new sortOrder goes out
+    // as an absolute value in its PUT (backfill period spec), so several
+    // reorders — sent in whatever order, or twice — end in the order shown here.
     await withTransaction(db, async () => {
+      await keepServerImage(db, a.id);
+      await keepServerImage(db, b.id);
       await db.runAsync(
         `UPDATE ${TABLE}
          SET sortorder = ?, updated_at = ?, dirty = 1, _synced = 0,
@@ -460,6 +495,25 @@ export const PeriodsService = {
     }
 
     const now = new Date().toISOString();
+
+    // Created on this device and never sent: there is nothing upstream to
+    // delete, so the row (and its queued create, if the sweep had queued it)
+    // simply goes and nothing is sent. Otherwise the create would still go
+    // out and the delete be lost — offline, 'delete' overwrote 'create' and
+    // the sync had no way to tell the server never had it.
+    const local = await db.getFirstAsync(
+      `SELECT operation, dirty FROM ${TABLE} WHERE id = ?`, [id]
+    ).catch(() => null);
+    if (local?.dirty && local.operation === "create") {
+      const { MutationQueue } = require("./mutationQueue.service");
+      const state = await MutationQueue.createState(`period:${id}`);
+      if (state === "unsent" || state === "none") {
+        await MutationQueue.cancelUnsent(`period:${id}`);
+        await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+        return true;
+      }
+    }
+
     const net = await NetInfo.fetch();
 
     if (net.isConnected) {
@@ -488,6 +542,8 @@ export const PeriodsService = {
     }
 
     // ── Offline soft-delete — will be pushed by SyncManager ─────────────────
+    // (the backfill's period-delete sweep sends DELETE /admin/periods/:id)
+    await keepServerImage(db, id);
     await db.runAsync(
       `UPDATE ${TABLE}
        SET deletedat = ?, updated_at = ?, dirty = 1, _synced = 0, operation = 'delete'
@@ -496,6 +552,51 @@ export const PeriodsService = {
     );
     console.log(`[periods] Soft-deleted offline: ${id}`);
     return true;
+  },
+
+  /**
+   * Undoes this device's unsent changes to one period, after the queue has
+   * dropped them (MutationQueue.discard, via the handler syncBackfill
+   * registers). Back to what the server holds:
+   *   - created here and never accepted (operation 'create') → removed;
+   *   - the server's copy kept (server_image) → restored from it, offline;
+   *   - neither → marked clean, and { refresh: true } asks for a full pull.
+   * A delete undone is undeleted in each case: the server still has the period.
+   *
+   * @returns {Promise<{deleted: boolean, refresh: boolean}>}
+   */
+  async discardLocal(id) {
+    const db = await getDatabase();
+    await ensureSchema(db);
+    const row = await db.getFirstAsync(`SELECT * FROM ${TABLE} WHERE id = ?`, [id]).catch(() => null);
+    if (!row) return { deleted: false, refresh: false };
+
+    if (row.operation === "create") {
+      // If a send did land unanswered, the server minted its own id for it,
+      // after the pull cursor: the next pull brings that copy down.
+      await db.runAsync(`DELETE FROM ${TABLE} WHERE id = ?`, [id]);
+      return { deleted: true, refresh: false };
+    }
+
+    let image = null;
+    try { image = row.server_image ? JSON.parse(row.server_image) : null; } catch { image = null; }
+    if (image && typeof image === "object") {
+      const cols = IMAGE_COLUMNS.filter((c) => c in image);
+      await db.runAsync(
+        `UPDATE ${TABLE}
+            SET ${cols.map((c) => `${c} = ?`).join(", ")},
+                deletedat = NULL, dirty = 0, operation = NULL, _synced = 1, server_image = NULL
+          WHERE id = ?`,
+        [...cols.map((c) => image[c]), id]
+      );
+      return { deleted: false, refresh: false };
+    }
+
+    await db.runAsync(
+      `UPDATE ${TABLE} SET deletedat = NULL, dirty = 0, operation = NULL, _synced = 1 WHERE id = ?`,
+      [id]
+    );
+    return { deleted: false, refresh: true };
   },
 
   async getDirtyItems() {

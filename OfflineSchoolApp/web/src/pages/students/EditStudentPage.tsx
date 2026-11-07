@@ -14,11 +14,16 @@
 // numbers come from a gapless per-school counter. A correction form that
 // quietly did any of that would be the more dangerous kind of convenience.
 
+import { dobError, normalisePhone, ageWarning } from "@/utils/studentValidation";
+import { useStudentAgeRanges } from "@/hooks/useSchoolYear";
 import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Save, History, Loader2, AlertCircle } from "lucide-react";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { genderLabel, GENDER_VALUES } from "@/utils/genderLabel";
+import { ArrowLeft, Save, History, Loader2, AlertCircle, User, Phone, Users, HeartPulse, FileText, type LucideIcon } from "lucide-react";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 import { Card, CardHeader }        from "@/components/ui/Card";
 import { Button }                  from "@/components/ui/Button";
@@ -32,6 +37,7 @@ import {
   getStudentHistory,
   type StudentEditPayload,
 } from "@/services/student.service";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 /*
  * The editable fields, in the order the form shows them.
@@ -158,6 +164,9 @@ export default function EditStudentPage() {
     [edits, initial]
   );
 
+  // An edit not saved is lost by leaving; leaving asks first.
+  const { allowNavigation } = useUnsavedChangesGuard(dirty.length > 0);
+
   /*
    * Sent back as baseUpdatedAt so the server can tell that somebody else edited
    * this record between the load and the save. The write still goes through —
@@ -199,11 +208,25 @@ export default function EditStudentPage() {
       void qc.invalidateQueries({ queryKey: ["student", id] });
       void qc.invalidateQueries({ queryKey: ["students"] });
       void qc.invalidateQueries({ queryKey: ["student-history", id] });
+      // Saved: the edits are no longer at risk, so the guard lets this through.
+      allowNavigation();
       navigate(`/students/${id}`);
     },
     onError: (err) =>
       toast({ title: t("studentEdit.errSave"), message: getErrorMessage(err), kind: "error" }),
   });
+
+  // B3: the same checks as the add form, before the round trip.
+  const ageRanges = useStudentAgeRanges();
+  const fieldError = (field: FieldName): string | undefined => {
+    const v = form[field] ?? "";
+    if (field === "dateOfBirth" && dobError(v.trim())) return t("students.dobFuture");
+    if ((field === "phone" || field === "alternatePhone" || field === "guardianPhone") && normalisePhone(v).error) {
+      return t("students.phoneInvalid");
+    }
+    return undefined;
+  };
+  const hasFieldErrors = dirty.some((f) => fieldError(f));
 
   const handleSave = useCallback(() => {
     if (dirty.length === 0) {
@@ -229,7 +252,7 @@ export default function EditStudentPage() {
     return (
       <Card>
         <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <AlertCircle className="h-8 w-8 text-danger" aria-hidden="true" />
+          <AlertCircle className="h-8 w-8 text-danger-text" aria-hidden="true" />
           <p className="text-sm text-ink-muted">{t("studentDetail.notFound")}</p>
           <Link to="/students"><Button variant="secondary">{t("notFound.goBack")}</Button></Link>
         </div>
@@ -247,12 +270,8 @@ export default function EditStudentPage() {
           <SelectField
             value={form.gender}
             onChange={set("gender")}
-            placeholder={t("studentEdit.emptyValue")}
-            options={[
-              { value: "male",   label: t("common.male")    },
-              { value: "female", label: t("common.female")  },
-              { value: "other",  label: t("common.unknown") },
-            ]}
+            placeholder={t("common.notSpecified")}
+            options={GENDER_VALUES.map((g) => ({ value: g, label: genderLabel(t, g) }))}
           />
         </FormField>
       );
@@ -264,21 +283,31 @@ export default function EditStudentPage() {
         </FormField>
       );
     }
+    const error = fieldError(field);
+    const age   = field === "dateOfBirth" ? ageWarning(form.dateOfBirth.trim(), student.className, ageRanges) : null;
     return (
-      <FormField key={field} label={t(LABEL_KEY[field])}>
+      <FormField
+        key={field}
+        label={t(LABEL_KEY[field])}
+        error={error}
+        hint={age
+          ? t("students.ageUnusual", { age: age.age, min: age.min, max: age.max, className: student.className ?? "" })
+          : field.toLowerCase().includes("phone") ? t("students.phoneHint") : undefined}
+      >
         <Input
           type={field === "email" || field === "guardianEmail" ? "email" : "text"}
           value={form[field]}
           onChange={set(field)}
+          invalid={!!error}
           placeholder={field === "dateOfBirth" ? t("academic.dateOfBirthPh") : undefined}
         />
       </FormField>
     );
   };
 
-  const section = (titleKey: string, fields: FieldName[], hintKey?: string) => (
+  const section = (titleKey: string, icon: LucideIcon, fields: FieldName[], hintKey?: string) => (
     <Card>
-      <CardHeader title={t(titleKey)} />
+      <CardHeader title={t(titleKey)} icon={icon} accent="blue" />
       {hintKey && <p className="px-4 pb-2 text-xs text-ink-faint">{t(hintKey)}</p>}
       <div className="grid gap-4 p-4 sm:grid-cols-2">{fields.map(renderField)}</div>
     </Card>
@@ -296,6 +325,7 @@ export default function EditStudentPage() {
           >
             <ArrowLeft className="h-5 w-5 text-ink-muted" aria-hidden="true" />
           </Link>
+          <PageIcon />
           {/*
             The pupil's name leads, not the screen's own title. You are
             correcting one child's record, and the first question when a
@@ -306,7 +336,9 @@ export default function EditStudentPage() {
             <h1 className="truncate text-lg font-semibold text-ink">
               {student.studentName || t("studentEdit.title")}
             </h1>
-            <p className="truncate text-xs text-ink-muted">
+            {/* Wraps rather than truncating: the admission number is what
+                the office reads off this line, and "ETEST-2026-…" is not one. */}
+            <p className="break-words text-xs text-ink-muted">
               {[student.enrollmentNo, student.className]
                 .filter(Boolean).join(" · ") || t("studentEdit.blurb")}
             </p>
@@ -318,7 +350,7 @@ export default function EditStudentPage() {
             <History className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {t("studentEdit.history")}
           </Button>
-          <Button onClick={handleSave} disabled={mutation.isPending || dirty.length === 0}>
+          <Button onClick={handleSave} disabled={mutation.isPending || dirty.length === 0 || hasFieldErrors}>
             {mutation.isPending
               ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
               : <Save    className="mr-1.5 h-4 w-4"              aria-hidden="true" />}
@@ -327,13 +359,13 @@ export default function EditStudentPage() {
         </div>
       </div>
 
-      {section("studentEdit.identity", IDENTITY, "studentEdit.identityHint")}
-      {section("studentEdit.contact",  CONTACT)}
-      {section("studentEdit.guardian", GUARDIAN)}
-      {section("studentEdit.welfare",  WELFARE)}
+      {section("studentEdit.identity", User, IDENTITY, "studentEdit.identityHint")}
+      {section("studentEdit.contact",  Phone, CONTACT)}
+      {section("studentEdit.guardian", Users, GUARDIAN)}
+      {section("studentEdit.welfare",  HeartPulse, WELFARE)}
 
       <Card>
-        <CardHeader title={t("studentEdit.reason")} />
+        <CardHeader title={t("studentEdit.reason")} icon={FileText} accent="blue" />
         <div className="p-4">
           <FormField label={t("studentEdit.reason")} hint={t("studentEdit.reasonHint")}>
             <Input
@@ -348,7 +380,7 @@ export default function EditStudentPage() {
 
       {showHistory && (
         <Card>
-          <CardHeader title={t("studentEdit.history")} />
+          <CardHeader title={t("studentEdit.history")} icon={History} accent="blue" />
           <div className="p-4">
             {historyQuery.isLoading ? (
               <div className="flex justify-center py-6"><Spinner /></div>
@@ -364,19 +396,23 @@ export default function EditStudentPage() {
                       </span>
                       <span className="text-ink-faint">{t("studentEdit.was")}</span>
                       <span className="text-ink-body">
-                        {h.previousValue == null || h.previousValue === ""
-                          ? t("studentEdit.emptyValue")
-                          : String(h.previousValue)}
+                        {h.field === "gender"
+                          ? genderLabel(t, h.previousValue as string | null)
+                          : h.previousValue == null || h.previousValue === ""
+                            ? t("studentEdit.emptyValue")
+                            : String(h.previousValue)}
                       </span>
                       <span aria-hidden="true" className="text-ink-faint">→</span>
                       <span className="text-ink-body">
-                        {h.newValue == null || h.newValue === ""
-                          ? t("studentEdit.emptyValue")
-                          : String(h.newValue)}
+                        {h.field === "gender"
+                          ? genderLabel(t, h.newValue as string | null)
+                          : h.newValue == null || h.newValue === ""
+                            ? t("studentEdit.emptyValue")
+                            : String(h.newValue)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-ink-faint">
-                      {new Date(h.changedAt).toLocaleString()}
+                      {formatDayTime(h.changedAt)}
                       {h.changedByName ? " · " + t("studentEdit.historyBy", { name: h.changedByName }) : ""}
                       {h.reason ? " · " + h.reason : ""}
                     </p>

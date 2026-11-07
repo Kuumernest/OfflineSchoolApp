@@ -9,6 +9,11 @@ const { v4: uuidv4 } = require("uuid");
  * replaced another admin's more recent edit. Used to give the
  * "loser" visibility of what happened.
  *
+ * The loser is the author of the version that was replaced — the previous
+ * editor (Student.updatedBy before the write) — never the request that did
+ * the replacing. They read their own rows from GET /api/sync/overwrites/mine
+ * and mark them seen there (routes/syncOverwrites.routes.js).
+ *
  * LWW (last-write-wins) still applies at the sync layer.
  * This model provides the audit trail.
  */
@@ -35,8 +40,15 @@ const syncOverwriteSchema = new mongoose.Schema(
     lostEditByName:  { type: String, default: null },
     lostEditAt:      { type: Date,   default: null },
 
-    // Snapshot of the version that was replaced (so we can show a diff)
+    // Snapshot of the version that was replaced (so we can show a diff).
+    // The whole record — read back only by someone who may read the whole
+    // record (students.viewFull), exactly as GET /students/:id decides.
     lostVersion:     { type: mongoose.Schema.Types.Mixed, default: null },
+    // The same snapshot through the roster projection, taken at write time by
+    // the same pickRoster GET /students/:id uses — for a reader who holds
+    // students.view only. Rows written before this field have none, and such
+    // a reader is then shown no snapshot rather than the whole one.
+    lostVersionRoster: { type: mongoose.Schema.Types.Mixed, default: null },
 
     // Resolution tracking
     seenByLoser:     { type: Boolean, default: false, index: true },

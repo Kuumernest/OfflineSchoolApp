@@ -9,7 +9,12 @@ import {
   ArrowLeft, UserPlus, Mail, User,
   Key, Lock, AlertCircle, CheckCircle,
   Copy, Check,
+  KeyRound,
+  ListChecks,
 } from "lucide-react";
+import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -23,20 +28,17 @@ const EMAIL_REGEX     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NEXT_STEPS = [
   {
     icon:     Key,
-    color:    "#4F46E5",
-    bg:       "bg-indigo-50",
+    box:      "bg-accent-blue-solid text-white",
     labelKey: "teachersAdd.step1",
   },
   {
     icon:     Mail,
-    color:    "#0891B2",
-    bg:       "bg-cyan-50",
+    box:      "bg-accent-teal-solid text-white",
     labelKey: "teachersAdd.step2",
   },
   {
     icon:     Lock,
-    color:    "#059669",
-    bg:       "bg-emerald-50",
+    box:      "bg-accent-indigo-solid text-white",
     labelKey: "teachersAdd.step3",
   },
 ];
@@ -195,8 +197,7 @@ export default function AddTeacherPage() {
         <Header onBack={() => navigate("/teachers")} />
 
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm
-                          p-8 w-full max-w-md text-center">
+          <div className={cn("bg-surface rounded-2xl border border-line shadow-sm p-8 w-full max-w-md text-center", DASH_TINT.violet.edge)}>
 
             {/* Icon */}
             <div className={`
@@ -234,13 +235,13 @@ export default function AddTeacherPage() {
                   {t("teachersAdd.shareManually")}
                 </p>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">📧 {t("common.email")}</p>
+                  <p className="text-xs text-yellow-700 font-medium"><Mail className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("common.email")}</p>
                   <p className="text-sm font-mono text-gray-900 mt-0.5">
                     {success.teacherEmail}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">🔑 {t("students.tempPassword")}</p>
+                  <p className="text-xs text-yellow-700 font-medium"><KeyRound className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("students.tempPassword")}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-sm font-mono text-gray-900 flex-1">
                       {success.tempPassword}
@@ -248,7 +249,7 @@ export default function AddTeacherPage() {
                     <button
                       onClick={() => handleCopy(success.tempPassword!)}
                       className="flex items-center gap-1 text-xs font-semibold
-                                 text-indigo-600 hover:text-indigo-800 transition-colors"
+                                 text-primary-600 hover:text-primary-800 transition-colors"
                     >
                       {copied
                         ? <><Check size={13} /> {t("common.copied")}</>
@@ -267,7 +268,7 @@ export default function AddTeacherPage() {
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleAddAnother}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white
                            font-semibold py-3 rounded-xl transition-colors"
               >
                 {t("teachersAdd.another")}
@@ -307,8 +308,7 @@ export default function AddTeacherPage() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="bg-white rounded-2xl border border-gray-200 shadow-sm
-                     p-6 space-y-5"
+          className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6 space-y-5", DASH_TINT.violet.edge)}
         >
           {/* Name field */}
           <div className="space-y-1.5">
@@ -320,7 +320,7 @@ export default function AddTeacherPage() {
               transition-colors
               ${errors.name
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <User
                 size={18}
@@ -376,7 +376,7 @@ export default function AddTeacherPage() {
               transition-colors
               ${errors.email
                 ? "border-red-400 bg-red-50"
-                : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"}
+                : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"}
             `}>
               <Mail
                 size={18}
@@ -413,7 +413,7 @@ export default function AddTeacherPage() {
             type="submit"
             disabled={isDisabled}
             className="w-full flex items-center justify-center gap-2
-                       bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300
+                       bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300
                        text-white font-bold py-3.5 rounded-xl transition-colors mt-2"
           >
             {saving ? (
@@ -443,19 +443,22 @@ export default function AddTeacherPage() {
         </form>
 
         {/* What happens next */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">
+        <div className={cn("bg-surface rounded-2xl border border-line shadow-sm p-6", DASH_TINT.violet.edge)}>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-ink mb-4">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)} aria-hidden="true">
+              <ListChecks className="h-4 w-4" />
+            </span>
             {t("teachersAdd.whatNext")}
           </h3>
           <div className="space-y-3">
-            {NEXT_STEPS.map(({ icon: Icon, color, bg, labelKey }) => (
+            {NEXT_STEPS.map(({ icon: Icon, box, labelKey }) => (
               <div key={labelKey} className="flex items-center gap-3">
                 <div className={`
-                  w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}
+                  w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${box}
                 `}>
-                  <Icon size={16} style={{ color }} />
+                  <Icon size={16} />
                 </div>
-                <p className="text-sm text-gray-600">{t(labelKey)}</p>
+                <p className="text-sm text-ink-body">{t(labelKey)}</p>
               </div>
             ))}
           </div>
@@ -482,9 +485,10 @@ function Header({ onBack }: { onBack: () => void }) {
       >
         <ArrowLeft size={20} className="text-gray-700" />
       </button>
+      <PageIcon />
       <div>
-        <h1 className="text-lg font-bold text-gray-900">{t("teachersAdd.title")}</h1>
-        <p className="text-xs text-gray-500 mt-0.5">{t("teachersAdd.blurb")}</p>
+        <h1 className="text-lg font-bold text-ink">{t("teachersAdd.title")}</h1>
+        <p className="text-xs text-ink-muted mt-0.5">{t("teachersAdd.blurb")}</p>
       </div>
     </div>
   );

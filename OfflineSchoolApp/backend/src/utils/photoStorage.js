@@ -19,20 +19,23 @@ const path   = require("path");
 const crypto = require("crypto");
 
 const { sniffImage, stripDataUri } = require("./logoStorage");
+const { getStore } = require("../storage/fileStore");
+const { shrinkImage, MAX_IMAGE_BYTES } = require("../storage/imageResize");
 
 const UPLOADS_ROOT  = path.resolve(__dirname, "..", "uploads");
 const PHOTO_DIR     = path.join(UPLOADS_ROOT, "photos");
 const PUBLIC_PREFIX = "/uploads/photos";
 
 /**
- * 3 MB.
+ * 5 MB, as uploaded.
  *
- * Higher than the logo limit because this arrives straight from a phone camera
- * without the chance to prepare it, and a rejected upload at the counter with a
- * parent waiting is worse than a slightly large file. The clients downscale
- * before sending, so this is a backstop rather than the normal size.
+ * A photo arrives straight from a phone camera without the chance to prepare
+ * it, and a rejected upload at the counter with a parent waiting is worse than
+ * a slightly large file. It is shrunk before it is stored (at most 400 px,
+ * JPEG, metadata stripped — storage/imageResize.js), so this bounds the
+ * upload, not what is kept.
  */
-const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+const MAX_PHOTO_BYTES = MAX_IMAGE_BYTES;
 
 const ensurePhotoDir = () => {
   if (!fs.existsSync(PHOTO_DIR)) {
@@ -45,7 +48,7 @@ const isPhotoReference = (value) =>
   typeof value === "string" && value.startsWith(PUBLIC_PREFIX);
 
 /**
- * Writes a base64 photo to disk and returns its public path.
+ * Writes a base64 photo to the file store and returns its public path.
  *
  * Content-addressed like logos: re-uploading identical bytes is a no-op, and a
  * changed photo gets a new URL, so clients and caches can treat the URL as
@@ -54,9 +57,11 @@ const isPhotoReference = (value) =>
  *
  * @param {string} studentId
  * @param {string} base64  raw base64, with or without a data: prefix
- * @returns {{ publicPath: string, bytes: number, mime: string, filename: string }}
+ * @param {object} [opts]
+ * @param {string} [opts.schoolId]  the pupil's school, kept with the file
+ * @returns {Promise<{ publicPath: string, bytes: number, mime: string, filename: string }>}
  */
-const savePhotoFromBase64 = (studentId, base64) => {
+const savePhotoFromBase64 = async (studentId, base64, { schoolId = null } = {}) => {
   const clean = stripDataUri(base64);
   if (!clean) throw new Error("Photo payload is empty");
 
@@ -78,22 +83,22 @@ const savePhotoFromBase64 = (studentId, base64) => {
   // Sniffed from the magic bytes, not from a client-sent mime type or a file
   // extension — both are attacker-controlled and neither says what the bytes
   // actually are.
-  const kind = sniffImage(buf);
-  if (!kind) throw new Error("Photo is not a JPEG, PNG, GIF or WebP image");
+  if (!sniffImage(buf)) throw new Error("Photo is not a JPEG, PNG, GIF or WebP image");
+  const image = await shrinkImage(buf, "photo", "Photo");
 
-  ensurePhotoDir();
-
-  const hash     = crypto.createHash("md5").update(buf).digest("hex").slice(0, 12);
+  const hash     = crypto.createHash("md5").update(image.buffer).digest("hex").slice(0, 12);
   const safeId   = String(studentId).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "student";
-  const filename = `${safeId}-${hash}.${kind.ext}`;
-  const abs      = path.join(PHOTO_DIR, filename);
+  const filename = `${safeId}-${hash}.${image.ext}`;
+  const store    = getStore();
 
-  if (!fs.existsSync(abs)) fs.writeFileSync(abs, buf);
+  if (!(await store.stat(`photos/${filename}`))) {
+    await store.put(`photos/${filename}`, image.buffer, { contentType: image.mime, schoolId });
+  }
 
   return {
     publicPath: `${PUBLIC_PREFIX}/${filename}`,
-    bytes:      buf.length,
-    mime:       kind.mime,
+    bytes:      image.buffer.length,
+    mime:       image.mime,
     filename,
   };
 };
@@ -105,22 +110,11 @@ const savePhotoFromBase64 = (studentId, base64) => {
  * field, and a value that is not one of ours must not become an arbitrary file
  * delete.
  */
-const deletePhotoFile = (publicPath) => {
-  try {
-    if (!isPhotoReference(publicPath)) return false;
-
-    const filename = path.basename(publicPath);
-    const abs      = path.join(PHOTO_DIR, filename);
-
-    // Confirms the resolved path is still inside PHOTO_DIR, so a crafted
-    // "../../.." in the stored value cannot escape it.
-    if (path.dirname(path.resolve(abs)) !== path.resolve(PHOTO_DIR)) return false;
-
-    if (fs.existsSync(abs)) { fs.unlinkSync(abs); return true; }
-    return false;
-  } catch {
-    return false;
-  }
+const deletePhotoFile = async (publicPath) => {
+  if (!isPhotoReference(publicPath)) return false;
+  const name = path.basename(publicPath.split("?")[0]);
+  if (!name || name === "." || name === "..") return false;
+  return getStore().removeUrl(`${PUBLIC_PREFIX}/${name}`);
 };
 
 module.exports = {

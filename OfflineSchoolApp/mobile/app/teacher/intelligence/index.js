@@ -39,23 +39,30 @@ import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { InterventionService } from "../../../src/services/intervention.service";
 import { errorText }       from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
 
 const C = {
-  primary: "#4F46E5", primaryBg: "#EEF2FF",
-  success: "#059669", successBg: "#ECFDF5",
-  warning: "#D97706", warningBg: "#FEF3C7",
-  error:   "#DC2626", errorBg:   "#FEF2F2",
-  white:   "#FFFFFF",
-  gray50:  "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray400: "#9CA3AF", gray500: "#6B7280", gray600: "#4B5563",
-  gray700: "#374151", gray900: "#111827",
+  // Class intelligence is violet.
+  primary: ACCENT.violet.solid, primaryBg: ACCENT.violet.wash,
+  primaryDeep: ACCENT.violet.deep, primaryEdge: ACCENT.violet.base,
+  success: SEMANTIC.success.text, successBg: SEMANTIC.success.bg,
+  warning: SEMANTIC.warning.text, warningBg: SEMANTIC.warning.bg,
+  error:   SEMANTIC.error.text,   errorBg:   SEMANTIC.error.bg,
+  white:   COLORS.surface,
+  gray50:  COLORS.page, gray100: COLORS.border, gray200: COLORS.border,
+  gray400: COLORS.textMuted, gray500: COLORS.textSecondary, gray600: COLORS.textSecondary,
+  gray700: COLORS.text, gray900: COLORS.text,
 };
 
 /** Loud for a child who is struggling, quiet for one who is doing well. */
+const INTERVENTION_BADGE = accentBadge("violet");
+const CLASS_CHIP = ACCENT.indigo;
+
 const TONE = {
-  high:     { bg: C.errorBg,   fg: C.error   },
-  moderate: { bg: C.warningBg, fg: C.warning },
-  low:      { bg: C.gray100,   fg: C.gray600 },
+  high:     { bg: SEMANTIC.error.bg,   fg: SEMANTIC.error.text,   border: SEMANTIC.error.icon + "4D" },
+  moderate: { bg: SEMANTIC.warning.bg, fg: SEMANTIC.warning.text, border: SEMANTIC.warning.icon + "4D" },
+  low:      { bg: SEMANTIC.info.bg,    fg: SEMANTIC.info.text,    border: SEMANTIC.info.icon + "4D" },
 };
 
 export default function ClassIntelligenceScreen() {
@@ -144,7 +151,10 @@ export default function ClassIntelligenceScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: pad.paddingTop }]}>
-        <Text style={styles.title}>{t("classIntel.title")}</Text>
+        <View style={styles.titleRow}>
+          <HeaderIcon />
+          <Text style={styles.title}>{t("classIntel.title")}</Text>
+        </View>
         <Text style={styles.blurb}>{t("classIntel.blurb")}</Text>
       </View>
 
@@ -168,7 +178,7 @@ export default function ClassIntelligenceScreen() {
       {/* Stale rather than silent — see the header. */}
       {offline && (
         <View style={styles.staleBar}>
-          <Ionicons name="cloud-offline-outline" size={16} color={C.warning} />
+          <Ionicons name="cloud-offline-outline" size={16} color={SEMANTIC.warning.icon} />
           <Text style={styles.staleText}>
             {fetchedAt
               ? t("classIntel.staleAt", { time: fetchedAt.toLocaleTimeString() })
@@ -187,13 +197,14 @@ export default function ClassIntelligenceScreen() {
           }
         >
           {!rows.length && (
-            <Text style={styles.empty}>{t("classIntel.empty")}</Text>
+            <EmptyState icon="bulb-outline" accent="violet" message={t("classIntel.empty")} />
           )}
 
           {rows.map((row) => (
             <View key={row.studentId} style={styles.card}>
               <TouchableOpacity style={styles.cardHead}
                                 onPress={() => openStudent(row.studentId)}>
+                <IconSquare icon="person" accent="blue" size={32} style={styles.cardIcon} />
                 <View style={styles.cardHeadText}>
                   <Text style={styles.name}>{row.name ?? row.studentId}</Text>
                   {!row.guidance?.length && (
@@ -202,14 +213,14 @@ export default function ClassIntelligenceScreen() {
                 </View>
                 <Ionicons
                   name={openId === row.studentId ? "chevron-up" : "chevron-down"}
-                  size={18} color={C.gray400}
+                  size={18} color={COLORS.textSecondary}
                 />
               </TouchableOpacity>
 
               <View style={styles.badgeRow}>
                 {(row.guidance ?? []).map((g, i) => (
                   <View key={`${g.rationaleCode}-${i}`}
-                        style={[styles.badge, { backgroundColor: TONE[g.priority].bg }]}>
+                        style={[styles.badge, { backgroundColor: TONE[g.priority].bg, borderColor: TONE[g.priority].border }]}>
                     <Text style={[styles.badgeText, { color: TONE[g.priority].fg }]}>
                       {g.subjectName ? `${g.subjectName} · ` : ""}
                       {t(`guidance.${g.rationaleCode}`)}
@@ -217,8 +228,8 @@ export default function ClassIntelligenceScreen() {
                   </View>
                 ))}
                 {(row.openInterventions ?? []).map((i) => (
-                  <View key={i._id} style={[styles.badge, { backgroundColor: C.primaryBg }]}>
-                    <Text style={[styles.badgeText, { color: C.primary }]}>
+                  <View key={i._id} style={[styles.badge, { backgroundColor: COLORS.surface, borderColor: INTERVENTION_BADGE.border }]}>
+                    <Text style={[styles.badgeText, { color: INTERVENTION_BADGE.text }]}>
                       {t(`intervention.status.${i.status}`)} · {t(`guidance.${i.actionCode}`)}
                     </Text>
                   </View>
@@ -284,7 +295,8 @@ export default function ClassIntelligenceScreen() {
 
 const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: C.gray50 },
-  header: { paddingHorizontal: 16, paddingBottom: 8 },
+  header: { paddingHorizontal: 16, paddingBottom: 8, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  titleRow: { flexDirection: "row", alignItems: "center" },
   title:  { fontSize: 20, fontWeight: "700", color: C.gray900 },
   blurb:  { fontSize: 12, color: C.gray500, marginTop: 4 },
 
@@ -292,9 +304,9 @@ const styles = StyleSheet.create({
   classBarInner: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
   chip:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
               backgroundColor: C.white, borderWidth: 1, borderColor: C.gray200 },
-  chipOn:   { backgroundColor: C.primaryBg, borderColor: C.primary },
+  chipOn:   { backgroundColor: CLASS_CHIP.wash, borderColor: CLASS_CHIP.base },
   chipText: { fontSize: 12, color: C.gray600 },
-  chipTextOn: { color: C.primary, fontWeight: "600" },
+  chipTextOn: { color: CLASS_CHIP.deep, fontWeight: "600" },
 
   staleBar:  { flexDirection: "row", alignItems: "center", gap: 6,
                backgroundColor: C.warningBg, paddingHorizontal: 16, paddingVertical: 8 },
@@ -302,28 +314,28 @@ const styles = StyleSheet.create({
 
   loader: { marginTop: 32 },
   list:   { padding: 16, gap: 12, paddingBottom: 40 },
-  empty:  { fontSize: 13, color: C.gray500, textAlign: "center", marginTop: 24 },
 
-  card:     { backgroundColor: C.white, borderRadius: 12, padding: 12,
-              borderWidth: 1, borderColor: C.gray200 },
+  card:     { backgroundColor: C.primaryBg, borderRadius: 12, padding: 12,
+              borderWidth: 1, borderColor: C.gray200, borderLeftWidth: 3, borderLeftColor: C.primaryEdge },
+  cardIcon: { marginRight: 10 },
   cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardHeadText: { flex: 1 },
   name:  { fontSize: 15, fontWeight: "600", color: C.gray900 },
-  quiet: { fontSize: 12, color: C.gray400, marginTop: 2 },
+  quiet: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   badgeRow:  { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  badge:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  badge:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
   badgeText: { fontSize: 11, fontWeight: "600" },
 
   detail:        { marginTop: 12, borderTopWidth: 1, borderTopColor: C.gray100, paddingTop: 12, gap: 12 },
-  guidanceBlock: { backgroundColor: C.gray50, borderRadius: 10, padding: 10 },
+  guidanceBlock: { backgroundColor: C.white, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: C.gray200 },
   guidanceTitle: { fontSize: 13, fontWeight: "600", color: C.gray900, marginBottom: 6 },
   evidence:      { fontSize: 11, color: C.gray600, lineHeight: 17 },
 
   actionRow:  { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   action:     { flexDirection: "row", alignItems: "center", gap: 4,
-                backgroundColor: C.white, borderWidth: 1, borderColor: C.primary,
+                backgroundColor: C.white, borderWidth: 1, borderColor: C.primaryEdge,
                 borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   actionOff:  { opacity: 0.5 },
-  actionText: { fontSize: 12, color: C.primary, fontWeight: "600" },
+  actionText: { fontSize: 12, color: C.primaryDeep, fontWeight: "600" },
 });

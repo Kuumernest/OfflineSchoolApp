@@ -1091,7 +1091,10 @@ const checkPortalNotices = () => {
   console.log("");
   console.log("THE PORTAL'S NOTICES");
 
-  const src = fs.readFileSync(path.join(ROOT, "app/portal/index.js"), "utf8");
+  // The shell owns the load and the read handlers; the Messages screen draws
+  // the notices. Both, as one source.
+  const src = ["app/portal/index.js", "src/components/portal/MessagesScreen.js"]
+    .map((rel) => fs.readFileSync(path.join(ROOT, rel), "utf8")).join("\n");
   const en  = JSON.parse(fs.readFileSync(path.join(ROOT, "src/i18n/locales/en.json"), "utf8"));
   const fr  = JSON.parse(fs.readFileSync(path.join(ROOT, "src/i18n/locales/fr.json"), "utf8"));
 

@@ -17,6 +17,7 @@
 // The old 0–100 "promotion average" is shown beside the new bar until a bar is
 // confirmed for that class; no run reads it, and nothing converts it.
 
+import { useSchoolYear, yearOptionsAround } from "@/hooks/useSchoolYear";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -27,6 +28,7 @@ import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
 import { Badge }       from "@/components/ui/Badge";
+import { DASH_TINT }   from "@/config/dashboardTint";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { SelectField, Checkbox, Input, FormField } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
@@ -38,12 +40,6 @@ import { fetchProgression, saveProgression } from "@/services/promotion.service"
 import { saveBars, type BarsWrite } from "@/services/academicRules.service";
 import type { ProgressionClass } from "@/types/promotion.types";
 
-const CURRENT_YEAR = new Date().getFullYear();
-const ACADEMIC_YEARS = [
-  `${CURRENT_YEAR - 1}/${CURRENT_YEAR}`,
-  `${CURRENT_YEAR}/${CURRENT_YEAR + 1}`,
-  `${CURRENT_YEAR + 1}/${CURRENT_YEAR + 2}`,
-];
 
 interface Entry {
   classId:     string;
@@ -65,7 +61,11 @@ export default function ProgressionPage() {
   const { toast } = useToast();
   const schoolId = useUser()?.schoolId ?? "";
 
-  const [year, setYear] = useState(ACADEMIC_YEARS[0]);
+  // Opens on the school's current year (B5); null until someone picks one.
+  const schoolYear = useSchoolYear();
+  const [pickedYear, setYear] = useState<string | null>(null);
+  const year = pickedYear ?? schoolYear.year;
+  const yearOptions = yearOptionsAround(schoolYear.year);
 
   // Only what the user has CHANGED is held in state; everything else is read
   // straight from the query. Copying the server's version into state on arrival
@@ -158,27 +158,27 @@ export default function ProgressionPage() {
 
       {incomplete > 0 ? (
         <div className="flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <div>
             <p className="font-medium">{t("prog.incomplete", { count: incomplete })}</p>
             <p className="text-ink-muted">{t("prog.incompleteHint")}</p>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-card border border-success-line bg-success-soft px-4 py-3 text-sm text-success">
+        <div className="flex items-center gap-2 rounded-card border border-success-line bg-success-soft px-4 py-3 text-sm text-success-text">
           <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
           <p>{t("prog.complete")}</p>
         </div>
       )}
 
-      <Card>
+      <Card className={DASH_TINT.blue.edge}>
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-44">
             <FormField label={t("prog.year")}>
               <SelectField
                 value={year}
                 onChange={(e) => { setYear(e.target.value); setBarEdits({}); setSchoolBarEdit(null); }}
-                options={ACADEMIC_YEARS.map((y) => ({ value: y, label: y }))}
+                options={yearOptions.map((y) => ({ value: y, label: y }))}
               />
             </FormField>
           </div>
@@ -198,14 +198,14 @@ export default function ProgressionPage() {
         </div>
         <p className="mt-3 text-sm text-ink-muted">{t("prog.rule")}</p>
         {yr && !yr.hasStructure && (
-          <p className="mt-2 text-sm text-warning">{t("prog.noStructure")}</p>
+          <p className="mt-2 text-sm text-warning-text">{t("prog.noStructure")}</p>
         )}
         {barsLocked && (
-          <p className="mt-2 text-sm text-warning">{t("prog.draftLocks")}</p>
+          <p className="mt-2 text-sm text-warning-text">{t("prog.draftLocks")}</p>
         )}
         {withoutResults.length > 0 && (
           <div className="mt-3 flex items-start gap-2 rounded-card border border-warning/30 bg-warning/8 px-4 py-3 text-sm text-ink-body">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
             <div>
               <p className="font-medium">{t("prog.noResults", { count: withoutResults.length })}</p>
               <p className="text-ink-muted">
@@ -305,7 +305,7 @@ export default function ProgressionPage() {
       </Card>
 
       {pendingBars && (
-        <Card>
+        <Card className={DASH_TINT.blue.edge}>
           <FormField label={t("prog.reason")} hint={t("prog.reasonHint")}>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} />
           </FormField>

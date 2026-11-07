@@ -193,21 +193,12 @@
           {
             "code": "academic_decline",
             "confidence": "strong"
-          },
-          {
-            "code": "sudden_performance_change",
-            "confidence": "strong"
           }
         ],
         "guidance": [
           {
             "type": "academic_support",
             "rationaleCode": "RECENT_DECLINE",
-            "priority": "high"
-          },
-          {
-            "type": "academic_support",
-            "rationaleCode": "SUDDEN_PERFORMANCE_CHANGE",
             "priority": "high"
           }
         ],
@@ -225,16 +216,12 @@
       }
     },
     {
-      "caseId": "sudden_change:S14:MAT",
+      "caseId": "sudden_change:S16:MAT",
       "category": "sudden_change",
-      "studentId": "S14",
+      "studentId": "S16",
       "subjectId": "MAT",
       "expected": {
         "classifications": [
-          {
-            "code": "academic_decline",
-            "confidence": "strong"
-          },
           {
             "code": "sudden_performance_change",
             "confidence": "strong"
@@ -243,24 +230,19 @@
         "guidance": [
           {
             "type": "academic_support",
-            "rationaleCode": "RECENT_DECLINE",
-            "priority": "high"
-          },
-          {
-            "type": "academic_support",
             "rationaleCode": "SUDDEN_PERFORMANCE_CHANGE",
             "priority": "high"
           }
         ],
         "metrics": {
-          "recentAverage": 12.5,
-          "priorAverage": 16,
-          "overallAverage": 14.3,
-          "delta": -3.5,
-          "spread": 7,
+          "recentAverage": 15.5,
+          "priorAverage": 14.5,
+          "overallAverage": 15,
+          "delta": 1,
+          "spread": 5,
           "consistency": "variable",
-          "latestStep": -7,
-          "belowPass": 1,
+          "latestStep": -5,
+          "belowPass": 0,
           "strongMarks": 3
         }
       }
@@ -541,47 +523,6 @@
       }
     },
     {
-      "caseId": "trend_on_variable_subject:S10:MAT",
-      "category": "trend_on_variable_subject",
-      "studentId": "S10",
-      "subjectId": "MAT",
-      "expected": {
-        "classifications": [
-          {
-            "code": "persistent_underperformance",
-            "confidence": "strong"
-          },
-          {
-            "code": "sustained_improvement",
-            "confidence": "strong"
-          }
-        ],
-        "guidance": [
-          {
-            "type": "academic_support",
-            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
-            "priority": "high"
-          },
-          {
-            "type": "strength_development",
-            "rationaleCode": "SUSTAINED_IMPROVEMENT",
-            "priority": "moderate"
-          }
-        ],
-        "metrics": {
-          "recentAverage": 5,
-          "priorAverage": 0,
-          "overallAverage": 1.7,
-          "delta": 5,
-          "spread": 5,
-          "consistency": "variable",
-          "latestStep": 5,
-          "belowPass": 3,
-          "strongMarks": 0
-        }
-      }
-    },
-    {
       "caseId": "trend_on_variable_subject:S13:MAT",
       "category": "trend_on_variable_subject",
       "studentId": "S13",
@@ -610,6 +551,38 @@
           "latestStep": 1,
           "belowPass": 1,
           "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "trend_on_variable_subject:S14:MAT",
+      "category": "trend_on_variable_subject",
+      "studentId": "S14",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 12.5,
+          "priorAverage": 16,
+          "overallAverage": 14.3,
+          "delta": -3.5,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -7,
+          "belowPass": 1,
+          "strongMarks": 3
         }
       }
     },
@@ -733,38 +706,6 @@
       }
     },
     {
-      "caseId": "volatile:S02:MAT",
-      "category": "volatile",
-      "studentId": "S02",
-      "subjectId": "MAT",
-      "expected": {
-        "classifications": [
-          {
-            "code": "academic_decline",
-            "confidence": "strong"
-          }
-        ],
-        "guidance": [
-          {
-            "type": "academic_support",
-            "rationaleCode": "RECENT_DECLINE",
-            "priority": "high"
-          }
-        ],
-        "metrics": {
-          "recentAverage": 9.5,
-          "priorAverage": 15.5,
-          "overallAverage": 12.5,
-          "delta": -6,
-          "spread": 7,
-          "consistency": "variable",
-          "latestStep": -1,
-          "belowPass": 1,
-          "strongMarks": 2
-        }
-      }
-    },
-    {
       "caseId": "volatile:S05:MAT",
       "category": "volatile",
       "studentId": "S05",
@@ -825,6 +766,38 @@
           "latestStep": 1,
           "belowPass": 1,
           "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "volatile:S16:MAT",
+      "category": "volatile",
+      "studentId": "S16",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "sudden_performance_change",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "SUDDEN_PERFORMANCE_CHANGE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 15.5,
+          "priorAverage": 14.5,
+          "overallAverage": 15,
+          "delta": 1,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": -5,
+          "belowPass": 0,
+          "strongMarks": 3
         }
       }
     },

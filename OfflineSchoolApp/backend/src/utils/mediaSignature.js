@@ -24,7 +24,15 @@ const crypto = require("crypto");
  * served. A signature outlives neither its expiry nor the path it names —
  * point the same URL at a different file and the MAC no longer matches.
  *
- * ── The rollout ────────────────────────────────────────────────────────────
+ * ── Now ────────────────────────────────────────────────────────────────────
+ *
+ * storage/fileAccess.js decides who reads a file, and a valid signature is
+ * one way in (a login of the file's school is the other) for every private
+ * directory, photos included — print/imageSource.js signs the photo link on a
+ * printed card. REQUIRE_MEDIA_SIGNATURE is no longer read: there is no observe
+ * mode. The history below is how it got here.
+ *
+ * ── The rollout (history) ──────────────────────────────────────────────────
  *
  * Enforcement is OFF by default. REQUIRE_MEDIA_SIGNATURE=1 turns it on; until
  * then the gate runs in observe mode and only logs unsigned access. That is

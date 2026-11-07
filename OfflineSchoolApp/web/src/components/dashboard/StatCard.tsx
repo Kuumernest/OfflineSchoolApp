@@ -2,34 +2,48 @@
 import { useNavigate }             from "react-router-dom";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn }                      from "@/utils/cn";
+import { CARD_SHELL, SEMANTIC, iconBox, type Semantic, type TileTone } from "@/config/sections";
+import { dashTint }                from "@/config/dashboardTint";
 
 interface StatCardProps {
   title:          string;
   value:          string | number;
   subtitle?:      string;
-  /** Tailwind text-colour class. Use it only to flag a value needing action. */
+  /**
+   * Tailwind classes for the subtitle, to flag a value needing action — e.g.
+   * "rounded-control bg-warning-soft px-1.5 text-warning-text".
+   */
   subtitleColor?: string;
   icon:           LucideIcon;
-  /** @deprecated Kept for call-site compatibility; the icon is neutral now. */
+  /**
+   * What the figure counts — students, finance, exams… Picks the icon box's
+   * accent (config/sections.ts). The card itself is always white.
+   */
+  tone?:          TileTone;
+  /**
+   * Set only when the value means something (a backlog, a fault). The card
+   * then takes that status's light tint instead of white.
+   */
+  semantic?:      Semantic;
+  /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
   iconColor?:     string;
-  /** @deprecated Kept for call-site compatibility; the icon is neutral now. */
+  /** @deprecated Kept for call-site compatibility; colour comes from `tone`. */
   iconBg?:        string;
   href?:          string;
   loading?:       boolean;
+  /**
+   * The app's card look (config/dashboardTint.ts): a soft wash of the kind's
+   * colour, a 3px top edge, a solid icon square and the figure in a deeper
+   * shade. On by default. A `semantic` tint still wins.
+   */
+  tinted?:        boolean;
 }
 
 /**
- * One metric.
- *
- * What makes a tile look expensive is not decoration — it is that every
- * element does a different job at a different weight: a recessed icon well, a
- * small-caps label, the figure in the display serif, a subtitle that stays out
- * of the way. Four ranks inside one small box, and nothing competing.
- *
- * `iconColor` and `iconBg` are still accepted so the exam and report pages keep
- * compiling, but they are ignored: six tiles in six unrelated hues implied a
- * colour code that meant nothing. Colour appears here only via `subtitleColor`,
- * and only when something needs attention.
+ * One metric on a white card. Colour lives only on the icon box, and says
+ * what the card counts; the figure is ink and the label secondary text. A
+ * status tint (`semantic`) is for values that mean something, never for
+ * decoration.
  */
 export default function StatCard({
   title,
@@ -37,11 +51,17 @@ export default function StatCard({
   subtitle,
   subtitleColor,
   icon: Icon,
+  tone = "neutral",
+  semantic,
   href,
   loading = false,
+  tinted = true,
 }: StatCardProps) {
   const navigate    = useNavigate();
   const interactive = Boolean(href);
+  const sem         = semantic ? SEMANTIC[semantic] : null;
+  const tint        = !sem && tinted ? dashTint(tone) : null;
+  const box         = sem ? sem.box : tint ? tint.box : iconBox(tone);
 
   const go = () => { if (href) navigate(href); };
 
@@ -58,57 +78,41 @@ export default function StatCard({
           : undefined
       }
       className={cn(
-        "group relative overflow-hidden rounded-card border border-line p-4 shadow-card",
-        // A gradient of barely two percent. You do not read it as a gradient —
-        // you read a surface lit from above instead of a flat fill.
-        "bg-gradient-to-b from-surface to-[#fcfcfe]",
+        "group relative overflow-hidden p-5",
+        sem ? sem.card : tint ? tint.card : CARD_SHELL,
         "transition duration-150 ease-[var(--ease-out-quiet)]",
-        interactive &&
-          "cursor-pointer hover:-translate-y-px hover:border-line-strong hover:shadow-lift"
+        // A tinted card keeps its coloured top edge on hover.
+        interactive && (tint ? "cursor-pointer hover:shadow-lift" : "cursor-pointer hover:border-line-strong hover:shadow-lift")
       )}
     >
-      {/*
-        A hairline of accent along the top edge, drawn only on hover. The tile
-        acknowledges the cursor without moving any colour underneath the
-        content, which is what keeps a grid of six from flickering as you
-        sweep across it.
-      */}
-      {interactive && (
-        <span
-          className="absolute inset-x-0 top-0 h-px origin-left scale-x-0 bg-primary-600 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:scale-x-100 group-hover:opacity-100"
-          aria-hidden="true"
-        />
-      )}
-
       <div className="flex items-start justify-between gap-2">
-        {/* A recessed well, not a coloured chip: the icon labels the tile, it
-            is not the subject of it. */}
-        <span className="flex h-8 w-8 items-center justify-center rounded-control bg-canvas text-ink-muted ring-1 ring-inset ring-line transition-colors group-hover:text-ink-body">
-          <Icon className="h-4 w-4" aria-hidden="true" />
+        <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", box)}>
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
 
         {interactive && (
           <ArrowUpRight
-            className="h-3.5 w-3.5 shrink-0 -translate-x-0.5 translate-y-0.5 text-ink-faint opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100"
+            className={cn("h-4 w-4 shrink-0 -translate-x-0.5 translate-y-0.5 opacity-0 transition duration-200 ease-[var(--ease-out-quiet)] group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100", tint ? tint.glyph : "text-ink-faint")}
             aria-hidden="true"
           />
         )}
       </div>
 
-      <p className="mt-3 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-        {title}
-      </p>
-
       {loading ? (
-        <div className="mt-1.5 h-8 w-16 animate-pulse rounded-control bg-canvas" />
+        <div className="mt-4 h-9 w-16 animate-pulse rounded-control bg-canvas" />
       ) : (
-        <p className="mt-1 font-display text-[32px] leading-none text-ink tabular">
+        <p className={cn("mt-4 text-[34px] font-bold leading-none tracking-tight tabular", sem ? sem.text : tint ? tint.number : "text-ink")}>
           {value}
         </p>
       )}
 
+      <p className={cn("mt-2 truncate text-sm font-medium", sem ? sem.text : "text-ink-muted")}>
+        {title}
+      </p>
+
+      {/* ink-faint is under AA on a wash, so a tinted card's subtitle is ink-muted. */}
       {subtitle && (
-        <p className={cn("mt-1.5 truncate text-xs", subtitleColor ?? "text-ink-faint")}>
+        <p className={cn("mt-1 truncate text-xs", subtitleColor ?? (sem ? sem.text : tint ? "text-ink-muted" : "text-ink-faint"))}>
           {subtitle}
         </p>
       )}

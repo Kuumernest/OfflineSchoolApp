@@ -24,6 +24,8 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+const { summaryPassRate } = require("../../../shared/passRate");
+const { passMarkOf } = require("./passMark.service");
 const Exam          = require("../db/models/Exam");
 const ExamSubject   = require("../db/models/ExamSubject");
 const StudentScore  = require("../db/models/StudentScore");
@@ -408,7 +410,7 @@ async function processResults(examId, classId = null, processedBy = null) {
   }
 
   // ── Step 10: Generate stats ────────────────────────────────────────────
-  const stats = generateStats(allResults);
+  const stats = generateStats(allResults, await passMarkOf(exam.schoolId));
 
   return {
     processed: allResults.length,
@@ -504,33 +506,54 @@ async function getExamResults(examId, classId = null, options = {}) {
 
 // ─── Get Rankings ─────────────────────────────────────────────────────────
 
-async function getRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false, limit = null } = {}) {
+/**
+ * The rows a ranking table is over: one exam, the caller's school, the scope's
+ * position present (absent = the pupil missed everything), optionally one
+ * class. Shared by the page and its count so the two can never disagree.
+ */
+function rankingsFilter(examId, scope, classId, schoolId, { onlyPublished = false } = {}) {
   // schoolId is the caller's; the controller resolves it and checks the exam
   // belongs to it first. The filter used to be examId alone. onlyPublished is
   // the non-administrator's table: positions the school has published.
   const filter = { examId, deletedAt: null, ...(schoolId ? { schoolId: String(schoolId) } : {}), ...(onlyPublished ? { isPublished: true } : {}) };
+  filter[rankingSortField(scope)] = { $ne: null };
+  // A class narrows every scope, school included: Form 1's pupils with their
+  // positions in the whole school. The school table used to ignore it and list
+  // every pupil under a page that said "Showing Form 1 only". The desktop's
+  // mirror (desktop/src/main/api/handlers/results.js) already filtered so.
+  if (classId) filter.classId = String(classId);
+  return filter;
+}
 
-  if (scope === "class") {
-    filter.classPosition  = { $ne: null };
-    if (classId) filter.classId = classId;
-  } else if (scope === "grade") {
-    filter.gradePosition  = { $ne: null };
-    if (classId) filter.classId = classId;
-  } else {
-    filter.schoolPosition = { $ne: null };
-  }
+const rankingSortField = (scope) =>
+  scope === "school" ? "schoolPosition" :
+  scope === "grade"  ? "gradePosition"  :
+                       "classPosition";
 
-  const sortField =
-    scope === "school" ? "schoolPosition" :
-    scope === "grade"  ? "gradePosition"  :
-                         "classPosition";
+async function getRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false, limit = null, page = 1 } = {}) {
+  const filter    = rankingsFilter(examId, scope, classId, schoolId, { onlyPublished });
+  const sortField = rankingSortField(scope);
 
   // The sort is the database's, so cutting the page there answers exactly
   // what sorting the whole table and slicing it answered — without reading
   // the whole school's positions, and backfilling names on all of them, for
-  // a page of a hundred.
-  let q = ResultSummary.find(filter).sort({ [sortField]: 1 });
-  if (Number.isFinite(Number(limit)) && Number(limit) > 0) q = q.limit(Number(limit));
+  // a page of a hundred. _id breaks ties (shared positions), so a page
+  // boundary never repeats or drops a pupil; the desktop mirror does the same.
+  // Class positions across every class are grouped by class (Form 1 before
+  // Form 2 before Form 10), so each page is runs of one class's table rather
+  // than every class's 1st, then every class's 2nd.
+  const grouped = scope === "class" && !classId;
+  const sort = grouped
+    ? { className: 1, classId: 1, classPosition: 1, _id: 1 }
+    : { [sortField]: 1, _id: 1 };
+  let q = ResultSummary.find(filter).sort(sort);
+  if (grouped) q = q.collation({ locale: "en", numericOrdering: true });
+  const n = Number(limit);
+  if (Number.isFinite(n) && n > 0) {
+    const p = Math.max(1, Math.floor(Number(page)) || 1);
+    if (p > 1) q = q.skip((p - 1) * n);
+    q = q.limit(n);
+  }
   const results = await q.lean();
 
   // Backfill studentName, admissionNo and className for rows that predate
@@ -539,6 +562,11 @@ async function getRankings(examId, scope = "class", classId = null, schoolId = n
   await backfillRankingNames(results);
 
   return results;
+}
+
+/** How many rows the whole ranking table has — the "N students" a page is of. */
+async function countRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false } = {}) {
+  return ResultSummary.countDocuments(rankingsFilter(examId, scope, classId, schoolId, { onlyPublished }));
 }
 
 /**
@@ -613,12 +641,12 @@ async function getExamStats(examId, classId = null) {
   if (classId) filter.classId = classId;
 
   const results = await ResultSummary.find(filter).lean();
-  return generateStats(results);
+  return generateStats(results, await passMarkOf(results[0]?.schoolId));
 }
 
 // ─── Stats Generator ──────────────────────────────────────────────────────
 
-function generateStats(results) {
+function generateStats(results, passMark) {
   if (!results.length) {
     return {
       totalStudents:     0,
@@ -641,8 +669,9 @@ function generateStats(results) {
 
   const present = results.filter((r) => !isFullyAbsent(r));
   const absent  = results.filter((r) =>  isFullyAbsent(r));
-  const passed  = present.filter((r) => r.isPassing);
-  const failed  = present.filter((r) => !r.isPassing);
+  // The one pass rate (shared/passRate.js): average /20 against the school's
+  // pass mark, over the pupils with results.
+  const pr = summaryPassRate(results, passMark);
 
   const averages     = present.map((r) => r.average).filter((a) => a != null);
   const classAverage = averages.length
@@ -697,11 +726,9 @@ function generateStats(results) {
     totalStudents: results.length,
     present:       present.length,
     absent:        absent.length,
-    passed:        passed.length,
-    failed:        failed.length,
-    passRate:      present.length
-      ? Math.round((passed.length / present.length) * 10000) / 100
-      : 0,
+    passed:        pr.passed,
+    failed:        pr.failed,
+    passRate:      pr.rate ?? 0,
     classAverage,
     highest,
     lowest,
@@ -718,6 +745,8 @@ module.exports = {
   unpublishResults,
   getExamResults,
   getRankings,
+  countRankings,
   getStudentResult,
   getExamStats,
+  backfillRankingNames,
 };

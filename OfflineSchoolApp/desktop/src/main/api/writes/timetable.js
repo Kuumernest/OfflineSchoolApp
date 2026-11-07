@@ -43,6 +43,8 @@
 const { randomUUID } = require("crypto");
 const TT                  = require("../../../../../shared/timetableConflicts");
 const { conflictContext } = require("../timetableConflicts");
+const { timetableSlotProblem } = require("../../../../../shared/timetableRules");
+const { assignedTeachers, pairKey } = require("../../../../../shared/classSubjectTeachers");
 
 const DAYS = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
 
@@ -81,6 +83,21 @@ const forced = (body, session) =>
   body?.force === true &&
   (session?.role === "school_admin" || session?.role === "super_admin");
 
+/**
+ * The server's B1 rules (shared/timetableRules.js): no lesson in a break, and
+ * only a teacher the class-subject assignment names. A refusal declines the
+ * write here, so the server answers it — the mirror does not invent a 422.
+ */
+const ruleProblem = (docs, schoolId, { classId, subjectId, teacherId, periodId }) => {
+  const period = docs.get("period", periodId);
+  const byPair = assignedTeachers(docs.find("teacherAssignment", { schoolId }), (id) => docs.get("user", id) ?? null);
+  return timetableSlotProblem({
+    period: period && String(period.schoolId) === String(schoolId) ? period : null,
+    teacherId,
+    assignedIds: byPair.get(pairKey(classId, subjectId))?.teacherIds ?? [],
+  });
+};
+
 module.exports = [
   {
     route: "POST /api/admin/timetable",
@@ -105,6 +122,8 @@ module.exports = [
 
       if (!classId || !subjectId || !teacherId || !dayOfWeek || !periodId) return null;
 
+      // B1 first: a refusal, never overridable; then the conflicts, which can be forced.
+      if (ruleProblem(docs, schoolId, { classId, subjectId, teacherId, periodId })) return null;
       const room  = body?.room?.trim() || null;
       const clash = !forced(body, session) &&
         conflictFor(docs, schoolId, { classId, subjectId, teacherId, dayOfWeek, periodId, room }, null);
@@ -178,6 +197,7 @@ module.exports = [
         room:      body?.room      !== undefined ? (body.room?.trim() || null)    : slot.room,
       };
 
+      if (ruleProblem(docs, schoolId, next)) return null;
       const clash = !forced(body, session) && conflictFor(docs, schoolId, next, slot._id);
       if (clash) return null;
 

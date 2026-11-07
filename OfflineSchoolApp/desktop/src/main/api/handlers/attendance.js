@@ -43,7 +43,7 @@ const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
  * a queued register against one day and apply it against another — and the two
  * would disagree about who was in the room with nothing to show why.
  */
-const { dateStr, lastSevenDays } = require("../../../../../shared/attendance");
+const { dateStr, lastSevenDays, schoolDaysOnly, dayRate } = require("../../../../../shared/attendance");
 const { dayCodeFor }             = require("../../../../../shared/timetable");
 
 /**
@@ -180,8 +180,8 @@ const countOf = (rows, status) => rows.filter((r) => r.status === status).length
  * here", and a rate over marks taken would answer "of the ones somebody
  * remembered to mark", which flatters an unmarked register.
  */
-const rateOf = (rows, total) =>
-  total > 0 ? Math.round((countOf(rows, "present") / total) * 100) : 0;
+// C3: null — shown "–" — when nobody was marked, as the server answers.
+const rateOf = (rows, total) => dayRate(countOf(rows, "present"), rows.length, total);
 
 module.exports = [
   {
@@ -291,7 +291,9 @@ module.exports = [
 
       if (docs.count("user", { schoolId, role: "teacher" }) === 0) return null;
 
-      const days  = lastSevenDays();
+      // C3: the school's open days only, as the server filters them.
+      const days  = schoolDaysOnly(lastSevenDays(), docs.get("school", schoolId)?.schoolDays);
+      if (!days.length) return ok({ trend: [], days });
       const from  = days[0];
       const to    = days[days.length - 1];
       const total = population(docs, schoolId);
@@ -556,6 +558,9 @@ module.exports = [
           classId:      s.classId,
           className:    s.className,
           grade:        s.grade,
+          // As the server selects: the number the record holds, and the
+          // legacy field for older imports.
+          enrollmentNo: s.enrollmentNo,
           admissionNo:  s.admissionNo,
         }))
         // .sort({ studentName: 1 }) on the server: byte order, not a locale's.
@@ -618,3 +623,20 @@ module.exports = [
     },
   },
 ];
+
+// ── Who may read these locally: whoever the server would answer ───────────
+// attendance.routes.js: staffRead = requirePermission("attendance.view");
+// /api/admin/attendance/stats is admin.routes (STAFF_ROLES + dashboard.view).
+// GET /api/attendance/students has no permission on the server — it scopes a
+// student to their own rows, and the handler above declines for students.
+// See readPermissions.js (F6).
+const { guardReads, STAFF_ROLES } = require("./readPermissions");
+guardReads(module.exports, {
+  "GET /api/admin/attendance/stats":           { roles: STAFF_ROLES, permissions: ["dashboard.view"] },
+  "GET /api/attendance/report/overview":       { permissions: ["attendance.view"] },
+  "GET /api/attendance/report/weekly":         { permissions: ["attendance.view"] },
+  "GET /api/attendance/report/class/:classId": { permissions: ["attendance.view"] },
+  "GET /api/attendance/teachers/roster":       { permissions: ["attendance.view"] },
+  "GET /api/attendance/teachers":              { permissions: ["attendance.view"] },
+  "GET /api/attendance/students/roster":       { permissions: ["attendance.view"] },
+}, { ownWrites: ["/api/attendance/"] });

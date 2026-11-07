@@ -245,7 +245,7 @@ export const create = async (schoolId, draft) => {
     entityKey: `fee-structure:${id}`,
     method:    "POST",
     endpoint:  "/fees/structures",
-    payload:   { ...body, __local: { table: TABLE, id } },
+    payload:   { ...body, __local: { table: TABLE, ids: [id] } },
   });
 
   return id;

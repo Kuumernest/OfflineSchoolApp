@@ -185,6 +185,57 @@ router.post("/seed-default", asyncHandler(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// READY-MADE LAYOUTS (C12) — print/reportPresets.js
+//
+//   GET  /api/templates/presets           the three layouts, and which is in use
+//   POST /api/templates/presets/:id/use   make it the school's default template
+//
+// "Use" creates the preset's template once (by its name) and promotes it the
+// same way PATCH /:id/default does: every OTHER template loses the flag.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { PRESETS, presetById, PRESET_HTML } = require("../print/reportPresets");
+
+router.get("/presets", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, error: "schoolId is required" });
+  const current = await ReportTemplate.findOne({ schoolId, isDefault: true, deletedAt: null })
+    .select("name").lean();
+  res.json({
+    success: true,
+    presets: PRESETS.map(({ id, name, description }) => ({
+      id, name, description, inUse: current?.name === name,
+    })),
+    // No default template: cards print with the built-in layout.
+    custom: current && !PRESETS.some((p) => p.name === current.name) ? current.name : null,
+  });
+}));
+
+router.post("/presets/:id/use", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, error: "schoolId is required" });
+  const preset = presetById(req.params.id);
+  if (!preset) return res.status(404).json({ success: false, error: "No such layout" });
+
+  let template = await ReportTemplate.findOne({ schoolId, name: preset.name, deletedAt: null });
+  if (!template) {
+    template = await ReportTemplate.create({
+      _id: uuidv4(), schoolId, name: preset.name,
+      html: PRESET_HTML, css: preset.css, isDefault: false, version: 1,
+      variables: scanVariables(PRESET_HTML),
+      createdBy: req.user?._id || null, updatedBy: req.user?._id || null,
+    });
+  }
+  await ReportTemplate.updateMany(
+    { schoolId, deletedAt: null, _id: { $ne: template._id } },
+    { $set: { isDefault: false } }
+  );
+  template.isDefault = true;
+  await template.save();
+  return res.json({ success: true, template: { _id: template._id, name: template.name, isDefault: true } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/templates/:id
 // ─────────────────────────────────────────────────────────────────────────────
 

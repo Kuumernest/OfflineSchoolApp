@@ -98,6 +98,8 @@ export default function ReportsPage() {
         <Card key={spec.key} padding={false}>
           <CardHeader
             title={spec.title}
+            icon={FileSpreadsheet}
+            accent="indigo"
             className="px-5 pt-4"
             action={
               <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} disabled={!rows.length}
@@ -126,7 +128,7 @@ export default function ReportsPage() {
                     </Tr>
                   ))}
                   {totals && rows.length > 1 && (
-                    <Tr className="font-semibold">
+                    <Tr className="bg-accent-indigo-soft font-semibold text-accent-indigo-deep">
                       {spec.render(spec.totals(totals)).map((v, i) => <Td key={i} numeric={i > 0}>{v}</Td>)}
                     </Tr>
                   )}

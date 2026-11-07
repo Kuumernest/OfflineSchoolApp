@@ -1,7 +1,7 @@
 // web/src/components/ui/Card.tsx
-import { useLocation } from "react-router-dom";
 import { cn }             from "@/utils/cn";
-import { sectionForPath } from "@/config/sections";
+import type { LucideIcon } from "lucide-react";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 
 interface CardProps {
   className?: string;
@@ -25,16 +25,12 @@ export function Card({
   return (
     <div
       className={cn(
-        // shadow-card carries a 1px inset top highlight as well as the drop
-        // shadow — see the token in index.css. The two-percent gradient reads
-        // as a surface lit from above rather than a flat fill; it is the same
-        // treatment the dashboard tiles use, so panels and tiles look cut from
-        // one material instead of merely sharing a border colour.
+        // White, one hairline border, a faint neutral shadow.
         // min-w-0: as a grid or flex item a card must be allowed to shrink below
         // its content. Without it a table inside the card sets the column's
         // minimum width, and on a phone the whole page grows to fit the table.
         "min-w-0 rounded-card border border-line shadow-card",
-        "bg-gradient-to-b from-surface to-[#fcfcfe]",
+        "bg-surface",
         padding && "p-5",
         className
       )}
@@ -55,11 +51,17 @@ export function CardHeader({
   title,
   subtitle,
   action,
+  icon: Icon,
+  accent = "blue",
   className,
 }: {
   title:      string;
   subtitle?:  string;
   action?:    React.ReactNode;
+  /** A small solid icon square in front of the title, in `accent`'s colour. */
+  icon?:      LucideIcon;
+  /** The square's colour (config/dashboardTint.ts); blue by default. */
+  accent?:    DashAccent;
   className?: string;
 }) {
   return (
@@ -70,16 +72,22 @@ export function CardHeader({
         {/* A 2px accent stub against the title. One small deliberate mark per
             panel is what separates a designed header from a bold paragraph —
             and it costs nothing in space. */}
-        <span
-          className={cn(
-            "mt-[3px] h-4 w-[3px] shrink-0 rounded-full",
-            // The section's hue rather than the accent, so every panel on a
-            // page agrees with the rule beside its title and with the icon in
-            // the rail. See config/sections.ts.
-            sectionForPath(useLocation().pathname).rule
-          )}
-          aria-hidden="true"
-        />
+        {Icon ? (
+          <span
+            className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)}
+            aria-hidden="true"
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "mt-[3px] h-4 w-[3px] shrink-0 rounded-full",
+              accent === "blue" ? "bg-primary-600" : DASH_TINT[accent].box,
+            )}
+            aria-hidden="true"
+          />
+        )}
         <div className="min-w-0">
           <h3 className="truncate text-base font-semibold text-ink" title={title}>{title}</h3>
           {subtitle && (

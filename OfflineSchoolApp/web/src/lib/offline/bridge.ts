@@ -34,7 +34,21 @@ export interface OutboxEntry {
 export interface OutboxSummary {
   pending: number;
   blocked: number;
-  stuck:   Array<{ seq: number; method: string; path: string; last_status: number | null; last_error: string | null }>;
+  /**
+   * Rows (waiting or blocked) that belong to the signed-in account — the ones
+   * signing in again would send, and signing out would leave behind. 0 with
+   * nobody signed in. Absent from a main process older than this field.
+   */
+  mine?:   number;
+  /**
+   * `owner`: whose the entry is for the account signed in — only "mine" may be
+   * discarded, retried or copied (the main process refuses the rest). Absent
+   * from a main process older than the field.
+   */
+  stuck:   Array<{
+    seq: number; method: string; path: string; last_status: number | null; last_error: string | null;
+    owner?: "mine" | "other" | "none";
+  }>;
   head:    OutboxSummary["stuck"][number] | null;
 }
 
@@ -45,11 +59,23 @@ export interface SyncStatus {
   /** The last pull stopped at the page ceiling; the next cycle continues it. */
   morePending?: boolean;
   lastCycleAt: string | null;
+  /**
+   * The last pull the server answered, for this server and school; survives a
+   * restart. Drives the 21/30-day notice (config/offlinePeriod.ts). Absent from
+   * a main process older than this field.
+   */
+  lastSyncedAt?: string | null;
   lastError:   string | null;
   pushed:      number;
   pulled:      number;
   refused?:    Array<{ collection: string; reason: string; permission?: string }>;
   heldBack?:   string[];
+  /**
+   * The server answered 401 to this machine's token. "unauthenticated" alone
+   * also covers "no token handed over yet"; only this one needs a person to
+   * sign in again (engine.js).
+   */
+  sessionRejected?: boolean;
 }
 
 /**
@@ -95,7 +121,7 @@ interface SchoolBridge {
     list:    () => Promise<OutboxEntry[]>;
     unblock: (seq: number) => Promise<OutboxSummary>;
     discard: (seq: number) => Promise<OutboxSummary>;
-    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string }>;
+    saveCopy: (seq: number) => Promise<{ ok: true; path: string } | { ok: false; cancelled?: boolean; error?: string; message?: string }>;
   };
   sync: {
     state:    () => Promise<Array<{ collection: string; cursor: string | null; last_pull_at: string | null; last_error: string | null }>>;

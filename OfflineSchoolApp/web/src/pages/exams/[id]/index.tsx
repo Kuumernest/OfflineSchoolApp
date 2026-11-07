@@ -1,6 +1,7 @@
 // web/src/pages/exams/[id]/index.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery }                          from "@tanstack/react-query";
+import { useQuery, useQueryClient }          from "@tanstack/react-query";
+import { examQueryKeys }                     from "@/hooks/useExams";
 import { useParams, useNavigate,
          useSearchParams, Link }             from "react-router-dom";
 import { fetchClasses }                      from "@/services/class.service";
@@ -13,6 +14,8 @@ import { useExamResults, useExamStats,
          useProcessResults,
          usePublishResults }                 from "@/hooks/useExamResults";
 import { UnpublishButton } from "@/components/results/UnpublishButton";
+import NeedsInternet from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
               ExamSubject,
@@ -30,6 +33,12 @@ import {
   examTypeLabel,
 }                                            from "@/constants/exam.constants";
 import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
+import { useUnsavedChangesGuard }            from "@/hooks/useUnsavedChangesGuard";
+import { Hourglass, Inbox, CheckCircle, XCircle, BarChart3, Calculator, Megaphone, SearchX, Flag, Info, ListChecks, Trophy } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ACCENT_LEFT_CARD, DASH_TINT, type DashAccent } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
+import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -138,8 +147,22 @@ interface MarkEntryStudent {
   id?:           string;
   name?:         string;
   studentName?:  string;
-  admissionNo?:  string;
+  /** What the student record stores, and what the ID card prints. */
+  enrollmentNo?: string | null;
+  /** Legacy names for the same number, read only when enrollmentNo is absent. */
+  admissionNo?:  string | null;
+  admissionNumber?: string | null;
 }
+
+/**
+ * A pupil's admission number on the marks sheet.
+ *
+ * The sheet read `admissionNo`, which the student list does not send — the
+ * record holds `enrollmentNo` — so every pupil, a newly enrolled one most
+ * visibly, showed a dash while their ID card printed ETEST-2026-041.
+ */
+const admissionOf = (s: MarkEntryStudent): string =>
+  s.enrollmentNo || s.admissionNo || s.admissionNumber || "";
 
 /** One saved score row as the scores endpoint returns it. */
 interface RawScoreRow {
@@ -170,13 +193,15 @@ const NEXT_STATUSES: Record<string, ExamStatus[]> = {
   archived:  ["draft"                 ],
 };
 
+// `accent` colours the subject's card (left edge, wash, icon square); `ring`
+// marks the open card on that wash. Class strings in full for Tailwind.
 const SUBMISSION_META: Record<string, {
-  color: string; bg: string; labelKey: string; icon: string;
+  color: string; bg: string; labelKey: string; icon: LucideIcon; accent: DashAccent; ring: string;
 }> = {
-  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: "⏳" },
-  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", labelKey: "examSubmission.awaitingApproval", icon: "📬" },
-  approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: "✅" },
-  rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: "❌" },
+  pending:   { color: "text-accent-amber-deep", bg: "bg-accent-amber-soft", labelKey: "examSubmission.notSubmitted",     icon: Hourglass,   accent: "amber", ring: "ring-accent-amber" },
+  submitted: { color: "text-accent-sky-deep",   bg: "bg-accent-sky-soft",   labelKey: "examSubmission.awaitingApproval", icon: Inbox,       accent: "sky",   ring: "ring-accent-sky" },
+  approved:  { color: "text-accent-green-deep", bg: "bg-accent-green-soft", labelKey: "results.approved",                icon: CheckCircle, accent: "green", ring: "ring-accent-green" },
+  rejected:  { color: "text-accent-red-deep",   bg: "bg-accent-red-soft",   labelKey: "results.rejected",                icon: XCircle,     accent: "red",   ring: "ring-accent-red" },
 };
 
 const EMPTY_SCORE: ScoreEntry = {
@@ -210,15 +235,20 @@ const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
 const EmptyState = ({
   icon, title, subtitle,
 }: {
-  icon: string; title: string; subtitle?: string;
-}) => (
+  icon: LucideIcon; title: string; subtitle?: string;
+}) => {
+  const Icon = icon;
+  return (
   <div className="flex flex-col items-center justify-center
-                  py-16 text-center text-gray-400">
-    <span className="text-5xl mb-3">{icon}</span>
-    <p className="font-semibold text-gray-600">{title}</p>
+                  py-16 text-center text-ink-muted">
+    <div className={cn("mb-3 flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.amber.box)} aria-hidden="true">
+      <Icon className="w-6 h-6" aria-hidden />
+    </div>
+    <p className="font-semibold text-ink">{title}</p>
     {subtitle && <p className="text-sm mt-1">{subtitle}</p>}
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // TAB 1 — DETAILS
@@ -325,9 +355,14 @@ const DetailsTab = ({
     <div className="space-y-5">
 
       {/* Status card */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">{t("exams.statusTitle")}</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Flag className="h-4 w-4" />
+          </span>
+            {t("exams.statusTitle")}
+          </h3>
           <StatusBadge status={exam.status} />
         </div>
 
@@ -363,9 +398,14 @@ const DetailsTab = ({
       </div>
 
       {/* Exam info */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">{t("exams.information")}</h3>
+          <h3 className="flex items-center gap-2 font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Info className="h-4 w-4" />
+          </span>
+            {t("exams.information")}
+          </h3>
           <button
             onClick={() => setEditOpen(true)}
             className="px-3 py-1.5 text-sm font-semibold rounded-xl
@@ -623,14 +663,19 @@ const DetailsTab = ({
       )}
 
       {/* Per-subject progress */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-1">{t("exams.marksProgress")}</h3>
-        <p className="text-xs text-gray-400 mb-4">
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
+        <h3 className="flex items-center gap-2 font-semibold text-ink mb-1">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <BarChart3 className="h-4 w-4" />
+          </span>
+          {t("exams.marksProgress")}
+        </h3>
+        <p className="text-xs text-ink-muted mb-4">
           {t("exams.marksProgressHint")}
         </p>
 
         {subjectCount === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
+          <p className="text-sm text-ink-muted text-center py-6">
             {t("exams.noSubjectsYet")}
           </p>
         ) : (
@@ -639,14 +684,13 @@ const DetailsTab = ({
               <div key={group.classId ?? "no-class"} className="space-y-3">
                 {showClassHeads && (
                   <div className="flex items-center gap-2 pt-3 first:pt-0">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide
-                                   text-indigo-700 shrink-0">
+                    <h4 className="text-xs font-semibold text-primary-700 shrink-0">
                       {group.className}
                     </h4>
-                    <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                    <span className="text-[11px] font-medium text-ink-muted tabular-nums">
                       {group.items.length}
                     </span>
-                    <span className="flex-1 border-t border-gray-100" />
+                    <span className="flex-1 border-t border-line" />
                   </div>
                 )}
 
@@ -654,18 +698,18 @@ const DetailsTab = ({
               <div key={sub._id}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">{meta.icon}</span>
-                    <span className="text-sm font-semibold text-gray-800">
+                    <meta.icon className={cn("w-4 h-4", DASH_TINT[meta.accent].glyph)} aria-hidden />
+                    <span className="text-sm font-semibold text-ink">
                       {sub.subjectName}
                     </span>
                     {sub.teacherName && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">
                         — {sub.teacherName}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-ink-muted">
                       {t("exams.enteredOf", { entered, total })}
                     </span>
                     <span className={`text-xs font-bold px-2 py-0.5
@@ -674,14 +718,14 @@ const DetailsTab = ({
                     </span>
                   </div>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-accent-amber-soft rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all
                       ${pct === 100
-                        ? "bg-green-500"
+                        ? "bg-accent-green-solid"
                         : pct > 0
                           ? "bg-primary-500"
-                          : "bg-gray-200"
+                          : "bg-transparent"
                       }`}
                     style={{ width: `${pct}%` }}
                   />
@@ -706,14 +750,18 @@ const ScoreEntryPanel = ({
   examId,
   schoolId,
   onClose,
+  onDirtyChange,
 }: {
   sub:      ExamSubject;
   examId:   string;
   schoolId: string;
+  /** Already guarded by the marks tab: asks first when marks are unsaved. */
   onClose:  () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [students, setStudents] = useState<MarkEntryStudent[]>([]);
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
@@ -728,6 +776,11 @@ const ScoreEntryPanel = ({
   // a blank) instead of a blind alert naming nobody.
   const [invalidIds, setInvalidIds] = useState<Set<string>>(new Set());
   const [formError,  setFormError]  = useState("");
+  // A mark typed since the sheet loaded or was last saved. The marks tab
+  // guards it (it owns which sheet is open), so it is reported up.
+  const [touched,    setTouched]    = useState(false);
+  useEffect(() => { onDirtyChange(touched && !saving); }, [touched, saving, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   // Stable primitive IDs — prevents double useEffect firing
   const subId     = sub._id;
@@ -744,6 +797,7 @@ const ScoreEntryPanel = ({
       setStudents([]);
       setScores({});
       setSaved(false);
+      setTouched(false);
       setInvalidIds(new Set());
       setFormError("");
 
@@ -801,6 +855,7 @@ const ScoreEntryPanel = ({
       [studentId]: { ...(prev[studentId] ?? EMPTY_SCORE), [field]: value },
     }));
     setSaved(false);
+    setTouched(true);
     setFormError("");
     setInvalidIds((prev) => {
       if (!prev.has(studentId)) return prev;
@@ -824,7 +879,17 @@ const ScoreEntryPanel = ({
   const [reasonPrompt, setReasonPrompt] = useState<null | "locked" | "published">(null);
   const [reasonText,   setReasonText]   = useState("");
 
-  const handleSave = async (changeReason?: string) => {
+  // Which save the reason prompt (423) is completing: a draft, or a submit.
+  const [draftMode, setDraftMode] = useState(false);
+  const [savedAs, setSavedAs] = useState<"draft" | "submitted" | null>(null);
+
+  /**
+   * Save the sheet. A draft keeps what has been typed — blanks allowed — and
+   * does not submit; submitting wants every present pupil marked, the check
+   * that used to stop any save at all while a single cell was empty.
+   */
+  const handleSave = async (changeReason?: string, draft = draftMode) => {
+    setDraftMode(draft);
     setSaving(true);
     try {
       const records = students.map((s) => {
@@ -853,9 +918,9 @@ const ScoreEntryPanel = ({
         return;
       }
 
-      // A present student must have a score — a blank cell means the sheet is
-      // unfinished, so the save is blocked until every row is filled or absent.
-      const unentered = records.filter((r) => !r.isAbsent && r.score === null);
+      // Submitting: every present student must have a score. A draft may be
+      // unfinished — that is what a draft is.
+      const unentered = draft ? [] : records.filter((r) => !r.isAbsent && r.score === null);
       if (unentered.length > 0) {
         setInvalidIds(new Set(unentered.map((r) => r.studentId)));
         setFormError(t("exams.missingScores", { count: unentered.length }));
@@ -872,13 +937,22 @@ const ScoreEntryPanel = ({
           subjectId,
           examSubjectId: subId,
           scores:        records,
+          draft,
           schoolId,
           ...(changeReason ? { changeReason } : {}),
         },
         { onProgress: (done, total) => setSaveProgress({ done, total }) },
       );
       setSaved(true);
+      setSavedAs(draft ? "draft" : "submitted");
+      setTouched(false);
       setReasonPrompt(null);
+      // This sheet saves through the service, not useSaveBulkScores, so
+      // nothing told the page: the subject's row kept "0/11 scores entered ·
+      // Not submitted" until a reload. The same keys that hook refreshes.
+      void qc.invalidateQueries({ queryKey: ["submissions", examId] });
+      void qc.invalidateQueries({ queryKey: ["scores", examId] });
+      void qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId) });
       setReasonText("");
     } catch (err) {
       // 423 is not a failure to report and stop at — it is the server asking
@@ -907,7 +981,7 @@ const ScoreEntryPanel = ({
     return (
       !q ||
       (s.studentName || s.name || "").toLowerCase().includes(q) ||
-      (s.admissionNo || "").toLowerCase().includes(q)
+      admissionOf(s).toLowerCase().includes(q)
     );
   });
 
@@ -923,13 +997,13 @@ const ScoreEntryPanel = ({
     <div className="border border-gray-200 rounded-xl overflow-hidden mt-3">
 
       {/* Panel header */}
-      <div className="bg-indigo-50 border-b border-indigo-100
+      <div className="bg-primary-50 border-b border-primary-100
                       px-4 py-3 flex items-center justify-between">
         <div>
-          <p className="font-semibold text-indigo-900 text-sm">
+          <p className="font-semibold text-primary-900 text-sm">
             {sub.subjectName} — {t("exams.scoreEntry")}
           </p>
-          <p className="text-xs text-indigo-500 mt-0.5">
+          <p className="text-xs text-primary-500 mt-0.5">
             {t("exams.scoreEntryMeta", {
               max:     maxScore,
               pass:    passMark,
@@ -951,26 +1025,38 @@ const ScoreEntryPanel = ({
             />
           )}
           <button
+            onClick={() => handleSave(undefined, true)}
+            disabled={saving}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-300
+                       bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            {saving && draftMode
+              ? t("common.saving")
+              : saved && savedAs === "draft"
+                ? `✓ ${t("exams.draftSaved")}`
+                : t("exams.saveDraft")}
+          </button>
+          <button
             // Wrapped: passing the handler directly hands React's click event
             // in as the first argument, which is now the changeReason.
-            onClick={() => handleSave()}
+            onClick={() => handleSave(undefined, false)}
             disabled={saving}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold
               transition-colors disabled:opacity-60
-              ${saved
+              ${saved && savedAs === "submitted"
                 ? "bg-green-100 text-green-700 border border-green-200"
                 : "bg-primary-600 text-white hover:bg-primary-700"
               }`}
           >
-            {saving
+            {saving && !draftMode
               ? t("common.saving")
-              : saved
-                ? `✓ ${t("exams.saved")}`
-                : t("exams.saveMarks")}
+              : saved && savedAs === "submitted"
+                ? `✓ ${t("exams.submitted")}`
+                : t("exams.submitMarks")}
           </button>
           <button
             onClick={onClose}
-            className="text-indigo-400 hover:text-indigo-700
+            className="text-primary-400 hover:text-primary-700
                        text-xl font-bold leading-none px-1"
           >
             ×
@@ -1069,7 +1155,7 @@ const ScoreEntryPanel = ({
 
                 {/* Admission number */}
                 <p className="text-xs text-gray-400 text-center">
-                  {student.admissionNo ? `#${student.admissionNo}` : "—"}
+                  {admissionOf(student) ? `#${admissionOf(student)}` : "—"}
                 </p>
 
                 {/* Absent toggle */}
@@ -1208,6 +1294,10 @@ const MarksTab = ({
   const { t } = useTranslation();
   const { confirm } = useToast();
   const [openSubjectId, setOpenSubjectId] = useState<string | null>(null);
+  // Unsaved marks in the open sheet. Closing it, opening another subject's
+  // sheet or leaving the page used to drop them without a word; all ask now.
+  const [sheetDirty, setSheetDirty] = useState(false);
+  const { confirmDiscard } = useUnsavedChangesGuard(sheetDirty);
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
 
@@ -1247,8 +1337,14 @@ const MarksTab = ({
   const approve = useApproveSubmission(examId);
   const reject  = useRejectSubmission(examId);
 
-  const toggleSubject = (id: string) =>
-    setOpenSubjectId((prev) => (prev === id ? null : id));
+  const toggleSubject = (id: string) => {
+    void confirmDiscard().then((ok) => {
+      if (ok) setOpenSubjectId((prev) => (prev === id ? null : id));
+    });
+  };
+  const closeSheet = () => {
+    void confirmDiscard().then((ok) => { if (ok) setOpenSubjectId(null); });
+  };
 
   const handleApprove = async (sub: ExamSubject) => {
     const ok = await confirm({
@@ -1270,7 +1366,7 @@ const MarksTab = ({
   if (submissions.length === 0) {
     return (
       <EmptyState
-        icon="📭"
+        icon={Inbox}
         title={t("exams.noSubjectsShort")}
         subtitle={t("exams.addSubjectsHint")}
       />
@@ -1327,7 +1423,7 @@ const MarksTab = ({
 
       {/* Subject rows */}
       <div className="space-y-2">
-        <p className="text-xs text-gray-400 font-medium mb-3">
+        <p className="text-xs text-ink-muted font-medium mb-3">
           {t("exams.marksHint")}
         </p>
 
@@ -1335,14 +1431,13 @@ const MarksTab = ({
           <div key={group.classId ?? "no-class"} className="space-y-2">
             {showClassHeaders && (
               <div className="flex items-center gap-2 pt-3 first:pt-0">
-                <h3 className="text-xs font-semibold uppercase tracking-wide
-                               text-indigo-700 shrink-0">
+                <h3 className="text-xs font-semibold text-primary-700 shrink-0">
                   {group.className}
                 </h3>
-                <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                <span className="text-[11px] font-medium text-ink-muted tabular-nums">
                   {group.items.length}
                 </span>
-                <span className="flex-1 border-t border-gray-100" />
+                <span className="flex-1 border-t border-line" />
               </div>
             )}
 
@@ -1356,45 +1451,46 @@ const MarksTab = ({
           return (
             <div key={sub._id}>
               <div
-                className={`bg-white rounded-xl border transition-colors
-                  cursor-pointer select-none
-                  ${isOpen
-                    ? "border-indigo-300 shadow-sm"
-                    : "border-gray-100 hover:border-gray-200"
-                  }`}
+                className={cn(
+                  ACCENT_LEFT_CARD[meta.accent],
+                  "transition-shadow cursor-pointer select-none",
+                  isOpen ? cn("ring-2", meta.ring) : "hover:shadow-lift",
+                )}
               >
                 <div
                   className="flex items-center gap-4 p-4"
                   onClick={() => toggleSubject(sub._id)}
                 >
-                  <span className="text-xl shrink-0">{meta.icon}</span>
+                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", DASH_TINT[meta.accent].box)} aria-hidden="true">
+                    <meta.icon className="w-5 h-5" aria-hidden />
+                  </span>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">
+                      <span className="font-semibold text-ink text-sm">
                         {sub.subjectName}
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5
-                        rounded-full ${meta.color} ${meta.bg}`}>
+                        rounded-full bg-surface ${meta.color}`}>
                         {t(meta.labelKey)}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">
                         {sub.teacherName || t("exams.noTeacherAssigned")}
                       </span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-ink-muted">·</span>
+                      <span className="text-xs text-ink-muted">
                         {t("exams.scoresEntered", { entered, total })}
                       </span>
-                      <span className="text-xs text-gray-300">·</span>
+                      <span className="text-xs text-ink-muted">·</span>
                       {editingCoeff === sub._id ? (
                         <span
                           className="flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-ink-muted">
                             {t("exams.coeff")}
                           </span>
                           <input
@@ -1409,7 +1505,7 @@ const MarksTab = ({
                             }}
                             autoFocus
                             className="w-14 px-1.5 py-0.5 text-xs border
-                                       border-indigo-300 rounded-md
+                                       border-primary-300 rounded-md
                                        focus:outline-none"
                           />
                           <button
@@ -1432,7 +1528,7 @@ const MarksTab = ({
                         </span>
                       ) : (
                         <span
-                          className="text-xs text-gray-400 flex items-center gap-1"
+                          className="text-xs text-ink-muted flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {t("exams.coeff")} {coeffOf(sub)}
@@ -1442,7 +1538,7 @@ const MarksTab = ({
                                 setEditingCoeff(sub._id);
                                 setCoeffValue(String(coeffOf(sub)));
                               }}
-                              className="text-indigo-400 hover:text-indigo-600"
+                              className="text-primary-400 hover:text-primary-600"
                               title={t("examCreate.coefficient")}
                             >
                               ✎
@@ -1452,10 +1548,10 @@ const MarksTab = ({
                       )}
                     </div>
 
-                    <div className="mt-2 h-1 bg-gray-100 rounded-full w-48">
+                    <div className="mt-2 h-1 bg-surface rounded-full w-48">
                       <div
                         className={`h-full rounded-full transition-all
-                          ${pct === 100 ? "bg-green-500" : "bg-primary-400"}`}
+                          ${pct === 100 ? "bg-accent-green-solid" : "bg-primary-400"}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -1499,7 +1595,7 @@ const MarksTab = ({
                 {sub.submissionStatus === "rejected" && sub.rejectReason && (
                   <div className="mx-4 mb-3 px-3 py-2 bg-red-50 rounded-lg
                                   text-xs text-red-600 border border-red-100">
-                    ❌ {t("exams.rejectedReason", { reason: sub.rejectReason })}
+                    <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />{t("exams.rejectedReason", { reason: sub.rejectReason })}
                   </div>
                 )}
               </div>
@@ -1509,7 +1605,8 @@ const MarksTab = ({
                   sub={sub}
                   examId={examId}
                   schoolId={schoolId}
-                  onClose={() => setOpenSubjectId(null)}
+                  onClose={closeSheet}
+                  onDirtyChange={setSheetDirty}
                 />
               )}
             </div>
@@ -1536,12 +1633,15 @@ const ResultsTab = ({
   examStatus:  ExamStatus;
   submissions: ExamSubjectWithTotals[];
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { confirm } = useToast();
   const { data: resultsData, isLoading } = useExamResults(examId);
   const { data: statsData }              = useExamStats(examId);
   const processResults                   = useProcessResults();
   const publishResults                   = usePublishResults();
+  // Calculating runs on the server (the desktop does not compute results —
+  // see writes/exams.js): online-only there. Publishing is not; it queues.
+  const net                              = useNeedsInternet();
 
   const results = resultsData?.results ?? [];
   const stats   = statsData?.data;
@@ -1598,16 +1698,23 @@ const ResultsTab = ({
     <div className="space-y-5">
 
       {/* Guided steps */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">{t("exams.checklist")}</h3>
+      <div className={cn("bg-surface rounded-xl border border-line p-5", DASH_TINT.amber.edge)}>
+        <h3 className="flex items-center gap-2 font-semibold text-ink mb-4">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <ListChecks className="h-4 w-4" />
+          </span>
+          {t("exams.checklist")}
+        </h3>
 
         <div className="space-y-3">
 
           {/* Step 1 */}
           <div className={`flex items-start gap-3 p-3 rounded-xl
             ${allMarksEntered ? "bg-green-50" : "bg-amber-50"}`}>
-            <span className="text-lg mt-0.5">
-              {allMarksEntered ? "✅" : "⏳"}
+            <span className="mt-0.5">
+              {allMarksEntered
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Hourglass className="w-5 h-5 text-amber-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1637,19 +1744,21 @@ const ResultsTab = ({
             ${resultsProcessed
               ? "bg-green-50"
               : currentStep === 2
-                ? "bg-indigo-50"
+                ? "bg-primary-50"
                 : "bg-gray-50 opacity-60"
             }`}>
-            <span className="text-lg mt-0.5">
-              {resultsProcessed ? "✅" : "🧮"}
+            <span className="mt-0.5">
+              {resultsProcessed
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Calculator className="w-5 h-5 text-primary-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
-                ${resultsProcessed ? "text-green-800" : "text-indigo-800"}`}>
+                ${resultsProcessed ? "text-green-800" : "text-primary-800"}`}>
                 {t("exams.step2Title")}
               </p>
               <p className={`text-xs mt-0.5
-                ${resultsProcessed ? "text-green-600" : "text-indigo-500"}`}>
+                ${resultsProcessed ? "text-green-600" : "text-primary-500"}`}>
                 {resultsProcessed
                   ? t("exams.step2Done")
                   : t("exams.step2Todo")}
@@ -1657,9 +1766,10 @@ const ResultsTab = ({
               {!resultsProcessed && currentStep === 2 && (
                 <button
                   onClick={handleProcess}
-                  disabled={processResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-indigo-600 text-white
-                             text-xs font-bold rounded-lg hover:bg-indigo-700
+                  disabled={processResults.isPending || net.blocked}
+                  title={net.hint}
+                  className="mt-2 px-4 py-1.5 bg-primary-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-primary-700
                              disabled:opacity-60 transition-colors"
                 >
                   {processResults.isPending ? t("exams.calculating") : t("exams.calculateResults")}
@@ -1670,14 +1780,18 @@ const ResultsTab = ({
               ) : (
                 <button
                   onClick={handleRecalculate}
-                  disabled={processResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-white border border-indigo-300 text-indigo-700
-                             text-xs font-bold rounded-lg hover:bg-indigo-50
+                  disabled={processResults.isPending || net.blocked}
+                  title={net.hint}
+                  className="mt-2 px-4 py-1.5 bg-white border border-primary-300 text-primary-700
+                             text-xs font-bold rounded-lg hover:bg-primary-50
                              disabled:opacity-60 transition-colors"
                 >
                   {processResults.isPending ? t("exams.calculating") : t("exams.recalculateResults")}
                 </button>
               ))}
+              {((!resultsProcessed && currentStep === 2) || (resultsProcessed && !anyPublished)) && (
+                <NeedsInternet className="mt-2 mb-0" />
+              )}
             </div>
           </div>
 
@@ -1689,8 +1803,10 @@ const ResultsTab = ({
                 ? "bg-purple-50"
                 : "bg-gray-50 opacity-60"
             }`}>
-            <span className="text-lg mt-0.5">
-              {resultsPublished ? "✅" : "📢"}
+            <span className="mt-0.5">
+              {resultsPublished
+                ? <CheckCircle className="w-5 h-5 text-green-600" aria-hidden />
+                : <Megaphone className="w-5 h-5 text-primary-600" aria-hidden />}
             </span>
             <div className="flex-1">
               <p className={`text-sm font-semibold
@@ -1722,8 +1838,8 @@ const ResultsTab = ({
                 <button
                   onClick={handlePublish}
                   disabled={publishResults.isPending}
-                  className="mt-2 px-4 py-1.5 bg-purple-600 text-white
-                             text-xs font-bold rounded-lg hover:bg-purple-700
+                  className="mt-2 px-4 py-1.5 bg-primary-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-primary-700
                              disabled:opacity-60 transition-colors"
                 >
                   {publishResults.isPending ? t("exams.publishing") : t("exams.publishResults")}
@@ -1737,17 +1853,18 @@ const ResultsTab = ({
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Tinted cards (config/dashboardTint.ts): students blue, passed
+              green, failed red, pass rate slate; the figure in the deep shade. */}
           {[
-            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  color: "text-primary-600" },
-            { id: "passed",   label: t("results.passed"),         value: stats.passed,         color: "text-green-600"   },
-            { id: "failed",   label: t("results.failed"),         value: stats.failed,         color: "text-red-600"     },
-            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, color: "text-amber-600"   },
+            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  tint: DASH_TINT.blue },
+            { id: "passed",   label: t("results.passed"),         value: stats.passed,         tint: DASH_TINT.green },
+            { id: "failed",   label: t("results.failed"),         value: stats.failed,         tint: DASH_TINT.red },
+            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, tint: DASH_TINT.slate },
           ].map((s) => (
             <div key={s.id}
-                 className="bg-white rounded-xl border border-gray-100
-                            p-4 text-center">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-500 font-medium mt-1">
+                 className={`p-5 text-center ${s.tint.card}`}>
+              <p className={`text-[28px] font-bold leading-none tracking-tight tabular-nums ${s.tint.number}`}>{s.value}</p>
+              <p className="text-sm font-medium mt-2 text-ink-muted">
                 {s.label}
               </p>
             </div>
@@ -1761,9 +1878,9 @@ const ResultsTab = ({
           <Spinner size="lg" />
         </div>
       ) : results.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100">
+        <div className={cn("bg-surface rounded-xl border border-line", DASH_TINT.amber.edge)}>
           <EmptyState
-            icon="📊"
+            icon={BarChart3}
             title={t("exams.noResultsYet")}
             subtitle={
               currentStep === 1
@@ -1773,11 +1890,13 @@ const ResultsTab = ({
           />
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100
-                        overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex
+        <div className={cn("bg-surface rounded-xl border border-line overflow-hidden", DASH_TINT.amber.edge)}>
+          <div className="px-4 py-3 border-b border-line flex
                           items-center justify-between">
-            <h3 className="font-semibold text-gray-900">
+            <h3 className="flex items-center gap-2 font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.amber.box)} aria-hidden="true">
+            <Trophy className="h-4 w-4" />
+          </span>
               {t("exams.rankingsCount", { count: results.length })}
             </h3>
             <Link
@@ -1795,7 +1914,7 @@ const ResultsTab = ({
                                 uppercase tracking-wide">
                 <tr>
                   {["results.pos", "academic.student", "academic.class",
-                    "academic.score", "academic.average", "academic.grade",
+                    "academic.average", "results.remark",
                     "reportCards.result"].map((labelKey) => (
                     <th key={labelKey}
                         className="px-4 py-3 text-left last:text-center">
@@ -1807,7 +1926,8 @@ const ResultsTab = ({
               <tbody className="divide-y divide-gray-100">
                 {results.map((r, idx) => {
                   const pos     = r.classPosition ?? idx + 1;
-                  const passing = r.isPassing;
+                  // On /20 against the school's pass mark, decided by the server.
+                  const passing = r.passes ?? r.isPassing;
                   const color   = passing ? "text-green-600" : "text-red-600";
                   return (
                     <tr key={r._id || r.studentId}
@@ -1834,14 +1954,11 @@ const ResultsTab = ({
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {r.className || "—"}
                       </td>
-                      <td className="px-4 py-3 font-semibold">
-                        {r.totalScore}/{r.maxTotalScore}
-                      </td>
                       <td className={`px-4 py-3 font-bold ${color}`}>
-                        {r.percentage?.toFixed(1)}%
+                        {r.average20 != null ? `${r.average20.toFixed(2)}/20` : "—"}
                       </td>
-                      <td className={`px-4 py-3 font-bold ${color}`}>
-                        {r.overallGrade || "—"}
+                      <td className="px-4 py-3 text-gray-600">
+                        {(i18n.language?.startsWith("fr") ? r.remarkFr : r.remark) ?? r.remark ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex px-2 py-0.5
@@ -1879,6 +1996,10 @@ export default function ExamDetailPage() {
 
   const initialTab                = (searchParams.get("tab") as Tab) ?? "details";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  // Derived during render rather than set in an effect: true from the first
+  // render the marks tab is shown on.
+  const [marksVisited, setMarksVisited] = useState(initialTab === "marks");
+  if (activeTab === "marks" && !marksVisited) setMarksVisited(true);
 
   const { data, isLoading, error } = useExamDetail(id ?? "");
   const { data: subData }          = useSubmissions(id ?? "");
@@ -1929,7 +2050,7 @@ export default function ExamDetailPage() {
   if (error || !exam) {
     return (
       <div className="text-center py-16">
-        <p className="text-5xl mb-4">😕</p>
+        <SearchX className="w-12 h-12 mx-auto mb-4 text-gray-300" strokeWidth={1.5} aria-hidden />
         <p className="font-semibold text-gray-700">{t("exams.notFound")}</p>
         <button
           onClick={() => navigate("/exams")}
@@ -1954,12 +2075,17 @@ export default function ExamDetailPage() {
           >
             ← {t("exams.backToExams")}
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">{exam.name}</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {examTypeLabel(t, exam.type)}
-            {exam.academicYear ? ` · ${exam.academicYear}` : ""}
-            {exam.term         ? ` · ${exam.term}`         : ""}
-          </p>
+          <div className="flex items-start gap-3">
+            <PageIcon />
+            <div>
+              <h1 className="text-2xl font-bold text-ink">{exam.name}</h1>
+              <p className="text-ink-muted text-sm mt-1">
+                {examTypeLabel(t, exam.type)}
+                {exam.academicYear ? ` · ${exam.academicYear}` : ""}
+                {exam.term         ? ` · ${exam.term}`         : ""}
+              </p>
+            </div>
+          </div>
         </div>
         <StatusBadge status={exam.status} />
       </div>
@@ -2002,12 +2128,17 @@ export default function ExamDetailPage() {
           />
         )}
 
-        {activeTab === "marks" && (
-          <MarksTab
-            examId={id ?? ""}
-            submissions={submissions}
-            schoolId={schoolId}
-          />
+        {/* Once opened, the marks tab stays mounted and is only hidden: a
+            switch to Details and back used to unmount it and drop a sheet of
+            typed marks without a word. Kept, they are still guarded. */}
+        {(activeTab === "marks" || marksVisited) && (
+          <div hidden={activeTab !== "marks"}>
+            <MarksTab
+              examId={id ?? ""}
+              submissions={submissions}
+              schoolId={schoolId}
+            />
+          </div>
         )}
 
         {activeTab === "results" && (

@@ -27,8 +27,10 @@ import { ClassService }    from "../../../../src/services/class.service";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { useTranslation }  from "../../../../src/i18n/useTranslation";
 import { errorText }       from "../../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, termAccent, levelAccent } from "../../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../../src/components/Tinted";
 
-const BRAND = "#4F46E5";
+const BRAND = ACCENT.teal.solid;
 
 const blankItem = () => ({ code: "", label: "", amount: "", isOptional: false });
 
@@ -96,17 +98,20 @@ export default function NewFeeStructureScreen() {
     }
   }, [academicYear, term, dueDate, classIds, items, schoolId, t, router]);
 
+  const termA = ACCENT[termAccent(term)];
+
   return (
     <KeyboardAvoidingView
       style={st.screen}
       behavior="padding"
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} translucent={false} />
 
       <View style={st.header}>
         <TouchableOpacity onPress={() => router.back()} style={st.backBtn} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={st.headerIcon} />
         <View style={st.headerCenter}>
           <Text style={st.headerTitle}>{t("feeStructures.newTitle")}</Text>
           <Text style={st.headerSub}>{t("feeStructures.newSub")}</Text>
@@ -122,7 +127,7 @@ export default function NewFeeStructureScreen() {
               value={academicYear}
               onChangeText={setYear}
               placeholder={t("feeStructures.yearPh")}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -132,7 +137,7 @@ export default function NewFeeStructureScreen() {
               value={term}
               onChangeText={setTerm}
               placeholder={t("feeStructures.termPh")}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textMuted}
             />
           </View>
         </View>
@@ -143,35 +148,42 @@ export default function NewFeeStructureScreen() {
           value={dueDate}
           onChangeText={setDueDate}
           placeholder="2026-09-15"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={COLORS.textMuted}
           autoCapitalize="none"
         />
         <Text style={st.hint}>{t("feeStructures.dueHint")}</Text>
 
         {/* ── Which classes ── */}
-        <Text style={st.section}>{t("feeStructures.classes")}</Text>
+        <View style={st.sectionRow}>
+          <IconSquare icon="school" accent="indigo" size={28} />
+          <Text style={[st.section, st.sectionInRow]}>{t("feeStructures.classes")}</Text>
+        </View>
         <Text style={st.hint}>{t("feeStructures.classesHint")}</Text>
         <View style={st.chips}>
           {classes.map((c) => {
             const on = classIds.includes(String(c.id ?? c._id));
+            const ca = ACCENT[levelAccent(c.level)];
             return (
               <TouchableOpacity
                 key={String(c.id ?? c._id)}
-                style={[st.chip, on && st.chipOn]}
+                style={[st.chip, on && { backgroundColor: ca.wash, borderColor: ca.base }]}
                 onPress={() => toggleClass(String(c.id ?? c._id))}
                 activeOpacity={0.8}
               >
-                <Text style={[st.chipText, on && st.chipTextOn]}>{c.name}</Text>
+                <Text style={[st.chipText, on && { color: ca.deep, fontWeight: "700" }]}>{c.name}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
         {/* ── The lines ── */}
-        <Text style={st.section}>{t("feeStructures.items")}</Text>
+        <View style={st.sectionRow}>
+          <IconSquare icon="wallet" accent={termAccent(term)} size={28} />
+          <Text style={[st.section, st.sectionInRow]}>{t("feeStructures.items")}</Text>
+        </View>
 
         {items.map((it, i) => (
-          <View key={i} style={st.itemCard}>
+          <View key={i} style={[st.itemCard, { borderLeftColor: termA.base }]}>
             <View style={st.row}>
               <View style={{ flex: 1 }}>
                 <Text style={st.label}>{t("feeStructures.code")}</Text>
@@ -180,7 +192,7 @@ export default function NewFeeStructureScreen() {
                   value={it.code}
                   onChangeText={(v) => setItem(i, { code: v })}
                   placeholder="TUITION"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.textMuted}
                   autoCapitalize="characters"
                 />
               </View>
@@ -191,7 +203,7 @@ export default function NewFeeStructureScreen() {
                   value={it.label}
                   onChangeText={(v) => setItem(i, { label: v })}
                   placeholder={t("feeStructures.itemLabelPh")}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.textMuted}
                 />
               </View>
             </View>
@@ -204,7 +216,7 @@ export default function NewFeeStructureScreen() {
                   value={String(it.amount)}
                   onChangeText={(v) => setItem(i, { amount: v.replace(/[^0-9]/g, "") })}
                   placeholder="0"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.textMuted}
                   keyboardType="number-pad"
                 />
               </View>
@@ -213,8 +225,8 @@ export default function NewFeeStructureScreen() {
                 <Switch
                   value={it.isOptional}
                   onValueChange={(v) => setItem(i, { isOptional: v })}
-                  trackColor={{ true: "#C7D2FE", false: "#E5E7EB" }}
-                  thumbColor={it.isOptional ? BRAND : "#9CA3AF"}
+                  trackColor={{ true: SEMANTIC.info.box, false: COLORS.border }}
+                  thumbColor={it.isOptional ? SEMANTIC.info.icon : COLORS.textMuted}
                 />
               </View>
             </View>
@@ -225,7 +237,7 @@ export default function NewFeeStructureScreen() {
                 style={st.removeBtn}
                 activeOpacity={0.7}
               >
-                <Ionicons name="trash-outline" size={15} color="#B91C1C" />
+                <Ionicons name="trash-outline" size={15} color={SEMANTIC.error.text} />
                 <Text style={st.removeText}>{t("common.remove")}</Text>
               </TouchableOpacity>
             )}
@@ -248,7 +260,7 @@ export default function NewFeeStructureScreen() {
           activeOpacity={0.85}
         >
           {saving
-            ? <ActivityIndicator color="#FFF" />
+            ? <ActivityIndicator color={COLORS.onPrimary} />
             : <Text style={st.saveText}>{t("common.save")}</Text>}
         </TouchableOpacity>
       </ScrollView>
@@ -257,43 +269,45 @@ export default function NewFeeStructureScreen() {
 }
 
 const st = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F9FAFB" },
+  screen: { flex: 1, backgroundColor: COLORS.page },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingTop: 60, paddingBottom: 14, paddingHorizontal: 16,
-    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backBtn:      { padding: 4 },
+  headerIcon:   { marginRight: 0 },
   headerCenter: { flex: 1 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   body: { padding: 16, gap: 4, paddingBottom: 40 },
   row:  { flexDirection: "row", gap: 10 },
 
-  label: { fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 6, marginTop: 10 },
+  label: { fontSize: 12, fontWeight: "600", color: COLORS.text, marginBottom: 6, marginTop: 10 },
   input: {
-    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10,
-    fontSize: 15, color: "#111827", backgroundColor: "#FFF",
+    fontSize: 15, color: COLORS.text, backgroundColor: COLORS.surface,
   },
-  hint: { fontSize: 12, color: "#6B7280", marginTop: 6, lineHeight: 17 },
+  hint: { fontSize: 12, color: COLORS.textSecondary, marginTop: 6, lineHeight: 17 },
 
-  section: { fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 22 },
+  section: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginTop: 22 },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 22 },
+  sectionInRow: { marginTop: 0, flex: 1 },
 
   chips:      { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   chip: {
-    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#FFF",
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: COLORS.surface,
   },
-  chipOn:     { backgroundColor: "#EEF2FF", borderColor: "#C7D2FE" },
-  chipText:   { fontSize: 13, color: "#374151" },
-  chipTextOn: { color: "#3730A3", fontWeight: "700" },
+  chipText:   { fontSize: 13, color: COLORS.text },
 
   itemCard: {
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginTop: 12,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginTop: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3,
   },
   optionalBox: { width: 110, alignItems: "flex-start" },
 
@@ -301,19 +315,19 @@ const st = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 5,
     alignSelf: "flex-start", marginTop: 12, paddingVertical: 4,
   },
-  removeText: { color: "#B91C1C", fontSize: 13, fontWeight: "600" },
+  removeText: { color: SEMANTIC.error.text, fontSize: 13, fontWeight: "600" },
 
   addItem: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    borderWidth: 1, borderColor: "#C7D2FE", borderStyle: "dashed",
-    borderRadius: 10, paddingVertical: 12, marginTop: 14, backgroundColor: "#FFF",
+    borderWidth: 1, borderColor: ACCENT.teal.base, borderStyle: "dashed",
+    borderRadius: 10, paddingVertical: 12, marginTop: 14, backgroundColor: ACCENT.teal.wash,
   },
-  addItemText: { color: BRAND, fontWeight: "700", fontSize: 14 },
+  addItemText: { color: ACCENT.teal.deep, fontWeight: "700", fontSize: 14 },
 
   saveBtn: {
     backgroundColor: BRAND, borderRadius: 12, paddingVertical: 15,
     alignItems: "center", marginTop: 26,
   },
   saveBtnOff: { opacity: 0.6 },
-  saveText:   { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  saveText:   { color: COLORS.onPrimary, fontWeight: "700", fontSize: 16 },
 });

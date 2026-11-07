@@ -74,6 +74,14 @@ const isValidTimezone = (tz) => {
  */
 const settingsSchema = new mongoose.Schema(
   {
+    /**
+     * The school's own age range per class level, { "1": { min, max }, … }
+     * (B3, shared/studentValidation.js). Null: the decided default — Form 1
+     * 9–14, each level up the minimum +1 and the maximum +2. Only ever a
+     * warning on the student form, never a refusal.
+     */
+    studentAgeRanges: { type: mongoose.Schema.Types.Mixed, default: null },
+
     academicYear: {
       type:    String,
       default: null,
@@ -240,6 +248,20 @@ const settingsSchema = new mongoose.Schema(
       payrollRequired:  { type: Boolean, default: false },
     },
 
+    /**
+     * How the phones of this school keep their local data (docs/40).
+     *
+     * perUserLocalData: each account on a shared phone gets its own local
+     * store, and the shared file's unsent work is placed with its owner or
+     * held for review. OFF by default, and off means the phone behaves exactly
+     * as it always has. Rolled out one school at a time by the platform
+     * (PUT /api/super-admin/schools/:id/offline-settings); a phone learns it
+     * at sign-in and token refresh (auth.routes.js buildTokenResponse).
+     */
+    offline: {
+      perUserLocalData: { type: Boolean, default: false },
+    },
+
     currency: {
       type:    String,
       default: "USD",
@@ -388,8 +410,12 @@ const schoolSchema = new mongoose.Schema(
     division: { type: String, default: null, trim: true, maxlength: 120 },
 
     schoolType:         { type: String,  default: "primary",
-                          enum: ["primary", "jhs", "shs", "combined",
-                                 "vocational", "university", "other"] },
+                          // Cameroon's types first (C9); jhs / shs / vocational /
+                          // university are kept so schools that saved one still
+                          // validate — the settings screen no longer offers them.
+                          enum: ["primary", "college_general", "college_technical",
+                                 "lycee_general", "lycee_technical", "combined", "other",
+                                 "jhs", "shs", "vocational", "university"] },
     termSystem:         { type: String,  default: "trimester",
                           enum: ["trimester", "semester", "quarter"] },
     registrationNumber: { type: String,  default: null,  trim: true },

@@ -24,7 +24,10 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { useFormat }    from "@/i18n/format";
+import { watchSource }  from "@/utils/watchSource";
 import { cn }           from "@/utils/cn";
+import { feeFlag }      from "@/utils/feeFlag";
+import { DASH_TINT }    from "@/config/dashboardTint";
 import { fetchClasses } from "@/services/class.service";
 import {
   fetchWatchlist,
@@ -37,6 +40,13 @@ const TIER_STYLE: Record<WatchTier, { badge: string; dot: string }> = {
   high:   { badge: "bg-red-50 text-red-700",       dot: "bg-red-500" },
   medium: { badge: "bg-amber-50 text-amber-700",   dot: "bg-amber-500" },
   low:    { badge: "bg-slate-100 text-slate-600",  dot: "bg-slate-400" },
+};
+
+/** The tier count cards: high risk red, medium amber, low blue. */
+const TIER_TINT: Record<WatchTier, (typeof DASH_TINT)[keyof typeof DASH_TINT]> = {
+  high:   DASH_TINT.red,
+  medium: DASH_TINT.amber,
+  low:    DASH_TINT.blue,
 };
 
 export default function WatchlistPage() {
@@ -71,9 +81,23 @@ export default function WatchlistPage() {
 
   /** One signal, in the reader's language, with the numbers filled in. */
   const signalText = (s: WatchSignal): string => {
+    const text = signalWords(s);
+    // Which exam a mark-based flag rests on, and when (utils/watchSource).
+    const src = watchSource(s);
+    if (!src) return text;
+    return `${text} · ${t(`watch.source.${src.key}`, {
+      exam: src.exam, from: src.from, date: src.date ? fmt.date(src.date) : "",
+    })}`;
+  };
+
+  const signalWords = (s: WatchSignal): string => {
     if (s.code === "fees_outstanding") {
-      return t("watch.sig.fees_outstanding", {
-        balance: fmt.money(Number(s.data.balance ?? 0)),
+      // Owed and overdue, as the Fees page shows them — the balance is not
+      // all overdue unless it is (utils/feeFlag).
+      const f = feeFlag(s.data);
+      return t(`watch.sig.${f.key}`, {
+        balance: fmt.money(f.balance),
+        overdue: fmt.money(f.overdue ?? 0),
       });
     }
     return t(`watch.sig.${s.code}`, { ...s.data } as Record<string, unknown>);
@@ -120,16 +144,17 @@ export default function WatchlistPage() {
             <Card
               className={cn(
                 "h-full transition-shadow",
-                tier === c.key && "ring-2 ring-indigo-400"
+                TIER_TINT[c.key].card,
+                tier === c.key && "ring-2 ring-primary-400"
               )}
             >
               <div className="flex items-center gap-2">
                 <span className={cn("h-2 w-2 rounded-full", TIER_STYLE[c.key].dot)} />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                   {t(`watch.tier.${c.key}`)}
                 </p>
               </div>
-              <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+              <p className={cn("mt-2 font-display text-[30px] leading-none tabular", TIER_TINT[c.key].number)}>
                 {c.count}
               </p>
               <p className="mt-1.5 text-xs text-ink-muted">{c.hint}</p>
@@ -138,7 +163,7 @@ export default function WatchlistPage() {
         ))}
       </div>
 
-      <Card>
+      <Card className={DASH_TINT.violet.edge}>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[9rem]">
             <label
@@ -183,7 +208,7 @@ export default function WatchlistPage() {
         </div>
       </Card>
 
-      <Card padding={false}>
+      <Card padding={false} className={DASH_TINT.red.edge}>
         {rows.length === 0 ? (
           <EmptyTable
             icon={list?.students.length ? <Search /> : <Eye />}

@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Search,
   X,
+  CheckCircle, XCircle,
 } from "lucide-react";
 
 import { useUser }            from "@/store/auth.store";
@@ -27,6 +28,8 @@ import {
   type Assignment,
 }                             from "@/services/assignment.service";
 import { cn }                 from "@/utils/cn";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon }           from "@/components/ui/PageHeader";
 import type { Teacher, Class, Subject } from "@/types";
 import { useTranslation } from "react-i18next";
 
@@ -93,7 +96,7 @@ const StepIndicator = ({
             disabled={!isCompleted}
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors",
-              isActive    && "bg-indigo-600 text-white",
+              isActive    && "bg-primary-600 text-white",
               isCompleted && !isActive && "cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600",
               !isActive && !isCompleted && "bg-gray-200 text-gray-500"
             )}
@@ -117,14 +120,14 @@ const StepCard = ({ step, children }: { step: Step; children: React.ReactNode })
   const s = STEPS[step - 1];
   const Icon = s.icon;
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={cn("rounded-2xl border border-line bg-surface p-5 shadow-sm", DASH_TINT.violet.edge)}>
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-          <Icon size={20} className="text-indigo-600" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-violet-solid text-white">
+          <Icon size={20} />
         </div>
         <div>
-          <p className="text-xs font-medium text-gray-400">{t("assignments.stepOf", { step, total: 4 })}</p>
-          <p className="text-base font-bold text-gray-900">{t(s.titleKey)}</p>
+          <p className="text-xs font-medium text-ink-muted">{t("assignments.stepOf", { step, total: 4 })}</p>
+          <p className="text-base font-bold text-ink">{t(s.titleKey)}</p>
         </div>
       </div>
       {children}
@@ -369,7 +372,7 @@ export default function AssignTeacherPage() {
     const allOk = results.every((r) => r.ok);
     return (
       <div className="mx-auto max-w-lg py-8">
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className={cn("rounded-2xl border border-line bg-surface p-6 shadow-sm", DASH_TINT.violet.edge)}>
           <div className={cn(
             "mb-4 flex h-14 w-14 items-center justify-center rounded-full",
             allOk ? "bg-emerald-50" : "bg-amber-50"
@@ -379,12 +382,12 @@ export default function AssignTeacherPage() {
               : <AlertCircle size={26} className="text-amber-600" />
             }
           </div>
-          <h2 className="text-xl font-bold text-gray-900">
+          <h2 className="text-xl font-bold text-ink">
             {allOk ? t("assignments.created") : t("assignments.partialSuccess")}
           </h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-ink-muted">
             {t("assignments.assignedTo")}{" "}
-            <span className="font-semibold text-gray-900">
+            <span className="font-semibold text-ink">
               {selectedTeacher?.name}
             </span>
           </p>
@@ -402,7 +405,7 @@ export default function AssignTeacherPage() {
                   "text-sm font-semibold",
                   r.ok ? "text-emerald-800" : "text-red-800"
                 )}>
-                  {r.ok ? "✅" : "❌"} {r.className}
+                  {r.ok ? <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden /> : <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />}{r.className}
                 </p>
                 <p className="mt-0.5 text-xs text-gray-500">
                   {r.subjects.join(", ")}
@@ -422,13 +425,13 @@ export default function AssignTeacherPage() {
                 setResults(null);
                 setStep(2);
               }}
-              className="flex-1 rounded-xl border-2 border-indigo-600 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors"
+              className="flex-1 rounded-xl border-2 border-primary-600 py-2.5 text-sm font-bold text-primary-600 hover:bg-primary-50 transition-colors"
             >
               {t("assignments.assignMore")}
             </button>
             <button
               onClick={() => navigate("/teachers/assignments")}
-              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
+              className="flex-1 rounded-xl bg-primary-600 py-2.5 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
             >
               {t("common.done")}
             </button>
@@ -449,8 +452,13 @@ export default function AssignTeacherPage() {
         {t("assignments.back")}
       </button>
 
-      <h1 className="text-2xl font-bold text-gray-900">{t("assignments.assignTeacher")}</h1>
-      <p className="mt-1 text-sm text-gray-500">{t("assignments.mapSubjects")}</p>
+      <div className="flex items-center gap-3">
+        <PageIcon />
+        <div>
+          <h1 className="text-2xl font-bold text-ink">{t("assignments.assignTeacher")}</h1>
+          <p className="mt-1 text-sm text-ink-muted">{t("assignments.mapSubjects")}</p>
+        </div>
+      </div>
 
       <StepIndicator
         current={step}
@@ -494,28 +502,28 @@ export default function AssignTeacherPage() {
                     className={cn(
                       "flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-colors",
                       isSelected
-                        ? "border-indigo-500 bg-indigo-50"
-                        : "border-gray-200 bg-white hover:border-gray-300"
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-line bg-surface hover:shadow-lift"
                     )}
                   >
                     <div className={cn(
                       "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                      isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600"
+                      isSelected ? "bg-primary-600 text-white" : DASH_TINT.violet.box
                     )}>
                       {teacher.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-gray-900">
+                      <p className="truncate text-sm font-semibold text-ink">
                         {teacher.name}
                       </p>
-                      <p className="truncate text-xs text-gray-400">
+                      <p className="truncate text-xs text-ink-muted">
                         {teacher.email}
                       </p>
                     </div>
                     <div className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
                       isSelected
-                        ? "border-indigo-600 bg-indigo-600"
+                        ? "border-primary-600 bg-primary-600"
                         : "border-gray-300"
                     )}>
                       {isSelected && (
@@ -533,15 +541,15 @@ export default function AssignTeacherPage() {
       {/* STEP 2 */}
       {step === 2 && (
         <StepCard step={2}>
-          <div className="mb-3 flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2.5">
-            <Users size={14} className="shrink-0 text-indigo-600" />
-            <span className="flex-1 truncate text-sm font-semibold text-indigo-900">
+          <div className="mb-3 flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2.5">
+            <Users size={14} className="shrink-0 text-primary-600" />
+            <span className="flex-1 truncate text-sm font-semibold text-primary-900">
               {selectedTeacher?.name ?? preTeacherName}
             </span>
             {!preTeacherId && (
               <button
                 onClick={() => goToStep(1)}
-                className="text-xs font-medium text-indigo-500 hover:text-indigo-700"
+                className="text-xs font-medium text-primary-500 hover:text-primary-700"
               >
                 {t("common.change")}
               </button>
@@ -572,38 +580,34 @@ export default function AssignTeacherPage() {
                     className={cn(
                       "flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-colors",
                       selectedClass?._id === cls._id
-                        ? "border-indigo-500 bg-indigo-50"
-                        : "border-gray-200 bg-white hover:border-gray-300"
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-line bg-surface hover:shadow-lift"
                     )}
                   >
                     <div className={cn(
                       "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                       selectedClass?._id === cls._id
-                        ? "bg-indigo-600"
-                        : "bg-purple-100"
+                        ? "bg-primary-600"
+                        : "bg-accent-indigo-solid"
                     )}>
                       <School
                         size={18}
-                        className={
-                          selectedClass?._id === cls._id
-                            ? "text-white"
-                            : "text-purple-700"
-                        }
+                        className="text-white"
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-gray-900">
+                      <p className="truncate text-sm font-semibold text-ink">
                         {cls.name}
                       </p>
                       {cls.section && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-ink-muted">
                           {t("common.section")} {cls.section}
                         </p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {count > 0 && (
-                        <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">
+                        <span className={cn("rounded-lg px-2 py-0.5 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.blue)}>
                           {t("assignments.countAssigned", { count })}
                         </span>
                       )}
@@ -623,9 +627,9 @@ export default function AssignTeacherPage() {
           <div className="mb-3 flex items-center gap-2 flex-wrap">
             <button
               onClick={() => goToStep(preTeacherId ? 2 : 1)}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+              className="flex items-center gap-1.5 rounded-lg bg-primary-50 px-2.5 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100"
             >
-              <Users size={12} />
+              <Users size={12} className={DASH_TINT.violet.glyph} />
               {selectedTeacher?.name ?? preTeacherName}
             </button>
             <ChevronRight size={12} className="text-gray-300" />
@@ -633,7 +637,7 @@ export default function AssignTeacherPage() {
               onClick={() => goToStep(2)}
               className="flex items-center gap-1.5 rounded-lg bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100"
             >
-              <School size={12} />
+              <School size={12} className={DASH_TINT.indigo.glyph} />
               {selectedClass?.name}
             </button>
           </div>
@@ -653,7 +657,7 @@ export default function AssignTeacherPage() {
               {availableSubjects.length > 0 && (
                 <button
                   onClick={toggleAll}
-                  className="mb-3 flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors w-full"
+                  className="mb-3 flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors w-full"
                 >
                   {allSelected
                     ? <CheckSquare size={18} />
@@ -677,9 +681,9 @@ export default function AssignTeacherPage() {
                       disabled={already}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border-2 p-3 text-left transition-colors",
-                        already   && "cursor-not-allowed border-gray-100 bg-gray-50 opacity-60",
+                        already   && "cursor-not-allowed border-line bg-canvas opacity-60",
                         isChecked && !already && "border-emerald-500 bg-emerald-50",
-                        !isChecked && !already && "border-gray-200 bg-white hover:border-gray-300"
+                        !isChecked && !already && "border-line bg-surface hover:shadow-lift"
                       )}
                     >
                       <div className={cn(
@@ -698,16 +702,16 @@ export default function AssignTeacherPage() {
                       <div className="min-w-0 flex-1">
                         <p className={cn(
                           "truncate text-sm font-semibold",
-                          already ? "text-gray-400" : "text-gray-900"
+                          already ? "text-ink-muted" : "text-ink"
                         )}>
                           {subject.name}
                         </p>
                         {subject.code && (
-                          <p className="text-xs text-gray-400">{subject.code}</p>
+                          <p className="text-xs text-ink-muted">{subject.code}</p>
                         )}
                       </div>
                       {already && (
-                        <span className="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">
+                        <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset", ACCENT_BADGE.slate)}>
                           {t("assignments.alreadyAssigned")}
                         </span>
                       )}
@@ -719,7 +723,7 @@ export default function AssignTeacherPage() {
               {selectedSubjects.length > 0 && (
                 <button
                   onClick={() => setStep(4)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
                 >
                   {t("assignments.reviewSelection", { count: selectedSubjects.length })}
                   <ChevronRight size={16} />
@@ -733,31 +737,34 @@ export default function AssignTeacherPage() {
       {/* STEP 4 */}
       {step === 4 && (
         <StepCard step={4}>
-          <h3 className="mb-4 text-base font-bold text-gray-900">
+          <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)} aria-hidden="true">
+              <CheckSquare className="h-4 w-4" />
+            </span>
             {t("assignments.summary")}
           </h3>
 
-          <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
-            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <Users size={12} /> {t("academic.teacher")}
+          <div className="mb-3 rounded-xl border border-line p-3.5">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <Users size={12} className={DASH_TINT.violet.glyph} /> {t("academic.teacher")}
             </p>
-            <p className="text-sm font-bold text-gray-900">
+            <p className="text-sm font-bold text-ink">
               {selectedTeacher?.name}
             </p>
           </div>
 
-          <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
-            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <School size={12} /> {t("academic.class")}
+          <div className="mb-3 rounded-xl border border-line p-3.5">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <School size={12} className={DASH_TINT.indigo.glyph} /> {t("academic.class")}
             </p>
-            <p className="text-sm font-bold text-gray-900">
+            <p className="text-sm font-bold text-ink">
               {selectedClass?.name}
             </p>
           </div>
 
-          <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <BookOpen size={12} /> {t("assignments.subjectsCount", { count: selectedSubjects.length })}
+          <div className="mb-3 rounded-xl border border-line p-3.5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <BookOpen size={12} className={DASH_TINT.slate.glyph} /> {t("assignments.subjectsCount", { count: selectedSubjects.length })}
             </p>
             <div className="flex flex-col gap-1.5">
               {selectedSubjects.map((s) => (
@@ -823,7 +830,7 @@ export default function AssignTeacherPage() {
                 "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-colors",
                 mutation.isPending || selectedSubjects.length === 0
                   ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {mutation.isPending ? (

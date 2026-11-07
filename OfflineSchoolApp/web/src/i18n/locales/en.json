@@ -118,7 +118,8 @@
     "unknownError": "Unknown error",
     "notProvided": "Not provided",
     "notSpecified": "Not specified",
-    "send": "Send"
+    "send": "Send",
+    "preparing": "Preparing…"
   },
   "flow": {
     "title": "Results workflow",
@@ -266,6 +267,8 @@
     "none": "No results found",
     "searchPh": "Search by name, admission number or class…",
     "gradeDistribution": "Grade distribution",
+    "remarkDistribution": "Remarks",
+    "remark": "Remark",
     "noGradeData": "No grade data available",
     "scoreDistribution": "Score distribution",
     "passFailSplit": "Pass / fail split",
@@ -310,7 +313,13 @@
     "toastCalculated": "Results calculated",
     "refusedPublished": "Not recalculated, results published: {{classes}}",
     "refusedPublished_other": "Not recalculated, results published in {{count}} classes: {{classes}}",
-    "toastPublished": "Results published — students can now view their scores"
+    "toastPublished": "Results published — students can now view their scores",
+    "allClasses": "All classes",
+    "chooseClassForTop": "Choose a class to see its top and bottom pupils.",
+    "showingClassOnly": "Showing {{className}} only",
+    "showAllClasses": "Show all classes",
+    "searchThisPage": "Search covers this page only.",
+    "allInTop": "Every pupil in this class is already listed above."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -363,15 +372,18 @@
     "totalTeachers": "Teachers",
     "unassignedTeachers": "Unassigned",
     "totalClasses": "Classes",
-    "totalSubjects": "Subjects",
+    "totalSubjects": "Class-subjects",
     "assignedSubjects": "Assigned",
     "activeAnnouncements": "Notices",
-    "totalPeriods": "Periods",
+    "totalPeriods": "Teaching periods",
     "incompleteTimetableSlots": "No timetable",
     "timetableConflicts": "Conflicts",
     "classesWithoutSubjects": "No subjects",
     "totalReportTemplates": "Templates",
-    "defaultTemplateSet": "Has default"
+    "defaultTemplateSet": "Has default",
+    "unassignedClassSubjects": "No teacher",
+    "distinctSubjects": "{{count}} subject",
+    "distinctSubjects_other": "{{count}} distinct subjects"
   },
   "examStatus": {
     "draft": "Draft",
@@ -394,15 +406,27 @@
     "goDash": "Back to dashboard",
     "pageProblem": "This page ran into a problem",
     "reload": "Reload the app",
-    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again."
+    "stillWorking": "The rest of the app is still working — you can go back to it using the menu, or try loading this page again.",
+    "chunkTitle": "This page could not be loaded",
+    "chunkBody": "The app may have been updated, or the connection dropped. Reload to get the latest version.",
+    "chunkReload": "Reload"
   },
   "staffOnly": {
-    "title": "This console is for school staff",
-    "body": "Your account is a student account. Student features live in the mobile app — sign in there with your enrolment number.",
     "signOut": "Sign out",
-    "greeting": "Hello{{name}} — this site is for staff",
-    "explain": "Your sign-in worked. This particular site is the one teachers and administrators use to run the school, so there is nothing here for a student account to open.",
-    "useApp": "Use the My School On The Move app on your phone instead. Your results, timetable and announcements are all there, and it keeps working when you have no signal. Sign in with the same enrolment number{{enrollment}} and password."
+    "greeting": "Hello{{name}}, your sign-in worked.",
+    "teacher": {
+      "title": "Teachers use the mobile app",
+      "explain": "This website is for the school office — the head, the administrators and the bursar. Marks, attendance, your timetable and messages are all in the My School On The Move app on your phone.",
+      "useApp": "Install the app and sign in with the same email and password. It keeps working when you have no signal and sends your marks when you are back online."
+    },
+    "student": {
+      "title": "Students use the mobile app",
+      "explain": "This website is for the school office — the head, the administrators and the bursar. Your results, timetable and announcements are all in the My School On The Move app on your phone.",
+      "useApp": "Install the app and sign in with the same enrolment number{{enrollment}} and password. It keeps working when you have no signal."
+    },
+    "getAndroid": "Download for Android",
+    "getIos": "Download for iPhone",
+    "askOffice": "Ask your school office how to install the app on your phone."
   },
   "requireRole": {
     "title": "This part of the console is not yours to open",
@@ -563,7 +587,18 @@
     "writeDown": "Write these down before leaving this page — they are not shown again, and recovering them means resetting the account.",
     "noActiveClassesEnroll": "There are no active classes to enroll into.",
     "firstOne": "Add your first student to get started",
-    "unassignedClass": "Unassigned"
+    "unassignedClass": "Unassigned",
+    "phoneInvalid": "A Cameroon number has 9 digits starting with 6 or 2 (e.g. 677 12 34 56).",
+    "phoneHint": "Saved as +237 and 9 digits.",
+    "dobFuture": "The date of birth cannot be in the future.",
+    "ageUnusual": "Age {{age}} is outside the usual {{min}}–{{max}} for {{className}}. Check the date — it will still be saved.",
+    "countRegistered": "{{count}} student registered",
+    "countRegistered_other": "{{count}} students registered",
+    "countResults": "{{count}} result",
+    "countResults_other": "{{count}} results",
+    "countResultsOf": "{{count}} result of {{total}} students",
+    "countResultsOf_other": "{{count}} results of {{total}} students",
+    "noneMatch": "No students match these filters"
   },
   "teachers": {
     "title": "Teachers",
@@ -574,7 +609,7 @@
     "notAssigned": "Not assigned yet",
     "resetPassword": "Reset password",
     "subjectsCovered": "Subjects covered",
-    "searchPh": "Search this page…",
+    "searchPh": "Search name, email or staff no.…",
     "activeOnly": "Active only",
     "inactiveOnly": "Inactive only",
     "resetTitle": "Reset this teacher's password?",
@@ -603,7 +638,14 @@
     "none": "No teachers yet",
     "firstOne": "Add a teacher to give them an account and assign them subjects.",
     "noneMatch": "Nothing matches that search",
-    "searchPageOnly": "Search only covers the current page — try another page or clear the filter."
+    "searchPageOnly": "Search only covers the current page — try another page or clear the filter.",
+    "unassignedTitle": "{{count}} of {{total}} class-subject has no teacher",
+    "unassignedTitle_other": "{{count}} of {{total}} class-subjects have no teacher",
+    "unassignedHint": "Their marks cannot be entered by a teacher and their report-card rows print no teacher.",
+    "unassignedShow": "Show them",
+    "unassignedHide": "Hide",
+    "staffNo": "Staff no.",
+    "staffNoNone": "Not assigned yet"
   },
   "subjects": {
     "title": "Subjects",
@@ -774,6 +816,7 @@
       "all": "Everyone",
       "teachers": "Teachers only",
       "students": "Students only",
+      "parents": "Parents only",
       "class": "Specific classes"
     },
     "priorityOpt": {
@@ -956,6 +999,7 @@
     "moreCount": "+{{count}} more",
     "timelineRange": "Timeline from {{from}} to {{to}}",
     "schoolAvg": "school avg",
+    "passRateScope": "{{year}} · pass mark {{mark}}/20",
     "missingGrades": "Missing grades",
     "avgScore": "Avg score",
     "adjustFilters": "Try adjusting or clearing your filters",
@@ -1052,7 +1096,13 @@
     "errCreate": "Failed to create exam",
     "errUpdateStatus": "Failed to update status",
     "errUpdate": "Failed to update exam",
-    "errDelete": "Failed to delete exam"
+    "errDelete": "Failed to delete exam",
+    "saveDraft": "Save draft",
+    "draftSaved": "Draft saved",
+    "submitMarks": "Submit for approval",
+    "submitted": "Submitted",
+    "marksIncomplete": "{{count}} student has no mark yet: enter a score or mark them absent before approving.",
+    "marksIncomplete_other": "{{count}} students have no mark yet: enter a score or mark them absent before approving."
   },
   "examCreate": {
     "title": "Create exam",
@@ -1091,7 +1141,7 @@
     "promoSequenceHint": "* marks this year's promotion exams, set in the academic structure. They do not decide promotion.",
     "createFailed": "Could not create the exam.",
     "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right",
-    "noSubjectsWarning": "⚠️ No subjects assigned. You can add them later from the exam detail."
+    "noSubjectsWarning": "No subjects assigned. You can add them later from the exam detail."
   },
   "reportCards": {
     "allStudents": "All {{count}} student",
@@ -1153,7 +1203,10 @@
     "printOne": "Preview & Print Report Card",
     "printAll": "Preview {{count}} Report",
     "printAll_other": "Preview All {{count}} Reports",
-    "viewResults": "View Results"
+    "viewResults": "View Results",
+    "noneMarked": "No student in this class has marks for this exam yet.",
+    "noMarksNote": "{{count}} student has no marks for this exam and gets no card:",
+    "noMarksNote_other": "{{count}} students have no marks for this exam and get no card:"
   },
   "admissions": {
     "title": "Admissions",
@@ -1241,7 +1294,14 @@
     "subtitle": "Teacher profile & subject assignments",
     "subjectsAssignedCount": "{{count}} subject assigned",
     "subjectsAssignedCount_other": "{{count}} subjects assigned",
-    "assign": "Assign"
+    "assign": "Assign",
+    "staffNo": "Staff number",
+    "staffNoHint": "Issued by the school when the teacher was added. Change it only to match numbers already on paperwork.",
+    "staffNoNone": "Not assigned yet — the server gives one shortly.",
+    "errStaffNoRequired": "A staff number cannot be removed.",
+    "errStaffNoTooLong": "A staff number is at most 32 characters.",
+    "errStaffNoChars": "Use only letters, digits and - / . _",
+    "errStaffNoTaken": "{{number}} is already another member of staff's number."
   },
   "subjectsAdd": {
     "title": "Add subject",
@@ -1296,7 +1356,7 @@
     "assignTeacher": "Assign a teacher",
     "loadFailed": "Couldn't load assignments",
     "byTeacher": "By teacher",
-    "brokenLinks": "Broken links",
+    "brokenLinks": "Assignments to fix",
     "teachersAssigned": "Teachers assigned",
     "classesCovered": "Classes covered",
     "totalLessons": "Total lessons",
@@ -1363,6 +1423,30 @@
     "blurb": "Where the school stands today, and the tools to produce paperwork"
   },
   "templates": {
+    "readyMade": "Ready-made layouts",
+    "readyMadeHint": "Pick a layout for your report cards. Every layout prints the same information.",
+    "chooseSections": "Choose what prints",
+    "customInUse": "Your school’s own template “{{name}}” is in use. Pick a layout below to switch.",
+    "inUse": "In use",
+    "printingWithThis": "Report cards print with this layout",
+    "useLayout": "Use this layout",
+    "layoutChosen": "Layout chosen — new report cards will use it.",
+    "advanced": "Advanced — custom HTML",
+    "advancedHint": "Write your own template in HTML. Only needed for a design the layouts above cannot give.",
+    "preset": {
+      "classic": {
+        "name": "Classic",
+        "description": "The standard card: official header, blue title band and the full subject table."
+      },
+      "compact": {
+        "name": "Compact",
+        "description": "The same card in smaller type and tighter spacing, so a long subject list fits on one page."
+      },
+      "clear": {
+        "name": "Clear",
+        "description": "Larger type and black-and-white bands — the easiest to read and to photocopy."
+      }
+    },
     "title": "Report templates",
     "blurb": "Manage your report card HTML designs",
     "create": "Create template",
@@ -1385,6 +1469,15 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "todo": "To do",
+    "action": {
+      "marksAwaitingApproval": "{{count}} subject's marks await approval",
+      "marksAwaitingApproval_other": "{{count}} subjects' marks await approval",
+      "resultsUnpublished": "{{count}} exam's results are ready to publish",
+      "resultsUnpublished_other": "{{count}} exams' results are ready to publish",
+      "overdueFees": "{{count}} pupil overdue ({{families}}) · {{amount}} past due",
+      "overdueFees_other": "{{count}} pupils overdue ({{families}}) · {{amount}} past due"
+    },
     "justNow": "Just now",
     "title": "Notifications",
     "readAll": "Read all",
@@ -1402,7 +1495,13 @@
     "filterUnread": "Unread",
     "filterAlerts": "Alerts",
     "alertCount": "{{count}} alert",
-    "alertCount_other": "{{count}} alerts"
+    "alertCount_other": "{{count}} alerts",
+    "families": "{{count}} family",
+    "families_other": "{{count}} families",
+    "overwriteTitle": "Your edit was replaced",
+    "overwriteBody": "{{name}} saved over your change to {{student}}. Their version is the one kept.",
+    "overwriteBodyDeleted": "{{name}} deleted {{student}} after your change to the record.",
+    "overwriteSomeone": "Someone"
   },
   "applications": {
     "refresh": "Refresh applications",
@@ -1629,6 +1728,7 @@
     "schoolSummary": "School summary",
     "schoolLogo": "School logo",
     "noLogo": "No logo",
+    "logoBroken": "Logo missing — upload it again",
     "removeLogo": "Remove logo",
     "schoolCode": "School code",
     "schoolType": "School type",
@@ -1711,10 +1811,15 @@
     "secAdmins": "Office accounts",
     "secIdCards": "ID cards",
     "secAnalytics": "Analytics",
+    "typeCollegeGeneral": "Collège – general",
+    "typeCollegeTechnical": "Collège – technical",
+    "typeLyceeGeneral": "Lycée – general",
+    "typeLyceeTechnical": "Lycée – technical",
+    "passMarkOn20": "Pass mark (/20)",
     "typePrimary": "Primary",
     "typeJhs": "JHS",
     "typeShs": "SHS / Secondary",
-    "typeCombined": "Combined",
+    "typeCombined": "Comprehensive (general and technical)",
     "typeVocational": "Vocational",
     "typeUniversity": "University",
     "typeOther": "Other",
@@ -1845,7 +1950,6 @@
       "homework": "Homework",
       "quiz": "Quizzes",
       "permissions": "Permissions",
-      "sync": "Synchronisation",
       "approvals": "Approvals",
       "subjects": "Subjects",
       "dashboard": "Dashboard",
@@ -1911,7 +2015,6 @@
       "homework.manage": "Set and grade homework",
       "quiz.author": "Write quizzes and questions",
       "permissions.manage": "Change these permissions",
-      "sync.push": "Send changes from a device",
       "fees.refund": "Give money back",
       "fees.waive": "Reduce or write off a charge",
       "approvals.view": "See what is waiting for a decision",
@@ -1949,7 +2052,6 @@
       "documents.manage": "Includes handing out guardian portal codes, which are credentials.",
       "messages.audit": "Reading a conversation you are not part of. Recorded, and never granted as a side effect of being able to send one.",
       "permissions.manage": "A role that can grant itself capabilities has no ceiling, and neither does anybody it appoints.",
-      "sync.push": "Writes period definitions and promotion decisions straight from a device.",
       "students.view": "Names, admission numbers, classes and guardian contacts. No marks.",
       "gate.scan": "In a small school the person on the gate at eight in the morning is whoever is standing there.",
       "approvals.decide": "Never the person who raised the request — that is enforced per request, by user, and holds for a super admin too.",
@@ -2070,6 +2172,10 @@
     "receiptNo": "Receipt no.",
     "receivedOn": "Received",
     "recorded": "Payment recorded",
+    "recordedProvisional": "Receipt {{receiptNo}} is provisional until this computer syncs with the school's server. A receipt printed now is marked provisional.",
+    "provisional": "Provisional",
+    "provisionalHint": "Not yet confirmed by the school's server. Its receipt prints marked provisional; the official receipt is available once this computer syncs.",
+    "printProvisional": "Print provisional",
     "recordFailed": "Could not record the payment",
     "reverse": "Reverse",
     "reverseTitle": "Reverse this payment?",
@@ -2127,7 +2233,14 @@
     "activate": "Could not activate the fee structure",
     "reactivate": "Reactivate",
     "owingCount": "{{count}} owing",
-    "noClass": "No class"
+    "noClass": "No class",
+    "overdue": "Overdue",
+    "overdueOfIt": "{{amount}} of it overdue",
+    "overduePupils": "{{count}} pupil late ({{families}})",
+    "overduePupils_other": "{{count}} pupils late ({{families}})",
+    "overdueCount": "{{count}} overdue",
+    "overdueCount_other": "{{count}} overdue",
+    "noneOverdue": "Nothing overdue yet"
   },
   "chase": {
     "title": "Chasing what is owed",
@@ -2499,7 +2612,8 @@
     "payroll": "Payroll",
     "payrollHint": "Payslips actually issued. Drafts are left out.",
     "enrollments": "Class history",
-    "enrollmentsHint": "Which class each student sat in, year by year."
+    "enrollmentsHint": "Which class each student sat in, year by year.",
+    "savedAs": "Saved as {{file}} in your downloads"
   },
   "platform": {
     "title": "Platform",
@@ -2898,9 +3012,150 @@
     "noticeStatus_failed": "Could not be delivered",
     "unreadCount": "{{count}} unread",
     "unreadCount_other": "{{count}} unread",
-    "general": "General"
+    "general": "General",
+    "nav": {
+      "home": "Home",
+      "results": "Results",
+      "attendance": "Attendance",
+      "fees": "Fees",
+      "messages": "Messages",
+      "main": "Portal sections"
+    },
+    "home": {
+      "title": "Your children",
+      "subtitle": "Everything at a glance, one card per child.",
+      "latestResult": "Latest result",
+      "noResults": "No results published yet",
+      "outOf": "/20",
+      "rank": "{{position}} of {{outOf}}",
+      "up": "Up {{delta}} on the {{exam}}",
+      "down": "Down {{delta}} on the {{exam}}",
+      "same": "Same as the {{exam}}",
+      "attendanceMonth": "Attendance this month",
+      "daysPresent": "Present {{present}} of {{marked}} days",
+      "noRegister": "No register taken yet this month",
+      "balance": "Fee balance",
+      "paidUp": "Paid up",
+      "dueOn": "Due {{date}}",
+      "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} overdue",
+      "overdueSince": "Overdue since {{date}}",
+      "nextExam": "Next exam",
+      "noExam": "No exam scheduled",
+      "startsOn": "Starts {{date}}",
+      "latestNews": "Latest from the school",
+      "seeAll": "See all",
+      "viewChild": "Open {{name}}",
+      "empty": "No children are linked to this code yet.",
+      "emptyHint": "Ask the school office to add them.",
+      "refresh": "Refresh"
+    },
+    "childSwitcher": "Choose a child",
+    "account": "Account",
+    "resultsScreen": {
+      "title": "Results",
+      "trend": "Average over time",
+      "trendLabel": "Average out of 20 for each published result, oldest to newest",
+      "showTable": "Show as a table",
+      "exam": "Exam",
+      "average": "Average",
+      "term": "Term {{term}} · {{year}}",
+      "subject": "Subject",
+      "mark": "Mark /20",
+      "coef": "Coef.",
+      "remark": "Remark",
+      "rank": "{{position}} of {{outOf}}",
+      "passed": "Pass",
+      "belowPass": "Below the pass mark",
+      "absent": "Absent",
+      "published": "Published {{date}}",
+      "reportCard": "Report card (PDF)",
+      "reportCardHint": "Opens the print window: choose “Save as PDF”.",
+      "notIssued": "The school has not issued this report card yet.",
+      "empty": "No results published yet",
+      "emptyHint": "Results appear here as soon as the school publishes them.",
+      "chooseTerm": "Choose a term",
+      "openFailed": "Could not open the report card. Check your connection and try again."
+    },
+    "attendanceScreen": {
+      "title": "Attendance",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "rate": "Attendance rate",
+      "rateHint": "Present, out of every register taken this month",
+      "marked": "{{count}} register taken",
+      "marked_other": "{{count}} registers taken",
+      "present": "Present",
+      "absent": "Absent",
+      "late": "Late",
+      "excused": "Excused",
+      "partial": "Partly absent",
+      "noRecord": "No register",
+      "calendar": "Calendar",
+      "legend": "Key",
+      "days": "Day by day",
+      "arrived": "Arrived {{time}}",
+      "left": "Left {{time}}",
+      "bySubject": "By subject",
+      "empty": "No register taken in {{month}}",
+      "emptyHint": "Days appear here once the school marks the register.",
+      "weekdays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ]
+    },
+    "feesScreen": {
+      "title": "Fees",
+      "balance": "Balance to pay",
+      "paidUp": "All paid up",
+      "paidUpHint": "Nothing is owed for {{name}} at the moment.",
+      "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} is overdue",
+      "overdueSince": "Payment was due on {{date}}",
+      "dueOn": "Next payment due {{date}}",
+      "charged": "Charged",
+      "waived": "Waived",
+      "paid": "Paid",
+      "charges": "What the school has charged",
+      "noDueDate": "No due date",
+      "dueBy": "Due {{date}}",
+      "payments": "Payments",
+      "noPayments": "No payments recorded yet",
+      "receipt": "Receipt",
+      "receiptFor": "Receipt {{no}}",
+      "reversal": "Reversal",
+      "plan": "Payment plan",
+      "instalment": "Instalment {{seq}}",
+      "empty": "No fees recorded yet",
+      "emptyHint": "Charges appear here once the school bills them.",
+      "receiptFailed": "Could not open the receipt. Check your connection and try again."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Mark all as read",
+      "new": "New",
+      "about": "About {{names}}",
+      "you": "You",
+      "send": "Send",
+      "back": "Back to messages",
+      "writeTo": "Write to a teacher or the office",
+      "noConversationsHint": "Start a conversation with your child’s teacher or the school office.",
+      "noNoticesHint": "Absences, fee reminders and published results appear here.",
+      "noNewsHint": "The school’s announcements appear here.",
+      "tabMessages": "Messages",
+      "tabNotices": "Notices",
+      "tabNews": "News"
+    }
   },
   "codes": {
+    "lastOpened": "Last opened",
+    "neverShort": "Never",
+    "noStudent": "Linked to no student",
+    "noStudentCount": "{{count}} code is linked to no current student — revoke it or link it to a child.",
+    "noStudentCount_other": "{{count}} codes are linked to no current student — revoke them or link them to a child.",
     "title": "Portal access",
     "blurb": "Give a guardian a code to see their child's fees, results and attendance. Codes are shown once — write it down before closing.",
     "issue": "Issue code",
@@ -2974,15 +3229,23 @@
     "empty": "Nobody is flagged",
     "emptyHint": "No student currently trips any signal. Flags appear as attendance, results, homework and fee records come in.",
     "noMatch": "No flagged students match these filters",
-    "footnote": "Built only from records the school already keeps — nothing here asked anyone for extra data entry. Thresholds live in the server's early-warning service.",
+    "footnote": "Built only from records the school already keeps — nothing here asked anyone for extra data entry.",
     "sig": {
       "absence": "Absent {{absent}} of {{marked}} marked days",
       "late": "Late {{late}} times",
-      "failed_exam": "Failed the last exam ({{percentage}}%)",
-      "grade_drop": "Average fell {{from}}% → {{to}}%",
+      "failed_exam": "Failed the last exam ({{average}}/20, pass mark {{passMark}})",
+      "grade_drop": "Average fell {{from}} → {{to}} /20",
       "subjects_failed": "{{count}} subjects failed",
       "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
-      "fees_outstanding": "Owes {{balance}}"
+      "fees_outstanding": "Owes {{balance}}, of which {{overdue}} is overdue",
+      "fees_outstanding_all": "Owes {{balance}}, all of it overdue",
+      "fees_owed": "Owes {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {
@@ -3051,6 +3314,8 @@
     "deleteMessage": "Delete message",
     "attach": "Attach a file",
     "writePh": "Write a message…",
+    "pendingSend": "Waiting to send — it goes when the connection returns",
+    "offlineQueued": "Offline — messages you send now wait on this computer and go when the connection returns. Attaching a file needs a connection.",
     "searchPh": "Search staff, students or parents…",
     "noMatch": "Nobody matches that name.",
     "nobodyAvailable": "There is nobody you can start a conversation with.",
@@ -3077,7 +3342,16 @@
       "lastActivity": "Last activity",
       "directConversation": "Direct conversation",
       "read": "Read",
-      "searchPh": "Search by name — staff, student, or a student’s parent"
+      "searchPh": "Search by name — staff, student, or a student’s parent",
+      "kinds": {
+        "direct": "Direct",
+        "class": "Class",
+        "subject": "Subject",
+        "group": "Group",
+        "conversationOf": "{{kind}} conversation"
+      },
+      "openedAsAudit": "{{count}} participant · audit view",
+      "openedAsAudit_other": "{{count}} participants · audit view"
     },
     "auditNotice": "This read is recorded. Deleted messages are shown in full here — that is the point of an audit — and are not visible to participants.",
     "noneMatching": "No conversation matches “{{query}}”.",
@@ -3146,7 +3420,9 @@
     "titleConflicts": "Timetable Conflicts",
     "titleNoTimetable": "Incomplete Timetables",
     "titleNoAssignments": "No Teacher Assignments",
-    "titleGeneric": "System Alert"
+    "titleGeneric": "System Alert",
+    "classSubjectsUnassigned": "{{count}} of {{total}} class-subject has no teacher",
+    "classSubjectsUnassigned_other": "{{count}} of {{total}} class-subjects have no teacher"
   },
   "modules": {
     "classes": "Classes",
@@ -3155,7 +3431,7 @@
     "subjectsDesc": "Create & link subjects",
     "teachers": "Teachers",
     "teachersDesc": "Manage teacher profiles",
-    "applications": "Applications",
+    "applications": "Admissions",
     "applicationsDesc": "Review student applications",
     "students": "Students",
     "studentsDesc": "Approved student roster",
@@ -3177,6 +3453,13 @@
     "settingsDesc": "System configuration"
   },
   "sync": {
+    "heldOtherAccount": "1 of these was queued by another account on this computer. It is sent when that person signs in here again — not under your name.",
+    "heldOtherAccount_other": "{{count}} of these were queued by another account on this computer. They are sent when that person signs in here again — not under your name.",
+    "heldOwnerless": "1 was queued by an older version of the app that did not record who made it. It is kept here and is not sent under any account until someone decides whose it is.",
+    "heldOwnerless_other": "{{count}} were queued by an older version of the app that did not record who made them. They are kept here and are not sent under any account until someone decides whose they are.",
+    "readOnlyOtherAccount": "Recorded by another account on this computer. Only that person can discard it, try it again or save a copy — it is sent when they sign in here.",
+    "readOnlyOwnerless": "Recorded by an older version of the app that did not note who made it. It is kept for review and cannot be discarded, retried or copied here.",
+    "refusedSignedOut": "Sign in to act on a change waiting on this computer.",
     "saveCopy": "Save a copy",
     "copySaved": "Saved to {{path}}",
     "copyFailed": "The copy could not be saved.",
@@ -3197,7 +3480,16 @@
     "discard": "Discard",
     "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
     "syncNow": "Check now",
-    "lastChecked": "Last checked at {{time}}"
+    "lastChecked": "Last checked at {{time}}",
+    "signInAgainTitle": "Sign in again to send {{count}} unsent change(s)",
+    "signInAgainTitleNone": "Sign in again to keep this computer in sync",
+    "signInAgainBody": "The server ended this computer's session, so nothing is being sent. Everything recorded here stays on this computer and is sent once you sign in again.",
+    "signInAgainAction": "Sign in again",
+    "signInAgainShort": "Sign in again"
+  },
+  "offlinePeriod": {
+    "notice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely.",
+    "warning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely."
   },
   "initialSync": {
     "loadingTitle": "Downloading your school's data to this computer…",
@@ -3328,7 +3620,8 @@
       "RULE_FIXED": "This rule is the same for every school and cannot be changed.",
       "PROMOTION_RUN_EXISTS": "A promotion run for this year was made from these results. Discard the draft, or reverse the run, first.",
       "CLASS_REQUIRED": "Choose a class: results are unpublished one class at a time."
-    }
+    },
+    "needsInternet": "This action needs an internet connection. The rest of the app keeps working offline."
   },
   "studentEdit": {
     "title": "Correct student record",
@@ -3361,7 +3654,7 @@
     "RECENT_DECLINE": "Recent academic performance has declined.",
     "SUDDEN_PERFORMANCE_CHANGE": "A recent performance change was observed.",
     "PERSISTENT_UNDERPERFORMANCE": "Performance has remained below the school's pass mark.",
-    "SUBJECT_STRENGTH": "A subject strength is emerging.",
+    "SUBJECT_STRENGTH": "Strong recent results in this subject.",
     "SUSTAINED_IMPROVEMENT": "Sustained improvement was observed.",
     "CONSISTENT_STRENGTH": "Consistent strong performance was observed.",
     "INSUFFICIENT_ACADEMIC_EVIDENCE": "There is not yet enough academic evidence.",
@@ -3669,7 +3962,7 @@
       "heading": "Validation pilot",
       "none": "No pilot is open for this school.",
       "kind": {
-        "synthetic": "Synthetic (fixtures)",
+        "synthetic": "Practice data",
         "development": "Development (testing the workflow)",
         "real": "Real (authorised school, own teachers)"
       },
@@ -3703,7 +3996,7 @@
       "openKind": "Kind of exercise",
       "openLabel": "Label (optional)",
       "openScope": "Classes (leave empty for the whole school)",
-      "openHint": "One open pilot per school. Only a pilot of kind “real” — an authorised school reviewed by its own teachers — produces calibration evidence.",
+      "openHint": "One open pilot per school. Only a pilot of kind “real” — an authorised school reviewed by its own teachers — counts towards tuning the suggestions.",
       "advance": "Move to {{state}}",
       "note": "Note for the record (optional)",
       "decisionHeading": "Decision",
@@ -5365,7 +5658,7 @@
   },
   "academicRules": {
     "title": "How results are calculated",
-    "intro": "The same for every school, decided by the project owner. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
+    "intro": "The same for every school. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
     "year": "Academic year",
     "statement": {
       "sequence": "Sequence average: each subject's mark out of 20 (CA blended in by the school's CA/paper split when CA is on; the paper alone when CA is off), weighted by the subject's coefficient.",
@@ -5472,6 +5765,58 @@
     "failed": "The address could not be checked. Try again.",
     "current": "Server: {{url}}",
     "change": "Change server"
+  },
+  "schoolHours": {
+    "conflictTitle": "School hours and periods disagree",
+    "conflictBody": "Settings say the school day runs {{open}}–{{close}}, but the periods run {{from}}–{{to}}. Change whichever is wrong.",
+    "editInSettings": "Edit school hours in Settings",
+    "editPeriods": "Edit periods"
+  },
+  "ageRanges": {
+    "title": "Usual ages per class",
+    "hint": "A pupil whose age falls outside these is still saved — the form only asks the office to check the date of birth. Leave blank for the default (Form 1: 9–14, each level up: minimum +1, maximum +2).",
+    "save": "Save ages",
+    "saved": "Age ranges saved",
+    "errSave": "Could not save the age ranges"
+  },
+  "studentOverview": {
+    "results": "Latest results",
+    "noResults": "No published results yet.",
+    "position": "{{position}} of {{outOf}}",
+    "attendance": "Attendance — last {{days}} days",
+    "attendanceBreakdown": "{{present}} present, {{late}} late, {{absent}} absent, {{excused}} excused",
+    "notMarked": "Not marked on any register in this period.",
+    "fees": "Fees {{year}}",
+    "openAccount": "Open account",
+    "settled": "Settled",
+    "feesBreakdown": "Billed {{charged}} · paid {{paid}}",
+    "guardian": "Guardian",
+    "noGuardian": "No guardian contact recorded.",
+    "unavailable": "The summary could not be loaded."
+  },
+  "unsaved": {
+    "title": "Leave without saving?",
+    "message": "Your changes on this page have not been saved and will be lost.",
+    "leave": "Leave",
+    "stay": "Stay",
+    "marks": "{{count}} unsaved mark will be lost.",
+    "marks_other": "{{count}} unsaved marks will be lost."
+  },
+  "verifyPage": {
+    "opening": "Opening the verification page…",
+    "continue": "Continue"
+  },
+  "connection": {
+    "offlineTitle": "You're offline.",
+    "unreachableTitle": "The server can't be reached.",
+    "browserBody": "The web console needs an internet connection — changes can't be saved until you reconnect.",
+    "needsInternetTitle": "This needs an internet connection",
+    "needsInternetBody": "This computer is offline. What is on this screen can only be done with the server, so it is switched off until the connection returns. Everything else in the app keeps working offline.",
+    "needsInternetShort": "Needs an internet connection"
+  },
+  "signOutGuard": {
+    "title": "Changes not yet sent",
+    "message": "You have {{count}} change(s) not yet sent. They'll be sent next time you sign in on this computer."
   },
   "ttConflicts": {
     "title": "Timetable conflicts",

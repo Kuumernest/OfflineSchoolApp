@@ -158,3 +158,32 @@ export async function movePeriod(
 export async function deletePeriod(id: string): Promise<void> {
   await api.delete(`${BASE}/${id}`);
 }
+
+/**
+ * Where the school's hours (Settings) and its period grid disagree (B2,
+ * decided 2026-10-27). Both are the school's own to set; neither overrides the
+ * other, but a grid that starts before the school opens or ends after it
+ * closes is worth saying out loud. Breaks count: they are inside the day.
+ *
+ * @returns null when they agree (or either is unknown)
+ */
+export function hoursConflict(
+  schoolStart: string | null | undefined,
+  schoolEnd:   string | null | undefined,
+  periods:     Pick<Period, "startTime" | "endTime" | "isActive">[],
+): { gridFrom: string; gridTo: string; startsEarlier: boolean; endsLater: boolean; startsLater: boolean; endsEarlier: boolean } | null {
+  const open  = toMinutes(schoolStart ?? "");
+  const close = toMinutes(schoolEnd ?? "");
+  const live  = periods.filter((p) => p.isActive !== false);
+  const starts = live.map((p) => toMinutes(p.startTime)).filter((n) => !Number.isNaN(n));
+  const ends   = live.map((p) => toMinutes(p.endTime)).filter((n) => !Number.isNaN(n));
+  if (Number.isNaN(open) || Number.isNaN(close) || !starts.length || !ends.length) return null;
+  const from = Math.min(...starts), to = Math.max(...ends);
+  if (from === open && to === close) return null;
+  const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return {
+    gridFrom: hhmm(from), gridTo: hhmm(to),
+    startsEarlier: from < open, endsLater: to > close,
+    startsLater: from > open, endsEarlier: to < close,
+  };
+}

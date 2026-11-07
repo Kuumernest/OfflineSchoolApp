@@ -19,13 +19,17 @@ import {
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useSafeLogout } from "../../../src/hooks/useSafeLogout";
 import { getDatabase }  from "../../../src/db/database";
 import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
+import { COLORS as THEME, ACCENT, SEMANTIC, TONE_EDGE, statusBadge, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 import * as ImagePicker from "expo-image-picker";
 import { errorText } from "../../../src/utils/appError";
+import { needsInternetFailureText, requireOnline } from "../../../src/hooks/useNeedsInternet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -55,10 +59,13 @@ const C = {
 // SECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Section({ title, children }) {
+function Section({ title, icon = "settings-outline", accent = "slate", children }) {
   return (
     <View style={sc.wrap}>
-      <Text style={sc.title}>{title}</Text>
+      <View style={sc.titleRow}>
+        <IconSquare icon={icon} accent={accent} size={28} />
+        <Text style={sc.title}>{title}</Text>
+      </View>
       <View style={sc.body}>{children}</View>
     </View>
   );
@@ -66,13 +73,17 @@ function Section({ title, children }) {
 
 const sc = StyleSheet.create({
   wrap:  { marginBottom: 24 },
-  title: {
-    fontSize: 12, fontWeight: "700", color: C.gray500,
-    textTransform: "uppercase", letterSpacing: 0.8,
+  titleRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
     marginBottom: 8, paddingHorizontal: 4,
   },
+  title: {
+    fontSize: 12, fontWeight: "700", color: THEME.textSecondary,
+    textTransform: "uppercase", letterSpacing: 0.8,
+  },
   body: {
-    backgroundColor: C.white, borderRadius: 16, overflow: "hidden",
+    backgroundColor: THEME.surface, borderRadius: 16, overflow: "hidden",
+    borderWidth: 1, borderColor: THEME.border,
     shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
 });
@@ -93,8 +104,8 @@ function SettingRow({
       disabled={disabled || type === "toggle"}
       activeOpacity={0.7}
     >
-      <View style={[sr.iconWrap, { backgroundColor: iconBg || C.gray100 }]}>
-        <Ionicons name={icon} size={18} color={iconColor || C.gray500} />
+      <View style={[sr.iconWrap, { backgroundColor: iconBg || ACCENT.slate.solid }]}>
+        <Ionicons name={icon} size={18} color={iconColor || THEME.onPrimary} />
       </View>
       <View style={sr.textWrap}>
         <Text style={[sr.title, destructive && sr.destructive]}>{title}</Text>
@@ -113,7 +124,7 @@ function SettingRow({
           <Text style={sr.valueText} numberOfLines={2}>{value}</Text>
         )}
         {type === "arrow" && (
-          <Ionicons name="chevron-forward" size={16} color={C.gray300} />
+          <Ionicons name="chevron-forward" size={16} color={THEME.textSecondary} />
         )}
       </View>
     </TouchableOpacity>
@@ -124,16 +135,16 @@ const sr = StyleSheet.create({
   row: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingVertical: 14, gap: 12,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
   rowLast:     { borderBottomWidth: 0 },
   iconWrap:    { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   textWrap:    { flex: 1 },
-  title:       { fontSize: 14, fontWeight: "600", color: C.gray900 },
-  destructive: { color: C.error },
-  subtitle:    { fontSize: 12, color: C.gray400, marginTop: 2 },
+  title:       { fontSize: 14, fontWeight: "600", color: THEME.text },
+  destructive: { color: SEMANTIC.error.text },
+  subtitle:    { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
   right:       { alignItems: "flex-end", maxWidth: "45%" },
-  valueText:   { fontSize: 13, color: C.gray400, fontWeight: "500", textAlign: "right" },
+  valueText:   { fontSize: 13, color: THEME.textSecondary, fontWeight: "500", textAlign: "right" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,8 +164,8 @@ function Avatar({ name, size = 64 }) {
 }
 
 const av = StyleSheet.create({
-  wrap: { backgroundColor: C.primaryBg, alignItems: "center", justifyContent: "center" },
-  text: { fontWeight: "800", color: C.primary },
+  wrap: { backgroundColor: THEME.surface, borderWidth: 1, borderColor: accentBadge("blue").border, alignItems: "center", justifyContent: "center" },
+  text: { fontWeight: "800", color: ACCENT.blue.deep },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,13 +194,13 @@ function ProfileProgress({ profile }) {
     <View style={pp.wrap}>
       <View style={pp.labelRow}>
         <Text style={pp.label}>{t("studentSettings.profileCompleteness")}</Text>
-        <Text style={[pp.pct, { color: complete ? C.success : C.warning }]}>{pct}%</Text>
+        <Text style={[pp.pct, { color: complete ? SEMANTIC.success.text : SEMANTIC.warning.text }]}>{pct}%</Text>
       </View>
       <View style={pp.track}>
         <View
           style={[
             pp.fill,
-            { width: `${pct}%`, backgroundColor: complete ? C.success : C.warning },
+            { width: `${pct}%`, backgroundColor: complete ? TONE_EDGE.success : TONE_EDGE.warning },
           ]}
         />
       </View>
@@ -207,21 +218,21 @@ function ProfileProgress({ profile }) {
 const pp = StyleSheet.create({
   wrap:     { marginTop: 12, gap: 6 },
   labelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  label:    { fontSize: 12, color: C.gray500, fontWeight: "600" },
+  label:    { fontSize: 12, color: THEME.textSecondary, fontWeight: "600" },
   pct:      { fontSize: 12, fontWeight: "800" },
-  track:    { height: 6, backgroundColor: C.gray100, borderRadius: 3, overflow: "hidden" },
+  track:    { height: 6, backgroundColor: THEME.surface, borderWidth: 1, borderColor: THEME.border, borderRadius: 3, overflow: "hidden" },
   fill:     { height: "100%", borderRadius: 3 },
-  hint:     { fontSize: 11, color: C.gray400 },
+  hint:     { fontSize: 11, color: THEME.textSecondary },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INFO BADGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function InfoBadge({ label, value, color, bg }) {
+function InfoBadge({ label, value, color, bg, border }) {
   if (!value) return null;
   return (
-    <View style={[ib.wrap, { backgroundColor: bg }]}>
+    <View style={[ib.wrap, { backgroundColor: bg, borderColor: border }]}>
       <Text style={[ib.text, { color }]}>
         {label ? `${label}: ` : ""}{value}
       </Text>
@@ -232,7 +243,7 @@ function InfoBadge({ label, value, color, bg }) {
 const ib = StyleSheet.create({
   wrap: {
     paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 8, marginRight: 6, marginBottom: 4,
+    borderRadius: 8, marginRight: 6, marginBottom: 4, borderWidth: 1,
   },
   text: { fontSize: 11, fontWeight: "600" },
 });
@@ -306,9 +317,8 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
         [{ text: t("studentSettings.ok"), onPress: onClose }]
       );
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        errorText(t, err, "studentSettings.errChangeFailed");
+      // Changing a password is online-only: offline, said as such.
+      const msg = needsInternetFailureText(t, err, "studentSettings.errChangeFailed");
       setError(msg);
     } finally {
       setSaving(false);
@@ -611,8 +621,9 @@ const cp = StyleSheet.create({
 export default function StudentSettingsScreen() {
   const { t }      = useTranslation();
   const user       = useAuthStore((s) => s.user);
-  const logout     = useAuthStore((s) => s.logout);
+  const safeLogout = useSafeLogout();
   const updateUser = useAuthStore((s) => s.updateUser);
+  const token      = useAuthStore((s) => s.token);
 
   const userId = String(user?._id || user?.id || "");
 
@@ -637,6 +648,8 @@ export default function StudentSettingsScreen() {
   };
 
   const pickPhoto = async () => {
+    // The photo is stored on the server (online-only): asked before picking.
+    if (!(await requireOnline(t))) return;
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
@@ -670,7 +683,7 @@ export default function StudentSettingsScreen() {
       // so it is shown rather than replaced with something generic.
       Alert.alert(
         t("studentSettings.photoSaveFailedTitle"),
-        err?.response?.data?.message || errorText(t, err, "studentSettings.tryAgain")
+        needsInternetFailureText(t, err, "studentSettings.tryAgain")
       );
     } finally {
       setPhotoBusy(false);
@@ -691,7 +704,7 @@ export default function StudentSettingsScreen() {
             await api.delete("/students/photo");
             setPhotoUrl(null);
           } catch (err) {
-            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), errorText(t, err));
+            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), needsInternetFailureText(t, err));
           } finally {
             setPhotoBusy(false);
           }
@@ -812,17 +825,14 @@ export default function StudentSettingsScreen() {
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
+  // Warns first when this account has changes not yet sent.
   const handleLogout = () => {
-    Alert.alert(t("studentSettings.logout"), t("studentSettings.logoutConfirm"), [
-      { text: t("studentSettings.cancel"), style: "cancel" },
-      {
-        text: t("studentSettings.logout"), style: "destructive",
-        onPress: async () => {
-          try { await logout(); } catch { /* ignore */ }
-          router.replace("/auth/login");
-        },
-      },
-    ]);
+    safeLogout({
+      title:        t("studentSettings.logout"),
+      body:         t("studentSettings.logoutConfirm"),
+      confirmLabel: t("studentSettings.logout"),
+      cancelLabel:  t("studentSettings.cancel"),
+    });
   };
 
   // ── Derived display values ────────────────────────────────────────────────
@@ -875,9 +885,12 @@ export default function StudentSettingsScreen() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={C.gray900} />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t("studentSettings.title")}</Text>
+        <View style={styles.headerCenter}>
+          <HeaderIcon />
+          <Text style={styles.headerTitle}>{t("studentSettings.title")}</Text>
+        </View>
         <TouchableOpacity
           onPress={loadProfile}
           style={styles.refreshBtn}
@@ -894,7 +907,7 @@ export default function StudentSettingsScreen() {
           onPress={() => setShowChangePwd(true)}
           activeOpacity={0.85}
         >
-          <Ionicons name="warning-outline" size={18} color="#92400E" />
+          <Ionicons name="warning-outline" size={18} color={SEMANTIC.warning.icon} />
           <Text style={styles.mustResetText}>
             {t("studentSettings.mustChangeBanner")}{" "}
             <Text style={styles.mustResetLink}>{t("studentSettings.tapHere")}</Text>
@@ -917,7 +930,7 @@ export default function StudentSettingsScreen() {
               </Text>
               {profileComplete && (
                 <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color={C.success} />
+                  <Ionicons name="checkmark-circle" size={14} color={SEMANTIC.success.icon} />
                   <Text style={styles.verifiedText}>{t("studentSettings.complete")}</Text>
                 </View>
               )}
@@ -935,18 +948,18 @@ export default function StudentSettingsScreen() {
                 <InfoBadge
                   label={t("studentSettings.statusLabel")}
                   value={t("studentSettings.repeating")}
-                  color={C.warning} bg={C.warningBg}
+                  color={statusBadge("warning").text} bg={statusBadge("warning").bg} border={statusBadge("warning").border}
                 />
               )}
               {!!profile?.bloodGroup && (
                 <InfoBadge
                   label={t("studentSettings.bloodLabel")}
                   value={profile.bloodGroup}
-                  color={C.error} bg={C.errorBg}
+                  color={statusBadge("error").text} bg={statusBadge("error").bg} border={statusBadge("error").border}
                 />
               )}
               {!!genderDisplay && (
-                <InfoBadge label="" value={genderDisplay} color={C.primary} bg={C.primaryBg} />
+                <InfoBadge label="" value={genderDisplay} color={accentBadge("blue").text} bg={accentBadge("blue").bg} border={accentBadge("blue").border} />
               )}
             </View>
 
@@ -980,13 +993,16 @@ export default function StudentSettingsScreen() {
             This is the picture that goes on the student's ID card, which is
             why it sits at the top of their own settings rather than being
             something only the office can set. */}
-        <Section title={t("studentSettings.photoSection")}>
+        <Section title={t("studentSettings.photoSection")} icon="camera-outline" accent="blue">
           <View style={styles.photoRow}>
             <View style={styles.photoFrame}>
               {photoUrl ? (
-                <Image source={{ uri: absolutePhoto(photoUrl) }} style={styles.photoImg} />
+                <Image
+                  source={{ uri: absolutePhoto(photoUrl), headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
+                  style={styles.photoImg}
+                />
               ) : (
-                <Ionicons name="person" size={34} color="#9AA3B2" />
+                <Ionicons name="person" size={34} color={ACCENT.blue.solid} />
               )}
             </View>
 
@@ -1004,7 +1020,7 @@ export default function StudentSettingsScreen() {
                   activeOpacity={0.85}
                 >
                   {photoBusy
-                    ? <ActivityIndicator color="#fff" size="small" />
+                    ? <ActivityIndicator color={THEME.onPrimary} size="small" />
                     : (
                       <Text style={styles.photoBtnText}>
                         {photoUrl
@@ -1029,9 +1045,9 @@ export default function StudentSettingsScreen() {
         </Section>
 
         {/* ── ACCOUNT ── */}
-        <Section title={t("studentSettings.accountSection")}>
+        <Section title={t("studentSettings.accountSection")} icon="person-circle-outline" accent="blue">
           <SettingRow
-            icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
+            icon="person-outline" iconBg={ACCENT.indigo.solid}
             title={t("studentSettings.editProfile")}
             subtitle={
               profileComplete
@@ -1042,7 +1058,7 @@ export default function StudentSettingsScreen() {
             onPress={() => router.push("/student/profile/setup")}
           />
           <SettingRow
-            icon="lock-closed-outline" iconBg="#FEF3C7" iconColor={C.warning}
+            icon="lock-closed-outline" iconBg={ACCENT.amber.solid}
             title={t("studentSettings.changePassword")}
             subtitle={
               mustReset
@@ -1057,15 +1073,15 @@ export default function StudentSettingsScreen() {
 
         {/* ── ENROLLMENT NUMBER (read-only) ── */}
         {!!resolvedEnrollmentNo && (
-          <Section title={t("studentSettings.loginCredentials")}>
+          <Section title={t("studentSettings.loginCredentials")} icon="key-outline" accent="violet">
             <View style={styles.enrollmentNote}>
-              <Ionicons name="information-circle-outline" size={14} color="#4338CA" />
+              <Ionicons name="information-circle-outline" size={14} color={SEMANTIC.info.icon} />
               <Text style={styles.enrollmentNoteText}>
                 {t("studentSettings.enrollmentNote")}
               </Text>
             </View>
             <SettingRow
-              icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
+              icon="id-card-outline" iconBg={ACCENT.violet.solid}
               title={t("studentSettings.enrollmentNumber")}
               subtitle={t("studentSettings.uniqueLoginId")}
               type="value"
@@ -1078,47 +1094,47 @@ export default function StudentSettingsScreen() {
 
         {/* ── PERSONAL DETAILS ── */}
         {profile && (
-          <Section title={t("studentSettings.personalDetails")}>
+          <Section title={t("studentSettings.personalDetails")} icon="person-outline" accent="blue">
             {!!genderDisplay && (
               <SettingRow
-                icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
+                icon="person-outline" iconBg={ACCENT.indigo.solid}
                 title={t("studentSettings.gender")} type="value" value={genderDisplay}
               />
             )}
             {!!profile.dateOfBirth && (
               <SettingRow
-                icon="calendar-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="calendar-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.dateOfBirth")} type="value" value={profile.dateOfBirth}
               />
             )}
             {!!profile.placeOfBirth && (
               <SettingRow
-                icon="location-outline" iconBg="#DBEAFE" iconColor="#2563EB"
+                icon="location-outline" iconBg={ACCENT.blue.solid}
                 title={t("studentSettings.placeOfBirth")} type="value" value={profile.placeOfBirth}
               />
             )}
             {!!profile.nationalId && (
               <SettingRow
-                icon="card-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="card-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.nationalId")} type="value" value={profile.nationalId}
               />
             )}
             {!!profile.bloodGroup && (
               <SettingRow
-                icon="water-outline" iconBg={C.errorBg} iconColor={C.error}
+                icon="water-outline" iconBg={ACCENT.red.solid}
                 title={t("studentSettings.bloodGroup")} type="value" value={profile.bloodGroup}
               />
             )}
             {!!profile.bio && (
               <SettingRow
-                icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="document-text-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.aboutMe")} type="value" value={profile.bio}
                 last={!profile.medicalConditions && !isRepeating}
               />
             )}
             {!!profile.medicalConditions && (
               <SettingRow
-                icon="medical-outline" iconBg={C.errorBg} iconColor={C.error}
+                icon="medical-outline" iconBg={ACCENT.red.solid}
                 title={t("studentSettings.healthMedical")}
                 subtitle={t("studentSettings.healthMedicalHint")}
                 type="value" value={profile.medicalConditions}
@@ -1127,7 +1143,7 @@ export default function StudentSettingsScreen() {
             )}
             {isRepeating && (
               <SettingRow
-                icon="repeat-outline" iconBg={C.warningBg} iconColor={C.warning}
+                icon="repeat-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.academicStatus")} type="value"
                 value={t("studentSettings.repeating")}
                 last
@@ -1138,22 +1154,22 @@ export default function StudentSettingsScreen() {
 
         {/* ── CONTACT & ADDRESS ── */}
         {profile && (profile.phone || profile.alternatePhone || fullAddress) && (
-          <Section title={t("studentSettings.contactAddress")}>
+          <Section title={t("studentSettings.contactAddress")} icon="call-outline" accent="teal">
             {!!profile.phone && (
               <SettingRow
-                icon="call-outline" iconBg={C.successBg} iconColor={C.success}
+                icon="call-outline" iconBg={ACCENT.green.solid}
                 title={t("studentSettings.phone")} type="value" value={profile.phone}
               />
             )}
             {!!profile.alternatePhone && (
               <SettingRow
-                icon="call-outline" iconBg={C.gray100} iconColor={C.gray500}
+                icon="call-outline" iconBg={ACCENT.slate.solid}
                 title={t("studentSettings.alternatePhone")} type="value" value={profile.alternatePhone}
               />
             )}
             {!!fullAddress && (
               <SettingRow
-                icon="home-outline" iconBg="#DBEAFE" iconColor="#2563EB"
+                icon="home-outline" iconBg={ACCENT.blue.solid}
                 title={t("studentSettings.address")} type="value" value={fullAddress}
                 last
               />
@@ -1163,10 +1179,10 @@ export default function StudentSettingsScreen() {
 
         {/* ── GUARDIAN / PARENT ── */}
         {profile && (profile.guardianName || profile.guardianPhone) && (
-          <Section title={t("studentSettings.guardianParent")}>
+          <Section title={t("studentSettings.guardianParent")} icon="people-outline" accent="sky">
             {!!profile.guardianName && (
               <SettingRow
-                icon="people-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="people-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianName")}
                 subtitle={
                   profile.guardianRelation
@@ -1179,13 +1195,13 @@ export default function StudentSettingsScreen() {
             )}
             {!!profile.guardianPhone && (
               <SettingRow
-                icon="call-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="call-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianPhone")} type="value" value={profile.guardianPhone}
               />
             )}
             {!!profile.guardianEmail && (
               <SettingRow
-                icon="mail-outline" iconBg="#FFF7ED" iconColor="#EA580C"
+                icon="mail-outline" iconBg={ACCENT.amber.solid}
                 title={t("studentSettings.guardianEmail")} type="value" value={profile.guardianEmail}
                 last
               />
@@ -1195,30 +1211,30 @@ export default function StudentSettingsScreen() {
 
         {/* ── SCHOOL INFO (read-only) ── */}
         {profile && (profile.admissionNo || profile.className || profile.grade) && (
-          <Section title={t("studentSettings.schoolInfo")}>
+          <Section title={t("studentSettings.schoolInfo")} icon="school-outline" accent="indigo">
             <View style={styles.schoolInfoNote}>
-              <Ionicons name="information-circle-outline" size={14} color={C.gray400} />
+              <Ionicons name="information-circle-outline" size={14} color={SEMANTIC.info.icon} />
               <Text style={styles.schoolInfoNoteText}>
                 {t("studentSettings.schoolInfoNote")}
               </Text>
             </View>
             {!!profile.admissionNo && (
               <SettingRow
-                icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
+                icon="id-card-outline" iconBg={ACCENT.violet.solid}
                 title={t("studentSettings.admissionNo")} type="value" value={profile.admissionNo}
                 disabled
               />
             )}
             {!!profile.className && (
               <SettingRow
-                icon="school-outline" iconBg={C.primaryBg} iconColor={C.primary}
+                icon="school-outline" iconBg={ACCENT.indigo.solid}
                 title={t("studentSettings.classTitle")} type="value" value={profile.className}
                 disabled
               />
             )}
             {!!profile.grade && profile.grade !== profile.className && (
               <SettingRow
-                icon="ribbon-outline" iconBg={C.successBg} iconColor={C.success}
+                icon="ribbon-outline" iconBg={ACCENT.green.solid}
                 title={t("studentSettings.gradeYear")} type="value" value={profile.grade}
                 disabled last
               />
@@ -1227,7 +1243,7 @@ export default function StudentSettingsScreen() {
         )}
 
         {/* ── PREFERENCES ── */}
-        <Section title={t("studentSettings.preferences")}>
+        <Section title={t("studentSettings.preferences")} icon="options-outline" accent="slate">
           {/*
             Language first in Preferences, above the toggles: a pupil looking for
             this control is reading an interface in a language they did not choose.
@@ -1241,7 +1257,7 @@ export default function StudentSettingsScreen() {
           </View>
 
           <SettingRow
-            icon="notifications-outline" iconBg="#FEF3C7" iconColor={C.warning}
+            icon="notifications-outline" iconBg={ACCENT.amber.solid}
             title={t("studentSettings.pushNotifications")}
             subtitle={t("studentSettings.pushNotificationsHint")}
             type="toggle" value={notifEnabled} onToggle={setNotifEnabled} last
@@ -1249,9 +1265,9 @@ export default function StudentSettingsScreen() {
         </Section>
 
         {/* ── SUPPORT ── */}
-        <Section title={t("studentSettings.support")}>
+        <Section title={t("studentSettings.support")} icon="help-buoy-outline" accent="green">
           <SettingRow
-            icon="help-circle-outline" iconBg={C.primaryBg} iconColor={C.primary}
+            icon="help-circle-outline" iconBg={ACCENT.indigo.solid}
             title={t("studentSettings.helpFaqs")} type="arrow"
             onPress={() =>
               Alert.alert(
@@ -1261,19 +1277,19 @@ export default function StudentSettingsScreen() {
             }
           />
           <SettingRow
-            icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
+            icon="document-text-outline" iconBg={ACCENT.slate.solid}
             title={t("studentSettings.terms")} type="arrow" onPress={() => {}}
           />
           <SettingRow
-            icon="shield-outline" iconBg={C.gray100} iconColor={C.gray500}
+            icon="shield-outline" iconBg={ACCENT.slate.solid}
             title={t("studentSettings.privacy")} type="arrow" onPress={() => {}} last
           />
         </Section>
 
         {/* ── SESSION ── */}
-        <Section title={t("studentSettings.session")}>
+        <Section title={t("studentSettings.session")} icon="log-out-outline" accent="red">
           <SettingRow
-            icon="log-out-outline" iconBg={C.errorBg} iconColor={C.error}
+            icon="log-out-outline" iconBg={ACCENT.red.solid}
             title={t("studentSettings.logout")}
             subtitle={t("studentSettings.signOutHint")}
             type="arrow" destructive onPress={handleLogout} last
@@ -1302,24 +1318,24 @@ const styles = StyleSheet.create({
   photoRow:   { flexDirection: "row", gap: 14, alignItems: "flex-start", padding: 4 },
   photoFrame: {
     width: 72, height: 96, borderRadius: 8,
-    borderWidth: 2, borderColor: "#3B4996", backgroundColor: "#F0F4FF",
+    borderWidth: 2, borderColor: ACCENT.blue.base, backgroundColor: ACCENT.blue.wash,
     alignItems: "center", justifyContent: "center", overflow: "hidden",
   },
   photoImg:   { width: "100%", height: "100%" },
-  photoTitle: { fontSize: 14, fontWeight: "700", color: "#0D1220" },
-  photoHint:  { marginTop: 2, fontSize: 12, color: "#4F5A70", lineHeight: 17 },
+  photoTitle: { fontSize: 14, fontWeight: "700", color: THEME.text },
+  photoHint:  { marginTop: 2, fontSize: 12, color: THEME.textSecondary, lineHeight: 17 },
   photoBtns:  { flexDirection: "row", gap: 8, marginTop: 10 },
   photoBtn: {
-    minWidth: 96, height: 36, borderRadius: 8, backgroundColor: "#3B4996",
+    minWidth: 96, height: 36, borderRadius: 8, backgroundColor: ACCENT.blue.solid,
     alignItems: "center", justifyContent: "center", paddingHorizontal: 14,
   },
   photoBtnOff:  { opacity: 0.5 },
-  photoBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  photoBtnText: { color: THEME.onPrimary, fontSize: 13, fontWeight: "600" },
   photoBtnGhost: {
-    height: 36, borderRadius: 8, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 36, borderRadius: 8, borderWidth: 1, borderColor: THEME.border,
     alignItems: "center", justifyContent: "center", paddingHorizontal: 14,
   },
-  photoBtnGhostText: { color: "#4F5A70", fontSize: 13, fontWeight: "600" },
+  photoBtnGhostText: { color: THEME.textSecondary, fontSize: 13, fontWeight: "600" },
 
   screen:   { flex: 1, backgroundColor: C.gray50 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -1328,27 +1344,28 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    backgroundColor: THEME.surface,
+    borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: C.gray100, alignItems: "center", justifyContent: "center",
+    backgroundColor: THEME.page, alignItems: "center", justifyContent: "center",
   },
+  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
   headerTitle: {
-    flex: 1, textAlign: "center",
-    fontSize: 18, fontWeight: "700", color: C.gray900,
+    textAlign: "center",
+    fontSize: 18, fontWeight: "700", color: THEME.text,
   },
   refreshBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
 
   // ── Must-reset banner ─────────────────────────────────────────────────────
   mustResetBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: C.warningBg,
+    backgroundColor: SEMANTIC.warning.bg,
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#FDE68A",
+    borderBottomWidth: 1, borderBottomColor: statusBadge("warning").border,
   },
-  mustResetText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  mustResetText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   mustResetLink: { fontWeight: "700", textDecorationLine: "underline" },
 
   content: { padding: 16, paddingTop: 20 },
@@ -1356,7 +1373,9 @@ const styles = StyleSheet.create({
   // ── Profile card ──────────────────────────────────────────────────────────
   profileCard: {
     flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: C.white, borderRadius: 16,
+    backgroundColor: ACCENT.blue.wash, borderRadius: 16,
+    borderWidth: 1, borderColor: THEME.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.blue.base,
     padding: 16, marginBottom: 16, gap: 14,
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
@@ -1365,15 +1384,16 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     gap: 8, flexWrap: "wrap", marginBottom: 2,
   },
-  profileName:    { fontSize: 17, fontWeight: "700", color: C.gray900, flexShrink: 1 },
+  profileName:    { fontSize: 17, fontWeight: "700", color: THEME.text, flexShrink: 1 },
   verifiedBadge: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: C.successBg, borderRadius: 8,
+    backgroundColor: statusBadge("success").bg, borderRadius: 8,
+    borderWidth: 1, borderColor: statusBadge("success").border,
     paddingHorizontal: 7, paddingVertical: 2,
   },
-  verifiedText:  { fontSize: 10, fontWeight: "700", color: C.success },
-  profileRole:   { fontSize: 12, color: C.gray500 },
-  profileEmail:  { fontSize: 11, color: C.gray400, marginTop: 2 },
+  verifiedText:  { fontSize: 10, fontWeight: "700", color: statusBadge("success").text },
+  profileRole:   { fontSize: 12, color: THEME.textSecondary },
+  profileEmail:  { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
   badgeRow:      { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
 
   // ── Setup prompt ──────────────────────────────────────────────────────────
@@ -1394,22 +1414,22 @@ const styles = StyleSheet.create({
   enrollmentNote: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: "#EEF2FF",
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    backgroundColor: SEMANTIC.info.bg,
+    borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
-  enrollmentNoteText: { fontSize: 11, color: "#4338CA", flex: 1 },
+  enrollmentNoteText: { fontSize: 11, color: SEMANTIC.info.text, flex: 1 },
 
   // ── School info note ──────────────────────────────────────────────────────
   schoolInfoNote: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: C.gray50,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    backgroundColor: SEMANTIC.info.bg,
+    borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
-  schoolInfoNoteText: { fontSize: 11, color: C.gray400, flex: 1 },
+  schoolInfoNoteText: { fontSize: 11, color: SEMANTIC.info.text, flex: 1 },
 
   version: {
     textAlign: "center", fontSize: 12,
-    color: C.gray400, fontWeight: "500", marginTop: 8,
+    color: THEME.textSecondary, fontWeight: "500", marginTop: 8,
   },
 });

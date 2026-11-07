@@ -22,6 +22,10 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
 import { errorText } from "../../../src/utils/appError";
+import { staffNoStatus, staffNoText } from "../../../src/utils/staffNumber";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -37,6 +41,8 @@ const STALE_THRESHOLD_MS = 30_000;
 const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
   const { t } = useTranslation();
   const hasAssignments = Number(teacher.subjectCount ?? 0) > 0;
+  // The school's number — "pending" for one created here that has not synced.
+  const staffNo = staffNoStatus(teacher);
 
   return (
     <TouchableOpacity
@@ -45,7 +51,7 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
       onPress={() => onEdit(teacher)}
     >
       <View style={styles.cardIcon}>
-        <Ionicons name="person" size={22} color="#4F46E5" />
+        <Ionicons name="person" size={22} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.cardInfo}>
@@ -55,10 +61,17 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
         <Text style={styles.teacherEmail} numberOfLines={1}>
           {teacher.email || t("teachers.noEmail")}
         </Text>
+        <Text
+          style={[styles.teacherStaffNo, staffNo.kind !== "assigned" && styles.teacherStaffNoMuted]}
+          numberOfLines={1}
+          accessibilityLabel={`${t("staffNo.labelLong")}: ${staffNoText(t, staffNo)}`}
+        >
+          {t("staffNo.label")} · {staffNoText(t, staffNo)}
+        </Text>
 
         <View style={styles.metaRow}>
-          <View style={styles.metaChip}>
-            <Ionicons name="book-outline" size={12} color="#4F46E5" />
+          <View style={[styles.metaChip, styles.metaChipSubject]}>
+            <Ionicons name="book-outline" size={12} color={ACCENT.slate.deep} />
             <Text style={styles.metaChipText}>
               {teacher.subjectCount ?? 0}{" "}
               {Number(teacher.subjectCount ?? 0) === 1
@@ -67,9 +80,9 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
             </Text>
           </View>
 
-          <View style={styles.metaChip}>
-            <Ionicons name="school-outline" size={12} color="#4F46E5" />
-            <Text style={styles.metaChipText}>
+          <View style={[styles.metaChip, styles.metaChipClass]}>
+            <Ionicons name="school-outline" size={12} color={ACCENT.indigo.deep} />
+            <Text style={[styles.metaChipText, styles.metaChipClassText]}>
               {teacher.classCount ?? 0}{" "}
               {Number(teacher.classCount ?? 0) === 1
                 ? t("teachers.klass")
@@ -79,7 +92,7 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
 
           {!hasAssignments && (
             <View style={styles.warningChip}>
-              <Ionicons name="alert-circle-outline" size={12} color="#D97706" />
+              <Ionicons name="alert-circle-outline" size={12} color={SEMANTIC.warning.text} />
               <Text style={styles.warningChipText}>{t("teachers.unassigned")}</Text>
             </View>
           )}
@@ -93,7 +106,7 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
           activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="create-outline" size={20} color="#4F46E5" />
+          <Ionicons name="create-outline" size={20} color={ACCENT.violet.solid} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -102,10 +115,10 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
           activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="trash-outline" size={20} color="#DC2626" />
+          <Ionicons name="trash-outline" size={20} color={ACCENT.red.solid} />
         </TouchableOpacity>
 
-        <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
       </View>
     </TouchableOpacity>
   );
@@ -115,14 +128,14 @@ const EmptyState = React.memo(({ showOnlyUnassigned, onAdd }) => {
                                 const { t } = useTranslation();
                                 return (
   <View style={styles.emptyState}>
-    <View style={styles.emptyIconWrap}>
-      <Ionicons
-        name={showOnlyUnassigned ? "checkmark-circle-outline" : "people-outline"}
-        size={36}
-        color={showOnlyUnassigned ? "#059669" : "#9CA3AF"}
-      />
-    </View>
-    <Text style={[styles.emptyTitle, showOnlyUnassigned && { color: "#059669" }]}>
+    <IconSquare
+      icon={showOnlyUnassigned ? "checkmark-circle-outline" : "people-outline"}
+      accent={showOnlyUnassigned ? "green" : "violet"}
+      size={80}
+      radius={20}
+      style={styles.emptyIconWrap}
+    />
+    <Text style={[styles.emptyTitle, showOnlyUnassigned && styles.emptyTitleSuccess]}>
       {showOnlyUnassigned ? t("teachers.allAssigned") : t("teachers.none")}
     </Text>
     <Text style={styles.emptySubtitle}>
@@ -130,7 +143,7 @@ const EmptyState = React.memo(({ showOnlyUnassigned, onAdd }) => {
     </Text>
     {!showOnlyUnassigned && (
       <TouchableOpacity style={styles.emptyButton} onPress={onAdd} activeOpacity={0.7}>
-        <Ionicons name="add-circle" size={18} color="#4F46E5" />
+        <Ionicons name="add-circle" size={18} color={ACCENT.violet.deep} />
         <Text style={styles.emptyButtonText}>{t("teachers.add")}</Text>
       </TouchableOpacity>
     )}
@@ -148,14 +161,14 @@ const StatsBanner = React.memo(({ stats }) => {
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
-      <Text style={[styles.statNumber, { color: "#059669" }]}>
+      <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>
         {stats.total - stats.unassigned}
       </Text>
       <Text style={styles.statLabel}>{t("teachers.assigned")}</Text>
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
-      <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
+      <Text style={[styles.statNumber, stats.unassigned > 0 && { color: SEMANTIC.warning.text }]}>
         {stats.unassigned}
       </Text>
       <Text style={styles.statLabel}>{t("teachers.unassigned")}</Text>
@@ -168,7 +181,7 @@ const ErrorBanner = React.memo(({ message, onRetry }) => {
                                  const { t } = useTranslation();
                                  return (
   <View style={styles.errorBanner}>
-    <Ionicons name="alert-circle" size={18} color="#DC2626" />
+    <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
     <Text style={styles.errorText}>{message}</Text>
     <TouchableOpacity
       onPress={onRetry}
@@ -403,8 +416,10 @@ export default function AdminTeachers() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={styles.headerIcon} />
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("teachers.title")}</Text>
@@ -501,21 +516,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12, marginRight: 8 },
-  headerTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addButton: {
     width:           40,
     height:          40,
@@ -573,42 +589,44 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "center",
-    backgroundColor: "#FFFFFF",
     paddingVertical: 12,
-    borderTopWidth:  1,
     borderBottomWidth: 1,
-    borderColor:     "#F3F4F6",
+    ...tileShell("teachers"),
     gap:             24,
   },
   statItem:   { alignItems: "center" },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel:  { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 1 },
-  statDivider:{ width: 1, height: 24, backgroundColor: "#E5E7EB" },
+  statNumber: { fontSize: 18, fontWeight: "700", color: ACCENT.violet.deep },
+  statLabel:  { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 1 },
+  statDivider:{ width: 1, height: 24, backgroundColor: COLORS.border },
 
   card: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ACCENT.violet.wash,
     borderRadius:    14,
     padding:         14,
     marginHorizontal: 20,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.violet.base,
   },
   cardIcon: {
     width:           44,
     height:          44,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginRight:     12,
     flexShrink:      0,
   },
   cardInfo:     { flex: 1, marginRight: 8 },
-  teacherName:  { fontSize: 15, fontWeight: "700", color: "#111827" },
-  teacherEmail: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  teacherName:  { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  teacherEmail: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  teacherStaffNo:      { fontSize: 12, color: COLORS.text, marginTop: 1, fontWeight: "600" },
+  teacherStaffNoMuted: { color: COLORS.textSecondary, fontWeight: "400", fontStyle: "italic" },
   metaRow: {
     flexDirection: "row",
     flexWrap:      "wrap",
@@ -619,22 +637,27 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     gap:             4,
-    backgroundColor: "#EEF2FF",
     borderRadius:    6,
+    borderWidth:     1,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  metaChipText: { fontSize: 11, fontWeight: "600", color: "#4F46E5" },
+  metaChipSubject:   { backgroundColor: accentBadge("slate").bg, borderColor: accentBadge("slate").border },
+  metaChipClass:     { backgroundColor: accentBadge("indigo").bg, borderColor: accentBadge("indigo").border },
+  metaChipText:      { fontSize: 11, fontWeight: "600", color: accentBadge("slate").text },
+  metaChipClassText: { color: accentBadge("indigo").text },
   warningChip: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             4,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: statusBadge("warning").bg,
+    borderColor:     statusBadge("warning").border,
+    borderWidth:     1,
     borderRadius:    6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  warningChipText: { fontSize: 11, fontWeight: "600", color: "#92400E" },
+  warningChipText: { fontSize: 11, fontWeight: "600", color: statusBadge("warning").text },
   cardActions: {
     flexDirection: "row",
     alignItems:    "center",
@@ -649,27 +672,20 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     paddingHorizontal: 40,
   },
-  emptyIconWrap: {
-    width:           80,
-    height:          80,
-    borderRadius:    20,
-    backgroundColor: "#F3F4F6",
-    alignItems:      "center",
-    justifyContent:  "center",
-    marginBottom:    8,
-  },
-  emptyTitle:    { fontSize: 16, fontWeight: "600", color: "#374151", marginTop: 8 },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", marginTop: 4, textAlign: "center", lineHeight: 18 },
+  emptyIconWrap: { marginBottom: 8 },
+  emptyTitle:    { fontSize: 16, fontWeight: "600", color: COLORS.text, marginTop: 8 },
+  emptyTitleSuccess: { color: SEMANTIC.success.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4, textAlign: "center", lineHeight: 18 },
   emptyButton: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.violet.wash,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius:    10,
     marginTop:       20,
     gap:             8,
   },
-  emptyButtonText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
+  emptyButtonText: { fontSize: 14, fontWeight: "600", color: ACCENT.violet.deep },
 });
-import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useTranslation } from "../../../src/i18n/useTranslation";

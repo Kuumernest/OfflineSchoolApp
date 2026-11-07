@@ -38,7 +38,8 @@ export function Table({
 
 // ── Head ─────────────────────────────────────────────────
 export function THead({ children }: { children: React.ReactNode }) {
-  return <thead className="bg-gray-50">{children}</thead>;
+  // Clean white, as the rows are; colour lives in the card's header icon.
+  return <thead className="bg-surface">{children}</thead>;
 }
 
 // ── Header cell ──────────────────────────────────────────
@@ -64,7 +65,7 @@ export function Th({
         // buy nothing once the header row is already tinted and ruled.
         "border-b border-line",
         // sticky so the header survives a long scroll inside the card
-        "sticky top-0 z-10 bg-gray-50",
+        "sticky top-0 z-10 bg-surface",
         numeric ? "text-right" : "text-left",
         className
       )}
@@ -109,7 +110,8 @@ export function Tr({
       className={cn(
         "group transition-colors",
         interactive && "cursor-pointer hover:bg-primary-50/50",
-        !interactive && "hover:bg-surface-muted",
+        // A faint blue wash on hover, never grey.
+        !interactive && "hover:bg-accent-blue-soft/70",
         className
       )}
     >
@@ -175,7 +177,8 @@ export function EmptyTable({
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
       {icon && (
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-card bg-canvas text-ink-faint [&_svg]:h-5 [&_svg]:w-5">
+        // A solid icon square with a white icon, as on every card — never a grey well.
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-card bg-accent-blue-solid text-white [&_svg]:h-5 [&_svg]:w-5 [&_svg]:text-white">
           {icon}
         </div>
       )}

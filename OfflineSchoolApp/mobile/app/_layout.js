@@ -13,6 +13,8 @@ import { useAuthStore } from "../src/store/auth.store";
 import { getRoleRoute } from "../src/services/routes";
 import { SyncManager }  from "../src/services/syncManager";
 import { loadStoredLanguage } from "../src/i18n";
+import PreparingLocalData from "../src/components/PreparingLocalData";
+import UpdateRequired from "../src/components/UpdateRequired";
 
 export default function RootLayout() {
   const router   = useRouter();
@@ -27,6 +29,11 @@ export default function RootLayout() {
   const token          = useAuthStore((s) => s.token);
   const initAuth       = useAuthStore((s) => s.initAuth);
   const setSyncError   = useAuthStore((s) => s.setSyncError);
+  // Per-user local data (docs/40): while an account's own store has its first
+  // full sync, no data screen is mounted and the regular sync does not start.
+  const preparing      = useAuthStore((s) => s.localDataPhase === "preparing");
+  // This build may not go on (docs/40 §8.9): no screen, no sync, nothing lost.
+  const updateRequired = useAuthStore((s) => s.updateRequired === true);
 
   // ✅ Auth is ready when EITHER flag is true AND we are not mid-login
   const authReady = (hydrated || hasInitialized) && !isLoading;
@@ -128,6 +135,8 @@ export default function RootLayout() {
     if (!dbReady)               return;
     if (!user || !token)        return;
     if (user.mustResetPassword) return;   // password wall — no data access yet
+    if (preparing)              return;   // the first sync of the account's own store runs it
+    if (updateRequired)         return;   // too old for this school's / phone's data
 
     SyncManager.ensureStarted().catch((err) => {
       console.warn("[layout] sync engine failed to start:", err.message);
@@ -135,13 +144,15 @@ export default function RootLayout() {
       // no indication that it is stale.
       setSyncError?.("Data sync failed. Some information may be outdated.");
     });
-  }, [dbReady, user?.id, token, user?.mustResetPassword, setSyncError]);
+  }, [dbReady, user?.id, token, user?.mustResetPassword, setSyncError, preparing, updateRequired]);
 
   // ── Navigation guard ───────────────────────────────────────────────────
   const canNavigate = dbReady && (authReady || forceReady);
 
   useEffect(() => {
     if (!canNavigate) return;
+    if (preparing)    return;
+    if (updateRequired) return;
 
     const path           = "/" + (segments?.join("/") || "");
     const isAuthGroup    = segments[0] === "auth";
@@ -228,7 +239,7 @@ export default function RootLayout() {
     }
 
     console.log("✅ Navigation guard passed:", path);
-  }, [canNavigate, user, segments, router]);
+  }, [canNavigate, user, segments, router, preparing, updateRequired]);
 
   // ── Splash ─────────────────────────────────────────────────────────────
   if (!canNavigate) {
@@ -250,6 +261,9 @@ export default function RootLayout() {
       </View>
     );
   }
+
+  if (updateRequired) return <UpdateRequired />;
+  if (user && preparing) return <PreparingLocalData />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

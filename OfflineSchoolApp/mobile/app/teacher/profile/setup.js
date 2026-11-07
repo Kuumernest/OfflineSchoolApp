@@ -26,30 +26,37 @@ import DateField                from "../../../src/components/DateField";
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 import { useTranslation }       from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+import { loadOwnStaffNo }       from "../../../src/services/staffNumber.service";
+import { staffNoText }          from "../../../src/utils/staffNumber";
+import { needsInternetFailureText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
 // ─────────────────────────────────────────────────────────
+// A teacher's own profile is violet, the teachers' colour everywhere.
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  successBg: "#ECFDF5",
-  warning:   "#D97706",
-  warningBg: "#FEF3C7",
-  error:     "#DC2626",
-  errorBg:   "#FEF2F2",
-  info:      "#2563EB",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray300:   "#D1D5DB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.violet.solid,
+  primaryBg: ACCENT.violet.wash,
+  primaryDeep: ACCENT.violet.deep,
+  primaryEdge: ACCENT.violet.base,
+  success:   ACCENT.green.solid,
+  successBg: SEMANTIC.success.bg,
+  warning:   COLORS.warning,
+  warningBg: SEMANTIC.warning.bg,
+  error:     COLORS.danger,
+  errorBg:   SEMANTIC.error.bg,
+  info:      SEMANTIC.info.icon,
+  white:     COLORS.surface,
+  gray50:    COLORS.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   COLORS.border,
+  gray300:   COLORS.textMuted,
+  gray400:   COLORS.textMuted,
+  gray500:   COLORS.textSecondary,
+  gray700:   COLORS.text,
+  gray900:   COLORS.text,
 };
 
 
@@ -123,7 +130,7 @@ const f = StyleSheet.create({
   icon:          { marginRight: 8 },
   input:         { flex: 1, fontSize: 14, color: C.gray900, paddingVertical: 12 },
   inputMulti:    { height: 80, textAlignVertical: "top", paddingTop: 12 },
-  hint:          { fontSize: 11, color: C.gray400, marginTop: 4 },
+  hint:          { fontSize: 11, color: COLORS.textSubtle, marginTop: 4 },
   errorText:     { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
 });
 
@@ -180,11 +187,11 @@ const sf = StyleSheet.create({
   selectorError:    { borderColor: C.error },
   selectorText:     { fontSize: 14, color: C.gray900, flex: 1 },
   placeholder:      { color: C.gray400 },
-  dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
+  dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: COLORS.shadow, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
   option:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.gray100 },
-  optionActive:     { backgroundColor: C.primaryBg },
+  optionActive:     { backgroundColor: C.primaryBg, borderWidth: 1, borderColor: C.primaryEdge },
   optionText:       { fontSize: 14, color: C.gray700 },
-  optionTextActive: { color: C.primary, fontWeight: "600" },
+  optionTextActive: { color: C.primaryDeep, fontWeight: "600" },
   errorText:        { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
 });
 
@@ -240,7 +247,6 @@ const validateStep = (step, form, t) => {
     if (!form.nationalId?.trim())  errors.nationalId  = t("profileTeacher.errNationalId");
   }
   if (step === 1) {
-    if (!form.staffId?.trim())   errors.staffId        = t("profileTeacher.errStaffId");
     if (!form.qualification)     errors.qualification  = t("profileTeacher.errQualification");
     if (!form.employmentType)    errors.employmentType = t("profileTeacher.errEmploymentType");
     if (!form.joinDate?.trim())  errors.joinDate       = t("profileTeacher.errJoinDate");
@@ -296,12 +302,16 @@ const saveProfile = async (form, userId) => {
   };
 
   // ── API save with retry ───────────────────────────────
+  // Online-only on the server side: nothing queues it. Reported back so the
+  // screen can say "saved on this phone only" instead of pretending.
+  let serverSaved = false;
   try {
     await withRetry(
       () => api.put("/teacher/profile", payload, { timeout: 10_000 }),
       3,
       1_000
     );
+    serverSaved = true;
   } catch (err) {
     console.warn("[profile/setup] API save failed:", err.message);
     // Non-fatal — SQLite save below is the source of truth on device
@@ -347,6 +357,14 @@ const saveProfile = async (form, userId) => {
     console.warn("[profile/setup] SQLite save error:", err.message);
     throw err;
   }
+
+  // Not reached the server: queued, so it is sent when the phone is next
+  // online (and counts as unsent work until it is). It used to be dropped.
+  if (!serverSaved) {
+    await TeacherProfile.queueUpload(userId, { ...payload, profileCompleted: true }, fullName)
+      .catch((err) => console.warn("[profile/setup] could not queue the profile:", err.message));
+  }
+  return { serverSaved };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -370,13 +388,11 @@ export const isTeacherProfileComplete = async (userId) => {
   try {
     const { token } = useAuthStore.getState();
     if (token && token !== "offline_mode") {
-      const res = await withRetry(
-        () => api.get("/teacher/profile"),
-        3,
-        1_000
-      );
-      const data = res.data?.data || res.data;
-      if (data?.profileCompleted) return true;
+      // The server's copy merged with this phone's: saves what the server
+      // adds, and queues a profile that so far lives only on this phone —
+      // which is how a profile saved before the server stored them gets there.
+      const { profile } = await TeacherProfile.loadProfile(userId, { api });
+      if (profile?.profileCompleted) return true;
     }
   } catch { /* fall through to SQLite */ }
 
@@ -403,7 +419,7 @@ export const isTeacherProfileComplete = async (userId) => {
 export default function TeacherProfileSetup() {
   const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
-  const setUser             = useAuthStore((s) => s.setUser);
+  const updateUser          = useAuthStore((s) => s.updateUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
 
   const userId = String(user?._id || user?.id || "");
@@ -411,6 +427,17 @@ export default function TeacherProfileSetup() {
   const [step,   setStep]   = useState(0);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // The school's staff number: issued by the server, shown read-only. It
+  // replaced the "Staff ID" a teacher used to type here, which the server
+  // never stored. Whatever an older build typed stays in form.staffId (and
+  // the local teacher_profiles.staff_id column) untouched, but is not shown.
+  const [staffNo, setStaffNo] = useState({ kind: "none", value: null });
+  useEffect(() => {
+    let live = true;
+    loadOwnStaffNo(user).then((s) => { if (live) setStaffNo(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
 
   const [form, setForm] = useState({
     firstName:         user?.name?.split(" ")[0]                 || "",
@@ -443,59 +470,22 @@ export default function TeacherProfileSetup() {
   // ── Load existing profile ─────────────────────────────
   useEffect(() => {
     const loadExisting = async () => {
-      // Try API first (with retry so transient WiFi blip doesn't break it)
+      // The server's copy merged with this phone's, field by field. It used
+      // to take the server's reply alone — a reply that carried no profile —
+      // and blank every field whenever the phone was online.
       try {
-        const res = await withRetry(
-          () => api.get("/teacher/profile", { timeout: 8_000 }),
-          3,
-          1_000
-        );
-        const p = res.data?.data || res.data;
-        if (p && typeof p === "object") {
-          setForm((prev) => ({
-            ...prev,
-            firstName:         p.firstName         || prev.firstName,
-            lastName:          p.lastName          || prev.lastName,
-            gender:            p.gender            || prev.gender,
-            dateOfBirth:       p.dateOfBirth       || "",
-            nationalId:        p.nationalId        || "",
-            staffId:           p.staffId           || "",
-            qualification:     p.qualification     || "",
-            employmentType:    p.employmentType    || "full_time",
-            joinDate:          p.joinDate          || "",
-            yearsOfExperience: p.yearsOfExperience || "",
-            previousSchool:    p.previousSchool    || "",
-            phone:             p.phone             || prev.phone,
-            alternatePhone:    p.alternatePhone    || "",
-            address:           p.address           || "",
-            city:              p.city              || "",
-            state:             p.state             || "",
-            emergencyName:     p.emergencyName     || "",
-            emergencyPhone:    p.emergencyPhone    || "",
-            emergencyRelation: p.emergencyRelation || "",
-            bloodGroup:        p.bloodGroup        || "",
-            medicalConditions: p.medicalConditions || "",
-            bio:               p.bio               || "",
-          }));
-          return; // API succeeded — no need for SQLite fallback
-        }
-      } catch { /* fall through to SQLite */ }
-
-      // Fallback: local cache. Returns the form's own shape, so there is no
-      // column-name mapping here to drift out of step with the writer.
-      try {
-        const saved = await TeacherProfile.getLocal(userId);
-        if (saved) {
+        const { profile } = await TeacherProfile.loadProfile(userId, { api });
+        if (profile) {
           setForm((prev) => {
             const merged = { ...prev };
-            for (const [key, value] of Object.entries(saved)) {
+            for (const [key, value] of Object.entries(profile)) {
               if (key === "profileCompleted" || key === "updatedAt") continue;
               if (value !== "" && value != null) merged[key] = value;
             }
             return merged;
           });
         }
-      } catch { /* ignore */ }
+      } catch { /* the form keeps what it has */ }
     };
 
     if (userId) loadExisting();
@@ -540,23 +530,25 @@ export default function TeacherProfileSetup() {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     try {
       setSaving(true);
-      await saveProfile(form, userId);
+      const { serverSaved } = await saveProfile(form, userId);
 
       const fullName = `${form.firstName} ${form.lastName}`.trim();
 
       setProfileCompleted(true);
-      if (user) setUser?.({ ...user, name: fullName, profileCompleted: true });
+      // updateUser, not setUser: setUser(user) with no token wrote an empty
+      // token, and the teacher was signed out on the next launch.
+      if (user) updateUser?.({ name: fullName, profileCompleted: true });
 
       Alert.alert(
         t("profileTeacher.savedTitle"),
-        t("profileTeacher.savedBody"),
+        serverSaved ? t("profileTeacher.savedBody") : t("common.savedOnPhoneOnly"),
         [{
           text: t("profileTeacher.continueBtn"),
           onPress: () => router.replace("/teacher/dashboard"),
         }]
       );
     } catch (err) {
-      Alert.alert(t("profileTeacher.errorTitle"), errorText(t, err, "profileTeacher.saveFailedBody"));
+      Alert.alert(t("profileTeacher.errorTitle"), needsInternetFailureText(t, err, "profileTeacher.saveFailedBody"));
     } finally {
       setSaving(false);
     }
@@ -654,12 +646,11 @@ export default function TeacherProfileSetup() {
             </View>
 
             <Field
-              label={t("profileTeacher.labelStaffId")} required
-              value={form.staffId}
-              onChangeText={(v) => set("staffId", v)}
-              placeholder={t("profileTeacher.phStaffId")}
+              label={t("staffNo.labelLong")}
+              value={staffNoText(t, staffNo)}
+              editable={false}
               icon="id-card-outline"
-              error={errors.staffId}
+              hint={t("staffNo.fromSchool")}
             />
 
             <SelectField
@@ -845,6 +836,7 @@ export default function TeacherProfileSetup() {
           <TouchableOpacity onPress={goBack} style={ss.backBtn} hitSlop={8}>
             <Ionicons name="arrow-back" size={22} color={C.gray700} />
           </TouchableOpacity>
+          <HeaderIcon style={ss.headerIcon} />
           <View style={{ flex: 1 }}>
             <Text style={ss.topTitle}>{t("profileTeacher.title")}</Text>
             <Text style={ss.topSub}>
@@ -885,7 +877,7 @@ export default function TeacherProfileSetup() {
                 ]}>
                   {isDone
                     ? <Ionicons name="checkmark" size={14} color={C.white} />
-                    : <Ionicons name={s.icon}    size={14} color={isCurrent ? C.white : C.gray400} />
+                    : <Ionicons name={s.icon}    size={14} color={isCurrent ? C.white : C.primary} />
                   }
                 </View>
                 <Text style={[
@@ -902,7 +894,10 @@ export default function TeacherProfileSetup() {
 
         {/* Step header */}
         <View style={ss.stepHeader}>
-          <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          <View style={ss.stepTitleRow}>
+            <IconSquare icon={STEPS[step].icon} accent="violet" size={28} />
+            <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          </View>
           <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
         </View>
 
@@ -961,28 +956,30 @@ const ss = StyleSheet.create({
   screen:           { flex: 1, backgroundColor: C.white },
   topBar:           { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: C.white, gap: 10 },
   backBtn:          { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  headerIcon:       { marginRight: 0 },
   topTitle:         { fontSize: 17, fontWeight: "700", color: C.gray900 },
-  topSub:           { fontSize: 12, color: C.gray400, marginTop: 1 },
-  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.gray50 },
+  topSub:           { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.white },
   skipBtnText:      { fontSize: 13, fontWeight: "600", color: C.gray500 },
   progressTrack:    { height: 4, backgroundColor: C.gray100, marginHorizontal: 16 },
   progressFill:     { height: "100%", backgroundColor: C.primary, borderRadius: 2 },
   stepRow:          { maxHeight: 80, backgroundColor: C.white },
   stepRowContent:   { paddingHorizontal: 16, paddingVertical: 12, gap: 24, alignItems: "center" },
   stepItem:         { alignItems: "center", gap: 4 },
-  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
-  stepCircleActive: { backgroundColor: C.primary },
-  stepCircleDone:   { backgroundColor: C.success },
-  stepLabel:        { fontSize: 10, color: C.gray400, fontWeight: "500" },
-  stepLabelActive:  { color: C.primary, fontWeight: "700" },
+  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.primaryBg, borderWidth: 1, borderColor: C.gray200, alignItems: "center", justifyContent: "center" },
+  stepCircleActive: { backgroundColor: C.primary, borderColor: C.primary },
+  stepCircleDone:   { backgroundColor: C.success, borderColor: C.success },
+  stepLabel:        { fontSize: 10, color: COLORS.textSecondary, fontWeight: "500" },
+  stepLabelActive:  { color: C.primaryDeep, fontWeight: "700" },
   stepLabelDone:    { color: C.success },
-  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray100, backgroundColor: C.gray50 },
+  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray200, backgroundColor: C.primaryBg },
+  stepTitleRow:     { flexDirection: "row", alignItems: "center", gap: 10 },
   stepTitle:        { fontSize: 18, fontWeight: "700", color: C.gray900 },
   stepDesc:         { fontSize: 13, color: C.gray500, marginTop: 2 },
   formContent:      { paddingHorizontal: 20, paddingTop: 20 },
   row:              { flexDirection: "row", alignItems: "flex-start" },
-  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#DBEAFE", borderRadius: 12, padding: 12, marginBottom: 16 },
-  infoText:         { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 18 },
+  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: SEMANTIC.info.box, borderRadius: 12, padding: 12, marginBottom: 16 },
+  infoText:         { flex: 1, fontSize: 13, color: SEMANTIC.info.text, lineHeight: 18 },
   bottomBar:        { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.white, gap: 12, borderTopWidth: 1, borderTopColor: C.gray100 },
   backAction:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary },
   backActionText:   { fontSize: 14, fontWeight: "700", color: C.primary },

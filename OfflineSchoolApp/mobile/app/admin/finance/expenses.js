@@ -25,23 +25,26 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare, Badge } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  primaryBg: "#F0F4FF",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  success:   "#12683A",
-  successBg: "#EEF7F1",
-  warning:   "#96570B",
-  warningBg: "#FDF6EC",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.teal.solid,
+  primaryBg: ACCENT.teal.wash,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  success:   SEMANTIC.success.text,
+  successBg: SEMANTIC.success.bg,
+  warning:   SEMANTIC.warning.text,
+  warningBg: SEMANTIC.warning.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
 const METHODS = ["cash", "mobile_money", "bank", "cheque"];
@@ -201,6 +204,7 @@ export default function ExpensesScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={22} color={C.inkBody} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title} numberOfLines={1}>{t("expenses.title")}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{t("expenses.blurb")}</Text>
@@ -230,7 +234,10 @@ export default function ExpensesScreen() {
 
         {/* Record */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t("expenses.record")}</Text>
+          <View style={styles.cardHead}>
+            <IconSquare icon="create" accent="teal" size={28} />
+            <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("expenses.record")}</Text>
+          </View>
 
           {categories.length === 0 ? (
             <Text style={styles.empty}>{t("expenses.noCategories")}</Text>
@@ -238,20 +245,24 @@ export default function ExpensesScreen() {
             <>
               <Text style={styles.label}>{t("expenses.category")}</Text>
               <View style={styles.chips}>
-                {categories.map((c) => (
-                  <TouchableOpacity
-                    key={c._id}
-                    style={[styles.chip, categoryId === c._id && styles.chipOn]}
-                    onPress={() => setCategoryId(c._id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[styles.chipText, categoryId === c._id && styles.chipTextOn]}
+                {categories.map((c) => {
+                  const ca = ACCENT[categoryAccent(c.label)];
+                  const on = categoryId === c._id;
+                  return (
+                    <TouchableOpacity
+                      key={c._id}
+                      style={[styles.chip, on && { backgroundColor: ca.wash, borderColor: ca.base }]}
+                      onPress={() => setCategoryId(c._id)}
+                      activeOpacity={0.8}
                     >
-                      {c.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[styles.chipText, on && { color: ca.deep, fontWeight: "700" }]}
+                      >
+                        {c.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.label}>{t("fees.amount")}</Text>
@@ -304,7 +315,7 @@ export default function ExpensesScreen() {
                 activeOpacity={0.85}
               >
                 {saving
-                  ? <ActivityIndicator color="#fff" />
+                  ? <ActivityIndicator color={COLORS.onPrimary} />
                   : <Text style={styles.submitText}>{t("expenses.record")}</Text>}
               </TouchableOpacity>
             </>
@@ -313,12 +324,22 @@ export default function ExpensesScreen() {
 
         {/* Ledger */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t("expenses.title")}</Text>
+          <View style={styles.cardHead}>
+            <IconSquare icon="receipt" accent="teal" size={28} />
+            <Text style={[styles.cardTitle, styles.cardTitleInHead]}>{t("expenses.title")}</Text>
+          </View>
           {expenses.length === 0 ? (
             <Text style={styles.empty}>{t("expenses.none")}</Text>
           ) : (
             expenses.map((e) => (
-              <View key={e._id} style={styles.line}>
+              <View
+                key={e._id}
+                style={[
+                  styles.line,
+                  styles.lineEdge,
+                  { borderLeftColor: e.voidedAt ? ACCENT.red.base : ACCENT[categoryAccent(labelFor(e.categoryId))].base },
+                ]}
+              >
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.lineLabel} numberOfLines={1}>
                     {e.description || labelFor(e.categoryId)}
@@ -348,13 +369,13 @@ export default function ExpensesScreen() {
                 </Text>
 
                 {e.voidedAt ? (
-                  <Text style={styles.voidTag}>{t("expenses.voided")}</Text>
+                  <Badge label={t("expenses.voided")} tone="error" textStyle={styles.voidTag} />
                 ) : (
                   <TouchableOpacity onPress={() => askUndo(e)} hitSlop={8}>
                     <Ionicons
                       name={e.isSynced ? "ban-outline" : "trash-outline"}
                       size={16}
-                      color={C.inkFaint}
+                      color={SEMANTIC.error.icon}
                     />
                   </TouchableOpacity>
                 )}
@@ -378,26 +399,27 @@ const styles = StyleSheet.create({
   },
   title:    { fontSize: 16, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 1, fontSize: 11, color: C.inkMuted },
+  headerIcon: { marginRight: 0 },
 
   body: { padding: 16, gap: 12, paddingBottom: 40 },
 
   totalCard: {
     borderRadius: 12, borderWidth: 1, padding: 16,
-    backgroundColor: C.surface, borderColor: C.line,
+    ...tileShell("finance"),
   },
   totalLabel: {
-    fontSize: 11, fontWeight: "600", color: C.inkMuted,
+    fontSize: 11, fontWeight: "600", color: COLORS.textSecondary,
     textTransform: "uppercase", letterSpacing: 0.6,
   },
   totalValue: {
-    marginTop: 6, fontSize: 30, fontWeight: "700", color: C.ink,
+    marginTop: 6, fontSize: 30, fontWeight: "700", color: ACCENT.teal.deep,
     fontVariant: ["tabular-nums"],
   },
 
   pendingBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.warningBg, borderWidth: 1, borderColor: "#F0DCBB",
+    backgroundColor: C.warningBg, borderWidth: 1, borderColor: SEMANTIC.warning.box,
   },
   pendingText: { flex: 1, fontSize: 12, color: C.warning, fontWeight: "500" },
 
@@ -406,40 +428,43 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.line, padding: 14,
   },
   cardTitle: { fontSize: 13, fontWeight: "700", color: C.ink, marginBottom: 10 },
+  cardHead:  { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  cardTitleInHead: { marginBottom: 0, flex: 1 },
 
   label: { fontSize: 12, fontWeight: "600", color: C.inkBody, marginBottom: 5, marginTop: 8 },
   input: {
-    height: 42, borderRadius: 9, borderWidth: 1, borderColor: "#D5D9E2",
+    height: 42, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 12, fontSize: 15, color: C.ink, backgroundColor: C.surface,
   },
-  hint: { marginTop: 4, fontSize: 11, color: C.inkFaint },
+  hint: { marginTop: 4, fontSize: 11, color: COLORS.textSecondary },
 
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-    borderWidth: 1, borderColor: "#D5D9E2", backgroundColor: C.surface,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: C.surface,
   },
-  chipOn:     { backgroundColor: C.primary, borderColor: C.primary },
+  chipOn:     { backgroundColor: ACCENT.teal.wash, borderColor: ACCENT.teal.base },
   chipText:   { fontSize: 12, color: C.inkBody, fontWeight: "500" },
-  chipTextOn: { color: "#fff" },
+  chipTextOn: { color: ACCENT.teal.deep, fontWeight: "700" },
 
   submit: {
     marginTop: 16, height: 46, borderRadius: 10, backgroundColor: C.primary,
     alignItems: "center", justifyContent: "center",
   },
   submitOff:  { opacity: 0.45 },
-  submitText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  submitText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "600" },
 
   line: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
   },
+  lineEdge:   { borderLeftWidth: 3, paddingLeft: 8 },
   lineLabel:  { fontSize: 13, color: C.inkBody },
-  lineMeta:   { marginTop: 2, fontSize: 11, color: C.inkFaint },
+  lineMeta:   { marginTop: 2, fontSize: 11, color: COLORS.textSecondary },
   lineAmount: { fontSize: 13, fontWeight: "600", color: C.ink, fontVariant: ["tabular-nums"] },
   lineAmountVoid: {
-    color: C.inkFaint, textDecorationLine: "line-through",
+    color: COLORS.textSecondary, textDecorationLine: "line-through",
   },
-  voidTag: { fontSize: 10, fontWeight: "600", color: C.inkFaint, textTransform: "uppercase" },
-  empty:   { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+  voidTag: { fontSize: 10, textTransform: "uppercase" },
+  empty:   { fontSize: 12, color: COLORS.textSecondary, paddingVertical: 8 },
 });

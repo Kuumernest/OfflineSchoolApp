@@ -7,6 +7,8 @@ import {
   HEALTH_METRIC_ROWS,
   type HealthMetric,
 } from "@/constants/dashboard.constants";
+import { type Semantic } from "@/config/sections";
+import { ALERT_NUMBER, dashTint, healthLook } from "@/config/dashboardTint";
 import { cn } from "@/utils/cn";
 
 // Flatten the grouped rows into one list; the grid handles wrapping.
@@ -21,8 +23,16 @@ const METRICS: HealthMetric[] = HEALTH_METRIC_ROWS.flat();
  * timetable conflict, an unassigned teacher) were invisible among the twelve
  * that were merely counts.
  *
- * Now it is a quiet list where only a problem is coloured. If nothing is wrong,
- * nothing is red, and the panel reads as "fine" in one glance.
+ * Every tile is the same: its kind's tinted card (config/dashboardTint.ts) —
+ * the same colour as that kind's headline card above — with a solid icon
+ * square and a white icon. Notices are sky, distinct from the students' blue.
+ * A metric that is a problem only when non-zero keeps that look at every
+ * value; only its figure and border change, from navy at zero to amber above
+ * it (red for a timetable conflict). When nothing is wrong the header pill is
+ * the success tint.
+ *
+ * The tile colours are styling only: the header's count of faults is still
+ * each metric's own `alert`, as before.
  */
 export default function SystemHealthGrid({
   stats,
@@ -32,9 +42,16 @@ export default function SystemHealthGrid({
   const { t } = useTranslation();
   const s = stats as unknown as Record<string, number>;
 
-  const problems = METRICS.filter(
-    (m) => m.alertOnNonZero && (s[m.key] ?? 0) > 0
-  );
+  /** Whether a metric is a fault right now (the header's count), or null. */
+  const toneOf = (m: HealthMetric): Semantic | null => {
+    if (m.alertOnNonZero) return (s[m.key] ?? 0) > 0 ? (m.alert ?? "error") : null;
+    return m.semantic ?? null;
+  };
+
+  // Faults only. Pending applications are a queue to work through, not a
+  // setup fault, so they tint their own card but do not turn the panel's
+  // "healthy" pill into "action needed" — the same count as before.
+  const problems = METRICS.filter((m) => toneOf(m) === "error");
 
   return (
     <Card>
@@ -51,8 +68,8 @@ export default function SystemHealthGrid({
               "inline-flex items-center gap-1.5 rounded-control px-2 py-0.5",
               "text-xs font-medium ring-1 ring-inset",
               problems.length
-                ? "bg-warning-soft text-warning ring-warning-line"
-                : "bg-success-soft text-success ring-success-line"
+                ? "bg-warning-soft text-warning-text ring-warning-line"
+                : "bg-success-soft text-success-text ring-success-line"
             )}
           >
             <span
@@ -67,68 +84,61 @@ export default function SystemHealthGrid({
         }
       />
 
-      {/*
-        Tiles, matching Quick actions, rather than a two-column list of rows.
-        Fourteen metrics as ruled rows read as a spreadsheet; as tiles they read
-        as a panel of readings — and a tile gives the problem state somewhere to
-        live, since it can carry a tinted surface and border that a table row
-        cannot without striping the whole grid.
-      */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {METRICS.map((metric) => {
-          const Icon    = metric.icon;
-          const value   = s[metric.key] ?? 0;
-          const isAlert = Boolean(metric.alertOnNonZero) && value > 0;
+          const Icon  = metric.icon;
+          const value = s[metric.key] ?? 0;
+          const look  = healthLook(metric, value);
+          const tint  = dashTint(metric.tone);
+          const alert = look.kind === "alert" ? look.level : null;
+          // Every tile has the same solid icon square; a warning metric only
+          // changes its border and figure above zero.
+          const card   = alert === "warning" ? tint.warnCard
+            : alert === "error" ? tint.errorCard
+            : tint.card;
+          const box    = tint.box;
+          const number = alert ? ALERT_NUMBER[alert] : tint.number;
 
-          const tileClass = cn(
-            "block rounded-control border p-3.5 transition-colors",
-            isAlert
-              ? "border-danger-line bg-danger-soft"
-              : "border-line bg-gradient-to-b from-surface to-[#fcfcfe]"
-          );
+          const tileClass = cn("block p-4 transition-colors", card);
 
           const body = (
             <>
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-control ring-1 ring-inset",
-                    isAlert
-                      ? "bg-surface text-danger ring-danger-line"
-                      : "bg-canvas text-ink-muted ring-line"
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-control",
+                    box
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
 
-                <p
-                  className={cn(
-                    "text-2xl font-semibold leading-none tabular",
-                    isAlert ? "text-danger" : "text-ink"
-                  )}
-                >
+                <p className={cn("text-[28px] font-bold leading-none tabular", number)}>
                   {value}
                 </p>
               </div>
 
               <p
-                className={cn(
-                  // One line: a label wrapping mid-word ("Unassigne / d") in a
-                  // narrow tile reads as a typo. Long labels truncate, and the
-                  // title attribute still carries the whole text.
-                  "mt-2.5 truncate whitespace-nowrap text-[13px] leading-snug",
-                  isAlert ? "font-medium text-danger" : "text-ink-muted"
-                )}
+                // One line: a label wrapping mid-word ("Unassigne / d") in a
+                // narrow tile reads as a typo. Long labels truncate, and the
+                // title attribute still carries the whole text.
+                className="mt-3 truncate whitespace-nowrap text-sm font-medium leading-snug text-ink-muted"
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
               </p>
+              {/* B4: the pairs, then how many distinct subjects they are. */}
+              {metric.key === "totalSubjects" && stats.distinctSubjects != null && (
+                <p className="text-xs text-ink-muted">
+                  {t("health.distinctSubjects", { count: stats.distinctSubjects })}
+                </p>
+              )}
             </>
           );
 
           // A problem tile with somewhere to fix it is a link; the rest stay
           // plain readings.
-          return isAlert && metric.href ? (
+          return alert && metric.href ? (
             <Link
               key={metric.key}
               to={metric.href}

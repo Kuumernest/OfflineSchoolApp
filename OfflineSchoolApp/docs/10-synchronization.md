@@ -7,18 +7,23 @@ storage or design. Both are live and supported. Confusing them is the most likel
 source of a wrong change in this system, so this document treats them separately
 throughout.
 
-| | Mobile | Desktop |
-|---|---|---|
-| Pull endpoint | `GET /api/sync/pull` | `GET /api/sync/changes` |
-| Controller | `src/controllers/sync.controller.js` | `src/controllers/syncFeed.controller.js` |
-| Collections | **6** | **36** |
-| Cursor | one timestamp for everything | `(updatedAt, _id)` per collection |
-| Pagination | none — one response | `limit`, default 500, max 2 000 |
-| Capability gating | none beyond `authenticate` | per collection, per permission |
-| Push | ordinary REST endpoints via the outbox | ordinary REST endpoints via the outbox |
+| | Mobile (since 2026-11) | Mobile (older builds) | Desktop |
+|---|---|---|---|
+| Pull endpoint | `GET /api/sync/changes?profile=phone` | `GET /api/sync/pull` | `GET /api/sync/changes` |
+| Controller | `syncFeed.controller.js` + `config/syncFeed.js` `PHONE_FEED` | `sync.controller.js` | `syncFeed.controller.js` + `FEED` |
+| Collections | **6** + hard deletes | **6** | **42** |
+| Cursor | `(updatedAt, _id)` per collection, per account | one timestamp | `(updatedAt, _id)` per collection |
+| Pagination | `limit` 500, max 2 000 | per collection, cut at 2 000 (`hasMore`) | `limit`, default 500, max 2 000 |
+| Audience | `/sync/pull`'s, per role (below) | per role (student narrowed) | per collection, per permission |
+| Push | ordinary REST endpoints via the outbox | same | same |
 
-`POST /api/sync/push` exists, is permission-gated on `sync.push`, and is
-**called by no client**. See [06](06-authentication-authorization.md).
+> **2026-11 — read this first.** Both feeds hand out **commit-safe** cursors
+> (see *Commit-safe cursors*), `/sync/pull` answers in **bounded pages**, and the
+> phone reads its six collections from `/sync/changes` with a **phone profile**.
+> The sections below that describe `/sync/pull` describe what older phone builds
+> still use; it is kept, not removed.
+
+`POST /api/sync/push` is retired: it answers **410 `SYNC_PUSH_RETIRED`** to any authenticated caller and writes nothing. The `sync.push` permission was removed with it (`RETIRED_KEYS` in `config/permissions.js`); a stored override still naming it is dropped on read and on save (`scripts/check-retired-permissions.js`). See [06](06-authentication-authorization.md).
 
 ---
 
@@ -67,7 +72,9 @@ that arrives without it is upserted and un-deleted.
 | **Incremental** (`lastSync` sent) | every row changed since the cursor, **including** soft-deleted ones (classes, periods, teachers); students who left the roster (no longer approved and active) as `{ _id, schoolId, deletedAt }`; and **hard deletes** from their tombstones, in the same shape. `deletedItems` lists every removal as `{ collection, id, deletedAt }` (informational). |
 
 **Hard deletes** (subjects, teacher assignments, students — including the
-subjects and assignments a class delete cascades to) leave no row, so the
+subjects and assignments a class delete cascades to — and, on the desktop feed,
+users, result summaries / term / annual results, enrolments, promotion runs and
+decisions; `SyncTombstone.ENTITIES`) leave no row, so the
 `syncTombstones` plugin (`src/db/plugins/syncTombstones.js`) writes a
 `SyncTombstone` (`schoolId, entity, docId, deletedAt`) **before** each delete,
 on the model, for every delete path. A tombstone whose row still exists (a
@@ -93,12 +100,16 @@ dropped. Only raw driver writes (`Model.collection.*`) bypass both.
 ### Desktop: hard deletes reach the mirror (2026-10-17)
 
 `/sync/changes` carries a `syncTombstone` collection: one row per hard-deleted
-subject, teacher assignment or pupil, paged on `(updatedAt, _id)` like every
-collection. Scoped to what the caller may mirror — subject and assignment
-tombstones with `subjects.view`; pupils with `students.view`, or for a teacher
-with only `students.viewTaught` the pupils of the classes they teach (the
-tombstone keeps `classId`); refused by name to anyone else. A tombstone whose
-row still exists is not sent (`postFilter`), and the cursor still passes it.
+row of any entity in `SyncTombstone.ENTITIES`, paged on `(updatedAt, _id)` like
+every collection. Scoped to what the caller may mirror, derived from each
+entity's own FEED entry (`tombstonesVisible`, `syncFeed.js`): the same
+capability, and for pupils of a teacher with only `students.viewTaught` the
+classes they teach (the tombstone keeps `classId`); refused by name to anyone
+else. Results are also tombstoned with reason **`"unpublished"`** when
+unpublished: non-admins mirror published results only, so their copy must go;
+admins hear only of deletions. A tombstone whose row still exists — or an
+"unpublished" one whose row is published again — is not sent, and the cursor
+still passes it.
 
 The desktop engine **removes** the named row (`store.applyTombstones`) — the
 server no longer has it, and some endpoints the mirror answers for apply no
@@ -186,21 +197,152 @@ The cursor is encoded as `{ at: ISO string, id: string }`. `parseCursor` require
 **both halves or neither** — a cursor carrying only a timestamp is the broken
 design, and accepting one would silently reintroduce it.
 
-### A limit the feed does not guard — documented, not fixed
+### Commit-safe cursors (2026-11) — both feeds
 
-A high-water mark is only as good as `updatedAt`. If a document's `updatedAt` is
-**ahead of the clock** — a data import that preserved original timestamps, or a
-row written with a deliberate future date — the cursor moves past it, and every
-row written afterwards sorts *before* the cursor and is never offered again.
+`updatedAt` is stamped by the application clock when a document is **built**,
+not when the write **commits**. A slow write (a transaction, a bulk insert of a
+class's charges) becomes visible with an `updatedAt` behind a cursor already
+handed out, sorts before it, and was never offered to that client again — on
+both feeds. And a **future-dated** row (an import that kept its timestamps, a
+wrong clock) carried the desktop cursor past every row written after it.
 
-This is **not guarded**, on purpose: the obvious guard (clamping the cursor to
-`now`) is worse, because it would re-send the entire tail on every cycle. The
-mitigation is operational — the desktop clears its cursor before the sections
-that need a full pass. See [18-operations-troubleshooting.md](18-operations-troubleshooting.md).
+The rule, `src/config/syncWindow.js` (window **2 minutes**,
+`SYNC_SAFETY_WINDOW_MS`, never below 1 s):
+
+- **`/sync/changes`** — within one *pass* (pages while `hasMore`) the cursor is
+  the page's last row, as before: progress is guaranteed and nothing in the pass
+  is sent twice. Each cursor also carries `s`, the pass's *floor* — the earliest
+  `now − window` any of its pages saw. The cursor a pass **ends** on
+  (`hasMore: false`, the one a client keeps) may not rest later than the floor:
+  if the last row is later, the server hands back a **resume point**
+  `{ at: floor, r: 1 }` (inclusive), and the next pass re-reads from there.
+  A write that took less than the window to commit is therefore always
+  delivered. (Proof sketch: if it landed after the page that passed its
+  position was read, its `updatedAt` is later than that page's clock minus the
+  window, which is at or after the floor.)
+- **`/sync/pull`** — `timestamp` is `pulledAt − window` (or earlier, see paging).
+
+The cost is the **overlap**: rows changed in the last couple of minutes come
+again next pass, which every client applies as the upsert it already is (same
+id, same `updatedAt`). A future-dated row is delivered and **re-sent every pass
+until real time passes it** — never hidden, and it can no longer blind the
+feed, because no resting cursor is later than the server clock minus the
+window. Such rows are reported: `futureDated` per collection on `/sync/changes`,
+top-level on `/sync/pull`, and a server warning.
+
+Choice: a lagging cursor plus re-read, rather than a server-side sequence
+stamped at commit. A commit-ordered sequence needs the oplog / change streams
+(a replica set) or a counter round-trip inside every write path; the window
+needs neither, works on a standalone server and in-memory tests, and the
+desktop needs no change. **Desktop compatibility:** the cursor is opaque to it
+— it stores it, sends it back and pages while `hasMore`; a pair it rebuilds
+itself (a row held back by a pending local write) is still a valid position
+(without a floor, which only makes that one pass's floor "now − window").
+`check:commitgap` pins the slow commit, the mid-pass late write, the future
+row, and both cursor shapes; `check:desktop` (parity) passes unchanged.
+
+### `/sync/pull` pages (2026-11)
+
+Each collection (and the tombstones) is read in `(updatedAt, _id)` order and
+cut at `limit` (default and ceiling **2 000**). When any is cut, `timestamp` is
+pulled back to the `updatedAt` of the last row sent from a cut collection and
+`hasMore: true` is set. An old build that only stores `timestamp` gets the rest
+over its next syncs — nothing skipped. Known edge: more than `limit` rows of one
+collection sharing **one millisecond** cannot be split by a plain timestamp, so
+an old build would be offered the same first `limit` of them each time (logged).
+`check:syncpaging` pins it.
+
+### The phone profile — `GET /sync/changes?profile=phone` (2026-11)
+
+Collections `classes, subjects, teachers, periods, assignments, students,
+tombstones` (`config/syncFeed.js` `PHONE_FEED`), with this endpoint's cursor,
+pages and commit-safe positions, and **`/sync/pull`'s audience and row shapes**:
+
+| Role | Receives |
+|---|---|
+| school_admin, bursar, teacher (super_admin with `schoolId`) | the six collections as `/sync/pull` sent them; `students` needs `students.view` or `students.viewTaught` (else refused by name); a teacher's `students` is their classes only (below) |
+| student | own pupil row only; teacher **names** only (no email, account state or staff number — also in each assignment's joined teacher); only their own pupil tombstone |
+
+Rows: pupils normalised as `/sync/pull` normalises them (off the roster → a
+removal row); assignments with teacher/class/subject names joined; tombstones as
+`{ collection: "subjects"|"assignments"|"students", _id, deletedAt }`. The desktop
+never sends `profile`, and its default list (`FEED`) and `KNOWN_GAPS` are
+unchanged. `check:phonefeed` compares every role row-for-row with `/sync/pull`.
+
+**A teacher's phone holds only their classes' pupils (owner decision, 2026-11)**,
+through both `?profile=phone` and `/sync/pull`, pupil tombstones included
+(`teacherRosterClassIds` in `config/syncFeed.js`; the phone purges local pupils
+by the same rule): a pupil whose class is one where the teacher has an **active**
+`TeacherAssignment` (`isActive !== false`, `teacher`/`teacherId` either spelling;
+`validFrom`/`validUntil` are not consulted, as nowhere on the server) **or** whose
+`Class.classTeacherId` is the teacher (class not soft-deleted). By role, as the
+desktop's `taughtStudentsOnly`: a teacher granted `students.view` is still
+narrowed. Classes and assignments still arrive whole, so a lost class reaches the
+phone as the assignment/class change it purges by. A gained class's unchanged
+pupils: the feed stamps the teacher's `students` cursor with a fingerprint of the
+roster classes and re-reads the collection when it differs; `/sync/pull` adds the
+live pupils of every roster class whose grant changed since `lastSync`. Known
+gap (as on the desktop): a pupil moved out of a teacher's class is not sent to
+that teacher, so the phone keeps the old copy until a full re-sync.
+`check:teacherroster`.
+
+**The phone** (`mobile/src/services/syncFeed.client.js`, called by
+`SyncManager._pullFeed`): pages to the end; applies each page **before** storing
+its cursor; re-asks only collections that said `hasMore`; applies through the
+same `syncClasses … syncStudents` functions, so the **pull-protection rule** (a
+pulled row never overwrites one with `_synced != 1`) holds for classes, teachers,
+subjects, periods (`dirty`) and now also teacher assignments (by id or by the
+teacher/class/subject key) and pupils. Pupils pulled from the server are
+written as synced, every genuine local pupil change sets `_synced = 0` (and an
+admission decision made on the phone also `_local_decision`), and a pupil with
+work in the outbox is skipped by the pull (`mobile/src/db/pupilSync.js`); only
+decisions made on the phone are sent, so a pulled pupil never produces an
+approve. A teacher's phone then drops locally stored pupils outside its classes
+by the same rule the server uses for its feed (`purgeOutOfScopePupils`), never
+one with an unsent change. A server without the profile (every collection
+refused `UNKNOWN_COLLECTION`) → the phone falls back to `/sync/pull`. Students'
+phones still do not pull the six (unchanged). Everything else the phone mirrors
+(fees, attendance, exams, finance, timetable, gate, homework, messages,
+announcements, quizzes) stays on its REST lists: those tables have their own
+shapes and per-role routes, and the feed's capability-scoped entries
+(`feeCharge`, `studentAttendance` …) would need per-table apply code and,
+for teachers, scopes the feed does not yet express.
+
+`check-sync-feed-phone.js` (mobile, real backend) pins the move.
+
+### Sync position per account (2026-11)
+
+The phone's cursors (`sync_last_timestamp`, `quiz_last_sync`,
+`feed_cursor:<collection>`) belong to an **account**
+(`mobile/src/db/syncCursors.js`): in a per-user file (switch on, docs/40) in its
+`local_meta`, as before; in the shared file (switch off) in a `sync_cursors`
+table keyed by (server, school, account). Another account on the same phone
+starts from its own cursor or from the beginning. The old phone-wide SecureStore
+cursor cannot be attributed (the last sign-in is not the last sync), so it is
+dropped once and each account's next pull is full — safe, just slower. A stored
+value that is not a date reads as the epoch (so `/quiz/sync` is never sent an
+Invalid Date; the route itself now answers **400 `INVALID_SINCE`**, not 500).
+`check-sync-cursors.js` pins it.
+
+### What the desktop should change later
+
+Nothing is required. Worth doing: (1) when rebuilding a cursor at a held row,
+keep the `s` of the page's cursor (decode, replace `at`/`id`), so a long pass
+with a held row keeps its floor; (2) show `futureDated` in the sync status so an
+office notices a bad import; (3) expect `pulled > 0` on an idle cycle — the
+overlap — and not read it as new activity.
+
+### Before 2026-11: the future-dated limit (superseded)
+
+A high-water mark is only as good as `updatedAt`: a row **ahead of the clock**
+moved the cursor past it, and every row written afterwards sorted before the
+cursor. It was left unguarded because clamping to `now` would re-send the tail
+every cycle; the commit-safe cursor above accepts exactly that cost for the
+rows inside the window and the future-dated ones, and closes the hole.
 
 ### Capability gating — IMPLEMENTATION VERIFIED
 
-Each of the 36 fed collections declares the permission that gates it:
+Each of the 42 fed collections declares the permission that gates it:
 
 | Collection group | Permission |
 |---|---|
@@ -300,7 +442,7 @@ flowchart TD
    conflict to the outbox.
 
 **Retrying a refused change (2026-10-18).** A 4xx answer is stored against its
-key and replayed for 14 days, so retrying a refused change under the same key
+key and replayed for the key's life (then 14 days, now 45), so retrying a refused change under the same key
 got the same refusal back — after a permission was granted or data fixed, the
 change never landed. Now a retry of a REFUSED entry (4xx) goes out under a
 **new** key: desktop `outbox.unblock`, phone `MutationQueue.retry` /
@@ -365,6 +507,8 @@ and well inside budget, but the ratio is the thing to watch as data grows — se
 |---|---|
 | Deletions | **IMPLEMENTED (2026-10-17)** — phones (`/sync/pull`) and desktops (`/sync/changes`, `syncTombstone`) receive soft and hard deletes; stale creates of a deleted id are refused 410. |
 | `POST /api/sync/push` | **UNUSED / DEAD CODE** — implemented server-side, called by nothing. |
-| Future-`updatedAt` documents can be skipped by the desktop cursor | **KNOWN, UNGUARDED, DELIBERATE.** Mitigated operationally by clearing the cursor. |
+| Future-`updatedAt` documents can be skipped by the desktop cursor | **FIXED (2026-11)** — no resting cursor is later than now − window; such rows are re-sent and reported (`futureDated`). |
+| A slow commit lands behind an issued cursor | **FIXED (2026-11)** — commit-safe cursors on both feeds (`check:commitgap`). |
+| `/sync/pull` unbounded | **FIXED (2026-11)** — paged per collection (`check:syncpaging`); new phones use `/sync/changes`. |
 | Two protocols with no convergence plan | **BY DESIGN at this commit.** Neither is deprecated. |
 | Real two-device convergence | **REQUIRES REAL-WORLD VALIDATION** — every multi-device claim here rests on simulated clients. |

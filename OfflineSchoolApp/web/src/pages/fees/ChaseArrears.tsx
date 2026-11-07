@@ -198,12 +198,12 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
             <span>{t("chase.totalCandidates", { count: reminderRows.length })}</span>
             {willSend > 0 && (
-              <span className="text-success font-medium">
+              <span className="text-success-text font-medium">
                 {t("chase.willSend", { count: willSend })}
               </span>
             )}
             {unreachableCount > 0 && (
-              <span className="text-warning">
+              <span className="text-warning-text">
                 {t("chase.unreachable", { count: unreachableCount })}
               </span>
             )}
@@ -237,7 +237,7 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
                       <Td className={skipped ? "text-ink-faint" : undefined}>
                         <div className="font-medium">{r.name}</div>
                         {!r.reachable && (
-                          <div className="mt-0.5 flex items-center gap-1 text-xs text-warning">
+                          <div className="mt-0.5 flex items-center gap-1 text-xs text-warning-text">
                             <PhoneOff className="h-3 w-3" aria-hidden="true" />
                             {t("chase.noContact")}
                           </div>
@@ -257,7 +257,7 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
                             : t("chase.noDueDate", "No due date")}
                         </div>
                         {r.isOverdue && (
-                          <div className="text-xs text-danger">
+                          <div className="text-xs text-danger-text">
                             {r.earliestDue
                               ? t("chase.daysLate", { count: r.daysOverdue })
                               : t("chase.overdue", "Overdue")}
@@ -311,7 +311,7 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
         onClose={close}
         title={t("chase.penaliseTitle")}
       >
-        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-3 py-2.5 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-3 py-2.5 text-sm text-warning-text">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{t("chase.penaliseWarning")}</span>
         </div>
@@ -350,7 +350,7 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
                         ? t("chase.rulePercent", { rate: r.rate })
                         : t("chase.ruleFixed", { amount: fmt.money(r.rate) })}
                     </Td>
-                    <Td numeric className="font-medium text-warning">
+                    <Td numeric className="font-medium text-warning-text">
                       {fmt.money(r.amount)}
                     </Td>
                   </Tr>

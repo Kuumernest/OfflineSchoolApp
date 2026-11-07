@@ -118,7 +118,8 @@
     "unknownError": "Erreur inconnue",
     "notProvided": "Non renseigné",
     "notSpecified": "Non précisé",
-    "send": "Envoyer"
+    "send": "Envoyer",
+    "preparing": "Préparation…"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -266,6 +267,8 @@
     "none": "Aucun résultat",
     "searchPh": "Rechercher par nom, numéro d'admission ou classe…",
     "gradeDistribution": "Répartition des notes",
+    "remarkDistribution": "Appréciations",
+    "remark": "Appréciation",
     "noGradeData": "Aucune donnée de notes",
     "scoreDistribution": "Répartition des scores",
     "passFailSplit": "Répartition réussite / échec",
@@ -310,7 +313,13 @@
     "toastCalculated": "Résultats calculés",
     "refusedPublished": "Non recalculée, résultats publiés : {{classes}}",
     "refusedPublished_other": "Non recalculées, résultats publiés dans {{count}} classes : {{classes}}",
-    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes"
+    "toastPublished": "Résultats publiés — les élèves peuvent maintenant voir leurs notes",
+    "allClasses": "Toutes les classes",
+    "chooseClassForTop": "Choisissez une classe pour voir ses meilleurs et ses plus faibles élèves.",
+    "showingClassOnly": "Affichage : {{className}} uniquement",
+    "showAllClasses": "Afficher toutes les classes",
+    "searchThisPage": "La recherche porte sur cette page uniquement.",
+    "allInTop": "Tous les élèves de cette classe figurent déjà ci-dessus."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -363,15 +372,18 @@
     "totalTeachers": "Enseignants",
     "unassignedTeachers": "Non affectés",
     "totalClasses": "Classes",
-    "totalSubjects": "Matières",
+    "totalSubjects": "Matières par classe",
     "assignedSubjects": "Affectées",
     "activeAnnouncements": "Communiqués",
-    "totalPeriods": "Créneaux",
+    "totalPeriods": "Périodes de cours",
     "incompleteTimetableSlots": "Sans emploi du temps",
     "timetableConflicts": "Conflits",
     "classesWithoutSubjects": "Sans matières",
     "totalReportTemplates": "Modèles",
-    "defaultTemplateSet": "Modèle par défaut"
+    "defaultTemplateSet": "Modèle par défaut",
+    "unassignedClassSubjects": "Sans enseignant",
+    "distinctSubjects": "{{count}} matière",
+    "distinctSubjects_other": "{{count}} matières distinctes"
   },
   "examStatus": {
     "draft": "Brouillon",
@@ -394,15 +406,27 @@
     "goDash": "Retour au tableau de bord",
     "pageProblem": "Cette page a rencontré un problème",
     "reload": "Recharger l'application",
-    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page."
+    "stillWorking": "Le reste de l'application fonctionne toujours — vous pouvez y revenir par le menu, ou réessayer de charger cette page.",
+    "chunkTitle": "Cette page n'a pas pu être chargée",
+    "chunkBody": "L'application a peut-être été mise à jour, ou la connexion a été interrompue. Rechargez pour obtenir la dernière version.",
+    "chunkReload": "Recharger"
   },
   "staffOnly": {
-    "title": "Cet espace est réservé au personnel",
-    "body": "Votre compte est un compte élève. Les fonctionnalités élèves se trouvent dans l'application mobile — connectez-vous avec votre matricule.",
     "signOut": "Se déconnecter",
-    "greeting": "Bonjour{{name}} — ce site est réservé au personnel",
-    "explain": "Votre connexion a réussi. Ce site est celui qu'utilisent les enseignants et les administrateurs pour gérer l'établissement ; il n'y a donc rien ici pour un compte élève.",
-    "useApp": "Utilisez plutôt l'application My School On The Move sur votre téléphone. Vos résultats, votre emploi du temps et les communiqués s'y trouvent, et elle fonctionne même sans réseau. Connectez-vous avec le même matricule{{enrollment}} et le même mot de passe."
+    "greeting": "Bonjour{{name}}, votre connexion a réussi.",
+    "teacher": {
+      "title": "Les enseignants utilisent l'application mobile",
+      "explain": "Ce site est réservé à l'administration de l'établissement — le chef d'établissement, les administrateurs et l'intendant. Les notes, l'appel, votre emploi du temps et vos messages se trouvent dans l'application My School On The Move sur votre téléphone.",
+      "useApp": "Installez l'application et connectez-vous avec la même adresse e-mail et le même mot de passe. Elle fonctionne même sans réseau et envoie vos notes dès que vous êtes de nouveau connecté."
+    },
+    "student": {
+      "title": "Les élèves utilisent l'application mobile",
+      "explain": "Ce site est réservé à l'administration de l'établissement — le chef d'établissement, les administrateurs et l'intendant. Vos résultats, votre emploi du temps et les communiqués se trouvent dans l'application My School On The Move sur votre téléphone.",
+      "useApp": "Installez l'application et connectez-vous avec le même matricule{{enrollment}} et le même mot de passe. Elle fonctionne même sans réseau."
+    },
+    "getAndroid": "Télécharger pour Android",
+    "getIos": "Télécharger pour iPhone",
+    "askOffice": "Demandez à l'administration de votre établissement comment installer l'application sur votre téléphone."
   },
   "requireRole": {
     "title": "Cette partie de la console ne vous est pas ouverte",
@@ -563,7 +587,18 @@
     "writeDown": "Notez ces informations avant de quitter la page : elles ne seront plus affichées, et les retrouver impose de réinitialiser le compte.",
     "noActiveClassesEnroll": "Aucune classe active dans laquelle inscrire l'élève.",
     "firstOne": "Ajoutez votre premier élève pour commencer",
-    "unassignedClass": "Sans classe"
+    "unassignedClass": "Sans classe",
+    "phoneInvalid": "Un numéro camerounais a 9 chiffres commençant par 6 ou 2 (ex. 677 12 34 56).",
+    "phoneHint": "Enregistré sous la forme +237 et 9 chiffres.",
+    "dobFuture": "La date de naissance ne peut pas être dans le futur.",
+    "ageUnusual": "{{age}} ans est hors de la tranche habituelle {{min}}–{{max}} pour {{className}}. Vérifiez la date — elle sera tout de même enregistrée.",
+    "countRegistered": "{{count}} élève inscrit",
+    "countRegistered_other": "{{count}} élèves inscrits",
+    "countResults": "{{count}} résultat",
+    "countResults_other": "{{count}} résultats",
+    "countResultsOf": "{{count}} résultat sur {{total}} élèves",
+    "countResultsOf_other": "{{count}} résultats sur {{total}} élèves",
+    "noneMatch": "Aucun élève ne correspond à ces filtres"
   },
   "teachers": {
     "title": "Enseignants",
@@ -574,7 +609,7 @@
     "notAssigned": "Pas encore affecté",
     "resetPassword": "Réinitialiser le mot de passe",
     "subjectsCovered": "Matières enseignées",
-    "searchPh": "Rechercher dans cette page…",
+    "searchPh": "Rechercher nom, e-mail ou matricule…",
     "activeOnly": "Actifs uniquement",
     "inactiveOnly": "Inactifs uniquement",
     "resetTitle": "Réinitialiser le mot de passe de cet enseignant ?",
@@ -603,7 +638,14 @@
     "none": "Aucun enseignant",
     "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières.",
     "noneMatch": "Aucun résultat pour cette recherche",
-    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre."
+    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre.",
+    "unassignedTitle": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "unassignedTitle_other": "{{count}} matières-classes sur {{total}} sans enseignant",
+    "unassignedHint": "Aucun enseignant ne peut y saisir de notes, et le bulletin n'affiche aucun enseignant pour ces lignes.",
+    "unassignedShow": "Afficher",
+    "unassignedHide": "Masquer",
+    "staffNo": "N° matricule",
+    "staffNoNone": "Pas encore attribué"
   },
   "subjects": {
     "title": "Matières",
@@ -774,6 +816,7 @@
       "all": "Tout le monde",
       "teachers": "Enseignants uniquement",
       "students": "Élèves uniquement",
+      "parents": "Parents uniquement",
       "class": "Classes précises"
     },
     "priorityOpt": {
@@ -956,6 +999,7 @@
     "moreCount": "+{{count}} de plus",
     "timelineRange": "Chronologie du {{from}} au {{to}}",
     "schoolAvg": "moyenne école",
+    "passRateScope": "{{year}} · moyenne de passage {{mark}}/20",
     "missingGrades": "Mentions manquantes",
     "avgScore": "Note moyenne",
     "adjustFilters": "Essayez d'ajuster ou d'effacer vos filtres",
@@ -1052,7 +1096,13 @@
     "errCreate": "Échec de la création de l'examen",
     "errUpdateStatus": "Échec de la mise à jour du statut",
     "errUpdate": "Échec de la mise à jour de l'examen",
-    "errDelete": "Échec de la suppression de l'examen"
+    "errDelete": "Échec de la suppression de l'examen",
+    "saveDraft": "Enregistrer le brouillon",
+    "draftSaved": "Brouillon enregistré",
+    "submitMarks": "Soumettre pour validation",
+    "submitted": "Soumis",
+    "marksIncomplete": "{{count}} élève n'a pas encore de note : saisissez une note ou marquez-le absent avant de valider.",
+    "marksIncomplete_other": "{{count}} élèves n'ont pas encore de note : saisissez une note ou marquez-les absents avant de valider."
   },
   "examCreate": {
     "title": "Créer une évaluation",
@@ -1091,7 +1141,7 @@
     "promoSequenceHint": "* indique les examens de passage de l’année, fixés dans la structure académique. Ils ne décident pas du passage.",
     "createFailed": "Impossible de créer l’examen.",
     "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite",
-    "noSubjectsWarning": "⚠️ Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
+    "noSubjectsWarning": "Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
   },
   "reportCards": {
     "allStudents": "Les {{count}} élève",
@@ -1153,7 +1203,10 @@
     "printOne": "Aperçu et impression du bulletin",
     "printAll": "Aperçu de {{count}} bulletin",
     "printAll_other": "Aperçu des {{count}} bulletins",
-    "viewResults": "Voir les résultats"
+    "viewResults": "Voir les résultats",
+    "noneMarked": "Aucun élève de cette classe n'a encore de notes pour cet examen.",
+    "noMarksNote": "{{count}} élève n'a aucune note pour cet examen et n'aura pas de bulletin :",
+    "noMarksNote_other": "{{count}} élèves n'ont aucune note pour cet examen et n'auront pas de bulletin :"
   },
   "admissions": {
     "title": "Admissions",
@@ -1241,7 +1294,14 @@
     "subtitle": "Profil de l’enseignant et matières attribuées",
     "subjectsAssignedCount": "{{count}} matière affectée",
     "subjectsAssignedCount_other": "{{count}} matières affectées",
-    "assign": "Affecter"
+    "assign": "Affecter",
+    "staffNo": "Matricule",
+    "staffNoHint": "Attribué par l'établissement à l'ajout de l'enseignant. Ne le modifiez que pour correspondre à un numéro déjà sur les documents.",
+    "staffNoNone": "Pas encore attribué — le serveur en donnera un sous peu.",
+    "errStaffNoRequired": "Un matricule ne peut pas être supprimé.",
+    "errStaffNoTooLong": "Un matricule comporte au plus 32 caractères.",
+    "errStaffNoChars": "Utilisez uniquement lettres, chiffres et - / . _",
+    "errStaffNoTaken": "{{number}} est déjà le matricule d'un autre membre du personnel."
   },
   "subjectsAdd": {
     "title": "Ajouter une matière",
@@ -1296,7 +1356,7 @@
     "assignTeacher": "Affecter un enseignant",
     "loadFailed": "Impossible de charger les affectations",
     "byTeacher": "Par enseignant",
-    "brokenLinks": "Liens rompus",
+    "brokenLinks": "Attributions à corriger",
     "teachersAssigned": "Enseignants affectés",
     "classesCovered": "Classes couvertes",
     "totalLessons": "Total des cours",
@@ -1363,6 +1423,30 @@
     "blurb": "La situation de l'établissement aujourd'hui, et les outils pour produire les documents"
   },
   "templates": {
+    "readyMade": "Mises en page prêtes",
+    "readyMadeHint": "Choisissez une mise en page pour vos bulletins. Toutes impriment les mêmes informations.",
+    "chooseSections": "Choisir ce qui s’imprime",
+    "customInUse": "Le modèle propre à l’école « {{name}} » est utilisé. Choisissez une mise en page ci-dessous pour changer.",
+    "inUse": "Utilisée",
+    "printingWithThis": "Les bulletins s’impriment avec cette mise en page",
+    "useLayout": "Utiliser cette mise en page",
+    "layoutChosen": "Mise en page choisie — les nouveaux bulletins l’utiliseront.",
+    "advanced": "Avancé — HTML personnalisé",
+    "advancedHint": "Écrivez votre propre modèle en HTML. Utile seulement pour un rendu que les mises en page ci-dessus n’offrent pas.",
+    "preset": {
+      "classic": {
+        "name": "Classique",
+        "description": "Le bulletin standard : en-tête officiel, bandeau de titre bleu et tableau complet des matières."
+      },
+      "compact": {
+        "name": "Compacte",
+        "description": "Le même bulletin en plus petit et plus serré, pour qu’une longue liste de matières tienne sur une page."
+      },
+      "clear": {
+        "name": "Lisible",
+        "description": "Gros caractères et bandes noir et blanc — la plus facile à lire et à photocopier."
+      }
+    },
     "title": "Modèles de bulletins",
     "blurb": "Gérer les maquettes HTML de vos bulletins",
     "create": "Créer un modèle",
@@ -1385,6 +1469,15 @@
     "version": "Version {{version}}"
   },
   "notifications": {
+    "todo": "À faire",
+    "action": {
+      "marksAwaitingApproval": "Les notes de {{count}} matière attendent l'approbation",
+      "marksAwaitingApproval_other": "Les notes de {{count}} matières attendent l'approbation",
+      "resultsUnpublished": "Les résultats de {{count}} examen sont prêts à publier",
+      "resultsUnpublished_other": "Les résultats de {{count}} examens sont prêts à publier",
+      "overdueFees": "{{count}} élève en retard ({{families}}) · {{amount}} échu",
+      "overdueFees_other": "{{count}} élèves en retard ({{families}}) · {{amount}} échus"
+    },
     "justNow": "À l'instant",
     "title": "Notifications",
     "readAll": "Tout marquer comme lu",
@@ -1402,7 +1495,13 @@
     "filterUnread": "Non lues",
     "filterAlerts": "Alertes",
     "alertCount": "{{count}} alerte",
-    "alertCount_other": "{{count}} alertes"
+    "alertCount_other": "{{count}} alertes",
+    "families": "{{count}} famille",
+    "families_other": "{{count}} familles",
+    "overwriteTitle": "Votre modification a été remplacée",
+    "overwriteBody": "{{name}} a enregistré par-dessus votre modification de {{student}}. C’est sa version qui est conservée.",
+    "overwriteBodyDeleted": "{{name}} a supprimé {{student}} après votre modification de la fiche.",
+    "overwriteSomeone": "Quelqu’un"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
@@ -1629,6 +1728,7 @@
     "schoolSummary": "Résumé de l'établissement",
     "schoolLogo": "Logo de l'établissement",
     "noLogo": "Aucun logo",
+    "logoBroken": "Logo introuvable — téléversez-le à nouveau",
     "removeLogo": "Supprimer le logo",
     "schoolCode": "Code de l'établissement",
     "schoolType": "Type d'établissement",
@@ -1711,10 +1811,15 @@
     "secAdmins": "Comptes du bureau",
     "secIdCards": "Cartes scolaires",
     "secAnalytics": "Statistiques",
+    "typeCollegeGeneral": "Collège – enseignement général",
+    "typeCollegeTechnical": "Collège – enseignement technique",
+    "typeLyceeGeneral": "Lycée – enseignement général",
+    "typeLyceeTechnical": "Lycée – enseignement technique",
+    "passMarkOn20": "Note de passage (/20)",
     "typePrimary": "Primaire",
     "typeJhs": "Premier cycle",
     "typeShs": "Second cycle / Lycée",
-    "typeCombined": "Mixte",
+    "typeCombined": "Polyvalent (général et technique)",
     "typeVocational": "Technique",
     "typeUniversity": "Université",
     "typeOther": "Autre",
@@ -1845,7 +1950,6 @@
       "homework": "Devoirs",
       "quiz": "Quiz",
       "permissions": "Droits",
-      "sync": "Synchronisation",
       "approvals": "Validations",
       "subjects": "Matières",
       "dashboard": "Tableau de bord",
@@ -1911,7 +2015,6 @@
       "homework.manage": "Donner et noter les devoirs",
       "quiz.author": "Rédiger quiz et questions",
       "permissions.manage": "Modifier ces droits",
-      "sync.push": "Envoyer des modifications depuis un appareil",
       "fees.refund": "Rembourser",
       "fees.waive": "Réduire ou annuler des frais",
       "approvals.view": "Voir les demandes en attente",
@@ -1949,7 +2052,6 @@
       "documents.manage": "Comprend la remise des codes du portail parents, qui sont des identifiants.",
       "messages.audit": "Lire une conversation dont on ne fait pas partie. Enregistré, et jamais accordé comme effet secondaire du droit d'écrire.",
       "permissions.manage": "Un rôle qui peut s'attribuer des droits n'a plus de limite, ni les personnes qu'il nomme.",
-      "sync.push": "Écrit les créneaux et les décisions de passage directement depuis un appareil.",
       "students.view": "Noms, matricules, classes et coordonnées des parents. Aucune note.",
       "gate.scan": "Dans un petit établissement, la personne au portail à huit heures est celle qui est là.",
       "approvals.decide": "Jamais la personne qui a soumis la demande — vérifié demande par demande, par utilisateur, y compris pour un super administrateur.",
@@ -2070,6 +2172,10 @@
     "receiptNo": "N° de reçu",
     "receivedOn": "Reçu le",
     "recorded": "Paiement enregistré",
+    "recordedProvisional": "Le reçu {{receiptNo}} est provisoire jusqu'à la synchronisation de cet ordinateur avec le serveur de l'école. Un reçu imprimé maintenant porte la mention provisoire.",
+    "provisional": "Provisoire",
+    "provisionalHint": "Pas encore confirmé par le serveur de l'école. Son reçu s'imprime avec la mention provisoire ; le reçu officiel sera disponible après la synchronisation de cet ordinateur.",
+    "printProvisional": "Imprimer (provisoire)",
     "recordFailed": "Impossible d'enregistrer le paiement",
     "reverse": "Annuler",
     "reverseTitle": "Annuler ce paiement ?",
@@ -2127,7 +2233,14 @@
     "activate": "Impossible d’activer la grille tarifaire",
     "reactivate": "Réactiver",
     "owingCount": "{{count}} en retard",
-    "noClass": "Sans classe"
+    "noClass": "Sans classe",
+    "overdue": "En retard",
+    "overdueOfIt": "dont {{amount}} en retard",
+    "overduePupils": "{{count}} élève en retard ({{families}})",
+    "overduePupils_other": "{{count}} élèves en retard ({{families}})",
+    "overdueCount": "{{count}} en retard",
+    "overdueCount_other": "{{count}} en retard",
+    "noneOverdue": "Rien en retard pour l'instant"
   },
   "chase": {
     "title": "Recouvrement",
@@ -2499,7 +2612,8 @@
     "payroll": "Paie",
     "payrollHint": "Les bulletins réellement émis. Les brouillons sont exclus.",
     "enrollments": "Historique des classes",
-    "enrollmentsHint": "La classe de chaque élève, année par année."
+    "enrollmentsHint": "La classe de chaque élève, année par année.",
+    "savedAs": "Enregistré sous {{file}} dans vos téléchargements"
   },
   "platform": {
     "title": "Plateforme",
@@ -2898,9 +3012,150 @@
     "noticeStatus_failed": "Envoi impossible",
     "unreadCount": "{{count}} non lu",
     "unreadCount_other": "{{count}} non lus",
-    "general": "Général"
+    "general": "Général",
+    "nav": {
+      "home": "Accueil",
+      "results": "Résultats",
+      "attendance": "Présences",
+      "fees": "Frais",
+      "messages": "Messages",
+      "main": "Sections du portail"
+    },
+    "home": {
+      "title": "Vos enfants",
+      "subtitle": "L’essentiel en un coup d’œil, une fiche par enfant.",
+      "latestResult": "Dernier résultat",
+      "noResults": "Aucun résultat publié pour l’instant",
+      "outOf": "/20",
+      "rank": "{{position}} sur {{outOf}}",
+      "up": "+{{delta}} par rapport à la {{exam}}",
+      "down": "−{{delta}} par rapport à la {{exam}}",
+      "same": "Identique à la {{exam}}",
+      "attendanceMonth": "Présences ce mois-ci",
+      "daysPresent": "Présent {{present}} jours sur {{marked}}",
+      "noRegister": "Aucun appel fait ce mois-ci",
+      "balance": "Solde des frais",
+      "paidUp": "À jour",
+      "dueOn": "Échéance le {{date}}",
+      "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
+      "overdueSince": "En retard depuis le {{date}}",
+      "nextExam": "Prochain examen",
+      "noExam": "Aucun examen prévu",
+      "startsOn": "Début le {{date}}",
+      "latestNews": "Dernières nouvelles de l’école",
+      "seeAll": "Tout voir",
+      "viewChild": "Ouvrir {{name}}",
+      "empty": "Aucun enfant n’est encore lié à ce code.",
+      "emptyHint": "Demandez au secrétariat de l’école de les ajouter.",
+      "refresh": "Actualiser"
+    },
+    "childSwitcher": "Choisir un enfant",
+    "account": "Compte",
+    "resultsScreen": {
+      "title": "Résultats",
+      "trend": "Évolution de la moyenne",
+      "trendLabel": "Moyenne sur 20 de chaque résultat publié, du plus ancien au plus récent",
+      "showTable": "Afficher sous forme de tableau",
+      "exam": "Examen",
+      "average": "Moyenne",
+      "term": "Trimestre {{term}} · {{year}}",
+      "subject": "Matière",
+      "mark": "Note /20",
+      "coef": "Coef.",
+      "remark": "Appréciation",
+      "rank": "{{position}} sur {{outOf}}",
+      "passed": "Admis",
+      "belowPass": "Sous la moyenne",
+      "absent": "Absent",
+      "published": "Publié le {{date}}",
+      "reportCard": "Bulletin (PDF)",
+      "reportCardHint": "Ouvre la fenêtre d’impression : choisissez « Enregistrer au format PDF ».",
+      "notIssued": "L’école n’a pas encore délivré ce bulletin.",
+      "empty": "Aucun résultat publié pour l’instant",
+      "emptyHint": "Les résultats apparaissent ici dès que l’école les publie.",
+      "chooseTerm": "Choisir un trimestre",
+      "openFailed": "Impossible d’ouvrir le bulletin. Vérifiez votre connexion et réessayez."
+    },
+    "attendanceScreen": {
+      "title": "Présences",
+      "prevMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "rate": "Taux de présence",
+      "rateHint": "Présent, sur tous les appels faits ce mois-ci",
+      "marked": "{{count}} appel fait",
+      "marked_other": "{{count}} appels faits",
+      "present": "Présent",
+      "absent": "Absent",
+      "late": "En retard",
+      "excused": "Excusé",
+      "partial": "Absent en partie",
+      "noRecord": "Pas d’appel",
+      "calendar": "Calendrier",
+      "legend": "Légende",
+      "days": "Jour par jour",
+      "arrived": "Arrivé à {{time}}",
+      "left": "Parti à {{time}}",
+      "bySubject": "Par matière",
+      "empty": "Aucun appel fait en {{month}}",
+      "emptyHint": "Les jours apparaissent ici dès que l’école fait l’appel.",
+      "weekdays": [
+        "Lun",
+        "Mar",
+        "Mer",
+        "Jeu",
+        "Ven"
+      ]
+    },
+    "feesScreen": {
+      "title": "Frais",
+      "balance": "Solde à payer",
+      "paidUp": "Tout est réglé",
+      "paidUpHint": "Rien n’est dû pour {{name}} pour le moment.",
+      "overdue": "En retard",
+      "overdueOfIt": "dont {{amount}} en retard",
+      "overdueSince": "Le paiement était dû le {{date}}",
+      "dueOn": "Prochain paiement le {{date}}",
+      "charged": "Facturé",
+      "waived": "Remise",
+      "paid": "Payé",
+      "charges": "Ce que l’école a facturé",
+      "noDueDate": "Sans échéance",
+      "dueBy": "Échéance le {{date}}",
+      "payments": "Paiements",
+      "noPayments": "Aucun paiement enregistré pour l’instant",
+      "receipt": "Reçu",
+      "receiptFor": "Reçu {{no}}",
+      "reversal": "Annulation",
+      "plan": "Échéancier",
+      "instalment": "Versement {{seq}}",
+      "empty": "Aucun frais enregistré pour l’instant",
+      "emptyHint": "Les frais apparaissent ici dès que l’école les facture.",
+      "receiptFailed": "Impossible d’ouvrir le reçu. Vérifiez votre connexion et réessayez."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Tout marquer comme lu",
+      "new": "Nouveau",
+      "about": "Concerne {{names}}",
+      "you": "Vous",
+      "send": "Envoyer",
+      "back": "Retour aux messages",
+      "writeTo": "Écrire à un enseignant ou au secrétariat",
+      "noConversationsHint": "Commencez une conversation avec l’enseignant de votre enfant ou le secrétariat.",
+      "noNoticesHint": "Les absences, rappels de frais et résultats publiés apparaissent ici.",
+      "noNewsHint": "Les annonces de l’école apparaissent ici.",
+      "tabMessages": "Messages",
+      "tabNotices": "Avis",
+      "tabNews": "Actualités"
+    }
   },
   "codes": {
+    "lastOpened": "Dernière consultation",
+    "neverShort": "Jamais",
+    "noStudent": "Lié à aucun élève",
+    "noStudentCount": "{{count}} code n'est lié à aucun élève actuel — révoquez-le ou liez-le à un enfant.",
+    "noStudentCount_other": "{{count}} codes ne sont liés à aucun élève actuel — révoquez-les ou liez-les à un enfant.",
     "title": "Accès parents",
     "blurb": "Donnez à un tuteur un code pour consulter les frais, résultats et présences de son enfant. Le code n'est affiché qu'une fois — notez-le avant de fermer.",
     "issue": "Générer un code",
@@ -2974,15 +3229,23 @@
     "empty": "Aucun élève signalé",
     "emptyHint": "Aucun élève ne déclenche de signal pour l'instant. Les signalements apparaissent au fil des présences, résultats, devoirs et paiements.",
     "noMatch": "Aucun élève signalé ne correspond à ces filtres",
-    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire. Les seuils se trouvent dans le service early-warning du serveur.",
+    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire.",
     "sig": {
       "absence": "Absent {{absent}} jours sur {{marked}} pointés",
       "late": "{{late}} retards",
-      "failed_exam": "Échec au dernier examen ({{percentage}} %)",
-      "grade_drop": "Moyenne passée de {{from}} % à {{to}} %",
+      "failed_exam": "Échec au dernier examen ({{average}}/20, moyenne de passage {{passMark}})",
+      "grade_drop": "Moyenne passée de {{from}} à {{to}} /20",
       "subjects_failed": "{{count}} matières échouées",
       "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
-      "fees_outstanding": "Doit {{balance}}"
+      "fees_outstanding": "Doit {{balance}}, dont {{overdue}} en retard",
+      "fees_outstanding_all": "Doit {{balance}}, entièrement en retard",
+      "fees_owed": "Doit {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {
@@ -3051,6 +3314,8 @@
     "deleteMessage": "Supprimer le message",
     "attach": "Joindre un fichier",
     "writePh": "Écrire un message…",
+    "pendingSend": "En attente d'envoi — il partira au retour de la connexion",
+    "offlineQueued": "Hors ligne — les messages envoyés maintenant attendent sur cet ordinateur et partiront au retour de la connexion. Joindre un fichier nécessite une connexion.",
     "searchPh": "Rechercher un personnel, un élève ou un parent…",
     "noMatch": "Personne ne correspond à ce nom.",
     "nobodyAvailable": "Il n'y a personne avec qui démarrer une conversation.",
@@ -3077,7 +3342,16 @@
       "lastActivity": "Dernière activité",
       "directConversation": "Conversation directe",
       "read": "Lire",
-      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève"
+      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève",
+      "kinds": {
+        "direct": "Directe",
+        "class": "Classe",
+        "subject": "Matière",
+        "group": "Groupe",
+        "conversationOf": "Conversation {{kind}}"
+      },
+      "openedAsAudit": "{{count}} participant · consultation d'audit",
+      "openedAsAudit_other": "{{count}} participants · consultation d'audit"
     },
     "auditNotice": "Cette consultation est enregistrée. Les messages supprimés sont affichés ici en entier — c’est l’objet d’un audit — et ne sont pas visibles par les participants.",
     "noneMatching": "Aucune conversation ne correspond à « {{query}} ».",
@@ -3146,7 +3420,9 @@
     "titleConflicts": "Conflits d’emploi du temps",
     "titleNoTimetable": "Emplois du temps incomplets",
     "titleNoAssignments": "Aucune attribution",
-    "titleGeneric": "Alerte système"
+    "titleGeneric": "Alerte système",
+    "classSubjectsUnassigned": "{{count}} matière-classe sur {{total}} sans enseignant",
+    "classSubjectsUnassigned_other": "{{count}} matières-classes sur {{total}} sans enseignant"
   },
   "modules": {
     "classes": "Classes",
@@ -3155,7 +3431,7 @@
     "subjectsDesc": "Créer et rattacher les matières",
     "teachers": "Enseignants",
     "teachersDesc": "Gérer les profils des enseignants",
-    "applications": "Demandes",
+    "applications": "Admissions",
     "applicationsDesc": "Examiner les demandes d’inscription",
     "students": "Élèves",
     "studentsDesc": "Liste des élèves admis",
@@ -3177,6 +3453,13 @@
     "settingsDesc": "Configuration du système"
   },
   "sync": {
+    "heldOtherAccount": "1 de ces modifications a été mise en file par un autre compte sur cet ordinateur. Elle sera envoyée quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOtherAccount_other": "{{count}} de ces modifications ont été mises en file par un autre compte sur cet ordinateur. Elles seront envoyées quand cette personne se reconnectera ici — pas sous votre nom.",
+    "heldOwnerless": "1 modification a été mise en file par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée ici et n’est envoyée sous aucun compte tant que personne n’a décidé à qui elle appartient.",
+    "heldOwnerless_other": "{{count}} modifications ont été mises en file par une ancienne version de l’application, qui n’indiquait pas leur auteur. Elles sont conservées ici et ne sont envoyées sous aucun compte tant que personne n’a décidé à qui elles appartiennent.",
+    "readOnlyOtherAccount": "Enregistrée par un autre compte sur cet ordinateur. Seule cette personne peut l’abandonner, la réessayer ou en enregistrer une copie — elle est envoyée quand elle se reconnecte ici.",
+    "readOnlyOwnerless": "Enregistrée par une ancienne version de l’application, qui n’indiquait pas son auteur. Elle est conservée pour examen et ne peut être ni abandonnée, ni réessayée, ni copiée ici.",
+    "refusedSignedOut": "Connectez-vous pour agir sur une modification en attente sur cet ordinateur.",
     "saveCopy": "Enregistrer une copie",
     "copySaved": "Enregistré dans {{path}}",
     "copyFailed": "La copie n'a pas pu être enregistrée.",
@@ -3197,7 +3480,16 @@
     "discard": "Abandonner",
     "discardConfirm": "Abandonner cette modification ? Ce qui a été enregistré sur cet ordinateur sera supprimé et jamais envoyé.",
     "syncNow": "Vérifier maintenant",
-    "lastChecked": "Dernière vérification à {{time}}"
+    "lastChecked": "Dernière vérification à {{time}}",
+    "signInAgainTitle": "Reconnectez-vous pour envoyer {{count}} modification(s) non envoyée(s)",
+    "signInAgainTitleNone": "Reconnectez-vous pour que cet ordinateur reste synchronisé",
+    "signInAgainBody": "Le serveur a mis fin à la session de cet ordinateur : plus rien n'est envoyé. Tout ce qui a été enregistré ici reste sur cet ordinateur et sera envoyé dès que vous vous reconnecterez.",
+    "signInAgainAction": "Se reconnecter",
+    "signInAgainShort": "Reconnexion requise"
+  },
+  "offlinePeriod": {
+    "notice": "Connectez-vous bientôt à Internet — dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité.",
+    "warning": "Connectez-vous maintenant : dernière synchronisation de cet appareil il y a {{count}} jours ; les modifications de plus de {{limit}} jours risquent de ne pas être acceptées en toute sécurité."
   },
   "initialSync": {
     "loadingTitle": "Téléchargement des données de votre établissement sur cet ordinateur…",
@@ -3328,7 +3620,8 @@
       "RULE_FIXED": "Cette règle est la même pour toutes les écoles et ne peut pas être modifiée.",
       "PROMOTION_RUN_EXISTS": "Une proposition de passage de l'année a été faite à partir de ces résultats. Supprimez d'abord le brouillon, ou annulez la proposition.",
       "CLASS_REQUIRED": "Choisissez une classe : la publication s'annule classe par classe."
-    }
+    },
+    "needsInternet": "Cette action nécessite une connexion Internet. Le reste de l'application continue de fonctionner hors ligne."
   },
   "studentEdit": {
     "title": "Corriger la fiche de l'élève",
@@ -3361,7 +3654,7 @@
     "RECENT_DECLINE": "Les résultats scolaires récents ont diminué.",
     "SUDDEN_PERFORMANCE_CHANGE": "Un changement récent de résultats a été observé.",
     "PERSISTENT_UNDERPERFORMANCE": "Les résultats restent inférieurs au seuil de réussite de l'école.",
-    "SUBJECT_STRENGTH": "Une force dans une matière se dégage.",
+    "SUBJECT_STRENGTH": "De bons résultats récents dans cette matière.",
     "SUSTAINED_IMPROVEMENT": "Une amélioration durable a été observée.",
     "CONSISTENT_STRENGTH": "Des résultats constamment solides ont été observés.",
     "INSUFFICIENT_ACADEMIC_EVIDENCE": "Les éléments scolaires sont encore insuffisants.",
@@ -3669,7 +3962,7 @@
       "heading": "Pilote de validation",
       "none": "Aucun pilote ouvert pour cet établissement.",
       "kind": {
-        "synthetic": "Synthétique (jeux de données)",
+        "synthetic": "Données d'essai",
         "development": "Développement (test du flux)",
         "real": "Réel (établissement autorisé, ses propres enseignants)"
       },
@@ -3703,7 +3996,7 @@
       "openKind": "Type d'exercice",
       "openLabel": "Libellé (facultatif)",
       "openScope": "Classes (vide = tout l'établissement)",
-      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — produit des preuves de calibration.",
+      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — sert à ajuster les suggestions.",
       "advance": "Passer à {{state}}",
       "note": "Note pour le dossier (facultatif)",
       "decisionHeading": "Décision",
@@ -5365,7 +5658,7 @@
   },
   "academicRules": {
     "title": "Comment les résultats sont calculés",
-    "intro": "Identique pour toutes les écoles, décidé par le responsable du projet. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
+    "intro": "Identique pour toutes les écoles. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
     "year": "Année scolaire",
     "statement": {
       "sequence": "Moyenne de séquence : la note de chaque matière sur 20 (CC intégré selon la répartition CC/épreuve de l'école quand le CC est activé ; l'épreuve seule sinon), pondérée par le coefficient de la matière.",
@@ -5472,6 +5765,58 @@
     "failed": "Impossible de vérifier l'adresse. Réessayez.",
     "current": "Serveur : {{url}}",
     "change": "Changer de serveur"
+  },
+  "schoolHours": {
+    "conflictTitle": "Les horaires et les périodes ne concordent pas",
+    "conflictBody": "Les paramètres indiquent une journée de {{open}} à {{close}}, mais les périodes vont de {{from}} à {{to}}. Corrigez celui qui est faux.",
+    "editInSettings": "Modifier les horaires dans les paramètres",
+    "editPeriods": "Modifier les périodes"
+  },
+  "ageRanges": {
+    "title": "Âges habituels par classe",
+    "hint": "Un élève hors de ces âges est tout de même enregistré — le formulaire demande seulement de vérifier la date de naissance. Laissez vide pour la valeur par défaut (Form 1 : 9–14, chaque niveau : minimum +1, maximum +2).",
+    "save": "Enregistrer les âges",
+    "saved": "Tranches d'âge enregistrées",
+    "errSave": "Impossible d'enregistrer les tranches d'âge"
+  },
+  "studentOverview": {
+    "results": "Derniers résultats",
+    "noResults": "Aucun résultat publié pour l'instant.",
+    "position": "{{position}} sur {{outOf}}",
+    "attendance": "Assiduité — {{days}} derniers jours",
+    "attendanceBreakdown": "{{present}} présent(s), {{late}} retard(s), {{absent}} absence(s), {{excused}} excusée(s)",
+    "notMarked": "Pointé sur aucun registre pendant cette période.",
+    "fees": "Frais {{year}}",
+    "openAccount": "Ouvrir le compte",
+    "settled": "Soldé",
+    "feesBreakdown": "Facturé {{charged}} · payé {{paid}}",
+    "guardian": "Tuteur",
+    "noGuardian": "Aucun contact de tuteur enregistré.",
+    "unavailable": "Le résumé n'a pas pu être chargé."
+  },
+  "unsaved": {
+    "title": "Quitter sans enregistrer ?",
+    "message": "Vos modifications sur cette page n'ont pas été enregistrées et seront perdues.",
+    "leave": "Quitter",
+    "stay": "Rester",
+    "marks": "{{count}} marque non enregistrée sera perdue.",
+    "marks_other": "{{count}} marques non enregistrées seront perdues."
+  },
+  "verifyPage": {
+    "opening": "Ouverture de la page de vérification…",
+    "continue": "Continuer"
+  },
+  "connection": {
+    "offlineTitle": "Vous êtes hors ligne.",
+    "unreachableTitle": "Le serveur est injoignable.",
+    "browserBody": "La console web a besoin d'une connexion Internet : les modifications ne peuvent pas être enregistrées tant que la connexion n'est pas rétablie.",
+    "needsInternetTitle": "Cette fonction nécessite une connexion Internet",
+    "needsInternetBody": "Cet ordinateur est hors ligne. Ce qui se fait sur cet écran passe obligatoirement par le serveur : c'est désactivé jusqu'au retour de la connexion. Tout le reste de l'application continue de fonctionner hors ligne.",
+    "needsInternetShort": "Nécessite une connexion Internet"
+  },
+  "signOutGuard": {
+    "title": "Modifications pas encore envoyées",
+    "message": "Vous avez {{count}} modification(s) pas encore envoyée(s). Elles seront envoyées la prochaine fois que vous vous connecterez sur cet ordinateur."
   },
   "ttConflicts": {
     "title": "Conflits d’emploi du temps",

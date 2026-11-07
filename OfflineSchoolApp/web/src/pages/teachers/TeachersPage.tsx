@@ -18,12 +18,14 @@ import {
   Users,
   BookMarked,
   AlertCircle,
+  AlertTriangle,
   ClipboardList,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
 import { PageSpinner } from "@/components/ui/Spinner";
@@ -40,6 +42,7 @@ import { API } from "@/services/apiEndpoints";
 import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT, type DashAccent } from "@/config/dashboardTint";
 import type { Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
 
@@ -104,6 +107,7 @@ export default function TeachersPage() {
     return teachers.filter((t) =>
       t.name?.toLowerCase().includes(q) ||
       t.email?.toLowerCase().includes(q) ||
+      t.staffNo?.toLowerCase().includes(q) ||
       t.phone?.toLowerCase().includes(q),
     );
   }, [teachers, deferredSearch]);
@@ -223,8 +227,8 @@ export default function TeachersPage() {
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">{t("teachers.loadFailed")}</h3>
-            <p className="text-sm text-gray-500 mt-0.5">{getErrorMessage(error)}</p>
+            <h3 className="text-sm font-semibold text-ink">{t("teachers.loadFailed")}</h3>
+            <p className="text-sm text-ink-muted mt-0.5">{getErrorMessage(error)}</p>
           </div>
         </div>
       </Card>
@@ -236,11 +240,14 @@ export default function TeachersPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("teachers.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("teachers.blurb")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("teachers.title")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("teachers.blurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -262,15 +269,19 @@ export default function TeachersPage() {
 
       {/* ── Totals ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
-        <Stat icon={Users}      label={t("teachers.title")}          value={totals.all} />
-        <Stat icon={School}     label={t("common.active")}            value={totals.active} />
-        <Stat icon={BookMarked} label={t("teachers.subjectsCovered")}  value={totals.subjects} />
+        <Stat icon={Users}      accent="violet" label={t("teachers.title")}          value={totals.all} />
+        <Stat icon={School}     accent="violet" label={t("common.active")}            value={totals.active} />
+        <Stat icon={BookMarked} accent="slate"  label={t("teachers.subjectsCovered")}  value={totals.subjects} />
       </div>
+
+      <UnassignedClassSubjects schoolId={schoolId} />
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
       <Card padding={false}>
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-line">
           <CardHeader
+            icon={Users}
+            accent="violet"
             title={t("teachers.all")}
             subtitle={
               deferredSearch
@@ -297,11 +308,13 @@ export default function TeachersPage() {
 
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <Users className="w-8 h-8 text-gray-300 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700">
+            <span className={cn("mx-auto flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.violet.box)} aria-hidden="true">
+              <Users className="w-6 h-6" />
+            </span>
+            <p className="mt-3 text-sm font-medium text-ink">
               {teachers.length === 0 ? t("teachers.none") : t("teachers.noneMatch")}
             </p>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {teachers.length === 0
                 ? t("teachers.firstOne")
                 : t("teachers.searchPageOnly")}
@@ -339,7 +352,18 @@ export default function TeachersPage() {
                             {initials(teacher.name)}
                           </span>
                         </div>
-                        <p className="font-medium text-gray-800">{teacher.name}</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-800">{teacher.name}</p>
+                          {/* The school's staff number, issued by the server. */}
+                          <p
+                            className="text-xs text-gray-500 font-mono"
+                            title={t("teachers.staffNo")}
+                          >
+                            {teacher.staffNo || (
+                              <span className="font-sans italic text-gray-400">{t("teachers.staffNoNone")}</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </td>
 
@@ -365,7 +389,7 @@ export default function TeachersPage() {
                           {teacher.subjects.length > 3 && (
                             <Badge
                               label={`+${teacher.subjects.length - 3}`}
-                              variant="default"
+                              accent="slate"
                             />
                           )}
                         </div>
@@ -379,7 +403,7 @@ export default function TeachersPage() {
                     <td className="px-4 py-3">
                       <Badge
                         label={teacher.isActive ? t("common.active") : t("common.inactive")}
-                        variant={teacher.isActive ? "success" : "default"}
+                        variant={teacher.isActive ? "success" : "danger"}
                       />
                     </td>
 
@@ -451,23 +475,92 @@ const initials = (name?: string): string =>
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("") || "?";
 
+/**
+ * Class-subjects no active assignment covers (B4). 69 of 105 had no teacher
+ * and nothing on this page said so. Grouped by class, folded by default — the
+ * count is the point; the list is for working through it.
+ */
+interface UnassignedRow { subjectId: string; subjectName: string | null; classId: string; className: string | null }
+
+function UnassignedClassSubjects({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({
+    queryKey: ["class-subjects-unassigned", schoolId],
+    queryFn:  async () => {
+      const { data } = await api.get("/admin/class-subjects/unassigned", { params: { schoolId } });
+      const body = data?.data ?? data;
+      return { rows: (body?.unassigned ?? []) as UnassignedRow[], total: Number(body?.classSubjects ?? 0) };
+    },
+    enabled: !!schoolId,
+  });
+  const byClass = useMemo(() => {
+    const m = new Map<string, { className: string; subjects: string[] }>();
+    for (const r of data?.rows ?? []) {
+      const g = m.get(r.classId) ?? { className: r.className ?? "—", subjects: [] };
+      g.subjects.push(r.subjectName ?? "—");
+      m.set(r.classId, g);
+    }
+    return [...m.values()];
+  }, [data]);
+  if (!data || data.rows.length === 0) return null;
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/60">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">
+              {t("teachers.unassignedTitle", { count: data.rows.length, total: data.total })}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">{t("teachers.unassignedHint")}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)}>
+            {open ? t("teachers.unassignedHide") : t("teachers.unassignedShow")}
+          </Button>
+          <Button size="sm" onClick={() => navigate("/teachers/assignments")}>
+            {t("nav.assignments")}
+          </Button>
+        </div>
+      </div>
+      {open && (
+        <ul className="mt-3 space-y-1.5 text-sm">
+          {byClass.map((g) => (
+            <li key={g.className}>
+              <span className="font-semibold text-gray-800">{g.className}:</span>{" "}
+              <span className="text-gray-600">{g.subjects.join(", ")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function Stat({
   icon: Icon,
+  accent,
   label,
   value,
 }: {
-  icon:  React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
+  icon:   React.ComponentType<{ className?: string }>;
+  accent: DashAccent;
+  label:  string;
+  value:  number;
 }) {
+  const tint = DASH_TINT[accent];
   return (
-    <Card className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-primary-600" />
+    <Card className={cn("flex items-center gap-3", tint.card)}>
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", tint.box)}>
+        <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0">
-        <p className="text-xl font-semibold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs text-gray-500 truncate">{label}</p>
+        <p className={cn("text-xl font-semibold leading-tight", tint.number)}>{value}</p>
+        <p className="text-xs text-ink-muted truncate">{label}</p>
       </div>
     </Card>
   );

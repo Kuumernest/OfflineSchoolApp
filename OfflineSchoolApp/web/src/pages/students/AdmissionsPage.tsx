@@ -28,9 +28,13 @@ import {
   type ApplicationDocument,
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
+import { type Semantic, type TileTone } from "@/config/sections";
+import { ACCENT_BADGE, ACCENT_LEFT_CARD, DASH_TINT, dashTint } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { useToast }       from "@/components/ui/Toast";
+import { formatDay } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -65,15 +69,7 @@ const isStaleApplication = (createdAt?: string | null): boolean => {
 };
 
 const formatDate = (value?: string | null): string => {
-  if (!value) return i18n.t("common.unknownDate");
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? i18n.t("common.unknownDate")
-    : d.toLocaleDateString(undefined, {
-        year:  "numeric",
-        month: "short",
-        day:   "numeric",
-      });
+  return formatDay(value, i18n.t("common.unknownDate"));
 };
 
 const resolveDocumentUrl = (uri?: string | null): string | null => {
@@ -175,27 +171,40 @@ function FlashBanner({
   );
 }
 
+/**
+ * A count over the list: the kind's tinted card with a solid icon square.
+ * When the count means something, `semantic` swaps in an amber (warning) or
+ * red (error) border and gives the figure that status colour.
+ */
 function SummaryCard({
-  bg,
-  icon,
-  iconColor,
+  icon: Icon,
+  tone,
+  semantic,
   value,
   label,
 }: {
-  bg: string;
-  icon: React.ReactNode;
-  iconColor?: string;
+  icon: React.ElementType;
+  tone: TileTone;
+  semantic?: Semantic | null;
   value: number;
   label: string;
 }) {
+  const tint = dashTint(tone);
+  const card =
+    semantic === "warning" ? tint.warnCard :
+    semantic === "error"   ? tint.errorCard :
+    tint.card;
+  const figure =
+    semantic === "warning" ? "text-warning-text" :
+    semantic === "error"   ? "text-danger-text" :
+    tint.number;
   return (
-    <div
-      className="flex flex-1 flex-col items-center gap-1 rounded-2xl px-4 py-4"
-      style={{ backgroundColor: bg }}
-    >
-      <div className={iconColor}>{icon}</div>
-      <span className="text-xl font-bold text-gray-900">{value}</span>
-      <span className="text-xs font-semibold text-gray-500">{label}</span>
+    <div className={cn("flex flex-1 flex-col items-center gap-1 px-4 py-4", card)}>
+      <span className={cn("flex h-9 w-9 items-center justify-center rounded-control", tint.box)}>
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <span className={cn("text-xl font-bold", figure)}>{value}</span>
+      <span className="text-xs font-semibold text-ink-muted">{label}</span>
     </div>
   );
 }
@@ -214,52 +223,52 @@ function ApplicationCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border bg-white p-4 shadow-sm",
-        stale ? "border-red-200" : "border-gray-200"
+        stale ? DASH_TINT.blue.errorCard : DASH_TINT.blue.card,
+        "rounded-2xl p-4"
       )}
     >
       <div className="flex items-start gap-3">
         <div
           className={cn(
             "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
-            stale ? "bg-red-50" : "bg-amber-50"
+            stale ? DASH_TINT.red.box : DASH_TINT.amber.box
           )}
         >
-          <UserPlus className={cn("h-5 w-5", stale ? "text-red-500" : "text-amber-600")} />
+          <UserPlus className="h-5 w-5" />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-gray-900">
+          <p className="truncate text-sm font-bold text-ink">
             {application.name}
           </p>
-          <p className="truncate text-xs text-gray-400">
+          <p className="truncate text-xs text-ink-muted">
             {application.email || t("admissions.noEmail")}
           </p>
         </div>
 
         <span
           className={cn(
-            "shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
+            "shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wide ring-1 ring-inset",
             stale
-              ? "bg-red-50 text-red-700"
-              : "bg-amber-50 text-amber-700"
+              ? ACCENT_BADGE.red
+              : ACCENT_BADGE.amber
           )}
         >
           {stale ? t("common.stale") : t("common.pending")}
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 text-xs text-ink-body sm:grid-cols-2">
         <div className="flex items-center gap-1.5">
-          <School className="h-3.5 w-3.5 text-indigo-500" />
+          <School className="h-3.5 w-3.5 text-primary-500" />
           <span>{application.className || application.grade || t("admissions.noClassSelected")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5 text-gray-500" />
+          <Users className={cn("h-3.5 w-3.5", DASH_TINT.blue.glyph)} />
           <span>{application.guardianName || t("admissions.noGuardian")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5 text-gray-500" />
+          <Calendar className={cn("h-3.5 w-3.5", DASH_TINT.blue.glyph)} />
           <span>{formatDate(application.created_at)}</span>
         </div>
         {application.phone ? (
@@ -301,10 +310,10 @@ function DetailRow({
     <div className="flex items-start gap-3">
       <div className="mt-0.5 shrink-0">{icon}</div>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
           {label}
         </p>
-        <p className="mt-0.5 text-sm font-medium text-gray-900 whitespace-pre-line">
+        <p className="mt-0.5 text-sm font-medium text-ink whitespace-pre-line">
           {value || t("common.notProvided")}
         </p>
       </div>
@@ -325,20 +334,20 @@ function DocumentCard({
   return (
     <button
       onClick={() => onOpen(doc)}
-      className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-left hover:bg-gray-100"
+      className={cn(ACCENT_LEFT_CARD.slate, "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:shadow-lift")}
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50">
-        <FileText className="h-4 w-4 text-emerald-600" />
+      <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", DASH_TINT.slate.box)}>
+        <FileText className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-gray-900">
+        <p className="truncate text-sm font-semibold text-ink">
           {doc.title || t("admissions.documentN", { n: index + 1 })}
         </p>
-        <p className="truncate text-xs text-gray-400">
+        <p className="truncate text-xs text-ink-muted">
           {doc.type || t("admissions.attachedDocument")}
         </p>
       </div>
-      <Eye className="h-4 w-4 shrink-0 text-gray-400" />
+      <Eye className={cn("h-4 w-4 shrink-0", DASH_TINT.slate.glyph)} />
     </button>
   );
 }
@@ -357,18 +366,18 @@ function ClassOption({
       onClick={() => onSelect(classItem)}
       className={cn(
         "flex w-full items-center gap-2 border-b border-gray-100 px-4 py-3 text-left last:border-b-0",
-        isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
+        isSelected ? "bg-primary-50" : "hover:bg-gray-50"
       )}
     >
-      <School className={cn("h-4 w-4", isSelected ? "text-indigo-600" : "text-gray-400")} />
+      <School className={cn("h-4 w-4", isSelected ? "text-primary-600" : "text-gray-400")} />
       <span className={cn(
         "flex-1 text-sm",
-        isSelected ? "font-bold text-indigo-700" : "font-medium text-gray-700"
+        isSelected ? "font-bold text-primary-700" : "font-medium text-gray-700"
       )}>
         {classItem.name}
       </span>
       {isSelected && (
-        <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+        <CheckCircle2 className="h-4 w-4 text-primary-600" />
       )}
     </button>
   );
@@ -433,10 +442,12 @@ function ReviewSheet({
 
         <div className="max-h-[calc(92vh-80px)] overflow-y-auto px-5 py-4">
           {/* Student Details */}
-          <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+          <section className={cn("mb-4 rounded-2xl border border-line bg-surface p-4", DASH_TINT.blue.edge)}>
             <div className="mb-4 flex items-center gap-2">
-              <Users className="h-4 w-4 text-indigo-600" />
-              <h3 className="text-sm font-bold text-gray-900">{t("admissions.studentDetails")}</h3>
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.blue.box)} aria-hidden="true">
+                <Users className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-bold text-ink">{t("admissions.studentDetails")}</h3>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -446,7 +457,7 @@ function ReviewSheet({
                 value={application.name}
               />
               <DetailRow
-                icon={<Mail className="h-4 w-4 text-indigo-600" />}
+                icon={<Mail className="h-4 w-4 text-primary-600" />}
                 label={t("common.email")}
                 value={application.email || t("admissions.noEmail")}
               />
@@ -456,7 +467,7 @@ function ReviewSheet({
                 value={application.phone}
               />
               <DetailRow
-                icon={<Users className="h-4 w-4 text-indigo-600" />}
+                icon={<Users className="h-4 w-4 text-primary-600" />}
                 label={t("admissions.guardian")}
                 value={application.guardianName}
               />
@@ -466,20 +477,20 @@ function ReviewSheet({
                 value={application.className || application.grade || t("common.notSpecified")}
               />
               <DetailRow
-                icon={<Calendar className="h-4 w-4 text-indigo-600" />}
+                icon={<Calendar className="h-4 w-4 text-primary-600" />}
                 label={t("admissions.appliedOn")}
                 value={formatDate(application.created_at)}
               />
               {application.address ? (
                 <DetailRow
-                  icon={<School className="h-4 w-4 text-gray-500" />}
+                  icon={<School className={cn("h-4 w-4", DASH_TINT.blue.glyph)} />}
                   label={t("common.address")}
                   value={application.address}
                 />
               ) : null}
               {application.notes ? (
                 <DetailRow
-                  icon={<FileText className="h-4 w-4 text-gray-500" />}
+                  icon={<FileText className={cn("h-4 w-4", DASH_TINT.blue.glyph)} />}
                   label={t("common.notes")}
                   value={application.notes}
                 />
@@ -488,10 +499,12 @@ function ReviewSheet({
           </section>
 
           {/* Documents */}
-          <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+          <section className={cn("mb-4 rounded-2xl border border-line bg-surface p-4", DASH_TINT.blue.edge)}>
             <div className="mb-4 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-gray-900">{t("common.documents")}</h3>
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+                <FileText className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-bold text-ink">{t("common.documents")}</h3>
             </div>
 
             {application.documents?.length ? (
@@ -506,18 +519,20 @@ function ReviewSheet({
                 ))}
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-500">
-                <FileText className="h-4 w-4 text-gray-400" />
+              <div className="flex items-center gap-2 rounded-xl border border-line bg-accent-slate-soft px-3 py-3 text-sm text-ink-muted">
+                <FileText className={cn("h-4 w-4", DASH_TINT.slate.glyph)} />
                 {t("admissions.noDocuments")}
               </div>
             )}
           </section>
 
           {/* Class assignment */}
-          <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+          <section className={cn("mb-4 rounded-2xl border border-line bg-surface p-4", DASH_TINT.blue.edge)}>
             <div className="mb-4 flex items-center gap-2">
-              <School className="h-4 w-4 text-indigo-600" />
-              <h3 className="text-sm font-bold text-gray-900">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.indigo.box)} aria-hidden="true">
+                <School className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-bold text-ink">
                 {t("admissions.assignClass")}
               </h3>
             </div>
@@ -534,7 +549,7 @@ function ReviewSheet({
                   className={cn(
                     "flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors",
                     selectedClass
-                      ? "border-indigo-500 bg-indigo-50"
+                      ? "border-primary-500 bg-primary-50"
                       : "border-gray-200 bg-gray-50 hover:bg-white"
                   )}
                 >
@@ -570,11 +585,13 @@ function ReviewSheet({
           </section>
 
           {/* Rejection reason */}
-          <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+          <section className={cn("mb-4 rounded-2xl border border-line bg-surface p-4", DASH_TINT.blue.edge)}>
             <div className="mb-4 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              <h3 className="text-sm font-bold text-gray-900">
-                {t("admissions.rejectionReason")} <span className="font-normal text-gray-400">(Optional)</span>
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.red.box)} aria-hidden="true">
+                <AlertCircle className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-bold text-ink">
+                {t("admissions.rejectionReason")} <span className="font-normal text-ink-muted">(Optional)</span>
               </h3>
             </div>
 
@@ -584,7 +601,7 @@ function ReviewSheet({
               disabled={isBusy}
               rows={3}
               placeholder={t("admissions.rejectionPh")}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-indigo-500 focus:bg-white"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-primary-500 focus:bg-white"
             />
           </section>
 
@@ -887,7 +904,7 @@ export default function AdmissionsPage() {
   if (applicationsQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("admissions.loading")}</p>
       </div>
     );
@@ -900,11 +917,14 @@ export default function AdmissionsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.applications")}</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {t("admissions.pendingCount", { count: applications.length })}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">{t("admissions.title")}</h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              {t("admissions.pendingCount", { count: applications.length })}
+            </p>
+          </div>
         </div>
 
         <button
@@ -942,20 +962,22 @@ export default function AdmissionsPage() {
       {/* Summary */}
       <div className="flex gap-3">
         <SummaryCard
-          bg="#FEF3C7"
-          icon={<UserPlus className="h-5 w-5 text-amber-600" />}
+          icon={UserPlus}
+          tone="students"
+          semantic={applications.length > 0 ? "warning" : null}
           value={applications.length}
           label={t("common.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
-          icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+          icon={AlertCircle}
+          tone="students"
+          semantic={staleCount > 0 ? "error" : null}
           value={staleCount}
           label={`Over ${STALE_DAYS}d`}
         />
         <SummaryCard
-          bg="#EEF2FF"
-          icon={<School className="h-5 w-5 text-indigo-600" />}
+          icon={School}
+          tone="classes"
           value={classes.length}
           label={t("academic.class_other")}
         />
@@ -963,10 +985,12 @@ export default function AdmissionsPage() {
 
       {/* Content */}
       {applications.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-8 py-16 text-center shadow-sm">
-          <CheckCircle2 className="h-12 w-12 text-emerald-600" />
-          <p className="mt-3 text-lg font-bold text-gray-900">{t("admissions.allCaughtUp")}</p>
-          <p className="mt-1 max-w-md text-sm text-gray-400">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-line bg-surface px-8 py-16 text-center shadow-sm">
+          <span className={cn("flex h-12 w-12 items-center justify-center rounded-card", DASH_TINT.green.box)} aria-hidden="true">
+            <CheckCircle2 className="h-6 w-6" />
+          </span>
+          <p className="mt-3 text-lg font-bold text-ink">{t("admissions.allCaughtUp")}</p>
+          <p className="mt-1 max-w-md text-sm text-ink-muted">
             {t("admissions.noPendingBody")}
           </p>
         </div>

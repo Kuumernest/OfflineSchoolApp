@@ -30,23 +30,23 @@ const SEVERITY_STYLES: Record<
 > = {
   danger: {
     wrap:    "bg-danger-soft border-danger-line hover:brightness-[0.98]",
-    icon:    "text-danger",
-    text:    "text-danger",
-    chevron: "text-danger/50",
+    icon:    "text-danger-text",
+    text:    "text-danger-text",
+    chevron: "text-danger-text/50",
     Icon:    AlertCircle,
   },
   warning: {
     wrap:    "bg-warning-soft border-warning-line hover:brightness-[0.98]",
-    icon:    "text-warning",
-    text:    "text-warning",
-    chevron: "text-warning/50",
+    icon:    "text-warning-text",
+    text:    "text-warning-text",
+    chevron: "text-warning-text/50",
     Icon:    AlertTriangle,
   },
   info: {
     wrap:    "bg-info-soft border-info-line hover:brightness-[0.98]",
-    icon:    "text-info",
-    text:    "text-info",
-    chevron: "text-info/50",
+    icon:    "text-info-text",
+    text:    "text-info-text",
+    chevron: "text-info-text/50",
     Icon:    Info,
   },
 };

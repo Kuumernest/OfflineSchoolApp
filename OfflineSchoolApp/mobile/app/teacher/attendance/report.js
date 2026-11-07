@@ -22,6 +22,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -48,11 +50,13 @@ const fmtDate = (dateStr) => {
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 };
 
-const rateColor = (rate) => {
-  if (rate >= 80) return "#059669";
-  if (rate >= 60) return "#D97706";
-  return "#DC2626";
+/** A rate's tone: 80%+ success, 60%+ warning, below that error. */
+const rateTone = (rate) => {
+  if (rate >= 80) return SEMANTIC.success;
+  if (rate >= 60) return SEMANTIC.warning;
+  return SEMANTIC.error;
 };
+const rateColor = (rate) => rateTone(rate).text;
 
 const DATE_PRESETS = [
   { labelKey: "attTeacher.rangeToday",      start: todayStr(),    end: todayStr()    },
@@ -112,9 +116,9 @@ const buildStudentSummaries = (records, t) => {
 // STAT CHIP
 // ─────────────────────────────────────────────────────────────
 
-const StatChip = ({ label, value, color }) => (
-  <View style={[chipS.chip, { backgroundColor: color + "15" }]}>
-    <Text style={[chipS.val, { color }]}>{value}</Text>
+const StatChip = ({ label, value, accent }) => (
+  <View style={[chipS.chip, { backgroundColor: accent.wash }]}>
+    <Text style={[chipS.val, { color: accent.deep }]}>{value}</Text>
     <Text style={chipS.lbl}>{label}</Text>
   </View>
 );
@@ -122,7 +126,7 @@ const StatChip = ({ label, value, color }) => (
 const chipS = StyleSheet.create({
   chip: { flex: 1, borderRadius: 10, padding: 8, alignItems: "center", gap: 2 },
   val:  { fontSize: 14, fontWeight: "800" },
-  lbl:  { fontSize: 9, color: "#6B7280", fontWeight: "600", textTransform: "uppercase" },
+  lbl:  { fontSize: 9, color: THEME.textSecondary, fontWeight: "600", textTransform: "uppercase" },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ const SummaryBar = ({ students }) => {
         <Text style={summaryS.title}>
           {t("academic.studentCount", { count: students.length })}
         </Text>
-        <View style={[summaryS.badge, { backgroundColor: color + "15" }]}>
+        <View style={[summaryS.badge, { backgroundColor: rateTone(totals.rate).bg, borderColor: rateTone(totals.rate).icon + "4D" }]}>
           <Text style={[summaryS.badgeText, { color }]}>
             {totals.rate}% overall
           </Text>
@@ -168,15 +172,15 @@ const SummaryBar = ({ students }) => {
           * undefined besides.
           */}
         {[
-          { labelKey: "attStatus.present", val: totals.present, color: "#059669" },
-          { labelKey: "attStatus.absent",  val: totals.absent,  color: "#DC2626" },
-          { labelKey: "attStatus.late",    val: totals.late,    color: "#D97706" },
-          { labelKey: "attStatus.excused", val: totals.excused, color: "#4F46E5" },
-          { labelKey: "common.total",      val: totals.total,   color: "#6B7280" },
+          { labelKey: "attStatus.present", val: totals.present, bg: SEMANTIC.success.bg, color: SEMANTIC.success.text },
+          { labelKey: "attStatus.absent",  val: totals.absent,  bg: SEMANTIC.error.bg,   color: SEMANTIC.error.text },
+          { labelKey: "attStatus.late",    val: totals.late,    bg: SEMANTIC.warning.bg, color: SEMANTIC.warning.text },
+          { labelKey: "attStatus.excused", val: totals.excused, bg: SEMANTIC.info.bg,    color: SEMANTIC.info.text },
+          { labelKey: "common.total",      val: totals.total,   bg: ACCENT.slate.wash,   color: ACCENT.slate.deep },
         ].map((p) => (
           <View
             key={p.labelKey}
-            style={[summaryS.pill, { backgroundColor: p.color + "10" }]}
+            style={[summaryS.pill, { backgroundColor: p.bg }]}
           >
             <Text style={[summaryS.pillVal, { color: p.color }]}>{p.val}</Text>
             <Text style={summaryS.pillLbl}>{t(p.labelKey)}</Text>
@@ -188,7 +192,7 @@ const SummaryBar = ({ students }) => {
         <View
           style={[
             summaryS.barFill,
-            { width: `${Math.min(totals.rate, 100)}%`, backgroundColor: color },
+            { width: `${Math.min(totals.rate, 100)}%`, backgroundColor: rateTone(totals.rate).icon },
           ]}
         />
       </View>
@@ -198,13 +202,15 @@ const SummaryBar = ({ students }) => {
 
 const summaryS = StyleSheet.create({
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.green.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    16,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.green.base,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -215,16 +221,16 @@ const summaryS = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom:   12,
   },
-  title:     { fontSize: 15, fontWeight: "700", color: "#111827" },
-  badge:     { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  title:     { fontSize: 15, fontWeight: "700", color: THEME.text },
+  badge:     { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
   badgeText: { fontSize: 13, fontWeight: "700" },
   pills:     { flexDirection: "row", gap: 6, marginBottom: 10 },
   pill:      { flex: 1, borderRadius: 10, padding: 8, alignItems: "center", gap: 2 },
   pillVal:   { fontSize: 15, fontWeight: "800" },
-  pillLbl:   { fontSize: 9, color: "#6B7280", fontWeight: "600", textTransform: "uppercase" },
+  pillLbl:   { fontSize: 9, color: THEME.textSecondary, fontWeight: "600", textTransform: "uppercase" },
   barBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: THEME.border,
     borderRadius:    3,
     overflow:        "hidden",
   },
@@ -264,7 +270,7 @@ const StudentCard = React.memo(({ student, isExpanded, onPress }) => {
           </Text>
         </View>
 
-        <View style={[cardS.rateBadge, { backgroundColor: color + "15" }]}>
+        <View style={[cardS.rateBadge, { backgroundColor: rateTone(rate).bg, borderColor: rateTone(rate).icon + "4D" }]}>
           <Text style={[cardS.rateNum, { color }]}>{rate}%</Text>
           <Text style={[cardS.rateLbl, { color }]}>rate</Text>
         </View>
@@ -272,24 +278,24 @@ const StudentCard = React.memo(({ student, isExpanded, onPress }) => {
         <Ionicons
           name={isExpanded ? "chevron-up" : "chevron-down"}
           size={16}
-          color="#9CA3AF"
+          color={THEME.textSecondary}
           style={{ marginLeft: 4 }}
         />
       </View>
 
       <View style={cardS.stats}>
-        <StatChip label={t("attStatus.present")} value={summary?.present ?? 0} color="#059669" />
-        <StatChip label={t("attStatus.absent")}  value={summary?.absent  ?? 0} color="#DC2626" />
-        <StatChip label={t("attStatus.late")}    value={summary?.late    ?? 0} color="#D97706" />
-        <StatChip label={t("attStatus.excused")} value={summary?.excused ?? 0} color="#4F46E5" />
-        <StatChip label={t("common.total")}   value={summary?.total   ?? 0} color="#6B7280" />
+        <StatChip label={t("attStatus.present")} value={summary?.present ?? 0} accent={ACCENT.green} />
+        <StatChip label={t("attStatus.absent")}  value={summary?.absent  ?? 0} accent={ACCENT.red} />
+        <StatChip label={t("attStatus.late")}    value={summary?.late    ?? 0} accent={ACCENT.amber} />
+        <StatChip label={t("attStatus.excused")} value={summary?.excused ?? 0} accent={ACCENT.indigo} />
+        <StatChip label={t("common.total")}   value={summary?.total   ?? 0} accent={ACCENT.slate} />
       </View>
 
       <View style={cardS.barBg}>
         <View
           style={[
             cardS.barFill,
-            { width: `${Math.min(rate, 100)}%`, backgroundColor: color },
+            { width: `${Math.min(rate, 100)}%`, backgroundColor: rateTone(rate).icon },
           ]}
         />
       </View>
@@ -298,14 +304,17 @@ const StudentCard = React.memo(({ student, isExpanded, onPress }) => {
 });
 
 const cardS = StyleSheet.create({
+  // A pupil's row: students are blue, a left edge on their wash.
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.blue.wash,
     borderRadius:    16,
     padding:         16,
     marginBottom:    4,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    shadowColor:     "#000",
+    borderColor:     THEME.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.blue.base,
+    shadowColor:     THEME.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
@@ -320,21 +329,21 @@ const cardS = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.blue.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  avatarText: { fontSize: 18, fontWeight: "800", color: "#4F46E5" },
+  avatarText: { fontSize: 18, fontWeight: "800", color: THEME.onPrimary },
   info:       { flex: 1 },
-  name:       { fontSize: 15, fontWeight: "700", color: "#111827" },
-  sub:        { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  rateBadge:  { alignItems: "center", borderRadius: 10, padding: 8, minWidth: 50 },
+  name:       { fontSize: 15, fontWeight: "700", color: THEME.text },
+  sub:        { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
+  rateBadge:  { alignItems: "center", borderRadius: 10, padding: 8, minWidth: 50, borderWidth: 1 },
   rateNum:    { fontSize: 18, fontWeight: "800" },
   rateLbl:    { fontSize: 9, fontWeight: "600", textTransform: "uppercase" },
   stats:      { flexDirection: "row", gap: 6, marginBottom: 10 },
   barBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: THEME.border,
     borderRadius:    3,
     overflow:        "hidden",
   },
@@ -345,12 +354,14 @@ const cardS = StyleSheet.create({
 // DETAIL PANEL
 // ─────────────────────────────────────────────────────────────
 
-const STATUS_COLORS = {
-  present:  "#059669",
-  absent:   "#DC2626",
-  late:     "#D97706",
-  excused:  "#4F46E5",
-  on_leave: "#6B7280",
+// A record's status badge: present success, absent error, late warning,
+// excused and on leave info.
+const STATUS_TONES = {
+  present:  SEMANTIC.success,
+  absent:   SEMANTIC.error,
+  late:     SEMANTIC.warning,
+  excused:  SEMANTIC.info,
+  on_leave: SEMANTIC.info,
 };
 
 const DetailPanel = React.memo(({ student }) => {
@@ -358,7 +369,7 @@ const DetailPanel = React.memo(({ student }) => {
   if (!student?.records?.length) {
     return (
       <View style={detailS.empty}>
-        <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
+        <IconSquare icon="calendar-outline" accent="green" size={40} />
         <Text style={detailS.emptyText}>{t("attTeacher.repNonePeriod")}</Text>
       </View>
     );
@@ -374,12 +385,12 @@ const DetailPanel = React.memo(({ student }) => {
         Records ({student.records.length})
       </Text>
       {sorted.map((rec, i) => {
-        const color = STATUS_COLORS[rec.status] || "#9CA3AF";
+        const tone = STATUS_TONES[rec.status] || SEMANTIC.info;
         return (
           <View key={`${rec.date}-${i}`} style={detailS.row}>
             <Text style={detailS.date}>{fmtDate(rec.date)}</Text>
-            <View style={[detailS.badge, { backgroundColor: color + "18" }]}>
-              <Text style={[detailS.badgeText, { color }]}>
+            <View style={[detailS.badge, { backgroundColor: tone.bg, borderColor: tone.icon + "4D" }]}>
+              <Text style={[detailS.badgeText, { color: tone.text }]}>
                 {(rec.status || "").replace("_", " ").toUpperCase()}
               </Text>
             </View>
@@ -397,7 +408,7 @@ const DetailPanel = React.memo(({ student }) => {
 
 const detailS = StyleSheet.create({
   container: {
-    backgroundColor:      "#F9FAFB",
+    backgroundColor:      THEME.surface,
     borderRadius:         16,
     borderTopLeftRadius:  0,
     borderTopRightRadius: 0,
@@ -405,30 +416,30 @@ const detailS = StyleSheet.create({
     marginBottom:         12,
     borderWidth:          1,
     borderTopWidth:       0,
-    borderColor:          "#F3F4F6",
+    borderColor:          THEME.border,
   },
-  title: { fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 10 },
+  title: { fontSize: 13, fontWeight: "700", color: THEME.text, marginBottom: 10 },
   row: {
     flexDirection:     "row",
     alignItems:        "center",
     paddingVertical:   8,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: THEME.border,
     gap:               10,
   },
-  date:      { fontSize: 13, color: "#374151", fontWeight: "500", flex: 1 },
-  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  date:      { fontSize: 13, color: THEME.text, fontWeight: "500", flex: 1 },
+  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   badgeText: { fontSize: 10, fontWeight: "700" },
-  note:      { fontSize: 11, color: "#9CA3AF", flex: 1 },
+  note:      { fontSize: 11, color: THEME.textSecondary, flex: 1 },
   empty: {
     alignItems:      "center",
     padding:         20,
     gap:             8,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.green.wash,
     borderRadius:    12,
     marginBottom:    12,
   },
-  emptyText: { fontSize: 13, color: "#9CA3AF" },
+  emptyText: { fontSize: 13, color: THEME.textSecondary },
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -553,7 +564,7 @@ export default function TeacherAttendanceReportScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={styles.loadingText}>{t("attTeacher.repLoading")}</Text>
       </View>
     );
@@ -563,7 +574,7 @@ export default function TeacherAttendanceReportScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={THEME.page} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -572,9 +583,10 @@ export default function TeacherAttendanceReportScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {t("attTeacher.classReport", { className })}
@@ -589,7 +601,7 @@ export default function TeacherAttendanceReportScreen() {
           onPress={() => loadReport(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh" size={20} color="#4F46E5" />
+          <Ionicons name="refresh" size={20} color={ACCENT.green.solid} />
         </TouchableOpacity>
       </View>
 
@@ -626,11 +638,11 @@ export default function TeacherAttendanceReportScreen() {
       {/* Search */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={16} color="#9CA3AF" />
+          <Ionicons name="search-outline" size={16} color={THEME.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder={t("attTeacher.repSearchPh")}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={THEME.textMuted}
             value={search}
             onChangeText={setSearch}
             autoCapitalize="none"
@@ -638,7 +650,7 @@ export default function TeacherAttendanceReportScreen() {
           />
           {!!search && (
             <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={16} color={THEME.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -682,8 +694,8 @@ export default function TeacherAttendanceReportScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadReport(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
         ListHeaderComponent={
@@ -703,7 +715,7 @@ export default function TeacherAttendanceReportScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="people-outline" size={56} color="#D1D5DB" />
+            <IconSquare icon="people-outline" accent="green" size={56} radius={16} />
             <Text style={styles.emptyTitle}>
               {error
                 ? t("attTeacher.repLoadFailed")
@@ -733,14 +745,14 @@ export default function TeacherAttendanceReportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: THEME.page },
   centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: THEME.page,
   },
-  loadingText: { color: "#6B7280", marginTop: 12, fontSize: 14 },
+  loadingText: { color: THEME.textSecondary, marginTop: 12, fontSize: 14 },
 
   header: {
     flexDirection:     "row",
@@ -748,87 +760,88 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: THEME.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:    { marginLeft: 12, marginRight: 0 },
   headerCenter:  { flex: 1, marginLeft: 12 },
-  headerTitle:   { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:     { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:   { fontSize: 18, fontWeight: "700", color: THEME.text },
+  headerSub:     { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
   refreshBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.green.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
 
   presetsRow: {
-    backgroundColor:   "#FFF",
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: THEME.border,
   },
   presetsScroll: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   presetBtn: {
     paddingHorizontal: 14,
     paddingVertical:   7,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   THEME.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       THEME.border,
   },
-  presetBtnActive:  { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  presetText:       { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  presetTextActive: { color: "#FFF" },
+  presetBtnActive:  { backgroundColor: ACCENT.green.wash, borderColor: ACCENT.green.base },
+  presetText:       { fontSize: 13, fontWeight: "600", color: THEME.textSecondary },
+  presetTextActive: { color: ACCENT.green.deep },
 
   searchRow: {
     paddingHorizontal: 16,
     paddingTop:        12,
     paddingBottom:     8,
-    backgroundColor:   "#FFF",
+    backgroundColor:   THEME.surface,
   },
   searchBox: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#F9FAFB",
+    backgroundColor:   THEME.surface,
     borderRadius:      10,
     paddingHorizontal: 12,
     height:            42,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       THEME.border,
     gap:               8,
   },
-  searchInput: { flex: 1, fontSize: 14, color: "#111827" },
+  searchInput: { flex: 1, fontSize: 14, color: THEME.text },
 
   sortRow: {
     flexDirection:     "row",
     paddingHorizontal: 16,
     paddingBottom:     12,
-    backgroundColor:   "#FFF",
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: THEME.border,
     gap:               6,
   },
   sortBtn: {
     paddingHorizontal: 12,
     paddingVertical:   6,
     borderRadius:      8,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   THEME.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       THEME.border,
   },
-  sortBtnActive:  { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  sortText:       { fontSize: 11, fontWeight: "600", color: "#6B7280" },
-  sortTextActive: { color: "#FFF" },
+  sortBtnActive:  { backgroundColor: ACCENT.green.wash, borderColor: ACCENT.green.base },
+  sortText:       { fontSize: 11, fontWeight: "600", color: THEME.textSecondary },
+  sortTextActive: { color: ACCENT.green.deep },
 
   list: { padding: 16, paddingBottom: 60 },
 
@@ -839,15 +852,15 @@ const styles = StyleSheet.create({
     gap:               12,
     paddingHorizontal: 32,
   },
-  emptyTitle: { fontSize: 16, fontWeight: "600", color: "#374151", textAlign: "center" },
-  emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle: { fontSize: 16, fontWeight: "600", color: THEME.text, textAlign: "center" },
+  emptySub:   { fontSize: 13, color: THEME.textSecondary, textAlign: "center" },
   retryBtn: {
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   ACCENT.green.solid,
     borderRadius:      10,
     paddingVertical:   10,
     paddingHorizontal: 24,
     marginTop:         8,
   },
-  retryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  retryText: { color: THEME.onPrimary, fontWeight: "700", fontSize: 14 },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";

@@ -26,6 +26,15 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
+/**
+ * The window's own view of the connection, relayed to the main process — its
+ * connectivity monitor (sync/connectivity.js) treats it as a hint and checks
+ * the server before sending anything. Nothing is exposed to the page for
+ * this: the preload listens itself, and sends a boolean.
+ */
+window.addEventListener("online",  () => ipcRenderer.send("net:status", true));
+window.addEventListener("offline", () => ipcRenderer.send("net:status", false));
+
 /** A named, frozen surface. Nothing here is a passthrough. */
 contextBridge.exposeInMainWorld("school", {
   /** Marks this as the desktop build. The web app branches on it once. */

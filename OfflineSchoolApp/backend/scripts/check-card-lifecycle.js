@@ -175,9 +175,10 @@ const main = async () => {
   console.log("--- a preview before any print ---");
   await M("DocumentVerification").deleteMany({ studentId: "p1", examId: { $regex: "^term:" } });
   await termCard("");
-  check("a code first minted by a preview starts at printCount 0", (await termQr())?.printCount, 0);
+  // A code is issued by a print or a download, never by looking (2026-10-30).
+  check("a preview of a card never printed issues no code", await termQr(), null);
   await termCard();
-  check("and its first print counts as one", (await termQr())?.printCount, 1);
+  check("its first print issues the code and counts as one", (await termQr())?.printCount, 1);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();

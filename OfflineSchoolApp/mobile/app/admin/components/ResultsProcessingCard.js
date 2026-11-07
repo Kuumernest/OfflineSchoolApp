@@ -10,7 +10,11 @@ import { router }      from "expo-router";
 import { Ionicons }    from "@expo/vector-icons";
 import { ExamService } from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
-import { errorText } from "../../../src/utils/appError";
+// Results, report cards and PDFs are online-only: a failure for want of a
+// connection says so rather than "Network Error".
+import { needsInternetErrorText } from "../../../src/hooks/useNeedsInternet";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -70,7 +74,7 @@ export default function ResultsProcessingCard({
       setProcessData(res);
       if (onProcessed) onProcessed();
     } catch (err) {
-      setProcessError(errorText(t, err, "resultsCard.processingFailed"));
+      setProcessError(needsInternetErrorText(t, err, "resultsCard.processingFailed"));
     } finally {
       setProcessing(false);
     }
@@ -93,7 +97,7 @@ export default function ResultsProcessingCard({
               );
               if (onProcessed) onProcessed();
             } catch (err) {
-              Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
+              Alert.alert(t("examDetail.errorTitle"), needsInternetErrorText(t, err));
             } finally {
               setPublishLoading(false);
             }
@@ -135,9 +139,7 @@ export default function ResultsProcessingCard({
 
       {/* Header */}
       <View style={s.header}>
-        <View style={s.headerIcon}>
-          <Ionicons name="calculator-outline" size={22} color={C.primary} />
-        </View>
+        <IconSquare icon="calculator" accent="slate" size={40} radius={10} style={s.headerIcon} />
         <View style={s.headerText}>
           <Text style={s.headerTitle}>{t("resultsCard.title")}</Text>
           <Text style={s.headerSub}>
@@ -150,10 +152,10 @@ export default function ResultsProcessingCard({
       {processSuccess && processData && (
         <View style={s.successBox}>
           <View style={s.successHeader}>
-            <Ionicons name="checkmark-circle" size={20} color={C.success} />
+            <Ionicons name="checkmark-circle" size={20} color={SEMANTIC.success.icon} />
             <Text style={s.successTitle}>{t("resultsCard.complete")}</Text>
             <TouchableOpacity onPress={handleDismiss} style={s.dismissBtn}>
-              <Ionicons name="close" size={18} color={C.gray400} />
+              <Ionicons name="close" size={18} color={COLORS.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -165,23 +167,23 @@ export default function ResultsProcessingCard({
             <StatItem
               label={t("examResults.passed")}
               value={processData.stats?.passed ?? 0}
-              color={C.success}
+              color={SEMANTIC.success.text}
             />
             <StatItem
               label={t("examResults.failed")}
               value={processData.stats?.failed ?? 0}
-              color={C.error}
+              color={SEMANTIC.error.text}
             />
             <StatItem
               label={t("exams.passRate")}
               value={`${processData.stats?.passRate ?? 0}%`}
-              color={C.primary}
+              color={ACCENT.slate.deep}
             />
           </View>
 
           {processData.isPartial && (
             <View style={s.warningBox}>
-              <Ionicons name="warning" size={16} color={C.warning} />
+              <Ionicons name="warning" size={16} color={SEMANTIC.warning.icon} />
               <Text style={s.warningText}>
                 {processData.warnings?.[0] || t("resultsCard.partial")}
               </Text>
@@ -239,7 +241,7 @@ export default function ResultsProcessingCard({
             <Ionicons
               name="information-circle-outline"
               size={14}
-              color={C.primary}
+              color={SEMANTIC.info.icon}
             />
             <Text style={s.hintText}>
               {t("resultsCard.hint")}
@@ -251,7 +253,7 @@ export default function ResultsProcessingCard({
       {/* ── Error state ── */}
       {processError && !processSuccess && (
         <View style={s.errorBox}>
-          <Ionicons name="alert-circle" size={20} color={C.error} />
+          <Ionicons name="alert-circle" size={20} color={SEMANTIC.error.icon} />
           <Text style={s.errorText}>{processError}</Text>
           <TouchableOpacity onPress={handleDismiss}>
             <Text style={s.dismissText}>{t("common.dismiss")}</Text>
@@ -324,9 +326,13 @@ function StatItem({ label, value, color }) {
 
 const s = StyleSheet.create({
   card: {
-    backgroundColor: C.white,
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         20,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
     shadowColor:     "#000",
     shadowOffset:    { width: 0, height: 2 },
     shadowOpacity:   0.06,
@@ -334,20 +340,12 @@ const s = StyleSheet.create({
     elevation:       3,
   },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  headerIcon: {
-    width:           40,
-    height:          40,
-    borderRadius:    10,
-    backgroundColor: "#EFF6FF",
-    justifyContent:  "center",
-    alignItems:      "center",
-    marginRight:     12,
-  },
+  headerIcon:  { marginRight: 12 },
   headerText:  { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: C.gray900 },
-  headerSub:   { fontSize: 13, color: C.gray500, marginTop: 2 },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   successBox: {
-    backgroundColor: C.successBg,
+    backgroundColor: SEMANTIC.success.bg,
     borderRadius:    12,
     padding:         16,
     marginBottom:    12,
@@ -357,25 +355,25 @@ const s = StyleSheet.create({
   successTitle: {
     fontSize:   15,
     fontWeight: "600",
-    color:      C.success,
+    color:      SEMANTIC.success.text,
     marginLeft: 8,
     flex:       1,
   },
   dismissBtn:  { padding: 4 },
   statsGrid:   { flexDirection: "row", justifyContent: "space-around" },
   statItem:    { alignItems: "center" },
-  statValue:   { fontSize: 22, fontWeight: "800", color: C.gray900 },
-  statLabel:   { fontSize: 11, color: C.gray500, marginTop: 2 },
+  statValue:   { fontSize: 22, fontWeight: "800", color: ACCENT.slate.deep },
+  statLabel:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   warningBox: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: C.warningBg,
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    8,
     padding:         10,
     gap:             8,
   },
-  warningText:   { fontSize: 12, color: C.warning, flex: 1, lineHeight: 18 },
-  warningDetail: { fontSize: 11, color: C.gray600, marginLeft: 4 },
+  warningText:   { fontSize: 12, color: SEMANTIC.warning.text, flex: 1, lineHeight: 18 },
+  warningDetail: { fontSize: 11, color: COLORS.textSecondary, marginLeft: 4 },
   actionRow:     { flexDirection: "row", gap: 8 },
   outlineBtn: {
     flex:            1,
@@ -422,39 +420,39 @@ const s = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "flex-start",
     gap:             6,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: SEMANTIC.info.bg,
     borderRadius:    8,
     padding:         10,
   },
-  hintText: { flex: 1, fontSize: 11, color: C.primary, lineHeight: 16 },
+  hintText: { flex: 1, fontSize: 11, color: SEMANTIC.info.text, lineHeight: 16 },
   errorBox: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: C.errorBg,
+    backgroundColor: SEMANTIC.error.bg,
     borderRadius:    10,
     padding:         12,
     marginBottom:    12,
     gap:             8,
   },
-  errorText:   { fontSize: 13, color: C.error, flex: 1 },
+  errorText:   { fontSize: 13, color: SEMANTIC.error.text, flex: 1 },
   dismissText: { fontSize: 13, fontWeight: "600", color: C.primary },
   confirmBox: {
-    backgroundColor: C.gray50,
+    backgroundColor: SEMANTIC.warning.bg,
     borderRadius:    12,
     padding:         16,
     marginBottom:    12,
     borderWidth:     1,
-    borderColor:     C.gray200,
+    borderColor:     COLORS.border,
   },
   confirmTitle: {
     fontSize:     16,
     fontWeight:   "700",
-    color:        C.gray900,
+    color:        COLORS.text,
     marginBottom: 8,
   },
   confirmText: {
     fontSize:     13,
-    color:        C.gray600,
+    color:        COLORS.textSecondary,
     lineHeight:   20,
     marginBottom: 16,
   },

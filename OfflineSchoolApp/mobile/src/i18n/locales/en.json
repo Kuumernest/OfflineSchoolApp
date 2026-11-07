@@ -102,7 +102,11 @@
     "error": "Error",
     "ok": "OK",
     "male": "Male",
-    "female": "Female"
+    "female": "Female",
+    "needsInternetTitle": "No internet connection",
+    "needsInternet": "This needs an internet connection. Connect and try again.",
+    "savedOnPhoneOnly": "Saved on this phone only. The school's copy was not updated because this needs an internet connection — save again when you are connected.",
+    "notSentYet": "Not sent yet"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -225,6 +229,7 @@
     "none": "No results found",
     "searchPh": "Search by name, admission number or class…",
     "gradeDistribution": "Grade distribution",
+    "remarkDistribution": "Remarks",
     "noGradeData": "No grade data available",
     "scoreDistribution": "Score distribution",
     "passFailSplit": "Pass / fail split",
@@ -249,15 +254,15 @@
       "retry": "Try Again",
       "reportCard": "Report Card",
       "myResults": "My Results",
-      "shareTitle": "📋 My Report Card",
+      "shareTitle": "My Report Card",
       "examLabel": "Exam:",
       "scoreLabel": "Score:",
       "gradeLabel": "Grade:",
       "positionLabel": "Position:",
       "resultLabel": "Result:",
       "inClass": "#{{pos}} in class",
-      "passFlag": "✅ PASS",
-      "failFlag": "❌ FAIL",
+      "passFlag": "PASS",
+      "failFlag": "FAIL",
       "passedWith": "You passed with {{pct}}%",
       "scoredNotPassed": "You scored {{pct}}% — not yet passed",
       "shareFailed": "Share Failed",
@@ -881,7 +886,7 @@
     "assignTeacher": "Assign a teacher",
     "loadFailed": "Couldn't load assignments",
     "byTeacher": "By teacher",
-    "brokenLinks": "Broken links",
+    "brokenLinks": "Assignments to fix",
     "teachersAssigned": "Teachers assigned",
     "classesCovered": "Classes covered",
     "totalLessons": "Total lessons",
@@ -1013,7 +1018,7 @@
     "gradeBands": "Grade bands",
     "gpaSystem": "GPA system",
     "gpaEnable": "Enable Grade Point Average tracking",
-    "passMarkPct": "Pass mark (%)",
+    "passMarkPct": "Pass mark (/20)",
     "minPct": "Min %",
     "maxPct": "Max %",
     "saveGrading": "Save grading system",
@@ -1115,6 +1120,10 @@
       "other": "{{count}} payments waiting to sync"
     },
     "pendingReceipt": "Receipt pending",
+    "provisionalReceipt": "Provisional receipt",
+    "provisionalReceiptHint": "This payment has not reached the school's server yet. The receipt will be marked PROVISIONAL; the official receipt is available once the phone syncs.",
+    "printProvisional": "Provisional receipt",
+    "provisionalRef": "Provisional ref. {{ref}}",
     "recordedOffline": "Saved on this device. It will reach the server on the next sync, and the receipt number arrives with it.",
     "classesLoading": "Loading classes…",
     "classesFailed": "Couldn't load classes",
@@ -1492,7 +1501,153 @@
     "arrived": "Arrived",
     "left": "Left",
     "noGateScan": "No gate scan",
-    "gateBlurb": "Times recorded at the school gate."
+    "gateBlurb": "Times recorded at the school gate.",
+    "chooseRecipient": "Who would you like to write to?",
+    "noRecipients": "There is nobody available to write to.",
+    "writeMessage": "Write a message…",
+    "messageDeleted": "This message was deleted",
+    "todayAttendance": "Today's attendance",
+    "noPeriodsToday": "No period records for today",
+    "attendanceBySubject": "Attendance by subject",
+    "general": "General",
+    "nav": {
+      "home": "Home",
+      "results": "Results",
+      "attendance": "Attendance",
+      "fees": "Fees",
+      "messages": "Messages",
+      "main": "Portal sections"
+    },
+    "home": {
+      "title": "Your children",
+      "subtitle": "Everything at a glance, one card per child.",
+      "latestResult": "Latest result",
+      "noResults": "No results published yet",
+      "outOf": "/20",
+      "rank": "{{position}} of {{outOf}}",
+      "up": "Up {{delta}} on the {{exam}}",
+      "down": "Down {{delta}} on the {{exam}}",
+      "same": "Same as the {{exam}}",
+      "attendanceMonth": "Attendance this month",
+      "daysPresent": "Present {{present}} of {{marked}} days",
+      "noRegister": "No register taken yet this month",
+      "balance": "Fee balance",
+      "paidUp": "Paid up",
+      "dueOn": "Due {{date}}",
+      "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} overdue",
+      "overdueSince": "Overdue since {{date}}",
+      "nextExam": "Next exam",
+      "noExam": "No exam scheduled",
+      "startsOn": "Starts {{date}}",
+      "latestNews": "Latest from the school",
+      "seeAll": "See all",
+      "viewChild": "Open {{name}}",
+      "empty": "No children are linked to this code yet.",
+      "emptyHint": "Ask the school office to add them.",
+      "refresh": "Refresh"
+    },
+    "childSwitcher": "Choose a child",
+    "account": "Account",
+    "resultsScreen": {
+      "title": "Results",
+      "trend": "Average over time",
+      "trendLabel": "Average out of 20 for each published result, oldest to newest",
+      "showTable": "Show as a table",
+      "exam": "Exam",
+      "average": "Average",
+      "term": "Term {{term}} · {{year}}",
+      "subject": "Subject",
+      "mark": "Mark /20",
+      "coef": "Coef.",
+      "remark": "Remark",
+      "rank": "{{position}} of {{outOf}}",
+      "passed": "Pass",
+      "belowPass": "Below the pass mark",
+      "absent": "Absent",
+      "published": "Published {{date}}",
+      "reportCard": "Report card (PDF)",
+      "reportCardHint": "Opens the print window: choose “Save as PDF”.",
+      "notIssued": "The school has not issued this report card yet.",
+      "empty": "No results published yet",
+      "emptyHint": "Results appear here as soon as the school publishes them.",
+      "chooseTerm": "Choose a term",
+      "openFailed": "Could not open the report card. Check your connection and try again."
+    },
+    "attendanceScreen": {
+      "title": "Attendance",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "rate": "Attendance rate",
+      "rateHint": "Present, out of every register taken this month",
+      "marked": {
+        "one": "{{count}} register taken",
+        "other": "{{count}} registers taken"
+      },
+      "present": "Present",
+      "absent": "Absent",
+      "late": "Late",
+      "excused": "Excused",
+      "partial": "Partly absent",
+      "noRecord": "No register",
+      "calendar": "Calendar",
+      "legend": "Key",
+      "days": "Day by day",
+      "arrived": "Arrived {{time}}",
+      "left": "Left {{time}}",
+      "bySubject": "By subject",
+      "empty": "No register taken in {{month}}",
+      "emptyHint": "Days appear here once the school marks the register.",
+      "weekdays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri"
+      ]
+    },
+    "feesScreen": {
+      "title": "Fees",
+      "balance": "Balance to pay",
+      "paidUp": "All paid up",
+      "paidUpHint": "Nothing is owed for {{name}} at the moment.",
+      "overdue": "Overdue",
+      "overdueOfIt": "of which {{amount}} is overdue",
+      "overdueSince": "Payment was due on {{date}}",
+      "dueOn": "Next payment due {{date}}",
+      "charged": "Charged",
+      "waived": "Waived",
+      "paid": "Paid",
+      "charges": "What the school has charged",
+      "noDueDate": "No due date",
+      "dueBy": "Due {{date}}",
+      "payments": "Payments",
+      "noPayments": "No payments recorded yet",
+      "receipt": "Receipt",
+      "receiptFor": "Receipt {{no}}",
+      "reversal": "Reversal",
+      "plan": "Payment plan",
+      "instalment": "Instalment {{seq}}",
+      "empty": "No fees recorded yet",
+      "emptyHint": "Charges appear here once the school bills them.",
+      "receiptFailed": "Could not open the receipt. Check your connection and try again."
+    },
+    "messagesScreen": {
+      "conversations": "Conversations",
+      "markAllRead": "Mark all as read",
+      "new": "New",
+      "about": "About {{names}}",
+      "you": "You",
+      "send": "Send",
+      "back": "Back to messages",
+      "writeTo": "Write to a teacher or the office",
+      "noConversationsHint": "Start a conversation with your child’s teacher or the school office.",
+      "noNoticesHint": "Absences, fee reminders and published results appear here.",
+      "noNewsHint": "The school’s announcements appear here.",
+      "tabMessages": "Messages",
+      "tabNotices": "Notices",
+      "tabNews": "News"
+    }
   },
   "codes": {
     "title": "Portal access",
@@ -1637,7 +1792,7 @@
     "notMatchErr": "Passwords do not match.",
     "failed": "Failed to update password.",
     "genericError": "Something went wrong. Please try again.",
-    "successTitle": "Password Set! 🎉",
+    "successTitle": "Password Set!",
     "successBody": "Your password has been saved. Welcome aboard!",
     "letsGo": "Let's Go",
     "signOutTitle": "Sign Out",
@@ -2265,7 +2420,7 @@
     "labelEnrollmentNo": "Enrollment No.",
     "labelTempPassword": "Temp Password",
     "btnCopy": "Copy",
-    "credentialsHint": "📱 Share these details with the student. The temporary password above works for the first login only — they will set their own password right after signing in.",
+    "credentialsHint": "Share these details with the student. The temporary password above works for the first login only — they will set their own password right after signing in.",
     "copyLabelEnrollment": "Enrollment number",
     "copyLabelPassword": "Password",
     "errLoadFailed": "Failed to load applications. Pull down to retry.",
@@ -2299,7 +2454,7 @@
     "btnRetry": "Retry",
     "emptyTitle": "All caught up!",
     "emptySubtitle": "No pending applications at the moment. New submissions will appear here for review.",
-    "approvedTitle": "Approval Successful 🎉",
+    "approvedTitle": "Approval Successful",
     "reviewSubtitle": "Approve or reject this application",
     "offlineBanner": "Approved offline — the student account will be fully created once you reconnect.",
     "emailSentBanner": "Login details have been emailed to the student.",
@@ -2454,7 +2609,7 @@
       "other": "{{count}} upcoming"
     },
     "emptyClassesTitle": "No classes scheduled today",
-    "emptyClassesSub": "Enjoy your free day! ☕",
+    "emptyClassesSub": "Enjoy your free day!",
     "nowBadge": "NOW",
     "subjectFallback": "Subject",
     "classFallback": "Class",
@@ -2505,7 +2660,7 @@
       "other": "{{count}} assignments due very soon!"
     },
     "urgentView": "View →",
-    "sectionPinned": "📌 Pinned",
+    "sectionPinned": "Pinned",
     "sectionTodaySchedule": "Today's Schedule",
     "sectionQuickAccess": "Quick Access",
     "sectionHomework": "Homework",
@@ -2649,7 +2804,7 @@
     "skipBody": "You can complete your profile later from Settings.",
     "skipConfirm": "Skip for Now",
     "cancel": "Cancel",
-    "savedTitle": "Profile Saved! 🎉",
+    "savedTitle": "Profile Saved!",
     "savedBody": "Your profile has been updated successfully.",
     "continueBtn": "Continue",
     "errorTitle": "Error",
@@ -2733,7 +2888,7 @@
     "cancel": "Cancel",
     "sessionErrorTitle": "Session Error",
     "sessionErrorBody": "Your session has expired. Please log in again.",
-    "savedTitle": "Profile Saved! 🎉",
+    "savedTitle": "Profile Saved!",
     "savedBody": "Your profile has been set up successfully.",
     "continueBtn": "Continue",
     "saveFailedTitle": "Save Failed",
@@ -2855,8 +3010,8 @@
   "studentAdd": {
     "title": "Add Student",
     "headerSubOnline": "Saves locally then syncs to server",
-    "headerSubOffline": "📴 Offline — will sync when connected",
-    "offlineBanner": "📴 You're offline. Student will be saved to this device and synced automatically when you reconnect.",
+    "headerSubOffline": "Offline — will sync when connected",
+    "offlineBanner": "You're offline. Student will be saved to this device and synced automatically when you reconnect.",
     "directEnrollment": "Direct enrollment",
     "directEnrollmentNote": "saved to device first, then synced to server. Works offline too!",
     "syncPending": "Saved locally — syncing…",
@@ -2885,12 +3040,12 @@
     "summaryEmailSent": "Email Sent",
     "summaryStatus": "Status",
     "pendingSync": "Pending sync…",
-    "emailSentYes": "✅ Sent",
-    "emailSentNo": "❌ Not sent",
-    "statusSavedOffline": "📱 Saved offline",
+    "emailSentYes": "Sent",
+    "emailSentNo": "Not sent",
+    "statusSavedOffline": "Saved offline",
     "credTitle": "Share Credentials Manually",
-    "credEnrollmentLabel": "📋 Enrollment No (Login ID)",
-    "credPasswordLabel": "🔑 Temp Password",
+    "credEnrollmentLabel": "Enrollment No (Login ID)",
+    "credPasswordLabel": "Temp Password",
     "copy": "Copy",
     "copied": "✓ Copied",
     "credHint": "Student must change this password on first login.",
@@ -2901,7 +3056,7 @@
     "sectionContact": "Contact Information",
     "sectionGuardian": "Guardian / Parent",
     "loadingClasses": "Loading classes…",
-    "noClasses": "⚠ No classes found. ",
+    "noClasses": "No classes found.",
     "addClassFirst": "Add a class first",
     "selectClass": "Select Class",
     "selectClassPlaceholder": "Select a class…",
@@ -3012,7 +3167,9 @@
     "movedMessage": "{{name}} moved to {{className}}.",
     "moveFailed": "Failed to move.",
     "error": "Error",
-    "ok": "OK"
+    "ok": "OK",
+    "changePending": "Saved on this phone. The change is sent to the school automatically when there is a connection.",
+    "changeRefused": "The school did not accept a change to this pupil. Open Pending changes to see why, then retry or discard it."
   },
   "studentSettings": {
     "title": "Settings",
@@ -3052,7 +3209,7 @@
     "profileCompleteCheck": "Profile complete ✓",
     "tapToCompleteSetup": "Tap to complete setup",
     "changePassword": "Change Password",
-    "passwordChangeRequired": "⚠️ Password change required",
+    "passwordChangeRequired": "Password change required",
     "updateLoginPassword": "Update your login password",
     "updateLoginPasswordBelow": "Update your login password below.",
     "mustSetNewPassword": "You must set a new password before continuing.",
@@ -3065,7 +3222,7 @@
     "passwordsMatch": "✓ Passwords match",
     "passwordsNoMatch": "✗ Passwords do not match",
     "saveNewPassword": "Save New Password",
-    "pwdChangedTitle": "Password Changed ✅",
+    "pwdChangedTitle": "Password Changed",
     "pwdChangedBody": "Your password has been updated successfully.",
     "errCurrentRequired": "Please enter your current password.",
     "errMinLength": "New password must be at least 8 characters.",
@@ -3508,7 +3665,7 @@
     "card": {
       "live": "Live",
       "draft": "Draft",
-      "noClass": "⚠ No class assigned — tap Edit to fix",
+      "noClass": "No class assigned — tap Edit to fix",
       "statQuestions": "Questions",
       "statTime": "Time",
       "statResponses": "Responses",
@@ -3616,8 +3773,8 @@
     "sourceQuiz": "Quiz",
     "marks": "{{obtained}} / {{total}} marks",
     "minutes": "⏱ {{minutes}} min",
-    "quizPassed": "✅ Passed",
-    "quizFailed": "❌ Failed",
+    "quizPassed": "Passed",
+    "quizFailed": "Failed",
     "subjectStats": "Avg {{avg}}%  ·  {{pass}}% pass",
     "tabs": {
       "grouped": "By class",
@@ -3653,10 +3810,10 @@
       "scoreRanges": "Score Ranges"
     },
     "sections": {
-      "overall": "📊 Overall Performance",
-      "exam": "📄 Exam Performance",
-      "quiz": "🧪 Quiz Performance",
-      "perClass": "🏫 Per Class Breakdown"
+      "overall": "Overall Performance",
+      "exam": "Exam Performance",
+      "quiz": "Quiz Performance",
+      "perClass": "Per Class Breakdown"
     },
     "detail": {
       "student": "Student",
@@ -3671,8 +3828,8 @@
       "questions": "Questions",
       "remarks": "Remarks",
       "status": "Status",
-      "yes": "Yes ✅",
-      "no": "No ❌"
+      "yes": "Yes",
+      "no": "No"
     },
     "assessmentFallback": "Assessment"
   },
@@ -3793,7 +3950,7 @@
     "errLoadData": "Failed to load data. Check your network connection.",
     "errCreate": "Failed to create assignment",
     "failedTitle": "Assignment Failed",
-    "successTitle": "✅ Success!",
+    "successTitle": "Success!",
     "successBody": {
       "one": "{{count}} subject assigned to {{teacher}}",
       "other": "{{count}} subjects assigned to {{teacher}}"
@@ -3868,7 +4025,7 @@
     "dropZoneSub": "%{formats} · Max %{max} MB",
     "titlePlaceholder": "e.g., Chapter 3 — %{type}",
     "descriptionPlaceholder": "Optional — what is this content about?",
-    "tipsTitle": "📌 Upload Tips",
+    "tipsTitle": "Upload Tips",
     "tip1": "Ensure the file is clearly named and readable",
     "tip2": "Compress large files before uploading if possible",
     "tip3": "Double-check the subject and class are correct",
@@ -3914,10 +4071,15 @@
       "one": "%{count} score out of range (0–%{max}).",
       "other": "%{count} scores out of range (0–%{max})."
     },
-    "savedTitle": "✅ Saved",
+    "savedTitle": "Saved",
     "savedBody": {
       "one": "Scores saved for %{count} student.",
       "other": "Scores saved for %{count} students."
+    },
+    "savedOfflineTitle": "Saved on this phone",
+    "savedOfflineBody": {
+      "one": "Scores for %{count} student are saved on this phone and will upload automatically when you are back online.",
+      "other": "Scores for %{count} students are saved on this phone and will upload automatically when you are back online."
     },
     "enterAnotherSubject": "Enter Another Subject",
     "done": "Done",
@@ -3958,7 +4120,18 @@
     "examFallback": "Exam",
     "screenTitle": "Exam Subjects",
     "headerSubEntry": "%{exam} · %{class}",
-    "headerSubList": "%{exam} — select a subject"
+    "headerSubList": "%{exam} — select a subject",
+    "rowPending": "Saved on phone · waiting to upload",
+    "rowAttention": "Needs attention",
+    "pendingBanner": {
+      "one": "%{count} mark is saved on this phone and waiting to upload.",
+      "other": "%{count} marks are saved on this phone and waiting to upload."
+    },
+    "attentionBanner": {
+      "one": "%{count} mark could not be uploaded and needs attention.",
+      "other": "%{count} marks could not be uploaded and need attention."
+    },
+    "reviewPending": "Review"
   },
   "examResults": {
     "title": "Exam Results",
@@ -4029,7 +4202,7 @@
     "reissuedRevived": "The card was restored and replaced with a fresh copy.",
     "reissuedFresh": "The parent's copy now reflects the current marks.",
     "reissueFailed": "Reissue failed",
-    "shareTitle": "📋 REPORT CARD",
+    "shareTitle": "REPORT CARD",
     "shareStudent": "Student:",
     "shareAdmission": "Admission:",
     "shareClass": "Class:",
@@ -4616,7 +4789,7 @@
     "mon11": "Dec",
     "ok": "OK",
     "errorTitle": "Error",
-    "savedTitle": "✅ Saved",
+    "savedTitle": "Saved",
     "saveFailed": "Save Failed",
     "pleaseTryAgain": "Please try again.",
     "nothingToSave": "Nothing to save",
@@ -4765,6 +4938,7 @@
     "noClass": "No class",
     "gpa": "GPA",
     "percentage": "Percentage",
+    "average20": "Average /20",
     "passFail": "Pass/Fail",
     "breakdown": "Subject Breakdown",
     "colSubject": "Subject",
@@ -5086,7 +5260,7 @@
     "markAllColon": "Mark all:",
     "nothingTitle": "Nothing to Save",
     "markOneFirst": "Please mark at least one student before saving.",
-    "savedTitle": "✅ Attendance Saved",
+    "savedTitle": "Attendance Saved",
     "saveFailedTitle": "Save Failed",
     "tryAgain": "Please try again.",
     "unmarkedTitle": "Unmarked Students",
@@ -5187,10 +5361,18 @@
     }
   },
   "syncScreens": {
+    "heldOtherAccount": {
+      "one": "1 change on this phone was saved by another account. It is sent when that person signs in here again — not under your name.",
+      "other": "{{count}} changes on this phone were saved by another account. They are sent when that person signs in here again — not under your name."
+    },
+    "heldOwnerless": {
+      "one": "1 change was saved by an older version of the app that did not record who made it. It is kept on this phone and is not sent under any account until someone decides whose it is.",
+      "other": "{{count}} changes were saved by an older version of the app that did not record who made them. They are kept on this phone and are not sent under any account until someone decides whose they are."
+    },
     "listTitle": "Sync Overwrites",
     "listBlurb": "Edits replaced by other admins",
     "loading": "Loading overwrites…",
-    "banner": "These are edits you made that were later replaced by other admins. Tap one to see the diff.",
+    "banner": "Edits of yours that other admins later replaced, newest first. Changes you replaced are listed below them. Tap one to see the diff.",
     "bannerLine2": "Tap one to see the diff.",
     "allClear": "All clear!",
     "allClearSub": "None of your edits have been overwritten by other admins.",
@@ -5255,7 +5437,7 @@
       "one": "Mark {{count}} overwrite as seen? This will clear the dashboard alert.",
       "other": "Mark all {{count}} overwrites as seen? This will clear the dashboard alert."
     },
-    "discardBody": "“{{label}}” will be permanently removed from the upload queue. The change stays on this device but will never reach the server.",
+    "discardBody": "“{{label}}” will be removed from the upload queue and undone on this device: the record goes back to what the server has (something created here and never sent is removed). This cannot be reversed.",
     "attemptCount": {
       "one": "{{count}} attempt",
       "other": "{{count}} attempts"
@@ -5270,7 +5452,15 @@
       "other": "{{count}} conflicts"
     },
     "failedCount": "{{count}} failed",
-    "retryAll": "Retry all {{count}}"
+    "retryAll": "Retry all {{count}}",
+    "lostRow": "{{name}}’s edit replaced yours from {{when}}",
+    "wonRow": "You replaced {{name}}’s change from {{when}}",
+    "unnamed": "Unnamed {{type}}",
+    "thisRecord": "this record",
+    "editOf": "{{name}}’s edit",
+    "changesCount": "Changes ({{count}})",
+    "theirVersion": "Their version",
+    "yourWin": "You replaced this change. It was {{name}}’s, and they are shown it."
   },
   "assignList": {
     "title": "Teacher Assignments",
@@ -5448,7 +5638,7 @@
     "resubmit": "Resubmit",
     "resubmitTitle": "Resubmit?",
     "resubmitBody": "This will replace your previous submission. Continue?",
-    "submittedTitle": "✅ Submitted!",
+    "submittedTitle": "Submitted!",
     "submittedBody": "Your assignment has been submitted successfully.",
     "submitFailed": "Could not submit. Please try again.",
     "writeFirst": "Please write your response before submitting.",
@@ -5571,6 +5761,8 @@
     "noSubjectMatch": "No subjects found",
     "noSubjects": "No subjects assigned",
     "noSubjectsSub": "Contact admin to get subjects assigned",
+    "subjectsNeverLoaded": "Your subjects are not on this phone yet",
+    "subjectsNeverLoadedSub": "Connect to the internet once to load your subjects. After that, you can pick them offline.",
     "pickClasses": "Which classes get access?",
     "pickClassesSub": "Select one or more classes for this content",
     "noClasses": "No classes found",
@@ -5726,7 +5918,7 @@
     "sTeachers": "Teachers",
     "hUnassigned": "Unassigned",
     "sClasses": "Classes",
-    "sSubjects": "Subjects",
+    "sSubjects": "Class-subjects",
     "hAssigned": "Assigned",
     "hNotices": "Notices",
     "hPeriods": "Periods",
@@ -5753,9 +5945,18 @@
     "alertNoTimetable": {
       "one": "{{count}} class without timetable ({{pct}}%)",
       "other": "{{count}} classes without timetable ({{pct}}%)"
+    },
+    "hNoTeacher": "No teacher",
+    "alertClassSubjectsUnassigned": {
+      "one": "{{count}} class-subject has no teacher",
+      "other": "{{count}} class-subjects have no teacher"
     }
   },
   "sync": {
+    "heldElsewhere": {
+      "one": "1 change on this phone is not yours to send",
+      "other": "{{count}} changes on this phone are not yours to send"
+    },
     "offlineSession": "Signed in offline — sign in again while connected to upload",
     "needAttention": {
       "one": "1 change needs attention",
@@ -5770,7 +5971,15 @@
       "one": "Uploading 1 change…",
       "other": "Uploading {{count}} changes…"
     },
-    "syncing": "Syncing…"
+    "syncing": "Syncing…",
+    "needsSignIn": {
+      "zero": "Your session has ended — sign in again to keep syncing",
+      "one": "Sign in again to send 1 unsent change",
+      "other": "Sign in again to send {{count}} unsent changes"
+    },
+    "signInCta": "Sign in",
+    "staleNotice": "Connect to the internet soon — this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely",
+    "staleWarning": "Connect now: this device last synced {{count}} days ago; changes older than {{limit}} days may not be accepted safely"
   },
   "svcErr": {
     "titleRequired": "Title is required",
@@ -5874,6 +6083,8 @@
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
     "invalidCredentials": "Invalid credentials",
+    "deviceFullOfAccounts": "This phone already holds unsent work for five other accounts. One of them must sign in and send it before another account can use this phone.",
+    "appUpdateRequired": "Update the app to keep syncing. This school's data now needs a newer version of the app.",
     "roomSlotConflict": "This room is already booked in this period"
   },
   "syncStep": {
@@ -5956,7 +6167,8 @@
     "edit": "Correct details",
     "guardianPhone": "Guardian's phone",
     "alternatePhone": "Other phone",
-    "city": "City or town"
+    "city": "City or town",
+    "queuedNote": "It is sent to the school automatically when there is a connection."
   },
   "teacherHw": {
     "title": "Homework",
@@ -6060,7 +6272,7 @@
     "RECENT_DECLINE": "Recent performance has declined",
     "SUDDEN_PERFORMANCE_CHANGE": "A recent performance change was observed",
     "PERSISTENT_UNDERPERFORMANCE": "Performance has stayed below the pass mark",
-    "SUBJECT_STRENGTH": "A subject strength is emerging",
+    "SUBJECT_STRENGTH": "Strong recent results in this subject",
     "SUSTAINED_IMPROVEMENT": "Sustained improvement was observed",
     "CONSISTENT_STRENGTH": "Consistent strong performance",
     "INSUFFICIENT_ACADEMIC_EVIDENCE": "Not enough academic evidence yet",
@@ -7299,6 +7511,68 @@
     "pendingUploads": "Some changes on this phone have not been uploaded yet. Sync them before changing school, or they would be sent to the wrong school.",
     "openPending": "See pending changes",
     "failed": "Could not change school."
+  },
+  "logoutGuard": {
+    "title": "Changes not yet sent",
+    "body": {
+      "one": "You have 1 change not yet sent. If you sign out, it will be sent next time you sign in on this phone.",
+      "other": "You have {{count}} changes not yet sent. If you sign out, they'll be sent next time you sign in on this phone."
+    },
+    "signOut": "Sign out"
+  },
+  "localData": {
+    "preparingTitle": "Setting up your own data on this phone",
+    "preparingBody": "This phone is shared, so your school now keeps each person's data separately. Your data is downloading once; nothing you saved on this phone is lost.",
+    "preparingSkip": "Use the app now",
+    "preparingStopping": "Stopping…",
+    "reviewTitle": "Held changes",
+    "reviewIntro": "These changes were saved on this phone without a record of who made them. They are kept here, in full, and are not sent under anybody's name until someone decides whose they are.",
+    "reviewAdminOnly": "Only an administrator signed in on this phone can decide what happens to them.",
+    "reviewEmpty": "No changes are held on this phone.",
+    "reviewLink": {
+      "one": "1 change on this phone is held for review",
+      "other": "{{count}} changes on this phone are held for review"
+    },
+    "statusHeld": "Held",
+    "statusAssigned": "Given to an account",
+    "statusPlaced": "With its account",
+    "heldSince": "Held since {{date}}",
+    "assign": "Give to an account",
+    "assignTitle": "Whose change is this?",
+    "assignBody": "Choose the account that made it. It will be sent the next time that person is signed in on this phone.",
+    "assignConfirmTitle": "Give this change away?",
+    "assignConfirmBody": "This change will be recorded as made by {{name}} and sent from their account.",
+    "sendAsMe": "Send as me",
+    "sendAsMeTitle": "Send this change as yours?",
+    "sendAsMeBody": "It will be recorded on the server as made by you, even if somebody else made it. Do this only if you know it is right.",
+    "saveCopy": "Save a copy",
+    "actionFailed": "That could not be done. Nothing was changed.",
+    "legacyTitle": "Old shared data on this phone",
+    "gateOk": "Everything on it is accounted for. It can be deleted.",
+    "gateNotMigrated": "This phone has not been moved to per-person data.",
+    "gateTooSoon": "It is kept for 30 days after the move ({{days}} so far).",
+    "gateAlreadyDeleted": "It has already been deleted.",
+    "gateUnplaced": "Some changes in it are not yet with their account.",
+    "gateWaitingOwner": "Some changes in it wait for their account to sign in on this phone.",
+    "gateUploadsPending": "Some files in it have not been uploaded yet.",
+    "gateInUse": "Somebody on this phone is still using it.",
+    "deleteLegacy": "Delete old shared data",
+    "deleteLegacyTitle": "Delete the old shared data?",
+    "deleteLegacyBody": "Every change in it is with its account or in the held list. This cannot be undone."
+  },
+  "staffNo": {
+    "label": "Staff no.",
+    "labelLong": "Staff number",
+    "pending": "Pending — the school issues it when this syncs",
+    "none": "Not assigned yet",
+    "fromSchool": "Issued by the school. It cannot be changed on the phone."
+  },
+  "updateRequired": {
+    "title": "Update the app to keep syncing",
+    "bodyServer": "Your school's data now needs a newer version of this app. Install the latest version, then open the app again.",
+    "bodyLocal": "A newer version of this app saved the data on this phone. This version cannot read it safely. Install the latest version to go on.",
+    "kept": "Nothing has been deleted. Your saved work and unsent changes stay on this phone and are sent after the update.",
+    "checkAgain": "Check again"
   },
   "ttConflicts": {
     "title": "Timetable conflicts",

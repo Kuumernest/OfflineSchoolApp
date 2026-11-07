@@ -175,6 +175,8 @@ export interface Teacher {
   _id:        string;
   name:       string;
   email:      string;
+  /** The school's staff number (CODE-STF-NNN), issued by the server; null until then. */
+  staffNo?:   string | null;
   phone?:     string;
   schoolId:   string;
   isActive:   boolean;

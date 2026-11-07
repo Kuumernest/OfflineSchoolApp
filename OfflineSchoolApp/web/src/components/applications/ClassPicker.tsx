@@ -34,9 +34,9 @@ export const ClassPicker: React.FC<ClassPickerProps> = ({
         className={[
           "w-full flex items-center justify-between px-4 py-3.5",
           "rounded-xl border-[1.5px] text-left transition-colors",
-          "focus:outline-none focus:ring-2 focus:ring-indigo-500",
+          "focus:outline-none focus:ring-2 focus:ring-primary-500",
           selected
-            ? "border-indigo-500 bg-indigo-50/30"
+            ? "border-primary-500 bg-primary-50/30"
             : "border-gray-200 bg-gray-50",
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         ].join(" ")}
@@ -87,7 +87,7 @@ export const ClassPicker: React.FC<ClassPickerProps> = ({
                     "w-full flex items-center gap-2 px-4 py-3 text-left",
                     "border-b border-gray-50 last:border-b-0 transition-colors",
                     isSelected
-                      ? "bg-indigo-50 text-indigo-700"
+                      ? "bg-primary-50 text-primary-700"
                       : "hover:bg-gray-50 text-gray-700",
                   ].join(" ")}
                 >
@@ -109,7 +109,7 @@ export const ClassPicker: React.FC<ClassPickerProps> = ({
 
                   <span
                     className={`flex-1 text-sm ${
-                      isSelected ? "font-bold text-indigo-700" : "font-medium"
+                      isSelected ? "font-bold text-primary-700" : "font-medium"
                     }`}
                   >
                     {cls.name}
@@ -117,7 +117,7 @@ export const ClassPicker: React.FC<ClassPickerProps> = ({
 
                   {isSelected && (
                     <svg
-                      className="w-[18px] h-[18px] text-indigo-600 flex-shrink-0"
+                      className="w-[18px] h-[18px] text-primary-600 flex-shrink-0"
                       fill="currentColor"
                       viewBox="0 0 24 24"
                     >

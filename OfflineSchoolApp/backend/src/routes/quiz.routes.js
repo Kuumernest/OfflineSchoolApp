@@ -60,9 +60,21 @@ const resolveSchoolId = (req, provided) =>
 
 router.get("/sync", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
-  const since    = req.query.since
-    ? new Date(req.query.since)
-    : new Date("1970-01-01");
+  // `since` is client input. Absent → from the beginning. Anything new Date()
+  // cannot read (garbage, "undefined", a repeated parameter) used to become
+  // Invalid Date, every query below threw, and the phone's quiz sync failed
+  // with a 500 on each cycle. Refused here instead, plainly.
+  const rawSince = req.query.since;
+  const since    = rawSince === undefined || rawSince === ""
+    ? new Date("1970-01-01")
+    : (typeof rawSince === "string" ? new Date(rawSince) : new Date(NaN));
+  if (Number.isNaN(since.getTime())) {
+    return res.status(400).json({
+      success: false,
+      code:    "INVALID_SINCE",
+      message: "since must be a date (ISO 8601), or left out to read everything.",
+    });
+  }
 
   const userId = String(req.user?._id || req.user?.id || "");
   const role   = req.user?.role;

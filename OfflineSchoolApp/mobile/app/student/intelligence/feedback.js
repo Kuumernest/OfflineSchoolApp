@@ -19,6 +19,8 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { useSyncStatus } from "../../../src/hooks/useSyncStatus";
 import { getMyPilotFeedback, submitMyPilotFeedback, FEEDBACK_QUESTIONS, FEEDBACK_ANSWERS } from "../../../src/services/intelligence.service";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 
 export default function StudentPilotFeedbackScreen() {
   const router = useRouter();
@@ -65,8 +67,9 @@ export default function StudentPilotFeedbackScreen() {
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("common.goBack")}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title} accessibilityRole="header">{t("intel.feedback.title")}</Text>
       </View>
       <Text style={st.sub}>{t("intel.feedback.subtitle")}</Text>
@@ -75,7 +78,7 @@ export default function StudentPilotFeedbackScreen() {
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: pad.paddingBottom + 16 }}>
           {(offline || problem === "offline") && (
             <View style={st.offlineBox} accessibilityRole="alert">
-              <Ionicons name="cloud-offline-outline" size={18} color="#D97706" />
+              <Ionicons name="cloud-offline-outline" size={18} color={SEMANTIC.warning.icon} />
               <View style={{ flex: 1 }}>
                 <Text style={st.offlineTitle}>{t("intel.feedback.offlineTitle")}</Text>
                 <Text style={st.offlineText}>{t("intel.feedback.offline")}</Text>
@@ -88,9 +91,9 @@ export default function StudentPilotFeedbackScreen() {
           )}
 
           {done && (
-            <View style={st.note} accessibilityLiveRegion="polite">
-              <Text style={st.noteTitle}>{t("intel.feedback.thanksTitle")}</Text>
-              <Text style={st.noteText}>{t("intel.feedback.thanks")}</Text>
+            <View style={[st.note, st.noteDone]} accessibilityLiveRegion="polite">
+              <Text style={[st.noteTitle, { color: SEMANTIC.success.text }]}>{t("intel.feedback.thanksTitle")}</Text>
+              <Text style={[st.noteText, { color: SEMANTIC.success.text }]}>{t("intel.feedback.thanks")}</Text>
             </View>
           )}
 
@@ -121,7 +124,7 @@ export default function StudentPilotFeedbackScreen() {
 
               <TouchableOpacity style={[st.btn, (!complete || busy) && st.btnDisabled]} onPress={submit} disabled={!complete || busy}
                 accessibilityRole="button" accessibilityLabel={t("intel.feedback.submit")} accessibilityState={{ disabled: !complete || busy }}>
-                {busy ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />}
+                {busy ? <ActivityIndicator color={COLORS.onPrimary} /> : <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.onPrimary} />}
                 <Text style={st.btnText}>{t("intel.feedback.submit")}</Text>
               </TouchableOpacity>
               {!complete && <Text style={st.hint}>{t("intel.feedback.answerAll")}</Text>}
@@ -143,27 +146,28 @@ export default function StudentPilotFeedbackScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  sub: { fontSize: 13, color: "#6B7280", paddingHorizontal: 16, marginBottom: 8 },
-  note: { backgroundColor: "#EEF2FF", borderRadius: 12, padding: 12, marginBottom: 10 },
-  noteTitle: { fontSize: 13, fontWeight: "700", color: "#3730A3", marginBottom: 2 },
-  noteText: { fontSize: 12, color: "#3730A3" },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E5E7EB" },
-  question: { fontSize: 14, fontWeight: "600", color: "#111827", marginBottom: 8 },
+  title: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  sub: { fontSize: 13, color: COLORS.textSecondary, paddingHorizontal: 16, marginBottom: 8 },
+  note: { backgroundColor: ACCENT.violet.wash, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.violet.base },
+  noteDone: { backgroundColor: SEMANTIC.success.bg, borderLeftColor: TONE_EDGE.success },
+  noteTitle: { fontSize: 13, fontWeight: "700", color: ACCENT.violet.deep, marginBottom: 2 },
+  noteText: { fontSize: 12, color: ACCENT.violet.deep },
+  card: { backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.violet.base },
+  question: { fontSize: 14, fontWeight: "600", color: COLORS.text, marginBottom: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: "#F3F4F6", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#E5E7EB" },
-  chipOn: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  chipText: { fontSize: 12, color: "#374151" },
-  chipTextOn: { color: "#FFFFFF", fontWeight: "600" },
-  btn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#4F46E5", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, marginTop: 6, alignSelf: "flex-start" },
-  btnDisabled: { backgroundColor: "#A5B4FC" },
-  btnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 14 },
-  hint: { fontSize: 11, color: "#6B7280", marginTop: 6 },
-  agency: { fontSize: 12, color: "#4B5563", marginTop: 10, fontStyle: "italic" },
-  empty: { fontSize: 13, color: "#6B7280" },
-  offlineBox: { flexDirection: "row", gap: 8, backgroundColor: "#FEF3C7", borderRadius: 10, padding: 12, marginBottom: 10 },
-  offlineTitle: { fontSize: 13, fontWeight: "700", color: "#92400E" },
-  offlineText: { fontSize: 12, color: "#92400E", marginTop: 2 },
-  problemBox: { backgroundColor: "#FEF2F2", borderRadius: 10, padding: 12, marginTop: 10 },
-  problemText: { fontSize: 13, color: "#991B1B" },
+  chip: { backgroundColor: COLORS.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border },
+  chipOn: { backgroundColor: ACCENT.violet.wash, borderColor: ACCENT.violet.base },
+  chipText: { fontSize: 12, color: COLORS.textSecondary },
+  chipTextOn: { color: ACCENT.violet.deep, fontWeight: "600" },
+  btn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: ACCENT.violet.solid, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, marginTop: 6, alignSelf: "flex-start" },
+  btnDisabled: { opacity: 0.5 },
+  btnText: { color: COLORS.onPrimary, fontWeight: "600", fontSize: 14 },
+  hint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 6 },
+  agency: { fontSize: 12, color: COLORS.textSecondary, marginTop: 10, fontStyle: "italic" },
+  empty: { fontSize: 13, color: COLORS.textSecondary },
+  offlineBox: { flexDirection: "row", gap: 8, backgroundColor: SEMANTIC.warning.bg, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: statusBadge("warning").border },
+  offlineTitle: { fontSize: 13, fontWeight: "700", color: SEMANTIC.warning.text },
+  offlineText: { fontSize: 12, color: SEMANTIC.warning.text, marginTop: 2 },
+  problemBox: { backgroundColor: SEMANTIC.error.bg, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: statusBadge("error").border },
+  problemText: { fontSize: 13, color: SEMANTIC.error.text },
 });

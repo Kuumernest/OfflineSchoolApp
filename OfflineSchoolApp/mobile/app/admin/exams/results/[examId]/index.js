@@ -21,6 +21,9 @@ import { Ionicons }                     from "@expo/vector-icons";
 import { useResultsStore }   from "../../../../../src/store/results.store";
 import { useAuthStore }      from "../../../../../src/store/auth.store";
 import { useTranslation }    from "../../../../../src/i18n/useTranslation";
+import { StatTile, tileShell } from "../../../../../src/components/Tiles";
+import { COLORS as THEME, ACCENT, SEMANTIC } from "../../../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../../../src/components/Tinted";
 import ResultsProcessingCard from "../../../components/ResultsProcessingCard";
 import RankingsTable         from "../../../components/RankingsTable";
 
@@ -134,25 +137,23 @@ export default function ExamResultsScreen() {
                   icon="people"
                   label={t("common.total")}
                   value={stats.totalStudents ?? 0}
-                  color={COLORS.primary}
                 />
                 <QuickStatCard
                   icon="checkmark-circle"
                   label={t("examResults.passed")}
+                  tone="success"
                   value={stats.passed ?? 0}
-                  color={COLORS.success}
                 />
                 <QuickStatCard
                   icon="close-circle"
                   label={t("examResults.failed")}
+                  tone="error"
                   value={stats.failed ?? 0}
-                  color={COLORS.error}
                 />
                 <QuickStatCard
                   icon="trending-up"
                   label={t("examResults.passPct")}
                   value={`${stats.passRate ?? 0}%`}
-                  color={COLORS.warning}
                 />
               </View>
             )}
@@ -167,19 +168,13 @@ export default function ExamResultsScreen() {
             )}
 
             {!loading && results.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="bar-chart-outline"
-                  size={48}
-                  color={COLORS.gray200}
-                />
-                <Text style={styles.emptyTitle}>
-                  {t("exams.noResultsYet")}
-                </Text>
-                <Text style={styles.emptySubtitle}>
-                  {t("examResults.emptySubtitle")}
-                </Text>
-              </View>
+              <EmptyState
+                icon="bar-chart-outline"
+                accent="slate"
+                title={t("exams.noResultsYet")}
+                message={t("examResults.emptySubtitle")}
+                style={styles.emptyState}
+              />
             )}
           </View>
         );
@@ -235,9 +230,10 @@ export default function ExamResultsScreen() {
           onPress={() => router.back()}
           style={styles.backBtn}
         >
-          <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
 
+        <HeaderIcon icon="stats-chart" accent="slate" />
         <Text style={styles.screenTitle}>{t("examResults.title")}</Text>
 
         <TouchableOpacity
@@ -256,7 +252,7 @@ export default function ExamResultsScreen() {
       {/* ── Error banner ── */}
       {!!error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
+          <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
           <Text style={styles.errorText} numberOfLines={2}>{error}</Text>
           <TouchableOpacity onPress={fetchData}>
             <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -326,30 +322,27 @@ export default function ExamResultsScreen() {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function QuickStatCard({ icon, label, value, color }) {
-  return (
-    <View style={styles.statCard}>
-      <View style={[styles.statIconBg, { backgroundColor: color + "18" }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
-      <Text style={styles.statCardValue}>{value}</Text>
-      <Text style={styles.statCardLabel}>{label}</Text>
-    </View>
-  );
+// Total and pass rate are plain results cards; Passed and Failed keep the
+// status colour that is their meaning.
+function QuickStatCard({ icon, label, value, tone }) {
+  return <StatTile kind="results" tone={tone} icon={icon} value={value} label={label} />;
 }
 
+/** A mark out of twenty, as every analytics figure is printed. */
+const on20 = (v) => (v == null ? "—" : `${Number(v).toFixed(2)}/20`);
+
 function StatsView({ stats }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   if (!stats) {
     return (
-      <View style={styles.emptyStats}>
-        <Ionicons name="analytics-outline" size={48} color={COLORS.gray200} />
-        <Text style={styles.emptyText}>{t("examResults.noStats")}</Text>
-        <Text style={styles.emptySubtitle}>
-          {t("examResults.noStatsSub")}
-        </Text>
-      </View>
+      <EmptyState
+        icon="analytics-outline"
+        accent="slate"
+        title={t("examResults.noStats")}
+        message={t("examResults.noStatsSub")}
+        style={styles.emptyStats}
+      />
     );
   }
 
@@ -358,47 +351,49 @@ function StatsView({ stats }) {
 
       {/* Performance overview */}
       <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>
-          {t("examResults.performanceOverview")}
-        </Text>
+        <View style={styles.sectionTitleRow}>
+          <IconSquare icon="speedometer" accent="slate" size={28} />
+          <Text style={styles.sectionTitle}>
+            {t("examResults.performanceOverview")}
+          </Text>
+        </View>
         <View style={styles.statsGrid}>
           <StatBox label={t("examResults.students")} value={stats.totalStudents} />
-          <StatBox label={t("examResults.passed")} value={stats.passed}  color={COLORS.success} />
-          <StatBox label={t("examResults.failed")} value={stats.failed}  color={COLORS.error}   />
+          <StatBox label={t("examResults.passed")} value={stats.passed}  color={SEMANTIC.success.text} />
+          <StatBox label={t("examResults.failed")} value={stats.failed}  color={SEMANTIC.error.text}   />
           <StatBox
             label={t("exams.passRate")}
             value={`${stats.passRate?.toFixed(1) ?? 0}%`}
-            color={(stats.passRate ?? 0) >= 50 ? COLORS.success : COLORS.error}
+            color={(stats.passRate ?? 0) >= 50 ? SEMANTIC.success.text : SEMANTIC.error.text}
           />
-          <StatBox label={t("results.average")} value={`${stats.average?.toFixed(1) ?? 0}%`} />
-          <StatBox label={t("results.highest")} value={`${stats.highest?.toFixed(1) ?? 0}%`} color={COLORS.success} />
-          <StatBox label={t("results.lowest")}  value={`${stats.lowest?.toFixed(1)  ?? 0}%`} color={COLORS.error}   />
-          <StatBox label={t("examResults.avgGpa")} value={stats.averageGpa?.toFixed(2)  ?? "—"} />
+          {/* On /20 (shared/examAnalytics on the server) — no percentages, no GPA. */}
+          <StatBox label={t("results.average")} value={on20(stats.average)} />
+          <StatBox label={t("results.highest")} value={on20(stats.highest)} color={SEMANTIC.success.text} />
+          <StatBox label={t("results.lowest")}  value={on20(stats.lowest)}  color={SEMANTIC.error.text}   />
         </View>
       </View>
 
-      {/* Grade distribution */}
-      {stats.gradeDistribution &&
-        Object.keys(stats.gradeDistribution).length > 0 && (
+      {/* Pupils per band of the school's own remark scale, highest first */}
+      {(stats.remarkDistribution ?? []).some((b) => b.count > 0) && (
           <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>
-              {t("results.gradeDistribution")}
-            </Text>
+            <View style={styles.sectionTitleRow}>
+              <IconSquare icon="podium" accent="slate" size={28} />
+              <Text style={styles.sectionTitle}>
+                {t("results.remarkDistribution")}
+              </Text>
+            </View>
             <View style={styles.gradeDistContainer}>
-              {Object.entries(stats.gradeDistribution)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([grade, count]) => {
-                  // ✅ FIX: removed `count as number` TypeScript cast —
-                  //    this is a plain JS file. `count` is already a number
-                  //    from Object.entries(); no cast needed.
-                  const countNum   = Number(count) || 0;
+              {stats.remarkDistribution
+                .map((band) => {
+                  const countNum   = Number(band.count) || 0;
                   const total      = stats.totalStudents || 1;
-                  const pct        = Math.max((countNum / total) * 100, 4);
+                  const pct        = countNum > 0 ? Math.max((countNum / total) * 100, 4) : 0;
                   const widthStyle = `${pct}%`;
+                  const label      = (String(language).startsWith("fr") ? band.remarkFr : band.remark) || band.remark || "—";
 
                   return (
-                    <View key={grade} style={styles.gradeDistRow}>
-                      <Text style={styles.gradeDistLabel}>{grade}</Text>
+                    <View key={`${band.minMark}-${band.maxMark}`} style={styles.gradeDistRow}>
+                      <Text style={[styles.gradeDistLabel, { width: 110 }]} numberOfLines={1}>{label}</Text>
                       <View style={styles.gradeDistBarBg}>
                         <View
                           style={[
@@ -418,7 +413,10 @@ function StatsView({ stats }) {
       {/* Subject performance */}
       {stats.subjectStats?.length > 0 && (
         <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>{t("results.bySubject")}</Text>
+          <View style={styles.sectionTitleRow}>
+            <IconSquare icon="book" accent="slate" size={28} />
+            <Text style={styles.sectionTitle}>{t("results.bySubject")}</Text>
+          </View>
           {stats.subjectStats.map((sub) => (
             <View
               key={sub.subjectId ?? sub.subjectName}
@@ -428,7 +426,7 @@ function StatsView({ stats }) {
                 {sub.subjectName}
               </Text>
               <Text style={styles.subjectStatAvg}>
-                {sub.average?.toFixed(1)}%
+                {on20(sub.average)}
               </Text>
               <Text
                 style={[
@@ -436,8 +434,8 @@ function StatsView({ stats }) {
                   {
                     color:
                       (sub.passRate ?? 0) >= 50
-                        ? COLORS.success
-                        : COLORS.error,
+                        ? SEMANTIC.success.text
+                        : SEMANTIC.error.text,
                   },
                 ]}
               >
@@ -467,7 +465,7 @@ function StatBox({ label, value, color }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.gray50 },
+  screen: { flex: 1, backgroundColor: THEME.page },
 
   // Header
   screenHeader: {
@@ -476,15 +474,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     12,
-    backgroundColor:   COLORS.white,
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: THEME.page,
     alignItems:      "center",
     justifyContent:  "center",
     marginRight:     8,
@@ -493,7 +491,7 @@ const styles = StyleSheet.create({
     flex:       1,
     fontSize:   20,
     fontWeight: "700",
-    color:      COLORS.gray900,
+    color:      THEME.text,
   },
   refreshBtn: { padding: 8 },
 
@@ -501,15 +499,15 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#FEF2F2",
+    backgroundColor:   SEMANTIC.error.bg,
     paddingHorizontal: 16,
     paddingVertical:   10,
     gap:               8,
     borderBottomWidth: 1,
-    borderBottomColor: "#FECACA",
+    borderBottomColor: SEMANTIC.error.box,
   },
-  errorText: { flex: 1, fontSize: 13, color: COLORS.error },
-  retryText: { fontSize: 13, fontWeight: "700", color: COLORS.error },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
+  retryText: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
 
   // Tab bar
   tabBarWrapper: {
@@ -542,24 +540,13 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 16, gap: 16, paddingBottom: 40 },
 
   loadingContainer: { alignItems: "center", paddingTop: 60, gap: 12 },
-  loadingText:      { fontSize: 14, color: COLORS.gray500 },
+  loadingText:      { fontSize: 14, color: THEME.textSecondary },
 
   // Empty state
   emptyState: {
     alignItems:        "center",
     paddingVertical:   48,
     gap:               12,
-  },
-  emptyTitle: {
-    fontSize:   17,
-    fontWeight: "600",
-    color:      COLORS.gray700,
-  },
-  emptySubtitle: {
-    fontSize:          14,
-    color:             COLORS.gray500,
-    textAlign:         "center",
-    paddingHorizontal: 32,
   },
 
   // Quick stat cards
@@ -568,56 +555,40 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap:            8,
   },
-  statCard: {
-    flex:            1,
-    backgroundColor: COLORS.white,
-    borderRadius:    12,
-    padding:         12,
-    alignItems:      "center",
-    elevation:       1,
-    shadowColor:     "#000",
-    shadowOpacity:   0.04,
-    shadowRadius:    4,
-  },
-  statIconBg: {
-    width:          32,
-    height:         32,
-    borderRadius:   8,
-    justifyContent: "center",
-    alignItems:     "center",
-    marginBottom:   6,
-  },
-  statCardValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
-  statCardLabel: { fontSize: 11, color: COLORS.gray500, marginTop: 2 },
 
   // Stats section
   statsSection: {
-    backgroundColor: COLORS.white,
+    backgroundColor: THEME.surface,
     borderRadius:    16,
     padding:         16,
+    borderWidth:     1,
+    borderColor:     THEME.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.slate.base,
     shadowColor:     "#000",
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   sectionTitle: {
     fontSize:     16,
     fontWeight:   "700",
-    color:        COLORS.gray900,
-    marginBottom: 12,
+    color:        THEME.text,
   },
   statsGrid:    { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   statBox: {
     width:           "30%",
-    backgroundColor: COLORS.gray50,
+    borderWidth:     1,
+    ...tileShell("results"),
     borderRadius:    10,
     padding:         12,
     alignItems:      "center",
   },
-  statBoxValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
+  statBoxValue: { fontSize: 18, fontWeight: "800", color: ACCENT.slate.deep },
   statBoxLabel: {
     fontSize:  11,
-    color:     COLORS.gray500,
+    color:     THEME.textSecondary,
     marginTop: 4,
     textAlign: "center",
   },
@@ -633,19 +604,19 @@ const styles = StyleSheet.create({
     width:      30,
     fontSize:   14,
     fontWeight: "700",
-    color:      COLORS.gray700,
+    color:      THEME.text,
     textAlign:  "center",
   },
   gradeDistBarBg: {
     flex:            1,
     height:          24,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    6,
     overflow:        "hidden",
   },
   gradeDistBar: {
     height:          "100%",
-    backgroundColor: COLORS.primary,
+    backgroundColor: ACCENT.slate.solid,
     borderRadius:    6,
     minWidth:        20,
   },
@@ -653,7 +624,7 @@ const styles = StyleSheet.create({
     width:      30,
     fontSize:   14,
     fontWeight: "600",
-    color:      COLORS.gray700,
+    color:      ACCENT.slate.deep,
     textAlign:  "right",
   },
 
@@ -663,13 +634,13 @@ const styles = StyleSheet.create({
     alignItems:        "center",
     paddingVertical:   8,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
   },
-  subjectStatName: { flex: 1, fontSize: 13, color: COLORS.gray900 },
+  subjectStatName: { flex: 1, fontSize: 13, color: THEME.text },
   subjectStatAvg: {
     fontSize:    13,
     fontWeight:  "700",
-    color:       COLORS.gray700,
+    color:       ACCENT.slate.deep,
     marginRight: 12,
   },
   subjectStatPass: {
@@ -681,5 +652,4 @@ const styles = StyleSheet.create({
 
   // Empty stats
   emptyStats: { alignItems: "center", paddingTop: 60, gap: 12 },
-  emptyText:  { fontSize: 15, color: COLORS.gray500 },
 });

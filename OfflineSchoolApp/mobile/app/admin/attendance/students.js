@@ -25,15 +25,17 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { PeriodsService }  from "../../../src/services/periods.service";
-import api                 from "../../../src/services/api";
+import { ClassService }    from "../../../src/services/class.service";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
 
 const STATUS_OPTIONS = [
-  { value: "present", labelKey: "academic.present", color: "#059669", icon: "checkmark-circle" },
-  { value: "absent",  labelKey: "academic.absent",  color: "#DC2626", icon: "close-circle"     },
-  { value: "late",    labelKey: "academic.late",    color: "#D97706", icon: "time"             },
-  { value: "excused", labelKey: "academic.excused", color: "#4F46E5", icon: "shield-checkmark" },
+  { value: "present", labelKey: "academic.present", color: ACCENT.green.solid,  tone: "success", icon: "checkmark-circle" },
+  { value: "absent",  labelKey: "academic.absent",  color: ACCENT.red.solid,    tone: "error",   icon: "close-circle"     },
+  { value: "late",    labelKey: "academic.late",    color: ACCENT.amber.solid,  tone: "warning", icon: "time"             },
+  { value: "excused", labelKey: "academic.excused", color: ACCENT.indigo.solid, tone: "info",    icon: "shield-checkmark" },
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -66,8 +68,8 @@ const PeriodSelector = ({ schoolId, selected, onSelect }) => {
   if (loading || periods.length === 0) return null;
 
   return (
-    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-      <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 6 }}>
+    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+      <Text style={{ fontSize: 12, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 6 }}>
         {t("attAdmin.selectPeriod")}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -116,18 +118,18 @@ const ps = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: COLORS.border,
   },
   chipActive: {
-    backgroundColor: "#EEF2FF",
-    borderColor: "#4F46E5",
+    backgroundColor: ACCENT.teal.wash,
+    borderColor: ACCENT.teal.base,
   },
-  chipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  chipTextActive: { color: "#4F46E5" },
-  chipTime: { fontSize: 11, color: "#9CA3AF" },
-  chipTimeActive: { color: "#818CF8" },
+  chipText: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  chipTextActive: { color: ACCENT.teal.deep },
+  chipTime: { fontSize: 11, color: COLORS.textSubtle },
+  chipTimeActive: { color: ACCENT.teal.deep },
 });
 
 const ClassSelector = ({ schoolId, onSelect }) => {
@@ -143,14 +145,10 @@ const ClassSelector = ({ schoolId, onSelect }) => {
       setLoading(true);
       setError(null);
 
-      const response = await api.get("/admin/classes", {
-        params: { schoolId },
-      });
-
-      const list =
-        response.data?.classes ||
-        response.data?.data    ||
-        (Array.isArray(response.data) ? response.data : []);
+      // Local-first: ClassService refreshes from the server when it can and
+      // always answers from the phone's SQLite, so the register can be taken
+      // offline (AttendanceService queues the marks).
+      const list = schoolId ? await ClassService.getAll(false) : [];
 
       const active = list.filter((c) => c.isActive !== false);
 
@@ -183,7 +181,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
   if (loading) {
     return (
       <View style={cs.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={cs.loadingText}>{t("attAdmin.loadingClasses")}</Text>
       </View>
     );
@@ -192,7 +190,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
   if (error) {
     return (
       <View style={cs.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
+        <Ionicons name="alert-circle-outline" size={48} color={SEMANTIC.error.icon} />
         <Text style={cs.errorText}>{error}</Text>
         <TouchableOpacity style={cs.retryBtn} onPress={fetchClasses}>
           <Text style={cs.retryText}>{t("common.retry")}</Text>
@@ -230,15 +228,16 @@ const ClassSelector = ({ schoolId, onSelect }) => {
         contentContainerStyle={cs.list}
       >
         {filtered.length === 0 ? (
-          <View style={cs.empty}>
-            <Ionicons name="school-outline" size={48} color="#D1D5DB" />
-            <Text style={cs.emptyText}>
-              {search ? t("attAdmin.noClassesMatch") : t("attAdmin.noClassesFound")}
-            </Text>
-          </View>
+          <EmptyState
+            icon="school-outline"
+            accent="indigo"
+            message={search ? t("attAdmin.noClassesMatch") : t("attAdmin.noClassesFound")}
+            style={cs.empty}
+          />
         ) : (
           filtered.map((cls) => {
             const name = cls.name || t("attAdmin.unnamedClass");
+            const accent = levelAccent(cls.level);
             const sub  = [cls.level, cls.section]
               .filter(Boolean)
               .join(" · ");
@@ -246,7 +245,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
             return (
               <TouchableOpacity
                 key={String(cls._id || cls.id)}
-                style={cs.classCard}
+                style={[cs.classCard, { backgroundColor: ACCENT[accent].wash, borderLeftColor: ACCENT[accent].base }]}
                 onPress={() =>
                   onSelect({
                     id:   String(cls._id || cls.id),
@@ -256,16 +255,14 @@ const ClassSelector = ({ schoolId, onSelect }) => {
                 }
                 activeOpacity={0.7}
               >
-                <View style={cs.classIcon}>
-                  <Ionicons name="school" size={22} color="#4F46E5" />
-                </View>
+                <IconSquare icon="school" accent={accent} size={48} radius={12} />
 
                 <View style={cs.classInfo}>
                   <Text style={cs.className}>{name}</Text>
                   {!!sub && <Text style={cs.classSub}>{sub}</Text>}
                 </View>
 
-                <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+                <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             );
           })
@@ -284,15 +281,15 @@ const cs = StyleSheet.create({
     gap:            12,
     padding:        32,
   },
-  loadingText: { fontSize: 14, color: "#6B7280" },
-  errorText:   { fontSize: 14, color: "#DC2626", textAlign: "center" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary },
+  errorText:   { fontSize: 14, color: SEMANTIC.error.text, textAlign: "center" },
   retryBtn: {
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   ACCENT.green.solid,
     borderRadius:      10,
     paddingVertical:   10,
     paddingHorizontal: 24,
   },
-  retryText:  { color: "#FFF", fontWeight: "700" },
+  retryText:  { color: COLORS.onPrimary, fontWeight: "700" },
   searchBox: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -309,7 +306,7 @@ const cs = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: "#111827" },
   hint: {
     fontSize:         13,
-    color:            "#9CA3AF",
+    color:            COLORS.textSecondary,
     marginHorizontal: 16,
     marginBottom:     12,
   },
@@ -319,32 +316,25 @@ const cs = StyleSheet.create({
     paddingVertical: 60,
     gap:             12,
   },
-  emptyText:  { fontSize: 14, color: "#9CA3AF", textAlign: "center" },
+  emptyText:  { fontSize: 14, color: COLORS.textSecondary, textAlign: "center" },
   classCard: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     padding:         16,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
     gap:             12,
-    shadowColor:     "#000",
+    shadowColor:     COLORS.shadow,
     shadowOpacity:   0.04,
     shadowRadius:    6,
     elevation:       2,
   },
-  classIcon: {
-    width:           48,
-    height:          48,
-    borderRadius:    12,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
   classInfo: { flex: 1 },
-  className: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  classSub:  { fontSize: 12, color: "#9CA3AF", marginTop: 3 },
+  className: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  classSub:  { fontSize: 12, color: COLORS.textSecondary, marginTop: 3 },
 });
 
 const MarkAttendance = React.forwardRef(({
@@ -482,7 +472,7 @@ const MarkAttendance = React.forwardRef(({
   if (loading) {
     return (
       <View style={ms.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.green.solid} />
         <Text style={ms.loadingText}>{t("attAdmin.loadingStudents")}</Text>
       </View>
     );
@@ -504,17 +494,17 @@ const MarkAttendance = React.forwardRef(({
 
         <View style={ms.statusCounts}>
           {[
-            { label: "P", value: presentCount, color: "#059669" },
-            { label: "A", value: absentCount,  color: "#DC2626" },
-            { label: "L", value: lateCount,    color: "#D97706" },
-            { label: "E", value: excusedCount, color: "#4F46E5" },
+            { label: "P", value: presentCount, tone: "success" },
+            { label: "A", value: absentCount,  tone: "error"   },
+            { label: "L", value: lateCount,    tone: "warning" },
+            { label: "E", value: excusedCount, tone: "info"    },
           ].map((s) => (
             <View
               key={s.label}
-              style={[ms.countChip, { backgroundColor: s.color + "15" }]}
+              style={[ms.countChip, { backgroundColor: statusBadge(s.tone).bg, borderColor: statusBadge(s.tone).border }]}
             >
-              <Text style={[ms.countVal, { color: s.color }]}>{s.value}</Text>
-              <Text style={[ms.countLbl, { color: s.color }]}>{s.label}</Text>
+              <Text style={[ms.countVal, { color: SEMANTIC[s.tone].text }]}>{s.value}</Text>
+              <Text style={[ms.countLbl, { color: SEMANTIC[s.tone].text }]}>{s.label}</Text>
             </View>
           ))}
         </View>
@@ -527,13 +517,13 @@ const MarkAttendance = React.forwardRef(({
             key={opt.value}
             style={[
               ms.markAllBtn,
-              { backgroundColor: opt.color + "15", borderColor: opt.color },
+              { backgroundColor: SEMANTIC[opt.tone].bg, borderColor: SEMANTIC[opt.tone].icon },
             ]}
             onPress={() => markAll(opt.value)}
             activeOpacity={0.7}
           >
-            <Ionicons name={opt.icon} size={12} color={opt.color} />
-            <Text style={[ms.markAllBtnText, { color: opt.color }]}>
+            <Ionicons name={opt.icon} size={12} color={SEMANTIC[opt.tone].text} />
+            <Text style={[ms.markAllBtnText, { color: SEMANTIC[opt.tone].text }]}>
               {opt.label}
             </Text>
           </TouchableOpacity>
@@ -567,8 +557,8 @@ const MarkAttendance = React.forwardRef(({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadRoster(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.green.solid}
+            colors={[ACCENT.green.solid]}
           />
         }
         renderItem={({ item }) => {
@@ -629,7 +619,7 @@ const MarkAttendance = React.forwardRef(({
                         ms.statusBtn,
                         isActive
                           ? { backgroundColor: opt.color, borderColor: opt.color }
-                          : { backgroundColor: "transparent", borderColor: "#E5E7EB" },
+                          : { backgroundColor: "transparent", borderColor: COLORS.border },
                       ]}
                       onPress={() => toggleStatus(studentId, opt.value)}
                       activeOpacity={0.7}
@@ -637,7 +627,7 @@ const MarkAttendance = React.forwardRef(({
                       <Ionicons
                         name={opt.icon}
                         size={16}
-                        color={isActive ? "#FFF" : "#9CA3AF"}
+                        color={isActive ? COLORS.onPrimary : COLORS.textSubtle}
                       />
                     </TouchableOpacity>
                   );
@@ -647,19 +637,15 @@ const MarkAttendance = React.forwardRef(({
           );
         }}
         ListEmptyComponent={
-          <View style={ms.empty}>
-            <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-            <Text style={ms.emptyTitle}>
-              {search
-                ? t("attAdmin.noStudentsMatch")
-                : t("attAdmin.noStudentsInClass")}
-            </Text>
-            {!search && (
-              <Text style={ms.emptyText}>
-                {t("attAdmin.enrolFirst")}
-              </Text>
-            )}
-          </View>
+          <EmptyState
+            icon="people-outline"
+            kind="students"
+            title={search
+              ? t("attAdmin.noStudentsMatch")
+              : t("attAdmin.noStudentsInClass")}
+            message={!search ? t("attAdmin.enrolFirst") : null}
+            style={ms.empty}
+          />
         }
       />
     </View>
@@ -674,32 +660,32 @@ const ms = StyleSheet.create({
     justifyContent: "center",
     gap:            12,
   },
-  loadingText: { fontSize: 14, color: "#6B7280" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary },
 
   progress: {
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     paddingHorizontal: 16,
     paddingVertical:   12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   progressInfo: {
     flexDirection:  "row",
     justifyContent: "space-between",
     marginBottom:   6,
   },
-  progressText: { fontSize: 13, color: "#374151", fontWeight: "600" },
-  progressPct:  { fontSize: 13, color: "#4F46E5", fontWeight: "700" },
+  progressText: { fontSize: 13, color: COLORS.text, fontWeight: "600" },
+  progressPct:  { fontSize: 13, color: ACCENT.green.deep, fontWeight: "700" },
   progressBarBg: {
     height:          6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     borderRadius:    3,
     overflow:        "hidden",
     marginBottom:    10,
   },
   progressBarFill: {
     height:          6,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.green.solid,
     borderRadius:    3,
   },
   statusCounts: { flexDirection: "row", gap: 8 },
@@ -710,6 +696,7 @@ const ms = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      8,
+    borderWidth:       1,
   },
   countVal: { fontSize: 13, fontWeight: "800" },
   countLbl: { fontSize: 11, fontWeight: "600" },
@@ -720,12 +707,12 @@ const ms = StyleSheet.create({
     flexWrap:          "wrap",
     paddingHorizontal: 16,
     paddingVertical:   10,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     gap:               8,
   },
-  markAllLabel:   { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  markAllLabel:   { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
   markAllBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -757,22 +744,22 @@ const ms = StyleSheet.create({
   studentRow: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    12,
     padding:         12,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     gap:             10,
   },
   avatar: {
     width:           40,
     height:          40,
     borderRadius:    20,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.blue.wash,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  avatarText:  { fontSize: 16, fontWeight: "800", color: "#4F46E5" },
+  avatarText:  { fontSize: 16, fontWeight: "800", color: ACCENT.blue.deep },
   studentInfo: { flex: 1 },
   nameRow: {
     flexDirection: "row",
@@ -780,15 +767,17 @@ const ms = StyleSheet.create({
     gap:           6,
     flexWrap:      "wrap",
   },
-  studentName: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  studentName: { fontSize: 14, fontWeight: "700", color: COLORS.text },
   savedBadge: {
-    backgroundColor:   "#D1FAE5",
+    backgroundColor:   SEMANTIC.success.bg,
+    borderColor:       statusBadge("success").border,
+    borderWidth:       1,
     borderRadius:      4,
     paddingHorizontal: 5,
     paddingVertical:   1,
   },
-  savedBadgeText: { fontSize: 9, color: "#059669", fontWeight: "700" },
-  studentSub:     { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  savedBadgeText: { fontSize: 9, color: SEMANTIC.success.text, fontWeight: "700" },
+  studentSub:     { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   statusButtons:  { flexDirection: "row", gap: 5 },
   statusBtn: {
     width:          30,
@@ -804,8 +793,8 @@ const ms = StyleSheet.create({
     paddingVertical: 60,
     gap:             10,
   },
-  emptyTitle: { fontSize: 15, fontWeight: "600", color: "#374151" },
-  emptyText:  { fontSize: 13, color: "#9CA3AF" },
+  emptyTitle: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  emptyText:  { fontSize: 13, color: COLORS.textSecondary },
 });
 
 export default function MarkStudentAttendanceScreen() {
@@ -849,7 +838,7 @@ export default function MarkStudentAttendanceScreen() {
 
   return (
     <View style={mainS.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.page} />
 
       <View style={mainS.header}>
         <TouchableOpacity
@@ -857,8 +846,10 @@ export default function MarkStudentAttendanceScreen() {
           onPress={handleBack}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+
+        <HeaderIcon style={mainS.headerIcon} />
 
         <View style={mainS.headerCenter}>
           <Text style={mainS.headerTitle}>
@@ -879,7 +870,7 @@ export default function MarkStudentAttendanceScreen() {
             activeOpacity={0.8}
           >
             {saving
-              ? <ActivityIndicator size="small" color="#FFF" />
+              ? <ActivityIndicator size="small" color={COLORS.onPrimary} />
               : <Text style={mainS.saveBtnText}>{t("common.save")}</Text>
             }
           </TouchableOpacity>
@@ -894,9 +885,9 @@ export default function MarkStudentAttendanceScreen() {
           onPress={() => setSelectedClass(null)}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={14} color="#4F46E5" />
+          <Ionicons name="arrow-back" size={14} color={ACCENT.green.solid} />
           <Text style={mainS.breadcrumbBack}>{t("attAdmin.allClasses")}</Text>
-          <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
+          <Ionicons name="chevron-forward" size={14} color={COLORS.textSecondary} />
           <Text style={mainS.breadcrumbCurrent}>{selectedClass.name}</Text>
           {!!selectedClass.sub && (
             <Text style={mainS.breadcrumbSub}> · {selectedClass.sub}</Text>
@@ -933,7 +924,7 @@ export default function MarkStudentAttendanceScreen() {
 }
 
 const mainS = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
 
   header: {
     flexDirection:     "row",
@@ -941,30 +932,31 @@ const mainS = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   saveBtn: {
-    backgroundColor:   "#4F46E5",
+    backgroundColor:   ACCENT.green.solid,
     borderRadius:      10,
     paddingVertical:   10,
     paddingHorizontal: 18,
     minWidth:          60,
     alignItems:        "center",
   },
-  saveBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  saveBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   breadcrumb: {
     flexDirection:     "row",
@@ -972,11 +964,11 @@ const mainS = StyleSheet.create({
     gap:               6,
     paddingHorizontal: 16,
     paddingVertical:   10,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
-  breadcrumbBack:    { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
-  breadcrumbCurrent: { fontSize: 13, color: "#111827", fontWeight: "700" },
-  breadcrumbSub:     { fontSize: 13, color: "#9CA3AF" },
+  breadcrumbBack:    { fontSize: 13, color: ACCENT.green.deep, fontWeight: "600" },
+  breadcrumbCurrent: { fontSize: 13, color: COLORS.text, fontWeight: "700" },
+  breadcrumbSub:     { fontSize: 13, color: COLORS.textSecondary },
 });

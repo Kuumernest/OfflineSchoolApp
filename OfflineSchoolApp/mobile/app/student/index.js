@@ -9,6 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore }         from "../../src/store/auth.store";
+import { useSafeLogout }        from "../../src/hooks/useSafeLogout";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { getDatabase }          from "../../src/db/database";
 import { getSchoolInfo }        from "../../src/services/school.service";
@@ -28,6 +29,9 @@ import {
 import { isStudentProfileComplete } from "./profile/setup";
 import { toDisplayUri }             from "../../src/utils/logoUri";
 import { useTranslation }           from "../../src/i18n/useTranslation";
+import { StatTile, ActionTile }     from "../../src/components/Tiles";
+import { COLORS, SEMANTIC, ACCENT, accentBadge, statusBadge, categoryAccent } from "../../src/theme/colors";
+import { HeaderIcon, IconSquare }   from "../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -63,7 +67,7 @@ const getDateString = () =>
 
 const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (!dueDateStr)
-    return { labelKey: "studentHome.dueNoDeadline", color: "#6B7280", bg: "#F3F4F6", urgent: false };
+    return { labelKey: "studentHome.dueNoDeadline", color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
 
   const due  = new Date(dueDateStr);
   const now  = new Date();
@@ -72,8 +76,8 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (submittedAt) {
     const wasLate = new Date(submittedAt) > due;
     return wasLate
-      ? { labelKey: "studentHome.dueSubmittedLate",   color: "#D97706", bg: "#FEF3C7", urgent: false }
-      : { labelKey: "studentHome.dueSubmittedOnTime", color: "#059669", bg: "#ECFDF5", urgent: false };
+      ? { labelKey: "studentHome.dueSubmittedLate",   color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: false }
+      : { labelKey: "studentHome.dueSubmittedOnTime", color: SEMANTIC.success.text, bg: SEMANTIC.success.bg, border: statusBadge("success").border, urgent: false };
   }
 
   if (diff < 0) {
@@ -81,7 +85,7 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
     return {
       labelKey:    daysAgo > 0 ? "studentHome.dueOverdueDays" : "studentHome.dueOverdue",
       labelParams: daysAgo > 0 ? { count: daysAgo } : undefined,
-      color:  "#DC2626", bg: "#FEE2E2",
+      color:  SEMANTIC.error.text, bg: SEMANTIC.error.bg, border: statusBadge("error").border,
       urgent: true, isPast: true,
     };
   }
@@ -89,11 +93,11 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
 
-  if (hours < 6)  return { labelKey: "studentHome.dueHoursLeft", labelParams: { count: hours }, color: "#DC2626", bg: "#FEE2E2", urgent: true  };
-  if (hours < 24) return { labelKey: "studentHome.dueToday",     color: "#D97706", bg: "#FEF3C7", urgent: true  };
-  if (days === 1) return { labelKey: "studentHome.dueTomorrow",  color: "#D97706", bg: "#FEF3C7", urgent: false };
-  if (days < 7)   return { labelKey: "studentHome.dueDaysLeft",  labelParams: { count: days }, color: "#059669", bg: "#ECFDF5", urgent: false };
-  return              { labelKey: "studentHome.dueWeeksLeft", labelParams: { count: Math.floor(days / 7) }, color: "#059669", bg: "#ECFDF5", urgent: false };
+  if (hours < 6)  return { labelKey: "studentHome.dueHoursLeft", labelParams: { count: hours }, color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: true  };
+  if (hours < 24) return { labelKey: "studentHome.dueToday",     color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: true  };
+  if (days === 1) return { labelKey: "studentHome.dueTomorrow",  color: SEMANTIC.warning.text, bg: SEMANTIC.warning.bg, border: statusBadge("warning").border, urgent: false };
+  if (days < 7)   return { labelKey: "studentHome.dueDaysLeft",  labelParams: { count: days }, color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
+  return              { labelKey: "studentHome.dueWeeksLeft", labelParams: { count: Math.floor(days / 7) }, color: accentBadge("indigo").text, bg: accentBadge("indigo").bg, border: accentBadge("indigo").border, urgent: false };
 };
 
 const getHomeworkSubmissionStatus = (hw) => {
@@ -104,19 +108,19 @@ const getHomeworkSubmissionStatus = (hw) => {
       type:     "graded",
       labelKey: "studentHome.hwGraded",
       labelParams: { score: hw.submission_score, max: hw.max_score, pct },
-      color: pct >= 70 ? "#059669" : "#DC2626",
+      tone:  pct >= 70 ? "success" : "error",
       icon:  "ribbon-outline",
     };
   }
   if (hw.submission_id)
-    return { type: "submitted", labelKey: "studentHome.hwSubmitted", color: "#4F46E5", icon: "checkmark-circle-outline" };
+    return { type: "submitted", labelKey: "studentHome.hwSubmitted", tone: "success", icon: "checkmark-circle-outline" };
 
   const due    = hw.due_date ? new Date(hw.due_date) : null;
   const isPast = due && new Date() > due;
   return {
     type:  "pending",
     labelKey: isPast ? "studentHome.hwLate" : "studentHome.hwPending",
-    color: isPast ? "#D97706" : "#6B7280",
+    tone:  isPast ? "warning" : "info",
     icon:  "document-outline",
   };
 };
@@ -375,14 +379,14 @@ const SchoolBanner = React.memo(({ school, className }) => {
         />
       ) : (
         <View style={sb.logoFallback}>
-          <Ionicons name="school" size={20} color="#4F46E5" />
+          <Ionicons name="school" size={20} color={COLORS.primary} />
         </View>
       )}
       <View style={{ flex: 1 }}>
         <Text style={sb.schoolName} numberOfLines={1}>{school.name}</Text>
         {!!location && (
           <Text style={sb.location} numberOfLines={1}>
-            <Ionicons name="location-outline" size={11} color="#6B7280" /> {location}
+            <Ionicons name="location-outline" size={11} color={COLORS.textSubtle} /> {location}
           </Text>
         )}
         {!!school.motto && (
@@ -391,7 +395,7 @@ const SchoolBanner = React.memo(({ school, className }) => {
       </View>
       {!!className && (
         <View style={sb.classChip}>
-          <Ionicons name="people-outline" size={11} color="#4F46E5" />
+          <Ionicons name="people-outline" size={11} color={COLORS.contextIcon} />
           <Text style={sb.classChipText} numberOfLines={1}>{className}</Text>
         </View>
       )}
@@ -399,44 +403,35 @@ const SchoolBanner = React.memo(({ school, className }) => {
   );
 });
 
+// The school context bar: a light blue band, the same on every dashboard.
 const sb = StyleSheet.create({
   banner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: COLORS.contextBg,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4,
     borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
-    gap: 10, borderWidth: 1, borderColor: "#C7D2FE",
+    gap: 10, borderWidth: 1, borderColor: COLORS.contextBorder,
   },
-  logo: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#fff" },
+  logo: { width: 40, height: 40, borderRadius: 10, backgroundColor: COLORS.surface },
   logoFallback: {
-    width: 40, height: 40, borderRadius: 10, backgroundColor: "#fff",
+    width: 40, height: 40, borderRadius: 10, backgroundColor: COLORS.surface,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#C7D2FE",
+    borderWidth: 1, borderColor: COLORS.contextBorder,
   },
-  schoolName: { fontSize: 13, fontWeight: "700", color: "#1E1B4B" },
-  location:   { fontSize: 11, color: "#6B7280", marginTop: 2 },
-  motto:      { fontSize: 11, color: "#4F46E5", fontStyle: "italic", marginTop: 2, fontWeight: "500" },
+  schoolName: { fontSize: 13, fontWeight: "700", color: COLORS.contextText },
+  location:   { fontSize: 11, color: COLORS.contextText, marginTop: 2 },
+  motto:      { fontSize: 11, color: COLORS.contextText, fontStyle: "italic", marginTop: 2, fontWeight: "500" },
   classChip: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#fff", paddingHorizontal: 8, paddingVertical: 5,
-    borderRadius: 8, borderWidth: 1, borderColor: "#C7D2FE",
+    backgroundColor: COLORS.surface, paddingHorizontal: 8, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1, borderColor: COLORS.contextBorder,
   },
-  classChipText: { fontSize: 11, fontWeight: "700", color: "#4F46E5", maxWidth: 80 },
+  classChipText: { fontSize: 11, fontWeight: "700", color: COLORS.contextText, maxWidth: 80 },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-const StatCard = ({ icon, value, label, bg, color }) => (
-  <View style={[s.statCard, { backgroundColor: bg }]}>
-    <View style={[s.statIconBg, { backgroundColor: color + "20" }]}>
-      <Ionicons name={icon} size={20} color={color} />
-    </View>
-    <Text style={[s.statValue, { color }]}>{value ?? "—"}</Text>
-    <Text style={s.statLabel}>{label}</Text>
-  </View>
-);
 
 const SectionHead = ({ title, action, onAction }) => (
   <View style={s.sectionHeader}>
@@ -449,9 +444,9 @@ const SectionHead = ({ title, action, onAction }) => (
   </View>
 );
 
-const EmptyCard = ({ icon, title, subtitle }) => (
+const EmptyCard = ({ icon, title, subtitle, accent = "blue" }) => (
   <View style={s.emptyCard}>
-    <Ionicons name={icon} size={32} color="#D1D5DB" />
+    <IconSquare icon={icon} accent={accent} size={44} radius={12} />
     <Text style={s.emptyCardTitle}>{title}</Text>
     {subtitle && <Text style={s.emptyCardSub}>{subtitle}</Text>}
   </View>
@@ -471,7 +466,7 @@ export default function StudentDashboard() {
 
   // Full user object — for display and callbacks only, NOT used in useEffect deps
   const user   = useAuthStore((st) => st.user);
-  const logout = useAuthStore((st) => st.logout);
+  const safeLogout = useSafeLogout();
 
   const storeProfileCompleted = useAuthStore((s) => s.profileCompleted);
 
@@ -637,30 +632,28 @@ export default function StudentDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/auth/login");
-  };
+  // Warns first when this account has changes not yet sent.
+  const handleLogout = () => safeLogout();
 
   // ── Quick actions ─────────────────────────────────────────────────────────
   const QUICK_ACTIONS = useMemo(() => [
-    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          color: "#7C3AED", route: "/student/timetable"       },
-    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   color: "#4F46E5", route: "/student/quizzes"         },
-    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", color: "#059669", route: "/student/homework"        },
-    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          color: "#D97706", route: "/student/subjects"        },
-    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      color: "#DC2626", route: "/student/attendance"      },
-    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
-    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
-    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
-    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        color: "#0D9488", route: "/student/fees"            },
-    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
+    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          route: "/student/timetable", kind: "timetable" },
+    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   route: "/student/quizzes", kind: "quizzes" },
+    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", route: "/student/homework", kind: "homework" },
+    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          route: "/student/subjects", kind: "subjects" },
+    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      route: "/student/attendance", kind: "attendance" },
+    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     route: "/student/announcements", kind: "announcements" },
+    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   route: "/messages", kind: "messages" },
+    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        route: "/student/results", kind: "results" },
+    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        route: "/student/fees", kind: "fees" },
+    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      route: "/student/settings", kind: "settings" },
   ], [t]);
 
   // ── Loading screen ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={s.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={s.loadingText}>{t("studentHome.loading")}</Text>
       </View>
     );
@@ -671,10 +664,11 @@ export default function StudentDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={s.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
       {/* HEADER */}
       <View style={s.header}>
+        <HeaderIcon style={{ marginRight: 4 }} />
         <View style={{ flex: 1 }}>
           <Text style={s.greeting}>{t(getGreetingKey())},</Text>
           <Text style={s.userName} numberOfLines={1}>
@@ -689,7 +683,7 @@ export default function StudentDashboard() {
             activeOpacity={0.7}
             hitSlop={8}
           >
-            <Ionicons name="alert-circle" size={16} color="#D97706" />
+            <Ionicons name="alert-circle" size={16} color={COLORS.warning} />
           </TouchableOpacity>
         )}
 
@@ -699,7 +693,7 @@ export default function StudentDashboard() {
           activeOpacity={0.7}
           hitSlop={8}
         >
-          <Ionicons name="notifications-outline" size={22} color="#6B7280" />
+          <Ionicons name="notifications-outline" size={22} color={COLORS.textSubtle} />
           {unreadAnnouncements > 0 && (
             <View style={s.headerBadge}>
               <Text style={s.headerBadgeText}>
@@ -715,7 +709,7 @@ export default function StudentDashboard() {
           activeOpacity={0.7}
           hitSlop={8}
         >
-          <Ionicons name="settings-outline" size={22} color="#6B7280" />
+          <Ionicons name="settings-outline" size={22} color={COLORS.textSubtle} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -736,8 +730,8 @@ export default function StudentDashboard() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
           />
         }
       >
@@ -752,7 +746,7 @@ export default function StudentDashboard() {
             activeOpacity={0.8}
           >
             <View style={s.profileSetupIcon}>
-              <Ionicons name="person-add-outline" size={20} color="#FFF" />
+              <Ionicons name="person-add-outline" size={20} color={COLORS.onPrimary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.profileSetupTitle}>{t("studentHome.profileBannerTitle")}</Text>
@@ -760,19 +754,20 @@ export default function StudentDashboard() {
                 {t("studentHome.profileBannerSub")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#FFF" />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.onPrimary} />
           </TouchableOpacity>
         )}
 
         {/* Date banner */}
         <View style={s.dateBanner}>
-          <Ionicons name="calendar-outline" size={15} color="#6B7280" />
+          <Ionicons name="calendar-outline" size={15} color={COLORS.textSubtle} />
           <Text style={s.dateText}>{getDateString()}</Text>
         </View>
 
         {/* Stats row */}
         <View style={s.statsRow}>
-          <StatCard
+          <StatTile
+            kind="attendance"
             icon="calendar"
             value={
               attendance.stats?.percentage != null
@@ -782,22 +777,19 @@ export default function StudentDashboard() {
                   : "—"
             }
             label={t("studentHome.statAttendance")}
-            bg="#EEF2FF"
-            color="#4F46E5"
           />
-          <StatCard
+          <StatTile
+            kind="homework"
             icon="document-text"
             value={homeworkStats.pending > 0 ? `${homeworkStats.pending}` : homeworkStats.total}
             label={homeworkStats.pending > 0 ? t("studentHome.statHwPending") : t("studentHome.statHomework")}
-            bg={homeworkStats.urgent > 0 ? "#FEE2E2" : "#ECFDF5"}
-            color={homeworkStats.urgent > 0 ? "#DC2626" : "#059669"}
+            tone={homeworkStats.urgent > 0 ? "warning" : undefined}
           />
-          <StatCard
+          <StatTile
+            kind="results"
             icon="trophy"
             value={quizStats.avgScore != null ? `${quizStats.avgScore}%` : "—"}
             label={t("studentHome.statAvgScore")}
-            bg="#FFFBEB"
-            color="#D97706"
           />
         </View>
 
@@ -808,7 +800,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/explore")}
             activeOpacity={0.8}
           >
-            <Ionicons name="compass-outline" size={18} color="#4F46E5" />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.sky.solid }]}>
+              <Ionicons name="compass-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("explore.subtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("explore.title")}</Text>
           </TouchableOpacity>
@@ -821,7 +815,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/development")}
             activeOpacity={0.8}
           >
-            <Ionicons name="trending-up-outline" size={18} color="#4F46E5" />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.green.solid }]}>
+              <Ionicons name="trending-up-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("development.studentSubtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("development.studentTitle")}</Text>
           </TouchableOpacity>
@@ -834,7 +830,9 @@ export default function StudentDashboard() {
             onPress={() => router.push("/student/plans")}
             activeOpacity={0.8}
           >
-            <Ionicons name="clipboard-outline" size={18} color="#4F46E5" />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.indigo.solid }]}>
+              <Ionicons name="clipboard-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("devPlan.activePlans")}</Text>
             <Text style={s.urgentBannerLink}>{t("devPlan.studentTitle")}</Text>
           </TouchableOpacity>
@@ -849,7 +847,9 @@ export default function StudentDashboard() {
             accessibilityRole="button"
             accessibilityLabel={t("intel.title")}
           >
-            <Ionicons name="sparkles-outline" size={18} color="#4F46E5" />
+            <View style={[s.bannerIcon, { backgroundColor: ACCENT.violet.solid }]}>
+              <Ionicons name="sparkles-outline" size={18} color={COLORS.onPrimary} />
+            </View>
             <Text style={s.urgentBannerText}>{t("intel.homeSubtitle")}</Text>
             <Text style={s.urgentBannerLink}>{t("intel.title")}</Text>
           </TouchableOpacity>
@@ -863,7 +863,7 @@ export default function StudentDashboard() {
               onPress={() => router.push("/student/homework")}
               activeOpacity={0.8}
             >
-              <Ionicons name="warning" size={18} color="#DC2626" />
+              <Ionicons name="warning" size={18} color={COLORS.danger} />
               <Text style={s.urgentBannerText}>
                 {t("studentHome.urgentHomework", { count: homeworkStats.urgent })}
               </Text>
@@ -888,13 +888,13 @@ export default function StudentDashboard() {
                 activeOpacity={0.7}
               >
                 <View style={s.pinnedIcon}>
-                  <Ionicons name="megaphone" size={16} color="#DC2626" />
+                  <Ionicons name="megaphone" size={16} color={COLORS.danger} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.pinnedTitle} numberOfLines={1}>{ann.title}</Text>
                   <Text style={s.pinnedBody}  numberOfLines={2}>{ann.body}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
               </TouchableOpacity>
             ))}
           </View>
@@ -910,20 +910,25 @@ export default function StudentDashboard() {
           {todayClasses.length === 0 ? (
             <EmptyCard
               icon="calendar-outline"
+              accent="teal"
               title={t("studentHome.emptyClassesTitle")}
               subtitle={t("studentHome.emptyClassesSub")}
             />
           ) : (
             todayClasses.slice(0, 7).map((item, idx) => {
               const isBreak = item.isbreak === 1 || item.isbreak === "1" || item.isBreak === true;
+              const tint    = ACCENT[categoryAccent(item.subjectName || item.periodName)];
               return (
-                <View key={item.id || idx} style={[s.ttCard, isBreak && s.ttCardBreak]}>
+                <View
+                  key={item.id || idx}
+                  style={[s.ttCard, { backgroundColor: tint.wash, borderLeftColor: tint.base }, isBreak && s.ttCardBreak]}
+                >
                   <View style={s.ttTime}>
-                    <Text style={s.ttTimeStart}>{formatTime(item.startTime)}</Text>
+                    <Text style={[s.ttTimeStart, { color: tint.deep }]}>{formatTime(item.startTime)}</Text>
                     <Text style={s.ttTimeSep}>–</Text>
                     <Text style={s.ttTimeEnd}>{formatTime(item.endTime)}</Text>
                   </View>
-                  <View style={s.ttDivider} />
+                  <View style={[s.ttDivider, { backgroundColor: isBreak ? SEMANTIC.warning.icon : tint.base }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.ttSubject, isBreak && s.ttSubjectBreak]} numberOfLines={1}>
                       {item.subjectName || item.periodName || (isBreak ? t("studentHome.breakLabel") : "—")}
@@ -955,24 +960,15 @@ export default function StudentDashboard() {
               const badgeNum = hwBadge ? homeworkStats.pending
                              : annBadge ? unreadAnnouncements : 0;
               return (
-                <TouchableOpacity
+                <ActionTile
                   key={a.id}
+                  kind={a.kind}
+                  icon={a.icon}
+                  label={a.title}
+                  badge={badgeNum}
                   style={s.actionBtn}
                   onPress={() => router.push(a.route)}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.actionIconWrap}>
-                    <View style={[s.actionIconBg, { backgroundColor: a.color + "15" }]}>
-                      <Ionicons name={a.icon} size={22} color={a.color} />
-                    </View>
-                    {badgeNum > 0 && (
-                      <View style={s.actionBadge}>
-                        <Text style={s.actionBadgeText}>{badgeNum > 9 ? "9+" : badgeNum}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={s.actionTitle}>{a.title}</Text>
-                </TouchableOpacity>
+                />
               );
             })}
           </View>
@@ -988,6 +984,7 @@ export default function StudentDashboard() {
           {homework.length === 0 ? (
             <EmptyCard
               icon="document-text-outline"
+              accent="indigo"
               title={t("studentHome.emptyHomeworkTitle")}
               subtitle={t("studentHome.emptyHomeworkSub")}
             />
@@ -1013,8 +1010,8 @@ export default function StudentDashboard() {
                     onPress={() => router.push("/student/homework")}
                     activeOpacity={0.7}
                   >
-                    <View style={[s.hwIconBg, { backgroundColor: status.color + "18" }]}>
-                      <Ionicons name={status.icon} size={20} color={status.color} />
+                    <View style={[s.hwIconBg, { backgroundColor: ACCENT.indigo.solid }]}>
+                      <Ionicons name={status.icon} size={20} color={COLORS.onPrimary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.hwTitle} numberOfLines={1}>{hw.title}</Text>
@@ -1022,17 +1019,17 @@ export default function StudentDashboard() {
                         {[hw.subject_name, hw.class_name].filter(Boolean).join("  ·  ")}
                       </Text>
                       <View style={s.hwChipRow}>
-                        <View style={[s.hwChip, { backgroundColor: due.bg }]}>
+                        <View style={[s.hwChip, { backgroundColor: due.bg, borderColor: due.border }]}>
                           <Ionicons name="calendar-outline" size={10} color={due.color} />
                           <Text style={[s.hwChipText, { color: due.color }]}>{t(due.labelKey, due.labelParams)}</Text>
                         </View>
-                        <View style={[s.hwChip, { backgroundColor: status.color + "18" }]}>
-                          <Text style={[s.hwChipText, { color: status.color }]}>{t(status.labelKey, status.labelParams)}</Text>
+                        <View style={[s.hwChip, { backgroundColor: statusBadge(status.tone).bg, borderColor: statusBadge(status.tone).border }]}>
+                          <Text style={[s.hwChipText, { color: statusBadge(status.tone).text }]}>{t(status.labelKey, status.labelParams)}</Text>
                         </View>
                         {hw.submission_score != null && (
-                          <View style={[s.hwChip, { backgroundColor: "#EEF2FF" }]}>
-                            <Ionicons name="ribbon-outline" size={10} color="#4F46E5" />
-                            <Text style={[s.hwChipText, { color: "#4F46E5" }]}>
+                          <View style={[s.hwChip, { backgroundColor: accentBadge("indigo").bg, borderColor: accentBadge("indigo").border }]}>
+                            <Ionicons name="ribbon-outline" size={10} color={ACCENT.indigo.deep} />
+                            <Text style={[s.hwChipText, { color: ACCENT.indigo.deep }]}>
                               {hw.submission_score}/{hw.max_score ?? 100}
                             </Text>
                           </View>
@@ -1056,7 +1053,7 @@ export default function StudentDashboard() {
               <Text style={s.seeMoreText}>
                 {t("studentHome.hwMoreAssignments", { count: homework.length - 4 })}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color="#4F46E5" />
+              <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
             </TouchableOpacity>
           )}
         </View>
@@ -1071,6 +1068,7 @@ export default function StudentDashboard() {
           {availableQuizzes.length === 0 ? (
             <EmptyCard
               icon="help-circle-outline"
+              accent="indigo"
               title={t("studentHome.emptyQuizzesTitle")}
               subtitle={t("studentHome.emptyQuizzesSub")}
             />
@@ -1090,11 +1088,11 @@ export default function StudentDashboard() {
                   })
                 }
               >
-                <View style={[s.quizIconBg, { backgroundColor: "#EEF2FF" }]}>
+                <View style={[s.quizIconBg, { backgroundColor: ACCENT.indigo.solid }]}>
                   <Ionicons
                     name={status.resumeId ? "play-circle" : "help-circle"}
                     size={20}
-                    color="#4F46E5"
+                    color={COLORS.onPrimary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -1119,7 +1117,7 @@ export default function StudentDashboard() {
                   <Text style={s.quizStartText}>
                     {status.resumeId ? t("studentHome.quizResume") : t("studentHome.quizStart")}
                   </Text>
-                  <Ionicons name="play" size={12} color="#FFF" />
+                  <Ionicons name="play" size={12} color={COLORS.onPrimary} />
                 </View>
               </TouchableOpacity>
             ))
@@ -1136,18 +1134,21 @@ export default function StudentDashboard() {
           {subjects.length === 0 ? (
             <EmptyCard
               icon="book-outline"
+              accent="slate"
               title={t("studentHome.emptySubjectsTitle")}
               subtitle={t("studentHome.emptySubjectsSub")}
             />
           ) : (
             <View style={s.subjectsGrid}>
-              {subjects.slice(0, 6).map((subj, idx) => {
-                const palette = ["#4F46E5","#059669","#D97706","#DC2626","#7C3AED","#DB2777"];
-                const color   = palette[idx % palette.length];
+              {subjects.slice(0, 6).map((subj) => {
+                // A subject takes its own colour from its name (categoryAccent),
+                // the same as on the timetable and the web console.
+                const tint  = ACCENT[categoryAccent(subj.name)];
+                const color = tint.base;
                 return (
                   <TouchableOpacity
                     key={subj.id}
-                    style={s.subjectChip}
+                    style={[s.subjectChip, { backgroundColor: tint.wash, borderLeftColor: tint.base }]}
                     activeOpacity={0.7}
                     onPress={() =>
                       router.push({
@@ -1163,7 +1164,7 @@ export default function StudentDashboard() {
                         <Text style={s.subjectTeacher} numberOfLines={1}>{subj.teacherName}</Text>
                       )}
                     </View>
-                    {subj.code && <Text style={s.subjectCode}>{subj.code}</Text>}
+                    {subj.code && <Text style={[s.subjectCode, { color: tint.deep }]}>{subj.code}</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -1180,14 +1181,17 @@ export default function StudentDashboard() {
               onAction={() => router.push("/student/quizzes/history")}
             />
             {quizHistory.slice(0, 4).map((attempt) => (
-              <View key={attempt.id} style={s.resultCard}>
+              <View
+                key={attempt.id}
+                style={[s.resultCard, { borderLeftColor: attempt.is_passed ? SEMANTIC.success.icon : SEMANTIC.error.icon }]}
+              >
                 <View style={[
                   s.resultScoreBg,
-                  { backgroundColor: attempt.is_passed ? "#ECFDF5" : "#FEF2F2" },
+                  { backgroundColor: attempt.is_passed ? SEMANTIC.success.box : SEMANTIC.error.box },
                 ]}>
                   <Text style={[
                     s.resultScore,
-                    { color: attempt.is_passed ? "#059669" : "#DC2626" },
+                    { color: attempt.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text },
                   ]}>
                     {Math.round(attempt.percentage || 0)}%
                   </Text>
@@ -1221,7 +1225,7 @@ export default function StudentDashboard() {
             activeOpacity={0.7}
           >
             <View style={s.resultsIconBg}>
-              <Ionicons name="document-text-outline" size={24} color="#2563EB" />
+              <Ionicons name="document-text-outline" size={24} color={COLORS.onPrimary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.resultsCardTitle}>{t("studentHome.reportCardsTitle")}</Text>
@@ -1229,7 +1233,7 @@ export default function StudentDashboard() {
                 {t("studentHome.reportCardsSub")}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -1259,7 +1263,7 @@ export default function StudentDashboard() {
                     <Text style={s.annAuthor}>— {ann.authorName}</Text>
                   )}
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
             ))}
             {storeInbox.filter((a) => !a.isPinned).length > 3 && (
@@ -1271,7 +1275,7 @@ export default function StudentDashboard() {
                 <Text style={s.seeMoreText}>
                   {t("studentHome.annMore", { count: storeInbox.filter((a) => !a.isPinned).length - 3 })}
                 </Text>
-                <Ionicons name="chevron-forward" size={14} color="#4F46E5" />
+                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
               </TouchableOpacity>
             )}
           </View>
@@ -1283,7 +1287,7 @@ export default function StudentDashboard() {
           onPress={handleLogout}
           activeOpacity={0.7}
         >
-          <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+          <Ionicons name="log-out-outline" size={18} color={COLORS.danger} />
           <Text style={s.logoutText}>{t("studentHome.logout")}</Text>
         </TouchableOpacity>
 
@@ -1298,51 +1302,51 @@ export default function StudentDashboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSubtle, fontWeight: "500" },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     gap: 8,
   },
-  greeting: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  userName:  { fontSize: 22, fontWeight: "700", color: "#111827", marginTop: 2 },
+  greeting: { fontSize: 13, color: COLORS.textSubtle, fontWeight: "500" },
+  userName:  { fontSize: 22, fontWeight: "700", color: COLORS.text, marginTop: 2 },
 
   profileIncompleteBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.box,
     alignItems: "center", justifyContent: "center",
   },
   headerIconBtn: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
     position: "relative",
   },
   headerBadge: {
     position: "absolute", top: 6, right: 6,
     minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: "#DC2626",
+    backgroundColor: COLORS.danger,
     alignItems: "center", justifyContent: "center",
     paddingHorizontal: 2,
-    borderWidth: 1.5, borderColor: "#FFF",
+    borderWidth: 1.5, borderColor: COLORS.surface,
   },
-  headerBadgeText: { fontSize: 9, fontWeight: "800", color: "#FFF" },
+  headerBadgeText: { fontSize: 9, fontWeight: "800", color: COLORS.onPrimary },
   avatarCircle: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: COLORS.primaryLight,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "#C7D2FE",
+    borderWidth: 2, borderColor: COLORS.contextBorder,
   },
-  avatarText: { fontSize: 18, fontWeight: "700", color: "#4F46E5" },
+  avatarText: { fontSize: 18, fontWeight: "700", color: COLORS.primary },
 
   profileSetupBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#D97706",
+    backgroundColor: COLORS.warning,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4,
     borderRadius: 14, padding: 14, gap: 12,
   },
@@ -1351,7 +1355,7 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center", justifyContent: "center",
   },
-  profileSetupTitle: { fontSize: 14, fontWeight: "700", color: "#FFF" },
+  profileSetupTitle: { fontSize: 14, fontWeight: "700", color: COLORS.onPrimary },
   profileSetupSub:   { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2 },
 
   scroll:     { paddingTop: 4 },
@@ -1359,215 +1363,207 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     gap: 6, paddingHorizontal: 20, paddingVertical: 10,
   },
-  dateText: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
+  dateText: { fontSize: 13, color: COLORS.textSubtle, fontWeight: "500" },
 
   statsRow: {
     flexDirection: "row", paddingHorizontal: 20, gap: 10, marginBottom: 20,
   },
-  statCard: {
-    flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8, alignItems: "center",
-  },
-  statIconBg: {
-    width: 32, height: 32, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", marginBottom: 6,
-  },
-  statValue: { fontSize: 19, fontWeight: "800" },
-  statLabel: { fontSize: 10, fontWeight: "600", color: "#6B7280", marginTop: 2 },
-
   section:       { paddingHorizontal: 20, marginBottom: 20 },
   sectionHeader: {
     flexDirection: "row", justifyContent: "space-between",
     alignItems: "center", marginBottom: 12,
   },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  seeAll:       { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+  sectionTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text },
+  seeAll:       { fontSize: 13, color: COLORS.primary, fontWeight: "600" },
 
   emptyCard: {
-    backgroundColor: "#FFF", borderRadius: 12, padding: 24,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 24,
     alignItems: "center", gap: 8,
-    borderWidth: 1, borderColor: "#F3F4F6",
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  emptyCardTitle: { fontSize: 14, fontWeight: "600", color: "#6B7280" },
-  emptyCardSub:   { fontSize: 12, color: "#9CA3AF" },
+  emptyCardTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  emptyCardSub:   { fontSize: 12, color: COLORS.textSecondary },
 
   urgentBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FEE2E2", borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: "#FECACA",
+    backgroundColor: SEMANTIC.error.box, borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: SEMANTIC.error.box,
   },
-  urgentBannerText: { flex: 1, fontSize: 13, color: "#DC2626", fontWeight: "600" },
-  urgentBannerLink: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  bannerIcon: {
+    width: 32, height: 32, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+  },
+  urgentBannerText: { flex: 1, fontSize: 13, color: COLORS.danger, fontWeight: "600" },
+  urgentBannerLink: { fontSize: 13, color: COLORS.danger, fontWeight: "700" },
 
   pinnedCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEF2F2", borderRadius: 12, padding: 12,
+    backgroundColor: SEMANTIC.error.bg, borderRadius: 12, padding: 12,
     marginBottom: 8, gap: 10,
-    borderWidth: 1, borderColor: "#FECACA",
+    borderWidth: 1, borderColor: SEMANTIC.error.box,
   },
   pinnedIcon: {
     width: 32, height: 32, borderRadius: 8,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     alignItems: "center", justifyContent: "center",
   },
-  pinnedTitle: { fontSize: 13, fontWeight: "700", color: "#991B1B" },
-  pinnedBody:  { fontSize: 12, color: "#B91C1C", marginTop: 2 },
+  pinnedTitle: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
+  pinnedBody:  { fontSize: 12, color: SEMANTIC.error.text, marginTop: 2 },
 
+  // A lesson row takes its subject's wash and left edge inline (categoryAccent).
   ttCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  ttCardBreak:    { backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FDE68A" },
+  ttCardBreak:    { backgroundColor: SEMANTIC.warning.bg, borderColor: SEMANTIC.warning.box, borderLeftColor: SEMANTIC.warning.icon },
   ttTime:         { width: 60, alignItems: "center" },
-  ttTimeStart:    { fontSize: 11, fontWeight: "700", color: "#4F46E5" },
-  ttTimeSep:      { fontSize: 9,  color: "#C7D2FE" },
-  ttTimeEnd:      { fontSize: 10, color: "#9CA3AF" },
-  ttDivider:      { width: 3, height: 36, borderRadius: 2, backgroundColor: "#E0E7FF" },
-  ttSubject:      { fontSize: 14, fontWeight: "600", color: "#111827" },
-  ttSubjectBreak: { color: "#D97706", fontStyle: "italic" },
-  ttMeta:         { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  ttTimeStart:    { fontSize: 11, fontWeight: "700", color: ACCENT.teal.deep },
+  ttTimeSep:      { fontSize: 9,  color: COLORS.textSecondary },
+  ttTimeEnd:      { fontSize: 10, color: COLORS.textSecondary },
+  ttDivider:      { width: 3, height: 36, borderRadius: 2, backgroundColor: ACCENT.teal.base },
+  ttSubject:      { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  ttSubjectBreak: { color: SEMANTIC.warning.text, fontStyle: "italic" },
+  ttMeta:         { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   ttBadge: {
-    backgroundColor: "#F3F4F6", borderRadius: 6,
+    backgroundColor: accentBadge("teal").bg, borderRadius: 6,
+    borderWidth: 1, borderColor: accentBadge("teal").border,
     paddingHorizontal: 7, paddingVertical: 3,
   },
-  ttBadgeText: { fontSize: 10, fontWeight: "700", color: "#6B7280" },
+  ttBadgeText: { fontSize: 10, fontWeight: "700", color: accentBadge("teal").text },
 
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  actionBtn: {
-    width: "23%", backgroundColor: "#FFF", borderRadius: 14, paddingVertical: 12,
-    alignItems: "center",
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
-  },
-  actionIconWrap: { position: "relative", marginBottom: 6 },
-  actionIconBg: {
-    width: 42, height: 42, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
-  },
-  actionBadge: {
-    position: "absolute", top: -4, right: -4,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: "#DC2626",
-    alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  actionBadgeText: { fontSize: 10, fontWeight: "800", color: "#FFF" },
-  actionTitle:     { fontSize: 10, fontWeight: "600", color: "#374151", textAlign: "center" },
+  // Four to a row is narrow: a tighter inside so "Announcements" still fits.
+  actionBtn: { width: "23%", paddingHorizontal: 6, minHeight: 84 },
 
   hwCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
-  hwCardUrgent: { borderWidth: 1, borderColor: "#FECACA", backgroundColor: "#FFFAFA" },
+  hwCardUrgent: { borderColor: SEMANTIC.error.box, borderLeftColor: ACCENT.red.base, backgroundColor: SEMANTIC.error.bg },
   hwIconBg: {
     width: 38, height: 38, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
   },
-  hwTitle:   { fontSize: 14, fontWeight: "600", color: "#111827" },
-  hwMeta:    { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  hwTitle:   { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  hwMeta:    { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   hwChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 5 },
   hwChip: {
     flexDirection: "row", alignItems: "center", gap: 3,
     borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1, borderColor: "transparent",
   },
   hwChipText:   { fontSize: 10, fontWeight: "600" },
   hwScoreBox:   { alignItems: "center", minWidth: 32 },
-  hwScoreValue: { fontSize: 15, fontWeight: "800", color: "#374151" },
-  hwScoreLabel: { fontSize: 9, color: "#9CA3AF", fontWeight: "500" },
+  hwScoreValue: { fontSize: 15, fontWeight: "800", color: ACCENT.indigo.deep },
+  hwScoreLabel: { fontSize: 9, color: COLORS.textSecondary, fontWeight: "500" },
 
   seeMoreBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 4, paddingVertical: 10,
-    backgroundColor: "#EEF2FF", borderRadius: 10,
+    backgroundColor: COLORS.primaryLight, borderRadius: 10,
   },
-  seeMoreText: { fontSize: 13, fontWeight: "600", color: "#4F46E5" },
+  seeMoreText: { fontSize: 13, fontWeight: "600", color: COLORS.primary },
 
   quizCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 12, padding: 12, marginBottom: 8, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.indigo.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   quizIconBg: {
     width: 36, height: 36, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
   },
-  quizTitle:       { fontSize: 14, fontWeight: "600", color: "#111827" },
-  quizMeta:        { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
-  quizAttemptInfo: { fontSize: 10, color: "#D97706", marginTop: 2, fontWeight: "600" },
+  quizTitle:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  quizMeta:        { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  quizAttemptInfo: { fontSize: 10, color: SEMANTIC.warning.text, marginTop: 2, fontWeight: "600" },
   quizStartBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#4F46E5", borderRadius: 8,
+    backgroundColor: ACCENT.indigo.solid, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 6,
   },
-  quizStartText: { fontSize: 12, fontWeight: "700", color: "#FFF" },
+  quizStartText: { fontSize: 12, fontWeight: "700", color: COLORS.onPrimary },
 
   subjectsGrid: { gap: 6 },
   subjectChip: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 12, padding: 12, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.slate.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
   },
   subjectDot:     { width: 8, height: 8, borderRadius: 4 },
-  subjectName:    { fontSize: 14, fontWeight: "600", color: "#111827" },
-  subjectTeacher: { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  subjectName:    { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  subjectTeacher: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   subjectCode: {
-    fontSize: 10, fontWeight: "700", color: "#9CA3AF",
-    backgroundColor: "#F3F4F6",
+    fontSize: 10, fontWeight: "700", color: ACCENT.slate.deep,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
   },
 
   resultCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
   },
   resultScoreBg: {
     width: 46, height: 46, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   resultScore: { fontSize: 15, fontWeight: "800" },
-  resultTitle: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  resultMeta:  { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  resultTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  resultMeta:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
 
   // Results card (exam results shortcut)
   resultsCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 14, gap: 12,
-    borderWidth: 1, borderColor: "#DBEAFE",
-    shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+    backgroundColor: ACCENT.slate.wash, borderRadius: 12, padding: 14, gap: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.slate.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
   },
   resultsIconBg: {
     width: 48, height: 48, borderRadius: 12,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: ACCENT.slate.solid,
     alignItems: "center", justifyContent: "center",
   },
-  resultsCardTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  resultsCardSub:   { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  resultsCardTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  resultsCardSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
   annCard: {
     flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
-    shadowColor: "#000", shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
+    backgroundColor: ACCENT.sky.wash, borderRadius: 12, padding: 12, marginBottom: 6, gap: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.sky.base + "4D",
+    shadowColor: COLORS.shadow, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1,
     position: "relative", overflow: "hidden",
   },
-  annCardUnread:  { borderLeftWidth: 3, borderLeftColor: "#4F46E5", backgroundColor: "#FAFAFF" },
+  annCardUnread:  { borderLeftColor: ACCENT.sky.solid },
   annUnreadDot: {
     position: "absolute", top: 8, right: 8,
-    width: 8, height: 8, borderRadius: 4, backgroundColor: "#4F46E5",
+    width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT.sky.solid,
   },
   annDot: {
     width: 8, height: 8, borderRadius: 4,
-    backgroundColor: "#4F46E5", marginTop: 4,
+    backgroundColor: ACCENT.sky.base, marginTop: 4,
   },
-  annTitle:       { fontSize: 14, fontWeight: "600", color: "#111827" },
-  annTitleUnread: { fontWeight: "800" },
-  annBody:        { fontSize: 12, color: "#6B7280", marginTop: 2, lineHeight: 18 },
-  annAuthor:      { fontSize: 11, color: "#9CA3AF", marginTop: 4, fontStyle: "italic" },
+  annTitle:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  annTitleUnread: { fontWeight: "800", color: ACCENT.sky.deep },
+  annBody:        { fontSize: 12, color: COLORS.textSecondary, marginTop: 2, lineHeight: 18 },
+  annAuthor:      { fontSize: 11, color: COLORS.textSecondary, marginTop: 4, fontStyle: "italic" },
 
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    marginHorizontal: 20, backgroundColor: "#FEE2E2",
+    marginHorizontal: 20, backgroundColor: SEMANTIC.error.box,
     paddingVertical: 14, borderRadius: 12, gap: 8, marginTop: 4,
   },
-  logoutText: { color: "#DC2626", fontWeight: "600", fontSize: 15 },
+  logoutText: { color: COLORS.danger, fontWeight: "600", fontSize: 15 },
 });

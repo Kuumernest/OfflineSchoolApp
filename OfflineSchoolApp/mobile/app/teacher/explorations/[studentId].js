@@ -39,6 +39,8 @@ import {
   refreshCatalog, refreshPupilExplorations, getPupilExplorations, criteriaFor,
   observeExploration, rateExploration,
 } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
 
 // The catalog's names for the choices (shared/exploration/catalog.js). The
 // server is the judge of them; these only draw the options.
@@ -48,21 +50,25 @@ const RATINGS    = ["not_met", "partly_met", "met", "exceeded"];
 const OBSERVABLE = ["STARTED", "SUBMITTED", "REVIEW_REQUIRED", "COMPLETED"];
 const RATEABLE   = ["SUBMITTED", "REVIEW_REQUIRED"];
 
+// Explorations are violet (a teacher's view of a pupil's strengths).
 const C = {
-  primary: "#4F46E5", primaryBg: "#EEF2FF",
-  success: "#059669", successBg: "#ECFDF5",
-  warning: "#D97706", warningBg: "#FEF3C7",
-  error:   "#DC2626", errorBg:   "#FEF2F2",
-  white:   "#FFFFFF",
-  gray50:  "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray400: "#9CA3AF", gray500: "#6B7280", gray600: "#4B5563",
-  gray700: "#374151", gray900: "#111827",
+  primary: ACCENT.violet.solid, primaryBg: ACCENT.violet.wash,
+  primaryDeep: ACCENT.violet.deep, primaryEdge: ACCENT.violet.base,
+  success: SEMANTIC.success.text, successBg: SEMANTIC.success.bg,
+  warning: SEMANTIC.warning.text, warningBg: SEMANTIC.warning.bg,
+  error:   SEMANTIC.error.text,   errorBg:   SEMANTIC.error.bg,
+  white:   COLORS.surface,
+  gray50:  COLORS.page, gray100: COLORS.border, gray200: COLORS.border,
+  gray400: COLORS.textMuted, gray500: COLORS.textSecondary, gray600: COLORS.textSecondary,
+  gray700: COLORS.text, gray900: COLORS.text,
 };
 
+// Status badges by tone: completed success, review warning, in progress info.
 const STATUS_TONE = {
-  COMPLETED:       { bg: C.successBg, fg: C.success },
-  REVIEW_REQUIRED: { bg: C.warningBg, fg: C.warning },
+  COMPLETED:       { bg: SEMANTIC.success.bg, fg: SEMANTIC.success.text, border: SEMANTIC.success.icon + "4D" },
+  REVIEW_REQUIRED: { bg: SEMANTIC.warning.bg, fg: SEMANTIC.warning.text, border: SEMANTIC.warning.icon + "4D" },
 };
+const DEFAULT_TONE = { bg: SEMANTIC.info.bg, fg: SEMANTIC.info.text, border: SEMANTIC.info.icon + "4D" };
 
 export default function PupilExplorationsScreen() {
   const { t, language } = useTranslation();
@@ -159,12 +165,6 @@ export default function PupilExplorationsScreen() {
     } catch (err) { fail(err); } finally { setSaving(false); }
   };
 
-  const Chip = ({ on, label, onPress, disabled }) => (
-    <TouchableOpacity onPress={onPress} disabled={disabled} style={[styles.chip, on && styles.chipOn, disabled && styles.off]}>
-      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
@@ -172,6 +172,7 @@ export default function PupilExplorationsScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t("common.back")}>
           <Ionicons name="arrow-back" size={22} color={C.gray900} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{name ? t("explore.pupilHeading", { name }) : t("explore.title")}</Text>
           <Text style={styles.blurb}>{t("explore.teacherBlurb")}</Text>
@@ -180,7 +181,7 @@ export default function PupilExplorationsScreen() {
 
       {offline && (
         <View style={styles.staleBar}>
-          <Ionicons name="cloud-offline-outline" size={16} color={C.warning} />
+          <Ionicons name="cloud-offline-outline" size={16} color={SEMANTIC.warning.icon} />
           <Text style={styles.staleText}>
             {fetchedAt ? t("classIntel.staleAt", { time: formatTime(fetchedAt) }) : t("classIntel.offline")}
           </Text>
@@ -194,15 +195,15 @@ export default function PupilExplorationsScreen() {
                     refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}>
           {!!error && (
             <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={C.error} />
+              <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity onPress={load}><Text style={styles.retry}>{t("common.retry")}</Text></TouchableOpacity>
             </View>
           )}
-          {!error && !rows.length && <Text style={styles.empty}>{t("explore.none")}</Text>}
+          {!error && !rows.length && <EmptyState icon="compass-outline" accent="violet" message={t("explore.none")} />}
 
           {rows.map((e) => {
-            const tone = STATUS_TONE[e.status] ?? { bg: C.gray100, fg: C.gray600 };
+            const tone = STATUS_TONE[e.status] ?? DEFAULT_TONE;
             const crit = criteria[e.activityId] ?? [];
             const canObserve = OBSERVABLE.includes(e.status);
             const canRate    = crit.length > 0 && RATEABLE.includes(e.status);
@@ -212,17 +213,18 @@ export default function PupilExplorationsScreen() {
             return (
               <View key={e.explorationId} style={styles.card}>
                 <TouchableOpacity style={styles.cardHead} onPress={() => setOpenId(open ? null : e.explorationId)}>
+                  <IconSquare icon="compass" accent="violet" size={32} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{e.title}</Text>
                     <View style={styles.badgeRow}>
-                      <View style={[styles.badge, { backgroundColor: tone.bg }]}>
+                      <View style={[styles.badge, { backgroundColor: tone.bg, borderColor: tone.border }]}>
                         <Text style={[styles.badgeText, { color: tone.fg }]}>{t(`explore.status.${e.status}`)}</Text>
                       </View>
                       <Text style={styles.meta}>{t(`explore.level.${e.level}`)}</Text>
                       {e.pendingSync && <Text style={styles.meta}>· {t("explore.pending")}</Text>}
                     </View>
                   </View>
-                  <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={C.gray400} />
+                  <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={COLORS.textSecondary} />
                 </TouchableOpacity>
 
                 {open && (
@@ -302,9 +304,17 @@ export default function PupilExplorationsScreen() {
   );
 }
 
+// Outside the screen so it keeps one identity across renders.
+const Chip = ({ on, label, onPress, disabled }) => (
+  <TouchableOpacity onPress={onPress} disabled={disabled} style={[styles.chip, on && styles.chipOn, disabled && styles.off]}>
+    <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: C.gray50 },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingBottom: 10, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  headerIcon: { marginRight: 0 },
   title:  { fontSize: 18, fontWeight: "700", color: C.gray900 },
   blurb:  { fontSize: 12, color: C.gray500, marginTop: 4 },
 
@@ -313,16 +323,15 @@ const styles = StyleSheet.create({
 
   loader: { marginTop: 32 },
   list:   { padding: 16, gap: 12, paddingBottom: 40 },
-  empty:  { fontSize: 13, color: C.gray500, textAlign: "center", marginTop: 24 },
   errorBox:  { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.errorBg, borderRadius: 10, padding: 12 },
   errorText: { flex: 1, fontSize: 13, color: C.error },
-  retry:     { fontSize: 13, fontWeight: "600", color: C.primary },
+  retry:     { fontSize: 13, fontWeight: "600", color: C.primaryDeep },
 
-  card:     { backgroundColor: C.white, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.gray200 },
+  card:     { backgroundColor: C.primaryBg, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.gray200, borderTopWidth: 3, borderTopColor: C.primaryEdge },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   name:     { fontSize: 15, fontWeight: "600", color: C.gray900 },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 6 },
-  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   badgeText: { fontSize: 11, fontWeight: "600" },
   meta:     { fontSize: 11, color: C.gray500 },
 
@@ -330,20 +339,20 @@ const styles = StyleSheet.create({
   line:   { fontSize: 12, color: C.gray700, lineHeight: 18 },
   muted:  { color: C.gray500 },
 
-  form:      { backgroundColor: C.gray50, borderRadius: 10, padding: 10, marginTop: 6, gap: 6 },
+  form:      { backgroundColor: C.white, borderRadius: 10, padding: 10, marginTop: 6, gap: 6, borderWidth: 1, borderColor: C.gray200 },
   formTitle: { fontSize: 13, fontWeight: "600", color: C.gray900 },
   hint:      { fontSize: 11, color: C.gray500 },
   label:     { fontSize: 11, fontWeight: "600", color: C.gray600, marginTop: 4 },
   chips:     { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip:      { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: C.white, borderWidth: 1, borderColor: C.gray200 },
-  chipOn:    { backgroundColor: C.primaryBg, borderColor: C.primary },
+  chipOn:    { backgroundColor: C.primaryBg, borderColor: C.primaryEdge },
   chipText:  { fontSize: 12, color: C.gray600 },
-  chipTextOn: { color: C.primary, fontWeight: "600" },
+  chipTextOn: { color: C.primaryDeep, fontWeight: "600" },
   input:     { backgroundColor: C.white, borderWidth: 1, borderColor: C.gray200, borderRadius: 8, padding: 8, fontSize: 13, color: C.gray900, minHeight: 40 },
 
   button:    { alignSelf: "flex-start", backgroundColor: C.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginTop: 4 },
   buttonText: { color: C.white, fontSize: 13, fontWeight: "600" },
   buttonSecondary:     { backgroundColor: C.white, borderWidth: 1, borderColor: C.primary },
-  buttonSecondaryText: { color: C.primary, fontSize: 13, fontWeight: "600" },
+  buttonSecondaryText: { color: C.primaryDeep, fontSize: 13, fontWeight: "600" },
   off: { opacity: 0.5 },
 });

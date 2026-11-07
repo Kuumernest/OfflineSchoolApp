@@ -15,6 +15,8 @@ import { Wallet, ArrowUpRight, Search } from "lucide-react";
 import { useUser }             from "@/store/auth.store";
 import { PageHeader }          from "@/components/ui/PageHeader";
 import { Card }                from "@/components/ui/Card";
+import { DASH_TINT }           from "@/config/dashboardTint";
+import { cn }                  from "@/utils/cn";
 import { Button }              from "@/components/ui/Button";
 import { Select }              from "@/components/ui/Select";
 import { SearchInput }         from "@/components/ui/SearchInput";
@@ -85,7 +87,7 @@ export default function FeesPage() {
     const names = new Map((classesQ.data ?? []).map((c) => [String(c._id), c.name]));
 
     type Row      = (typeof rows)[number];
-    type Grouping = { classId: string | null; className: string; items: Row[]; total: number };
+    type Grouping = { classId: string | null; className: string; items: Row[]; total: number; overdue: number };
 
     const byClass = new Map<string, Grouping>();
     for (const r of rows) {
@@ -96,11 +98,13 @@ export default function FeesPage() {
           className: (r.classId && names.get(String(r.classId))) || t("fees.noClass"),
           items:     [],
           total:     0,
+          overdue:   0,
         });
       }
       const g = byClass.get(key)!;
       g.items.push(r);
       g.total += r.balance ?? 0;
+      if (r.isOverdue) g.overdue += 1;
     }
 
     // The biggest debt is still the first thing on the page, now under a class.
@@ -142,20 +146,43 @@ export default function FeesPage() {
 
       {/* The headline figure, before the detail. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="sm:col-span-1">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-ink-faint" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+        <div className={cn("min-w-0 p-5 sm:col-span-1", DASH_TINT.teal.card)}>
+          <div className="flex items-center gap-2.5">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)}>
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-ink-muted">
               {t("fees.totalOutstanding")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+          <p className={cn("mt-3 text-[30px] font-bold leading-none tracking-tight tabular", DASH_TINT.teal.number)}>
             {fmt.money(report?.totalOutstanding ?? 0)}
           </p>
-          <p className="mt-1.5 text-xs text-ink-muted">
+          {/* ink-faint is under AA on a wash, so these lines are ink-muted. */}
+          <p className="mt-2 text-xs text-ink-muted">
             {t("fees.studentsOwing", { count: report?.count ?? 0 })}
           </p>
-        </Card>
+          {/* Owed is everything unpaid; overdue the part past its due date —
+              the figure the bell shows, from the same helper. */}
+          <p className="mt-1 text-xs text-ink-muted">
+            {(report?.overdueCount ?? 0) > 0 ? (
+              <>
+                <span className="rounded-control bg-danger-soft px-1.5 font-semibold text-danger-text tabular">
+                  {t("fees.overdueOfIt", { amount: fmt.money(report?.overdueTotal ?? 0) })}
+                </span>
+                {" · "}
+                <span className="whitespace-nowrap">
+                  {t("fees.overduePupils", {
+                    count:    report?.overdueCount ?? 0,
+                    families: t("notifications.families", { count: report?.overdueFamilies ?? 0 }),
+                  })}
+                </span>
+              </>
+            ) : (
+              t("fees.noneOverdue")
+            )}
+          </p>
+        </div>
 
         <Card className="sm:col-span-2">
           <div className="flex flex-wrap items-end gap-3">
@@ -233,6 +260,7 @@ export default function FeesPage() {
                 <Th numeric>{t("fees.charged")}</Th>
                 <Th numeric>{t("fees.paid")}</Th>
                 <Th numeric>{t("fees.owes")}</Th>
+                <Th numeric>{t("fees.overdue")}</Th>
                 <Th />
               </Tr>
             </THead>
@@ -240,19 +268,27 @@ export default function FeesPage() {
               {arrearsGroups.map((group) => (
                 <Fragment key={group.classId ?? "no-class"}>
                   {showClassRows && (
-                    <Tr className="bg-indigo-50/60">
-                      <Td colSpan={5} className="py-2">
-                        <span className="text-xs font-semibold uppercase
-                                         tracking-wide text-indigo-700">
+                    <Tr className="bg-primary-50/60">
+                      <Td colSpan={4} className="py-2">
+                        {/* "Form 5 – 5 owing" (C7): the class as it is
+                            written, then the count, never run together. */}
+                        <span className="text-xs font-semibold text-primary-700">
                           {group.className}
                         </span>
-                        <span className="ml-2 text-[11px] text-ink-faint tabular-nums">
-                          {t("fees.owingCount", { count: group.items.length })}
+                        <span className="text-[11px] text-ink-faint tabular-nums">
+                          {" – "}{t("fees.owingCount", { count: group.items.length })}
+                          {group.overdue > 0 && (
+                            <span className="text-danger-text">
+                              {" · "}{t("fees.overdueCount", { count: group.overdue })}
+                            </span>
+                          )}
                         </span>
                       </Td>
-                      <Td numeric className="py-2 font-semibold text-danger">
+                      <Td numeric className="py-2 font-semibold text-danger-text">
                         {fmt.money(group.total)}
                       </Td>
+                      <Td />
+                      <Td />
                     </Tr>
                   )}
 
@@ -265,8 +301,11 @@ export default function FeesPage() {
                   <Td className="text-ink-muted">{r.enrollmentNo ?? "—"}</Td>
                   <Td numeric>{fmt.money(r.charged)}</Td>
                   <Td numeric>{fmt.money(r.paid)}</Td>
-                  <Td numeric className="font-semibold text-danger">
+                  <Td numeric className="font-semibold text-danger-text">
                     {fmt.money(r.balance)}
+                  </Td>
+                  <Td numeric className={r.overdue > 0 ? "font-semibold text-danger-text" : "text-ink-faint"}>
+                    {r.overdue > 0 ? fmt.money(r.overdue) : "—"}
                   </Td>
                   <Td numeric>
                     <ArrowUpRight

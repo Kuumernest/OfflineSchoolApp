@@ -45,6 +45,9 @@ import {
   type ExplainResponse, type ExplainClaim, type CitationItem,
   type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine, type DevGuidanceItem, type DevelopmentIntervention, type InterventionTrigger, type DevelopmentPlan,
 } from "@/services/insights.service";
+import { formatDay } from "../../../../shared/dateFormat.js";
+import { DASH_TINT, categoryAccent } from "@/config/dashboardTint";
+import { cn } from "@/utils/cn";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
 const OBS_CODES  = ["PROBLEM_SOLVING", "PERSISTENCE", "COMMUNICATION", "TECHNICAL_EXECUTION", "CREATIVE_APPROACH", "COLLABORATION", "EXPLANATION", "ITERATION"];
@@ -55,8 +58,24 @@ const DIMENSIONS = ["quantitative_reasoning", "scientific_reasoning", "language_
 const AREAS = ["quantitative_scientific", "mathematical", "life_sciences", "computational_technical", "language_media", "humanities_social",
   "creative_arts", "design_spatial", "organisation_enterprise", "collaborative_service"];
 
-const LEVEL_VARIANT = { strong: "success", emerging: "info", limited: "default" } as const;
-const CONF_VARIANT  = { strong: "success", emerging: "info", insufficient: "default" } as const;
+const LEVEL_VARIANT = { strong: "success", emerging: "info", limited: "info" } as const;
+const CONF_VARIANT  = { strong: "success", emerging: "info", insufficient: "info" } as const;
+
+// Badge colours for readings that go up or down: green for a gain, red for a
+// loss, the info blue for everything in between. Styling only.
+type ReadingVariant = "success" | "danger" | "warning" | "info";
+const stateVariant = (state?: string | null): ReadingVariant =>
+  state === "ESTABLISHED" ? "success" : state === "DECLINING" ? "danger" : "info";
+const trajectoryVariant = (tr?: string | null): ReadingVariant =>
+  ["STRENGTHENING", "RECOVERING", "STABLE_ESTABLISHED"].includes(tr ?? "") ? "success"
+  : ["WEAKENING", "DECLINING", "STABLE_DECLINING"].includes(tr ?? "") ? "danger" : "info";
+const directionVariant = (dir?: string | null): ReadingVariant =>
+  dir === "rising" ? "success" : dir === "declining" ? "danger" : "info";
+const evidenceQualityVariant = (q?: string | null): ReadingVariant =>
+  q === "WELL_SUPPORTED" || q === "SUPPORTED" ? "success" : q === "INSUFFICIENT" ? "warning" : "info";
+const coverageVariant = (level?: string | null): ReadingVariant =>
+  level === "STRONG_COVERAGE" || level === "GOOD_COVERAGE" ? "success"
+  : level === "SPARSE_DATA" || level === "INSUFFICIENT_DATA" ? "warning" : "info";
 
 export default function StudentStrengthsPage() {
   const { studentId = "" } = useParams();
@@ -86,15 +105,15 @@ export default function StudentStrengthsPage() {
     <div className="space-y-5">
       <PageHeader title={data?.name ? t("strengths.titleFor", { name: data.name }) : t("strengths.title")} description={t("strengths.blurb")} />
 
-      {strengthsQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning">{t("strengths.unavailable")}</p></Card>}
+      {strengthsQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning-text">{t("strengths.unavailable")}</p></Card>}
 
       {p && (
         <Card>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant={CONF_VARIANT[p.confidence]} label={t(`strengths.confidence.${p.confidence}`)} />
-            <Badge variant="default" label={t("strengths.coverage", { seq: p.evidenceCoverage.sequences, subj: p.evidenceCoverage.subjects })} />
-            <Badge variant="default" label={t("strengths.versions", { a: p.academicEngineVersion ?? "—", s: p.strengthEngineVersion })} />
-            <Badge variant="default" label={t("strengths.strongMark", { m: p.grading.strongMark })} />
+            <Badge variant="info" label={t("strengths.coverage", { seq: p.evidenceCoverage.sequences, subj: p.evidenceCoverage.subjects })} />
+            <Badge variant="info" label={t("strengths.versions", { a: p.academicEngineVersion ?? "—", s: p.strengthEngineVersion })} />
+            <Badge variant="info" label={t("strengths.strongMark", { m: p.grading.strongMark })} />
           </div>
           <p className="mt-2 text-xs text-ink-muted">{t("strengths.confidenceMeans")}</p>
         </Card>
@@ -151,7 +170,7 @@ export default function StudentStrengthsPage() {
         {p?.strengths.length ? p.strengths.map((d) => <DimensionCard key={d.dimension} d={d} areas={p?.explorationAreas} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
           : <p className="text-sm text-ink-muted">{t("strengths.none")}</p>}
         {p?.singleSubjectStrengths.map((s) => (
-          <Card key={s.subjectId} className="text-sm">
+          <Card key={s.subjectId} className={cn("text-sm", DASH_TINT.slate.card)}>
             <p className="font-medium text-ink">{s.subjectName ?? s.subjectId} <span className="font-normal text-ink-muted">· {t("strengths.singleSubject")}</span></p>
             <p className="text-xs text-ink-muted">{t(`strengths.state.${s.state}`)} · {t(`strengths.persistence.${s.persistence}`)} · {s.consistency ? t(`strengths.consistency.${s.consistency}`) : "—"}</p>
           </Card>
@@ -176,7 +195,7 @@ export default function StudentStrengthsPage() {
         {p?.explorationAreas.length ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {p.explorationAreas.map((a) => (
-              <Card key={a.area} className="space-y-2 text-sm">
+              <Card key={a.area} className={cn("space-y-2 text-sm", DASH_TINT[categoryAccent(a.area)].card)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-ink">{t(`strengths.area.${a.area}`, { defaultValue: a.area })}</span>
                   <Badge variant={LEVEL_VARIANT[a.evidenceLevel]} label={t(`strengths.level.${a.evidenceLevel}`)} />
@@ -186,7 +205,7 @@ export default function StudentStrengthsPage() {
                   {a.supportingSubjects.length > 0 && ` · ${a.supportingSubjects.map((s) => s.subjectName ?? s.subjectId).join(", ")}`}
                 </p>
                 <div>
-                  <p className="text-xs font-medium text-ink-faint">{t("strengths.waysToExplore")}</p>
+                  <p className="text-xs font-medium text-ink-muted">{t("strengths.waysToExplore")}</p>
                   <ul className="list-disc pl-5 text-ink">{a.waysToExplore.map((w) => <li key={w}>{t(`strengths.activity.${w}`, { defaultValue: w })}</li>)}</ul>
                 </div>
               </Card>
@@ -201,11 +220,11 @@ export default function StudentStrengthsPage() {
           <ul className="space-y-1 text-sm">
             {p.interestSignals.map((s, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2">
-                <Badge variant="default" label={t(`strengths.kind.${s.kind}`)} />
+                <Badge accent={categoryAccent(s.kind)} label={t(`strengths.kind.${s.kind}`)} />
                 <span className="text-ink">{s.activity}</span>
                 <span className="text-xs text-ink-muted">
                   {s.dimension ? t(`strengths.dimension.${s.dimension}`, { defaultValue: s.dimension }) : s.area ? t(`strengths.area.${s.area}`, { defaultValue: s.area }) : ""}
-                  {s.date ? ` · ${new Date(s.date).toLocaleDateString()}` : ""}
+                  {s.date ? ` · ${formatDay(s.date)}` : ""}
                   {s.participation ? ` · ${t(`strengths.participation.${s.participation}`)}` : ""}
                   {s.reflection ? ` · ${t(`strengths.reflection.${s.reflection}`)}` : ""}
                 </span>
@@ -239,8 +258,8 @@ export default function StudentStrengthsPage() {
           <ul className="space-y-1 text-sm">
             {profileQ.data!.history.map((h) => (
               <li key={h.snapshotId} className="flex flex-wrap items-center gap-2">
-                <Badge variant="default" label={`v${h.profileVersion}`} />
-                <span className="text-ink">{h.periodLabel ?? new Date(h.generatedAt).toLocaleDateString()}</span>
+                <Badge variant="info" label={`v${h.profileVersion}`} />
+                <span className="text-ink">{h.periodLabel ?? formatDay(h.generatedAt)}</span>
                 <span className="text-xs text-ink-muted">
                   {t("strengths.historyLine", { s: h.profile.strengths.map((d) => t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })).join(", ") || "—",
                     e: h.profile.emergingAreas.map((d) => t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })).join(", ") || "—", v: h.strengthEngineVersion })}
@@ -280,13 +299,13 @@ function DimensionCard({ d, areas, reviews, studentId, schoolId, isStaff, onChan
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{t(`strengths.dimension.${d.dimension}`, { defaultValue: d.dimension })}</span>
         <Badge variant={d.state === "ESTABLISHED" ? "success" : d.state === "EMERGING" ? "info" : d.state === "DECLINING" ? "warning" : "default"} label={t(`strengths.state.${d.state}`)} />
-        <Badge variant="default" label={t(`strengths.persistence.${d.persistence}`)} />
+        <Badge variant="info" label={t(`strengths.persistence.${d.persistence}`)} />
         <Badge variant={CONF_VARIANT[d.confidence]} label={t(`strengths.confidence.${d.confidence}`)} />
-        {d.crossSubject && <Badge variant="default" label={t("strengths.crossSubject")} />}
+        {d.crossSubject && <Badge variant="info" label={t("strengths.crossSubject")} />}
       </div>
       <ul className="space-y-0.5 text-xs text-ink-muted">
         {d.evidence.map((e, i) => (
-          <li key={i} className={e.supports ? "" : "text-warning"}>
+          <li key={i} className={e.supports ? "" : "text-warning-text"}>
             {e.evidenceType === "subject_performance" && t("strengths.ev.performance", { s: e.subjectName ?? e.subjectId, n: e.strongObservations, o: e.observations, p: t(`strengths.persistence.${e.persistence}`), c: e.consistency ? t(`strengths.consistency.${e.consistency}`) : "—", avg: e.overallAverage ?? "—" })}
             {e.evidenceType === "subject_decline" && t("strengths.ev.decline", { s: e.subjectName ?? e.subjectId, r: e.recentAverage ?? "—", d: e.delta ?? "—" })}
             {e.evidenceType === "cross_subject_support" && t("strengths.ev.cross", { n: e.subjectIds?.length ?? 0 })}
@@ -394,10 +413,10 @@ function EventList({ label, events, warn }: { label: string; events: LearningEve
   if (!events.length) return null;
   return (
     <div className="mt-1">
-      <p className={warn ? "text-warning" : "text-ink"}>{label} ({events.length})</p>
+      <p className={warn ? "text-warning-text" : "text-ink"}>{label} ({events.length})</p>
       <ul className="list-disc pl-5 text-ink-muted">
         {events.map((e) => <li key={e.eventId}>{t("strengths.integration.event", { family: t(`strengths.integration.family.${e.sourceKind}`, { defaultValue: e.sourceKind }), subject: e.subjectName ?? e.subjectId ?? "—",
-          when: e.observedAt ? new Date(e.observedAt).toLocaleDateString() : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
+          when: e.observedAt ? formatDay(e.observedAt) : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
       </ul>
     </div>
   );
@@ -504,7 +523,7 @@ function ExplorationCard({ e, criteria, schoolId, toast, onChanged }: { e: Explo
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{e.title}</span>
         <Badge variant={e.status === "COMPLETED" ? "success" : e.status === "REVIEW_REQUIRED" ? "warning" : closedish ? "default" : "info"} label={t(`explore.status.${e.status}`)} />
-        <Badge variant="default" label={t(`strengths.area.${e.area}`, { defaultValue: e.area })} />
+        <Badge accent={categoryAccent(e.area)} label={t(`strengths.area.${e.area}`, { defaultValue: e.area })} />
         <span className="text-xs text-ink-muted">{t(`explore.level.${e.level}`)}{e.relevance ? ` · ${t(`explore.relevance.${e.relevance}`)}` : ""}</span>
       </div>
       {e.suggestedBecause.length > 0 && <p className="text-xs text-ink-muted">{t("explore.because")}: {e.suggestedBecause.map((r) => t(`explore.reason.${r}`, { defaultValue: r })).join(", ")}</p>}
@@ -576,7 +595,7 @@ function Development({ studentId, schoolId, isStaff }: { studentId: string; scho
   const q = useQuery({ queryKey: ["development", studentId, schoolId], queryFn: () => fetchDevelopment(studentId, schoolId) });
   const h = q.data;
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   const explainLine = (l: ExplanationLine) => t(`development.explain.${l.code}`, {
     defaultValue: l.code, state: l.state ? t(`strengths.state.${l.state}`) : "", n: l.n ?? "", from: l.from ? t(`strengths.state.${l.from}`) : "", to: l.to ? t(`strengths.state.${l.to}`) : "",
     at: day(l.at), family: l.family ? t(`strengths.integration.family.${l.family}`, { defaultValue: l.family }) : "", kind: l.kind ? t(`strengths.integration.conflict.${l.kind}`, { defaultValue: t(`strengths.fusion.conflict.${l.kind}`, { defaultValue: l.kind }) }) : "",
@@ -625,9 +644,9 @@ function TrajectoryCard({ x, isStaff, fam, day, explainLine }: { x: Trajectory; 
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{name}</span>
         <Badge variant={x.currentState === "ESTABLISHED" ? "success" : x.currentState === "EMERGING" ? "info" : x.currentState === "DECLINING" ? "warning" : "default"} label={`${t("development.current")}: ${t(`strengths.state.${x.currentState}`)}`} />
-        {prev && <Badge variant="default" label={`${t("development.previous")}: ${t(`strengths.state.${prev.state}`)}`} />}
-        <Badge variant="default" label={t(`development.trajectory.${x.trajectory}`, { defaultValue: x.trajectory })} />
-        <Badge variant="default" label={`${t("development.direction")}: ${t(`development.dir.${x.direction}`, { defaultValue: x.direction })}`} />
+        {prev && <Badge variant={stateVariant(prev.state)} label={`${t("development.previous")}: ${t(`strengths.state.${prev.state}`)}`} />}
+        <Badge variant={trajectoryVariant(x.trajectory)} label={t(`development.trajectory.${x.trajectory}`, { defaultValue: x.trajectory })} />
+        <Badge variant={directionVariant(x.direction)} label={`${t("development.direction")}: ${t(`development.dir.${x.direction}`, { defaultValue: x.direction })}`} />
       </div>
       {x.currentRelationship && <p className="text-xs text-ink-muted">{t("development.relationship")}: {t(`strengths.integration.relationship.${x.currentRelationship}`, { defaultValue: x.currentRelationship })}</p>}
       <div className="text-xs">
@@ -684,7 +703,7 @@ function GuidanceAndSupport({ studentId, schoolId, isStaff, toast }: { studentId
     onSuccess: async () => { toast({ kind: "success", title: t("devPlan.created") }); await qc.invalidateQueries({ queryKey: ["dev-plans", studentId, schoolId] }); },
     onError: (err: unknown) => { const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code; toast({ kind: "error", title: t(`devPlan.error.${code ?? "generic"}`, { defaultValue: t("devPlan.error.generic") }) }); } });
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   const items = g.data?.items ?? [];
   const triggers = iv.data?.triggers ?? [];
   const interventions = iv.data?.interventions ?? [];
@@ -720,7 +739,7 @@ function GuidanceCard({ i, isStaff, triggers, onPropose, onPlan, fam, day }: { i
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ink">{name}</span>
         <Badge variant={["SEEK_SUPPORT", "CHANGE_APPROACH"].includes(i.category) ? "warning" : ["MAINTAIN", "DEEPEN"].includes(i.category) ? "success" : "info"} label={t(`devGuidance.category.${i.category}`, { defaultValue: i.category })} />
-        <Badge variant="default" label={`${t("devGuidance.quality")}: ${t(`devGuidance.evidenceQuality.${i.evidenceQuality}`, { defaultValue: i.evidenceQuality })}`} />
+        <Badge variant={evidenceQualityVariant(i.evidenceQuality)} label={`${t("devGuidance.quality")}: ${t(`devGuidance.evidenceQuality.${i.evidenceQuality}`, { defaultValue: i.evidenceQuality })}`} />
       </div>
       <div className="grid gap-2 text-xs md:grid-cols-2">
         <div>
@@ -812,7 +831,7 @@ function DevelopmentPlans({ studentId, schoolId, isStaff, toast }: { studentId: 
   const review = useMutation({ mutationFn: (b: { id: string; code: string; note: string; decision: string; actionType: string | null }) => reviewDevelopmentPlan(studentId, b.id, { teacherReview: b.code ? { code: b.code, note: b.note || null } : null, decision: b.decision, actionType: b.actionType, ...(schoolId ? { schoolId } : {}) }), onSuccess: refresh, onError });
   const plans = q.data?.plans ?? [];
   const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
-  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const day = (d?: string | null) => (d ? formatDay(d) : "—");
   return (
     <Section icon={<ClipboardList className="h-3.5 w-3.5" />} heading={t("devPlan.heading")} hint={t("devPlan.hint", { p: q.data?.engineVersions.planning ?? "—", a: q.data?.engineVersions.adaptive ?? "—" })}>
       {plans.length === 0 && <p className="text-sm text-ink-muted">{t("devPlan.none")}</p>}
@@ -888,7 +907,7 @@ function PlanCard({ x, isStaff, skipReasons, fam, day, onAct, onAdapt, onMove, o
           <div>
             <p className="font-medium text-ink-faint">{t("devPlan.observedEvidence")}</p>
             <p className="text-ink">{sr.contract.evidence.independentObservations > 0 ? t("devPlan.evidenceLine", { n: sr.contract.evidence.independentObservations, fam: fam(sr.contract.evidence.families) || "—" }) : t("devPlan.noNewEvidence")}</p>
-            {sr.contradiction && <p className="text-warning">{t("devPlan.contradiction")}</p>}
+            {sr.contradiction && <p className="text-warning-text">{t("devPlan.contradiction")}</p>}
           </div>
           <div>
             <p className="font-medium text-ink-faint">{t("devPlan.systemInterpretation")}</p>
@@ -934,7 +953,7 @@ function WhatChanged({ studentId, schoolId }: { studentId: string; schoolId?: st
   const any = moved.some(([, l]) => l.length) || (c.newEvidence?.rows ?? 0) > 0;
   return (
     <Section icon={<GitCompare className="h-3.5 w-3.5" />} heading={t("strengths.fusion.changesHeading")}
-      hint={c.previous ? t("strengths.fusion.changesSince", { v: c.previous.profileVersion, when: new Date(c.previous.generatedAt).toLocaleDateString() }) : t("strengths.fusion.noSnapshotYet")}>
+      hint={c.previous ? t("strengths.fusion.changesSince", { v: c.previous.profileVersion, when: formatDay(c.previous.generatedAt) }) : t("strengths.fusion.noSnapshotYet")}>
       {!any && <p className="text-sm text-ink-muted">{t("strengths.fusion.nothingChanged")}</p>}
       {c.newEvidence && c.newEvidence.rows > 0 && (
         <p className="text-sm text-ink">{t("strengths.fusion.newEvidence")}: {Object.entries(c.newEvidence.byKind).map(([k, v]) => `${v} × ${t(`strengths.kind.${k}`, { defaultValue: k })}`).join(", ")} · {t("strengths.fusion.explorations", { n: c.newEvidence.explorations })}</p>
@@ -983,7 +1002,7 @@ function Timeline({ dimension }: { dimension: string }) {
       <ul className="mt-1 space-y-0.5 text-ink-muted">
         {rows.map((r, i) => (
           <li key={i}>
-            {r.when ? (r.when.length > 10 ? new Date(r.when).toLocaleDateString() : r.when) : "—"} · {t(`strengths.fusion.src.${r.source.toLowerCase()}`, { defaultValue: r.source })} · {r.subjectName ?? ""}{r.area ? t(`strengths.area.${r.area}`, { defaultValue: r.area }) : ""} {r.reading}{r.observers ? ` ×${r.observers}` : ""}
+            {r.when ? (r.when.length > 10 ? formatDay(r.when) : r.when) : "—"} · {t(`strengths.fusion.src.${r.source.toLowerCase()}`, { defaultValue: r.source })} · {r.subjectName ?? ""}{r.area ? t(`strengths.area.${r.area}`, { defaultValue: r.area }) : ""} {r.reading}{r.observers ? ` ×${r.observers}` : ""}
           </li>
         ))}
       </ul>
@@ -1032,7 +1051,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
     <Section icon={<BookOpen className="h-3.5 w-3.5" />} heading={t("learning.heading")} hint={t("learning.hint", { v: d.learningEvidenceVersion })}>
       <Card className="text-xs text-ink-muted">
         {t("learning.counts", { e: d.counts.events, h: d.counts.bySource.HOMEWORK ?? 0, q: d.counts.bySource.QUIZ ?? 0, s: d.counts.bySource.EXAM_SCORE ?? 0, a: d.counts.bySource.ATTENDANCE ?? 0 })}
-        {" · "}{t("learning.coverageOverall")}: <Badge variant="default" label={t(`learning.quality.${d.quality.overall.level}`)} />
+        {" · "}{t("learning.coverageOverall")}: <Badge variant={coverageVariant(d.quality.overall.level)} label={t(`learning.quality.${d.quality.overall.level}`)} />
         {d.quality.overall.flags.map((f) => <span key={f}> <Badge variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} /></span>)}
       </Card>
 
@@ -1042,7 +1061,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
           <Card key={s.subjectId ?? "none"} className="space-y-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-ink">{s.subjectId}</span>
-              <Badge variant="default" label={t(`learning.quality.${qs?.level ?? "NO_DATA"}`)} />
+              <Badge variant={coverageVariant(qs?.level)} label={t(`learning.quality.${qs?.level ?? "NO_DATA"}`)} />
               {(qs?.flags ?? []).map((f) => <Badge key={f} variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} />)}
             </div>
             <p className="text-xs font-medium text-ink-faint">{t("learning.observed")}</p>
@@ -1065,7 +1084,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
               </span>
             </div>
             {(qs?.contradictions ?? []).length > 0 && (
-              <p className="text-xs text-warning">{t("learning.conflicts")}: {(qs?.contradictions ?? []).map((c) => t(`learning.contradiction.${c.code}`, { defaultValue: c.code })).join("; ")}</p>
+              <p className="text-xs text-warning-text">{t("learning.conflicts")}: {(qs?.contradictions ?? []).map((c) => t(`learning.contradiction.${c.code}`, { defaultValue: c.code })).join("; ")}</p>
             )}
           </Card>
         );
@@ -1084,7 +1103,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
         <summary className="cursor-pointer text-ink-muted">{t("learning.timeline", { n: d.timeline.length })}</summary>
         <ul className="mt-1 max-h-64 space-y-0.5 overflow-y-auto text-ink-muted">
           {d.timeline.slice().reverse().map((e) => (
-            <li key={e.learningEventId}>{e.when ? new Date(e.when).toLocaleDateString() : "—"} · {t(`learning.source.${e.sourceType}`)}{e.subjectId ? ` · ${e.subjectId}` : ""} · {e.observations.map((o) => `${o.kind}: ${o.state}${o.normalizedValue !== undefined && o.normalizedValue !== null ? ` (${Math.round(o.normalizedValue * 100)}%)` : ""}`).join(", ")} · {e.recency}</li>
+            <li key={e.learningEventId}>{e.when ? formatDay(e.when) : "—"} · {t(`learning.source.${e.sourceType}`)}{e.subjectId ? ` · ${e.subjectId}` : ""} · {e.observations.map((o) => `${o.kind}: ${o.state}${o.normalizedValue !== undefined && o.normalizedValue !== null ? ` (${Math.round(o.normalizedValue * 100)}%)` : ""}`).join(", ")} · {e.recency}</li>
           ))}
         </ul>
       </details>
@@ -1092,7 +1111,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
       <p className="text-xs text-ink-muted">{t("learning.notInferred")}</p>
       {isStaff && cq.data && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-          <span>{cq.data.previous ? t("learning.lastSnapshot", { n: cq.data.previous.snapshotNumber, when: new Date(cq.data.previous.generatedAt).toLocaleDateString() }) : t("learning.noSnapshot")}{cq.data.pendingSnapshot ? ` · ${t("learning.pending2")}` : ""}</span>
+          <span>{cq.data.previous ? t("learning.lastSnapshot", { n: cq.data.previous.snapshotNumber, when: formatDay(cq.data.previous.generatedAt) }) : t("learning.noSnapshot")}{cq.data.pendingSnapshot ? ` · ${t("learning.pending2")}` : ""}</span>
           <Button size="sm" variant="secondary" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>{t("learning.rebuild")}</Button>
         </div>
       )}
@@ -1112,7 +1131,7 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
 
 const EXPLAIN_PROMPTS = ["profile", "changed", "evidence", "guidance", "plan", "explore"] as const;
 const humanCode = (s: unknown) => String(s ?? "").toLowerCase().replace(/_/g, " ");
-const dayOf = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+const dayOf = (d?: string | null) => (d ? formatDay(d) : "—");
 type Tr = ReturnType<typeof useTranslation>["t"];
 const pickText = (...vals: unknown[]) => vals.find((v) => typeof v === "string" && v.length > 0) as string | undefined;
 
@@ -1147,7 +1166,7 @@ function Explanation({ studentId, schoolId, toast }: { studentId: string; school
   return (
     <Section icon={<MessageSquare className="h-3.5 w-3.5" />} heading={t("explain.heading")} hint={t("explain.hint")}>
       {summaryQ.isLoading && <PageSpinner />}
-      {summaryQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning">{t("explain.summaryUnavailable")}</p></Card>}
+      {summaryQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning-text">{t("explain.summaryUnavailable")}</p></Card>}
       {s && (
         <Card className="space-y-3 text-sm">
           <p className="text-xs text-ink-muted">{t("explain.summaryBlurb", { date: dayOf(s.asOf) })}</p>
@@ -1259,7 +1278,10 @@ function ExplanationResult({ r, onPick }: { r: ExplainResponse; onPick: (q: stri
 function Section({ icon, heading, hint, children }: { icon: React.ReactNode; heading: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{icon} {heading}</h3>
+      <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        <span aria-hidden="true" className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.violet.box)}>{icon}</span>
+        {heading}
+      </h3>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       {children}
     </section>

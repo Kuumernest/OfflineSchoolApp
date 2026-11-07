@@ -62,15 +62,27 @@ const wholeSchool = () => ({});
  * what the capability students.viewTaught exists to prevent.
  */
 /**
- * Which hard deletes this caller hears of (models/SyncTombstone.js): those of
- * the records it may mirror at all. Subject and teacher-assignment deletions
- * with subjects.view (both collections are read under it); a pupil's deletion
- * with students.view, or — for a teacher holding only students.viewTaught —
- * for pupils of the classes they teach (the tombstone keeps the class, the
- * pupil's row being gone).
+ * Which tombstones (models/SyncTombstone.js) this caller hears of: exactly
+ * those of the rows it may mirror. Derived from the FEED entry each tombstone
+ * names (its `entity` is the collection), so a deletion reaches a caller on
+ * the same capability and the same scope as the row did:
+ *
+ *   - no scope (enrollment, promotion runs, users, subjects…): every tombstone
+ *     of the collection, to whoever holds its capability;
+ *   - taughtStudentsOnly (pupils): for a teacher, those of the classes they
+ *     teach — the tombstone keeps the deleted row's class;
+ *   - publishedUnlessAdmin (results): admins hear of deletions; everyone else
+ *     also hears of unpublishing (reason "unpublished"), since their mirror
+ *     holds the published copy and the feed no longer sends the row.
+ *
+ * The boot check below refuses any other scope on a tombstoned collection: a
+ * scope this function cannot reproduce would send a deletion to a machine
+ * that never held the row, or withhold it from one that does.
  */
 const tombstonesVisible = async (req, models) => {
-  if (req.user?.role === ROLES.SUPER_ADMIN) return {};
+  // Root mirrors as an admin does, unpublished rows included: no
+  // "unpublished" tombstone is meant for it.
+  if (req.user?.role === ROLES.SUPER_ADMIN) return { reason: null };
   if (!req._heldForTombstones) {
     req._heldForTombstones = new Set(
       await require("../services/permissions.service").effectiveFor(req.user?.role, req.user?.schoolId)
@@ -78,26 +90,42 @@ const tombstonesVisible = async (req, models) => {
   }
   const held = req._heldForTombstones;
   const visible = [];
-  if (held.has("subjects.view")) visible.push({ entity: { $in: ["subject", "teacherAssignment"] } });
-  if (held.has("students.view")) {
-    visible.push({ entity: "student" });
-  } else if (held.has("students.viewTaught")) {
-    visible.push({ entity: "student", ...(await taughtStudentsOnly(req, models)) });
+  for (const entity of tombstoneEntities()) {
+    const entry = byCollection.get(entity);
+    if (!entry || !satisfies(entry, held)) continue;
+    if (!entry.scope) visible.push({ entity });
+    else if (entry.scope === taughtStudentsOnly) visible.push({ entity, ...(await taughtStudentsOnly(req, models)) });
+    else if (entry.scope === publishedUnlessAdmin) {
+      visible.push(ADMIN_ROLES.includes(req.user?.role) ? { entity, reason: null } : { entity });
+    }
   }
   return visible.length ? { $or: visible } : { entity: { $in: [] } };
 };
 
-/** A tombstone whose row still exists (a delete that failed after writing it) is not sent. */
+/**
+ * What is actually sent of a page of tombstones. A deletion whose row still
+ * exists (a delete that failed after writing it) is not; an "unpublished"
+ * whose row is published again is not either (the row reaches the mirror
+ * through its own collection). The cursor still passes both.
+ */
 const dropTombstonesOfLiveRows = async (rows, models) => {
-  const modelOf = { subject: models.Subject, teacherAssignment: models.TeacherAssignment, student: models.Student };
-  const live = new Set();
-  for (const [entity, Model] of Object.entries(modelOf)) {
-    const ids = rows.filter((r) => r.entity === entity).map((r) => r.docId);
-    if (!ids.length || !Model) continue;
-    for (const id of await Model.find({ _id: { $in: ids } }).distinct("_id")) live.add(`${entity}:${id}`);
+  const keep = new Set();
+  for (const entity of new Set(rows.map((r) => r.entity))) {
+    const Model = models[byCollection.get(entity)?.model];
+    if (!Model) continue;   // nothing this build mirrors: nothing to remove
+    const mine = rows.filter((r) => r.entity === entity);
+    const live = new Map((await Model.find({ _id: { $in: mine.map((r) => r.docId) } })
+      .select("_id isPublished").lean()).map((d) => [String(d._id), d]));
+    for (const r of mine) {
+      const row = live.get(String(r.docId));
+      if (!row || (r.reason === "unpublished" && row.isPublished !== true)) keep.add(r);
+    }
   }
-  return rows.filter((r) => !live.has(`${r.entity}:${r.docId}`));
+  return rows.filter((r) => keep.has(r));
 };
+
+/** The collections a tombstone can name (models/SyncTombstone.js ENTITIES). */
+const tombstoneEntities = () => require("../db/models/SyncTombstone").ENTITIES;
 
 const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
@@ -108,8 +136,13 @@ const taughtStudentsOnly = async (req, models) => {
   req._taughtScope = taughtScopeOf(req, models);
   return req._taughtScope;
 };
-const taughtScopeOf = async (req, models) => {
+const taughtScopeOf = async (req, models) =>
+  // No classes means no pupils — said explicitly, because an empty $in would
+  // otherwise be read as "no filter" by anything that builds on this.
+  ({ classId: { $in: await assignedClassIds(req, models) } });
 
+/** The classes this teacher holds an ACTIVE assignment in (the desktop's whole rule; half the phone's). */
+const assignedClassIds = async (req, models) => {
   const teacherId = String(req.user._id ?? req.user.id);
   // Active rows only, as utils/teacherScope.js asks on every write: an
   // assignment the office switched off is a class whose roster the device
@@ -122,13 +155,9 @@ const taughtScopeOf = async (req, models) => {
     deletedAt: null,
   }).select("class classId").lean();
 
-  const classIds = [...new Set(
+  return [...new Set(
     assignments.map((a) => String(a.classId ?? a.class ?? "")).filter(Boolean)
   )];
-
-  // No classes means no pupils — said explicitly, because an empty $in would
-  // otherwise be read as "no filter" by anything that builds on this.
-  return { classId: { $in: classIds } };
 };
 
 /**
@@ -224,13 +253,16 @@ const FEED = [
   { collection: "timetableSlot", model: "TimetableSlot", permission: "timetable.view" },
   {
     collection: "syncTombstone", model: "SyncTombstone",
-    permission: ["subjects.view", "students.view", "students.viewTaught"],
+    // Any capability that reads a tombstoned collection. Filled in below from
+    // those entries themselves, once FEED exists, so it cannot drift.
+    permission: [],
     scope: tombstonesVisible,
     postFilter: dropTombstonesOfLiveRows,
-    why: "How a HARD delete (subject, teacher assignment, pupil) reaches the " +
-         "mirror: the row is gone, so its tombstone is sent instead and the " +
-         "desktop removes its copy. Only for records the caller may mirror " +
-         "(the scope); a tombstone whose row still exists is never sent.",
+    why: "How a HARD delete (a pupil, a subject, a result a recompute dropped, " +
+         "a discarded promotion run…) reaches the mirror: the row is gone, so " +
+         "its tombstone is sent instead and the desktop removes its copy. Only " +
+         "for records the caller may mirror (the scope); a tombstone whose row " +
+         "still exists is never sent.",
   },
   { collection: "gradingConfig", model: "GradingConfig", permission: "results.view" },
   {
@@ -384,6 +416,13 @@ const FEED = [
   { collection: "promotionDecision", model: "PromotionDecision", permission: "promotion.run" },
   { collection: "studentApplication", model: "StudentApplication", permission: "students.admit" },
 ];
+
+// syncTombstone is readable by whoever may read any collection a tombstone can
+// name; which tombstones each caller gets is its scope (tombstonesVisible).
+FEED.find((e) => e.collection === "syncTombstone").permission = [...new Set(
+  FEED.filter((e) => tombstoneEntities().includes(e.collection))
+    .flatMap((e) => (Array.isArray(e.permission) ? e.permission : [e.permission]))
+)];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELIBERATELY NOT MIRRORED
@@ -624,6 +663,87 @@ const assertEveryModelIsClassified = () => {
   }
 };
 
+/**
+ * A HARD delete of a mirrored collection must leave a tombstone, or every
+ * desktop that holds the row keeps it for good (the feed reads rows by
+ * updatedAt; a deleted row has none). Checked at boot, like classification:
+ *
+ *   1. every collection a tombstone can name (SyncTombstone ENTITIES) is a
+ *      FEED collection, its model carries the syncTombstones plugin under
+ *      that same name (the desktop removes the row from the collection the
+ *      tombstone names), and its scope is one tombstonesVisible reproduces;
+ *   2. every mirrored model the code hard-deletes — Name.deleteOne/deleteMany/
+ *      findOneAndDelete/findByIdAndDelete, or model("Name")/M("Name") the same,
+ *      anywhere under src/ or middleware/ — is one of them.
+ *
+ * (2) reads the source, so a delete through an alias (`const C = Content`)
+ * or the raw driver is not seen; scripts/check-feed-tombstones.js pins the
+ * delete paths themselves.
+ */
+const DELETE_CALL = /(?:\b([A-Z]\w*)|\b(?:model|M)\(\s*["'](\w+)["']\s*\))\s*\.\s*(?:deleteMany|deleteOne|findOneAndDelete|findByIdAndDelete|findOneAndRemove|findByIdAndRemove)\s*\(/g;
+
+const sourceFiles = (dir, out = []) => {
+  if (!fs.existsSync(dir)) return out;
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) { if (ent.name !== "node_modules") sourceFiles(p, out); }
+    else if (ent.name.endsWith(".js")) out.push(p);
+  }
+  return out;
+};
+
+/** Mirrored model names the source hard-deletes, with where. */
+const hardDeletedModels = () => {
+  const mirrored = new Set(FEED.map((e) => e.model));
+  const found = new Map();
+  const roots = [path.join(__dirname, ".."), path.join(__dirname, "..", "..", "middleware")];
+  for (const file of roots.flatMap((r) => sourceFiles(r))) {
+    const text = fs.readFileSync(file, "utf8");
+    for (const m of text.matchAll(DELETE_CALL)) {
+      const name = m[1] || m[2];
+      if (!mirrored.has(name) || found.has(name)) continue;
+      found.set(name, path.relative(path.join(__dirname, "..", ".."), file));
+    }
+  }
+  return found;
+};
+
+const assertHardDeletesAreTombstoned = () => {
+  const mongoose = require("mongoose");
+  const entities = tombstoneEntities();
+  const problems = [];
+
+  for (const entity of entities) {
+    const entry = FEED.find((e) => e.collection === entity);
+    if (!entry) { problems.push(`tombstone entity "${entity}" is not a FEED collection`); continue; }
+    if (entry.scope && entry.scope !== taughtStudentsOnly && entry.scope !== publishedUnlessAdmin) {
+      problems.push(`${entity}: its scope is not one tombstonesVisible can apply to a tombstone`);
+    }
+    require(path.join(MODELS_DIR, entry.model));
+    const tagged = mongoose.models[entry.model]?.schema?.syncTombstoneEntity;
+    if (tagged !== entity) {
+      problems.push(`${entry.model} does not carry the syncTombstones plugin as "${entity}"` +
+        (tagged ? ` (it says "${tagged}")` : ""));
+    }
+  }
+
+  for (const [model, where] of hardDeletedModels()) {
+    const entry = FEED.find((e) => e.model === model);
+    if (!entities.includes(entry.collection)) {
+      problems.push(`${model} is mirrored (${entry.collection}) and hard-deleted in ${where}, with no tombstone`);
+    }
+  }
+
+  if (problems.length) {
+    throw new Error(
+      `src/config/syncFeed.js: a hard delete would never reach the desktop mirror:\n  ` +
+      problems.join("\n  ") +
+      `\nGive the model the syncTombstones plugin (db/plugins/syncTombstones.js) with its ` +
+      `FEED collection as the entity, and add that to ENTITIES in models/SyncTombstone.js.`
+    );
+  }
+};
+
 /** The capabilities that would each be sufficient for one entry. */
 const required = (entry) =>
   Array.isArray(entry.permission) ? entry.permission : [entry.permission];
@@ -681,12 +801,178 @@ const KNOWN_GAPS = [
 
 const byCollection = new Map(FEED.map((e) => [e.collection, e]));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PHONE PROFILE — GET /sync/changes?profile=phone
+//
+// The phone used GET /sync/pull: six collections, one timestamp cursor, one
+// unbounded answer. It now reads the same six through this endpoint's keyset
+// cursor, pages and tombstones. They are a separate table rather than entries
+// in FEED because they are a different AUDIENCE, not a different capability:
+//
+//   - the desktop's class/subject/teacherAssignment are gated on classes.view /
+//     subjects.view, which no teacher holds (KNOWN_GAPS) — yet a teacher's
+//     phone has always received them from /sync/pull, and its timetable,
+//     subjects and register screens are built on them;
+//   - a STUDENT's phone gets its own pupil row and teacher NAMES, nothing more
+//     (the narrowing /sync/pull applies), which no capability expresses;
+//   - the rows are shaped as /sync/pull shaped them (a normalised pupil, an
+//     assignment with its teacher/class/subject names joined), so the phone's
+//     apply functions take them unchanged.
+//
+// So each entry says WHO (allow) and WHICH (scope, project) the way
+// /sync/pull did — tenancy from the token, never the query string — and
+// nothing here widens what a role received from /sync/pull. The desktop never
+// sends profile=phone, and FEED, its default list, is untouched.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Every account that signs in to the phone app. Guardians use the portal and are not Users. */
+const PHONE_ROLES = new Set([ROLES.SUPER_ADMIN, ROLES.SCHOOL_ADMIN, ROLES.BURSAR, ROLES.TEACHER, ROLES.STUDENT]);
+const isStudentCaller = (req) => req.user?.role === ROLES.STUDENT;
+const callerIdOf = (req) => String(req.user?._id ?? req.user?.id ?? "");
+const anyPhoneRole = (req) => PHONE_ROLES.has(req.user?.role);
+
+/** A pupil's own record: matched on either key, as /sync/pull does (userId on most rows, the shared _id on older ones). */
+const ownPupil = (req) => ({ $or: [{ userId: callerIdOf(req) }, { _id: callerIdOf(req) }] });
+
+/**
+ * The classes whose pupils a TEACHER's phone holds (owner decision, 2026-11),
+ * or null for every other role (the whole roster, or a pupil's own row).
+ *
+ *   a class where the teacher holds an ACTIVE TeacherAssignment — exactly the
+ *   desktop's taughtStudentsOnly (assignedClassIds): isActive !== false, either
+ *   field spelling; validFrom/validUntil are not consulted, as no server check
+ *   consults them (utils/teacherScope.js) — OR
+ *   a class whose classTeacherId is the teacher (the form master, who often
+ *   has no subject assignment in it), the class not soft-deleted.
+ *
+ * Decided by ROLE, as taughtStudentsOnly decides: a teacher granted
+ * students.view is still narrowed here. The mobile app purges local pupils by
+ * this same rule, so the two must not drift. Shared by /sync/changes
+ * ?profile=phone and /sync/pull; memoised on the request.
+ */
+const teacherRosterClassIds = async (req, models) => {
+  if (req.user?.role !== ROLES.TEACHER) return null;
+  if (!req._teacherRoster) {
+    req._teacherRoster = (async () => {
+      const formMaster = await models.Class.find({
+        schoolId: req.user.schoolId, classTeacherId: callerIdOf(req), ...models.Class.notDeletedClause(),
+      }).distinct("_id");
+      return [...new Set([...(await assignedClassIds(req, models)), ...formMaster.map(String)])].sort();
+    })();
+  }
+  return req._teacherRoster;
+};
+
+/**
+ * A short fingerprint of a teacher's roster classes, carried in the phone's
+ * `students` cursor (controllers/syncFeed.controller.js). A cursor is a
+ * position in the rows the teacher COULD see; when the classes change it is a
+ * position in a different set, and the pupils of a gained class — rows that
+ * did not change — sit behind it for good. So a cursor whose fingerprint is
+ * not today's is set aside and the collection is read again from the start:
+ * the teacher's own roster, a few hundred rows, once per change of classes.
+ */
+const teacherRosterKey = async (req, models) => {
+  const classes = await teacherRosterClassIds(req, models);
+  if (!classes) return null;
+  return require("crypto").createHash("sha1").update(classes.join(",")).digest("base64url").slice(0, 16);
+};
+
+/** /sync/pull's teacher fields: names only for a pupil. */
+const teacherFieldsFor = (req) => isStudentCaller(req)
+  ? "name role schoolId deletedAt createdAt updatedAt"
+  : "name email role schoolId isActive mustResetPassword enrollmentNo staffNo deletedAt createdAt updatedAt";
+
+/** Pupils: the roster as /sync/pull serves it; off the roster → a removal. */
+const pupilRows = (rows) => {
+  const { normaliseStudentForSync } = require("../controllers/sync.controller");
+  const onRoster = (s) => s.status === "approved" && s.isActive === true && !s.deletedAt;
+  return rows.map((s) => onRoster(s)
+    ? normaliseStudentForSync(s)
+    : { _id: String(s._id), id: String(s._id), schoolId: s.schoolId ?? null, deletedAt: s.deletedAt || s.updatedAt, updatedAt: s.updatedAt });
+};
+
+/**
+ * Hard deletes the phone applies: subjects and assignments for everyone; pupils
+ * for staff, a teacher only those of their roster classes (the tombstone keeps
+ * the deleted pupil's class) — a pupil hears only of their own.
+ */
+const phoneTombstones = async (req, models) => {
+  const roster = await teacherRosterClassIds(req, models);
+  if (roster) {
+    return { $or: [{ entity: { $in: ["subject", "teacherAssignment"] } }, { entity: "student", classId: { $in: roster } }] };
+  }
+  if (!isStudentCaller(req)) return { entity: { $in: ["subject", "teacherAssignment", "student"] } };
+  const own = await models.Student.findOne(ownPupil(req)).select("_id").lean();
+  const ids = [callerIdOf(req), own ? String(own._id) : null].filter(Boolean);
+  return { $or: [{ entity: { $in: ["subject", "teacherAssignment"] } }, { entity: "student", docId: { $in: ids } }] };
+};
+
+/** A tombstone as the phone applies it: the removal row of the collection it belongs to. */
+const TOMBSTONE_TARGET = { subject: "subjects", teacherAssignment: "assignments", student: "students" };
+const tombstoneRows = (rows) => rows.map((t) => ({
+  _id: t.docId, id: t.docId, collection: TOMBSTONE_TARGET[t.entity], schoolId: t.schoolId ?? null,
+  deletedAt: t.deletedAt, updatedAt: t.updatedAt,
+}));
+
+/**
+ * @type {Array<FeedEntry & { allow: Function, project?: Function, populate?: Function, transform?: Function, scopeKey?: Function }>}
+ * allow(req, held) — who may have it (held: the caller's capabilities).
+ * scopeKey(req, models) — a fingerprint of WHICH rows the scope admits; a
+ *   cursor carrying another one is set aside (the collection is re-read).
+ */
+const PHONE_FEED = [
+  { collection: "classes",  model: "Class",  allow: anyPhoneRole },
+  { collection: "subjects", model: "Subject", allow: anyPhoneRole },
+  { collection: "periods",  model: "Period", allow: anyPhoneRole },
+  {
+    collection: "teachers", model: "User", allow: anyPhoneRole,
+    scope: () => ({ role: ROLES.TEACHER }),
+    project: teacherFieldsFor,
+    why: "Teacher names for the timetable; a pupil gets nothing else about an account.",
+  },
+  {
+    collection: "assignments", model: "TeacherAssignment", allow: anyPhoneRole,
+    populate: (q, req) => q
+      .populate("teacher", isStudentCaller(req) ? "name" : "name email")
+      .populate("class", "name")
+      .populate("subject", "name"),
+  },
+  {
+    collection: "students", model: "Student",
+    // A pupil: their own row. A teacher: their roster classes. Other staff:
+    // the school, as /sync/pull served them — each only with a capability to
+    // read pupils at all.
+    allow: (req, held) => isStudentCaller(req) || held.has("students.view") || held.has("students.viewTaught"),
+    scope: async (req, models) => {
+      if (isStudentCaller(req)) return ownPupil(req);
+      const roster = await teacherRosterClassIds(req, models);
+      return roster ? { classId: { $in: roster } } : {};
+    },
+    scopeKey: teacherRosterKey,
+    transform: pupilRows,
+    why: "A teacher's phone holds the pupils of the classes they teach or are form " +
+         "master of (teacherRosterClassIds — owner decision 2026-11); the office " +
+         "roles the whole roster. A change of classes restarts the teacher's cursor " +
+         "(scopeKey), so a gained class's unchanged pupils arrive.",
+  },
+  {
+    collection: "tombstones", model: "SyncTombstone", allow: anyPhoneRole,
+    scope: phoneTombstones,
+    postFilter: dropTombstonesOfLiveRows,
+    transform: tombstoneRows,
+  },
+];
+
+const phoneByCollection = new Map(PHONE_FEED.map((e) => [e.collection, e]));
+
 // Invoked here, at the very bottom, rather than beside its definition: it reads
 // required() and every const above, and calling it earlier put it in front of
 // their initialisation — a temporal dead zone error at require time, which
 // takes the whole server down on boot. Which is the intended failure mode for a
 // misclassified model, but not for this.
 assertEveryModelIsClassified();
+assertHardDeletesAreTombstoned();
 
 module.exports = {
   FEED,
@@ -696,7 +982,13 @@ module.exports = {
   required,
   satisfies,
   byCollection,
+  PHONE_FEED,
+  PHONE_ROLES,
+  phoneByCollection,
   modelNames,
   assertEveryModelIsClassified,
+  assertHardDeletesAreTombstoned,
+  hardDeletedModels,
   scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin, marksAsReadOnline },
+  teacherRosterClassIds,
 };

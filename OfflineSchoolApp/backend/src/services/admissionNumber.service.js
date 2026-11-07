@@ -12,7 +12,7 @@
  *   the console's "give a number" POST /admin/students/:id/enrollment-number   GVA00/2026/001
  *   adding a student directly     POST /students (provisionStudentAccount)   GVA00-2026-0001
  *   provisioning a login          POST /api/students/:id/enrollment-number   GVA00-2026-0001
- *   approving through the sync    POST /sync/push (pushStudentDecisions)     GVA00-2026-0001
+ *   approving through the sync    POST /sync/push (since retired: 410)       GVA00-2026-0001
  *
  * So two pupils admitted the same morning got numbers in different shapes,
  * and each generator counted only its own shape — the slash ones read

@@ -33,6 +33,8 @@ import {
   suggestFixes,
 } from "../../../../src/services/timetableService";
 import ConflictTypeBadge from "./ConflictTypeBadge";
+import { COLORS, ACCENT, SEMANTIC, categoryAccent } from "../../../../src/theme/colors";
+import { HeaderIcon } from "../../../../src/components/Tinted";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -536,6 +538,7 @@ export default function SlotEditorModal({
 
           {/* ── Header ── */}
           <View style={styles.header}>
+            <HeaderIcon />
             <View style={styles.headerLeft}>
               <Text style={styles.title}>
                 {mode === "edit" ? t("ttAdmin.editSlot") : t("ttAdmin.configureSlot")}
@@ -552,7 +555,7 @@ export default function SlotEditorModal({
               activeOpacity={0.7}
               style={[styles.closeBtn, saving && styles.disabledOpacity]}
             >
-              <Ionicons name="close" size={20} color="#111827" />
+              <Ionicons name="close" size={20} color={COLORS.text} />
             </TouchableOpacity>
           </View>
 
@@ -568,7 +571,7 @@ export default function SlotEditorModal({
 
             {loadingSubjects ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#4F46E5" size="small" />
+                <ActivityIndicator color={ACCENT.teal.solid} size="small" />
                 <Text style={styles.loadingText}>{t("ttAdmin.loadingSubjects")}</Text>
               </View>
             ) : subjects.length === 0 ? (
@@ -576,22 +579,26 @@ export default function SlotEditorModal({
             ) : (
               subjects.map((subject) => {
                 const selected = subjectId === subject.id;
+                const tint     = ACCENT[categoryAccent(subject.name)];
                 return (
                   <Pressable
                     key={`subj-${subject.id}`}
-                    style={[styles.option, selected && styles.optionBlue]}
+                    style={[
+                      styles.option,
+                      selected && { backgroundColor: tint.wash, borderColor: tint.base },
+                    ]}
                     onPress={() => handleSelectSubject(subject.id)}
                     disabled={saving}
                   >
                     <View style={styles.optionRow}>
                       <Text
-                        style={[styles.optionText, selected && styles.optionTextBlue]}
+                        style={[styles.optionText, selected && { color: tint.deep }]}
                         numberOfLines={2}
                       >
                         {subject.name}
                       </Text>
                       {selected && (
-                        <Ionicons name="checkmark-circle" size={19} color="#4F46E5" />
+                        <Ionicons name="checkmark-circle" size={19} color={tint.solid} />
                       )}
                     </View>
                   </Pressable>
@@ -606,7 +613,7 @@ export default function SlotEditorModal({
               <Text style={styles.emptyText}>{t("timetable.chooseSubjectFirst")}</Text>
             ) : loadingTeachers ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#4F46E5" size="small" />
+                <ActivityIndicator color={ACCENT.violet.solid} size="small" />
                 <Text style={styles.loadingText}>{t("ttAdmin.loadingTeachers")}</Text>
               </View>
             ) : teachers.length === 0 ? (
@@ -631,7 +638,7 @@ export default function SlotEditorModal({
                         {teacher.name}
                       </Text>
                       {selected && (
-                        <Ionicons name="checkmark-circle" size={19} color="#059669" />
+                        <Ionicons name="checkmark-circle" size={19} color={ACCENT.violet.solid} />
                       )}
                     </View>
                   </Pressable>
@@ -790,7 +797,7 @@ export default function SlotEditorModal({
               activeOpacity={0.7}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={COLORS.onPrimary} />
               ) : (
                 <Text style={styles.btnSaveText}>{t("ttAdmin.saveSlot")}</Text>
               )}
@@ -815,7 +822,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   modal: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     padding:         16,
     maxHeight:       "88%",
@@ -830,22 +837,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize:   18,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   subtitle: {
     fontSize:   13,
-    color:      "#4F46E5",
+    color:      ACCENT.teal.deep,
     fontWeight: "600",
     marginTop:  2,
   },
   time: {
     fontSize:  12,
-    color:     "#6B7280",
+    color:     COLORS.textSecondary,
     marginTop: 2,
   },
   closeBtn: {
     padding:         6,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     borderRadius:    8,
     marginLeft:      8,
   },
@@ -858,13 +865,13 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize:     14,
     fontWeight:   "700",
-    color:        "#374151",
+    color:        COLORS.text,
     marginBottom: 8,
   },
   optional: {
     fontSize:   12,
     fontWeight: "400",
-    color:      "#9CA3AF",
+    color:      COLORS.textSubtle,
   },
 
   loadingRow: {
@@ -874,12 +881,12 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize:   13,
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
     marginLeft: 8,
   },
 
   emptyText: {
-    color:           "#6B7280",
+    color:           COLORS.textSecondary,
     fontSize:        13,
     fontStyle:       "italic",
     paddingVertical: 12,
@@ -888,13 +895,12 @@ const styles = StyleSheet.create({
   option: {
     padding:         12,
     borderRadius:    10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
     marginBottom:    8,
     borderWidth:     1.5,
-    borderColor:     "transparent",
+    borderColor:     COLORS.border,
   },
-  optionBlue:  { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  optionGreen: { backgroundColor: "#ECFDF5", borderColor: "#059669" },
+  optionGreen: { backgroundColor: ACCENT.violet.wash, borderColor: ACCENT.violet.base },
   optionRow: {
     flexDirection: "row",
     alignItems:    "center",
@@ -903,19 +909,20 @@ const styles = StyleSheet.create({
     flex:        1,
     fontSize:    14,
     fontWeight:  "600",
-    color:       "#111827",
+    color:       COLORS.text,
     marginRight: 8,
   },
-  optionTextBlue:  { color: "#4F46E5" },
-  optionTextGreen: { color: "#059669" },
+  optionTextGreen: { color: ACCENT.violet.deep },
 
   summary: {
     marginTop:       12,
     padding:         12,
     borderRadius:    10,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: ACCENT.teal.wash,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.teal.base,
   },
   summaryRow: {
     flexDirection: "row",
@@ -926,13 +933,13 @@ const styles = StyleSheet.create({
     width:      70,
     fontSize:   12,
     fontWeight: "700",
-    color:      "#6B7280",
+    color:      COLORS.textSecondary,
   },
   summaryValue: {
     flex:       1,
     fontSize:   12,
     fontWeight: "600",
-    color:      "#111827",
+    color:      COLORS.text,
   },
 
   input: {
@@ -959,13 +966,13 @@ const styles = StyleSheet.create({
     justifyContent:    "center",
     alignItems:        "center",
   },
-  btnSave:         { backgroundColor: "#4F46E5" },
-  btnSaveDisabled: { backgroundColor: "#A5B4FC" },
-  btnCancel:       { backgroundColor: "#E5E7EB" },
-  btnDelete:       { backgroundColor: "#FEE2E2" },
-  btnSaveText:   { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
-  btnCancelText: { color: "#374151", fontWeight: "700", fontSize: 14 },
-  btnDeleteText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
+  btnSave:         { backgroundColor: ACCENT.teal.solid },
+  btnSaveDisabled: { backgroundColor: COLORS.textMuted },
+  btnCancel:       { backgroundColor: COLORS.border },
+  btnDelete:       { backgroundColor: SEMANTIC.error.box },
+  btnSaveText:   { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
+  btnCancelText: { color: COLORS.text, fontWeight: "700", fontSize: 14 },
+  btnDeleteText: { color: SEMANTIC.error.text, fontWeight: "700", fontSize: 14 },
   disabledOpacity: { opacity: 0.55 },
 
   conflictBox: {

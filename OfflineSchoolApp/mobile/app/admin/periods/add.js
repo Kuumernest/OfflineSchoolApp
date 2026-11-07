@@ -23,6 +23,8 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PeriodsService } from "../../../src/services/periods.service";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 import { useAuthStore } from "../../../src/store/auth.store";
 
 export default function AddPeriod() {
@@ -146,8 +148,9 @@ export default function AddPeriod() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("periodsAdmin.addTitle")}</Text>
           <Text style={styles.headerSubtitle}>{t("periodsAdmin.addSubtitle")}</Text>
@@ -249,8 +252,8 @@ export default function AddPeriod() {
             <Switch
               value={isBreak}
               onValueChange={setIsBreak}
-              trackColor={{ false: "#E5E7EB", true: "#A5B4FC" }}
-              thumbColor={isBreak ? "#4F46E5" : "#FFFFFF"}
+              trackColor={{ false: COLORS.border, true: ACCENT.teal.base }}
+              thumbColor={isBreak ? ACCENT.teal.solid : COLORS.surface}
               disabled={saving}
             />
           </View>
@@ -259,7 +262,7 @@ export default function AddPeriod() {
 
         {name.trim() && startTime.length === 5 && endTime.length === 5 && (
           <View style={styles.preview}>
-            <Ionicons name="eye-outline" size={16} color="#4F46E5" />
+            <Ionicons name="eye-outline" size={16} color={ACCENT.teal.solid} />
             <View style={styles.previewContent}>
               <Text style={styles.previewName}>{name.trim()}</Text>
               <Text style={styles.previewTime}>
@@ -308,33 +311,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40, height: 40,
     borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center",
     justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
 
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
 
   formCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: COLORS.border,
+    borderTopWidth: 3,
+    borderTopColor: ACCENT.teal.base,
     marginBottom: 16,
   },
   formGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: "600", color: COLORS.text, marginBottom: 8 },
   required: { color: "#DC2626" },
   hint: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
   errorText: { fontSize: 12, color: "#DC2626", marginTop: 4, fontWeight: "500" },
@@ -364,17 +370,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.teal.wash,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.teal.base,
     padding: 14,
     borderRadius: 12,
     marginBottom: 16,
   },
   previewContent: { flex: 1 },
-  previewName: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  previewTime: { fontSize: 13, color: "#4F46E5", marginTop: 2, fontWeight: "500" },
+  previewName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  previewTime: { fontSize: 13, color: ACCENT.teal.deep, marginTop: 2, fontWeight: "500" },
 
   submitButton: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.teal.solid,
     borderRadius: 12,
     paddingVertical: 16,
     flexDirection: "row",

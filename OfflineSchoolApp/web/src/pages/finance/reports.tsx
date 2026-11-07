@@ -10,11 +10,12 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, CalendarDays, PieChart, AlertTriangle } from "lucide-react";
 
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
+import { DASH_TINT }    from "@/config/dashboardTint";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input } from "@/components/ui/FormField";
 import {
@@ -157,29 +158,35 @@ export default function FinanceReportsPage() {
 
       {/* Headline */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
+        {/* Tinted cards (config/dashboardTint.ts): income green, expenditure
+            red, net teal, each with a solid icon square. */}
+        <div className={cn("min-w-0 p-5", DASH_TINT.green.card)}>
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-success" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.green.box)}>
+              <TrendingUp className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-ink-muted">
               {t("finrep.income")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[28px] leading-none text-ink tabular">
+          <p className={cn("mt-3 text-[28px] font-bold leading-none tracking-tight tabular", DASH_TINT.green.number)}>
             {fmt.money(income)}
           </p>
           <p className="mt-2 text-xs text-ink-muted">
             {t("finrep.paymentCount", { count: summary?.income.count ?? 0 })}
           </p>
-        </Card>
+        </div>
 
-        <Card>
+        <div className={cn("min-w-0 p-5", DASH_TINT.red.card)}>
           <div className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4 text-danger" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.red.box)}>
+              <TrendingDown className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-ink-muted">
               {t("finrep.expenditure")}
             </p>
           </div>
-          <p className="mt-2 font-display text-[28px] leading-none text-ink tabular">
+          <p className={cn("mt-3 text-[28px] font-bold leading-none tracking-tight tabular", DASH_TINT.red.number)}>
             {fmt.money(expenditure)}
           </p>
           <p className="mt-2 text-xs text-ink-muted">
@@ -187,31 +194,38 @@ export default function FinanceReportsPage() {
             {" · "}
             {t("finrep.payrollLine")} {fmt.money(summary?.expenditure.payroll ?? 0)}
           </p>
-        </Card>
+        </div>
 
-        <Card>
+        <div className={cn("min-w-0 p-5", DASH_TINT.teal.card)}>
           <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-ink-faint" aria-hidden="true" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)}>
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {net < 0 ? t("finrep.deficit") : t("finrep.surplus")}
             </p>
           </div>
           <p
             className={cn(
               "mt-2 font-display text-[28px] leading-none tabular",
-              net < 0 ? "text-danger" : "text-success"
+              net < 0 ? "text-danger-text" : "text-success-text"
             )}
           >
             {fmt.money(net)}
           </p>
           <p className="mt-2 text-xs text-ink-muted">{t("finrep.net")}</p>
-        </Card>
+        </div>
       </div>
 
       {/* Month by month */}
       <Card padding={false}>
         <div className="border-b border-line px-5 py-3">
-          <h2 className="text-sm font-semibold text-ink">{t("finrep.monthly")}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+              <CalendarDays className="h-4 w-4" />
+            </span>
+            {t("finrep.monthly")}
+          </h2>
         </div>
         {months.length === 0 ? (
           <EmptyTable title={t("finrep.noData")} subtitle={t("finrep.noDataHint")} />
@@ -233,13 +247,13 @@ export default function FinanceReportsPage() {
                   <Td className="w-[38%]">
                     {/* Two bars on one scale — the shape of the month at a glance. */}
                     <div className="flex flex-col gap-1">
-                      <div className="h-1.5 w-full rounded-full bg-canvas">
+                      <div className="h-1.5 w-full rounded-full bg-accent-teal-soft">
                         <div
                           className="h-full rounded-full bg-success transition-[width] duration-300"
                           style={{ width: `${(m.income / peak) * 100}%` }}
                         />
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-canvas">
+                      <div className="h-1.5 w-full rounded-full bg-accent-teal-soft">
                         <div
                           className="h-full rounded-full bg-danger transition-[width] duration-300"
                           style={{ width: `${(m.expenditure / peak) * 100}%` }}
@@ -253,7 +267,7 @@ export default function FinanceReportsPage() {
                     numeric
                     className={cn(
                       "font-semibold",
-                      m.net < 0 ? "text-danger" : "text-ink"
+                      m.net < 0 ? "text-danger-text" : "text-ink"
                     )}
                   >
                     {fmt.money(m.net)}
@@ -269,7 +283,12 @@ export default function FinanceReportsPage() {
         {/* By category */}
         <Card padding={false}>
           <div className="border-b border-line px-5 py-3">
-            <h2 className="text-sm font-semibold text-ink">{t("finrep.byCategory")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+                <PieChart className="h-4 w-4" />
+              </span>
+              {t("finrep.byCategory")}
+            </h2>
           </div>
           {(summary?.byCategory.length ?? 0) === 0 ? (
             <EmptyTable title={t("expenses.none")} subtitle={t("expenses.noneHint")} />
@@ -303,10 +322,15 @@ export default function FinanceReportsPage() {
 
         {/* Arrears — a position, not a flow. */}
         <Card>
-          <h2 className="text-sm font-semibold text-ink">{t("finrep.arrears")}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.teal.box)} aria-hidden="true">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+            {t("finrep.arrears")}
+          </h2>
           <p className="mt-1 text-xs text-ink-muted">{t("finrep.arrearsNote")}</p>
 
-          <p className="mt-4 font-display text-[28px] leading-none text-danger tabular">
+          <p className="mt-4 font-display text-[28px] leading-none text-danger-text tabular">
             {fmt.money(arrears?.outstanding ?? 0)}
           </p>
 
@@ -337,7 +361,7 @@ export default function FinanceReportsPage() {
                   {arrears.collectionRate}%
                 </span>
               </div>
-              <div className="mt-1.5 h-2 w-full rounded-full bg-canvas">
+              <div className="mt-1.5 h-2 w-full rounded-full bg-accent-teal-soft">
                 <div
                   className="h-full rounded-full bg-primary-600 transition-[width] duration-300"
                   style={{ width: `${Math.min(100, Math.max(0, arrears.collectionRate))}%` }}

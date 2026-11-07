@@ -23,11 +23,15 @@ import { participantName } from "../../src/utils/participantName";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatTime, formatDateShort } from "../../src/i18n/format";
 
+import { HeaderIcon, IconSquare } from "../../src/components/Tinted";
+import { COLORS, ACCENT, roleAccent } from "../../src/theme/colors";
+
+// The app's theme under this screen's old names.
 const C = {
-  primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
-  gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray300: "#D1D5DB", gray400: "#9CA3AF", gray500: "#6B7280",
-  gray700: "#374151", gray900: "#111827",
+  primary: COLORS.primary, primaryBg: COLORS.primaryLight, white: COLORS.surface,
+  gray50: COLORS.page, gray100: COLORS.border, gray200: COLORS.border,
+  gray300: COLORS.textMuted, gray400: COLORS.textSubtle, gray500: COLORS.textSecondary,
+  gray700: COLORS.text, gray900: COLORS.text,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -53,6 +57,14 @@ const titleFor = (c, myId, t) => {
   if (c.title) return c.title;
   const other = (c.participants || []).find((p) => String(p.id) !== String(myId));
   return (other ? participantName(other, t) : null) || t("msgMobile.conversation");
+};
+
+/** A direct thread takes the other person's role colour; anything else is sky. */
+const accentFor = (c, myId) => {
+  if (c.title || (c.kind && c.kind !== "direct")) return ACCENT.sky;
+  const other = (c.participants || []).find((p) => String(p.id) !== String(myId));
+  if (other?.kind === "guardian") return ACCENT.sky;
+  return ACCENT[other?.role ? roleAccent(other.role) : "sky"];
 };
 
 const iconFor = (kind) => {
@@ -116,8 +128,8 @@ export default function ConversationsScreen() {
       activeOpacity={0.7}
       onPress={() => router.push(`/messages/${item._id}`)}
     >
-      <View style={s.avatar}>
-        <Ionicons name={iconFor(item.kind)} size={20} color={C.primary} />
+      <View style={[s.avatar, { backgroundColor: accentFor(item, myId).solid }]}>
+        <Ionicons name={iconFor(item.kind)} size={20} color={COLORS.onPrimary} />
       </View>
 
       <View style={s.rowBody}>
@@ -151,7 +163,10 @@ export default function ConversationsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>{t("msgMobile.title")}</Text>
+        <View style={s.headerTitleRow}>
+          <HeaderIcon size={32} style={s.headerIcon} />
+          <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.title")}</Text>
+        </View>
         <TouchableOpacity
           onPress={() => router.push("/messages/new")}
           style={s.backBtn}
@@ -182,7 +197,7 @@ export default function ConversationsScreen() {
           }
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="chatbubbles-outline" size={44} color={C.gray300} />
+              <IconSquare icon="chatbubbles-outline" accent="sky" size={56} radius={16} />
               <Text style={s.emptyTitle}>{t("msgMobile.emptyTitle")}</Text>
               <Text style={s.emptyBody}>
                 {t("msgMobile.emptyBody")}
@@ -213,7 +228,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.gray200,
   },
   backBtn:     { width: 40, alignItems: "center" },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: C.gray900, textAlign: "center" },
+  headerTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  headerIcon:  { marginRight: 8 },
+  headerTitle: { flexShrink: 1, fontSize: 18, fontWeight: "700", color: C.gray900, textAlign: "center" },
 
   note: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -228,7 +245,7 @@ const s = StyleSheet.create({
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: C.primaryBg, alignItems: "center", justifyContent: "center",
+    backgroundColor: ACCENT.sky.solid, alignItems: "center", justifyContent: "center",
   },
   rowBody:   { flex: 1 },
   rowTop:    { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -239,7 +256,7 @@ const s = StyleSheet.create({
 
   badge: {
     minWidth: 20, paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: 10, backgroundColor: C.primary, alignItems: "center",
+    borderRadius: 10, backgroundColor: ACCENT.sky.solid, alignItems: "center",
   },
   badgeText: { fontSize: 11, fontWeight: "700", color: C.white },
 

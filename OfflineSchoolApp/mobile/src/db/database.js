@@ -4,8 +4,21 @@
 import * as SQLite from "expo-sqlite";
 import { createTableFromSchema, ensureSchemaColumns } from "./schema";
 import { instrument } from "./localWrites";
+import { scrubFreedPages } from "./freePageScrub";
 
-const DB_NAME = "schoolapp.db";
+/**
+ * The shared file every install has always used. With per-user local data
+ * (docs/40, services/perUserData.service.js) an account that has completed
+ * its own first sync reads `schoolapp.u_<id>.db` instead; everyone else, and
+ * every phone whose school has the switch off, reads this one — unchanged.
+ */
+export const LEGACY_DB_NAME = "schoolapp.db";
+
+/** name → Promise<handle>. Every file is opened (and instrumented) once. */
+const _handles = new Map();
+
+/** The file getDatabase() answers. Only perUserData.service changes it. */
+let _activeName = LEGACY_DB_NAME;
 
 /** @type {import('expo-sqlite').SQLiteDatabase | null} */
 let _db = null;
@@ -17,7 +30,7 @@ let _db = null;
 let _initPromise = null;
 
 /**
- * Open (or return cached) SQLite database.
+ * Open (or return cached) SQLite database — the ACTIVE file.
  * Safe to call multiple times and from multiple places concurrently.
  *
  * @returns {Promise<import('expo-sqlite').SQLiteDatabase>}
@@ -26,17 +39,71 @@ export const getDatabase = async () => {
   if (_db)          return _db;
   if (_initPromise) return _initPromise;
 
-  _initPromise = _openDatabase();
+  const name = _activeName;
+  _initPromise = openDatabaseFile(name).then((db) => {
+    if (_activeName === name) _db = db;
+    return db;
+  }, (err) => { _initPromise = null; throw err; });
   return _initPromise;
 };
 
-const _openDatabase = async () => {
+/** Open (once) a named file with the app's core schema, instrumented. */
+export const openDatabaseFile = (name = LEGACY_DB_NAME) => {
+  if (!_handles.has(name)) {
+    const p = _openDatabase(name).catch((err) => { _handles.delete(name); throw err; });
+    _handles.set(name, p);
+  }
+  return _handles.get(name);
+};
+
+/** The name of the active file. */
+export const activeDatabaseName = () => _activeName;
+
+/**
+ * Make `name` the file getDatabase() answers. The caller (perUserData.service)
+ * has stopped the sync engine first; nothing else should call this.
+ */
+export const setActiveDatabase = async (name) => {
+  const db = await openDatabaseFile(name);
+  _activeName  = name;
+  _db          = db;
+  _initPromise = null;
+  return db;
+};
+
+/** Close one file (never the active one). */
+export const closeDatabaseFile = async (name) => {
+  if (name === _activeName && _db) throw new Error(`${name} is the active database`);
+  const p = _handles.get(name);
+  if (!p) return;
+  _handles.delete(name);
+  const db = await p.catch(() => null);
+  await db?.closeAsync?.().catch(() => {});
+};
+
+/** Delete one closed file from disk. */
+export const deleteDatabaseFile = async (name) => {
+  if (_handles.has(name)) await closeDatabaseFile(name);
+  if (typeof SQLite.deleteDatabaseAsync === "function") await SQLite.deleteDatabaseAsync(name);
+};
+
+const _openDatabase = async (DB_NAME) => {
   try {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
 
     // ── Performance + safety pragmas ──────────────────────────────────
     await db.execAsync("PRAGMA journal_mode = WAL;").catch(() => {});
     await db.execAsync("PRAGMA foreign_keys = ON;").catch(() => {});
+
+    // ── One-time rebuild (db/freePageScrub.js) ────────────────────────
+    // Before the handle exists for anyone else: no screen, sync or drain
+    // can be using it. Clears freed copies of clear-text offline passwords
+    // older builds left; keeps every rowid. A failure leaves the file as it
+    // was and is retried at the next launch.
+    await scrubFreedPages(db).then(
+      (r) => { if (r.ran || r.reason === "engine-renumbers") console.log(`[database] ${DB_NAME} scrub: ${r.reason} (${r.ms} ms)`); },
+      (err) => console.warn(`[database] ${DB_NAME} scrub failed, retried next launch:`, err?.message)
+    );
 
     // ── Core schema ───────────────────────────────────────────────────
 
@@ -281,6 +348,7 @@ const _openDatabase = async () => {
         name                TEXT,
         email               TEXT,
         enrollmentNo        TEXT,
+        staff_no            TEXT,
         role                TEXT,
         is_active           INTEGER DEFAULT 1,
         must_reset_password INTEGER DEFAULT 0,
@@ -312,6 +380,9 @@ const _openDatabase = async () => {
       ["passwordSalt",        "TEXT"],
       ["passwordHash",        "TEXT"],
       ["enrollmentNo",        "TEXT"],
+      // The school's staff number (CODE-STF-NNN). Issued by the server only;
+      // a teacher created offline has none until the create syncs.
+      ["staff_no",            "TEXT"],
       ["must_reset_password", "INTEGER DEFAULT 0"],
       ["_synced",             "INTEGER DEFAULT 0"],
       ["_synced_at",          "TEXT"],
@@ -404,28 +475,28 @@ const _openDatabase = async () => {
     // Every write from here on is reported to the sync (localWrites.js), so a
     // change leaves the device shortly after it is made. After the schema
     // setup above, which is not anybody's change.
-    _db = instrument(db);
-    return _db;
+    return instrument(db);
 
   } catch (err) {
-    // Clear _initPromise on failure so the next call retries
-    _initPromise = null;
     console.error("[database] Failed to open database:", err.message);
     throw err;
   }
 };
 
 /**
- * Close the database connection.
+ * Close every database connection.
  * Call this only during app cleanup — not during normal operation.
  */
 export const closeDatabase = async () => {
-  if (_db) {
-    await _db.closeAsync().catch(() => {});
-    _db          = null;
-    _initPromise = null;
-    console.log("[database] SQLite closed");
+  const all = [..._handles.values()];
+  _handles.clear();
+  for (const p of all) {
+    const db = await p.catch(() => null);
+    await db?.closeAsync?.().catch(() => {});
   }
+  if (all.length) console.log("[database] SQLite closed");
+  _db          = null;
+  _initPromise = null;
 };
 
 /**
@@ -433,6 +504,8 @@ export const closeDatabase = async () => {
  * Does NOT close the database — call closeDatabase() first if needed.
  */
 export const resetDatabaseSingleton = () => {
+  _handles.clear();
+  _activeName  = LEGACY_DB_NAME;
   _db          = null;
   _initPromise = null;
 };

@@ -28,8 +28,12 @@ import {
   getClassesList,
   deleteAssignment,
   backfillTeacherNames,   // ✅ import the backfill so existing rows get names
-} from "../../../src/services/assignment.service";
+} from "../../../src/services/assignment.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare, Badge } from "../../../src/components/Tinted";
+import { COLORS, ACCENT, SEMANTIC, TONE_EDGE, levelAccent, accentBadge } from "../../../src/theme/colors";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -63,26 +67,26 @@ const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => {
                                     return (
   <View style={styles.assignmentCard}>
     <View style={styles.assignmentLeft}>
-      <View style={styles.assignmentIconWrap}>
-        <Ionicons name="git-branch-outline" size={18} color="#4F46E5" />
-      </View>
+      <IconSquare icon="git-branch-outline" accent="violet" size={36} radius={10} style={styles.assignmentIconWrap} />
       <View style={styles.assignmentInfo}>
         <Text style={styles.assignmentTeacher} numberOfLines={1}>
           {assignment.teacher?.name || t("assignList.unknownTeacher")}
         </Text>
         <View style={styles.assignmentMeta}>
-          <View style={styles.metaChip}>
-            <Ionicons name="book-outline" size={12} color="#059669" />
-            <Text style={styles.metaChipText}>
-              {assignment.subject?.name || "N/A"}
-            </Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Ionicons name="school-outline" size={12} color="#7C3AED" />
-            <Text style={styles.metaChipText}>
-              {assignment.class?.name || "N/A"}
-            </Text>
-          </View>
+          <Badge
+            icon="book-outline"
+            accent="slate"
+            label={assignment.subject?.name || "N/A"}
+          />
+          <Badge
+            icon="school-outline"
+            accent={levelAccent(assignment.class?.level)}
+            label={assignment.class?.name || "N/A"}
+          />
+          {/* Made here and still queued: it goes by itself. */}
+          {assignment._synced === 0 && (
+            <Badge icon="cloud-upload-outline" tone="warning" label={t("common.notSentYet")} />
+          )}
         </View>
       </View>
     </View>
@@ -95,9 +99,9 @@ const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => {
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       {isDeleting ? (
-        <ActivityIndicator size="small" color="#DC2626" />
+        <ActivityIndicator size="small" color={ACCENT.red.solid} />
       ) : (
-        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+        <Ionicons name="trash-outline" size={16} color={ACCENT.red.solid} />
       )}
     </TouchableOpacity>
   </View>
@@ -110,7 +114,7 @@ const GroupHeader = React.memo(
     subtitle,
     avatarContent,
     badgeCount,
-    badgeColor,
+    accent,
     isExpanded,
     onToggle,
   }) => (
@@ -123,7 +127,7 @@ const GroupHeader = React.memo(
         <View
           style={[
             styles.groupAvatar,
-            { backgroundColor: badgeColor + "20" },
+            { backgroundColor: ACCENT[accent].solid },
           ]}
         >
           {avatarContent}
@@ -139,17 +143,17 @@ const GroupHeader = React.memo(
         <View
           style={[
             styles.countBadge,
-            { backgroundColor: badgeColor + "20" },
+            { backgroundColor: accentBadge(accent).bg, borderColor: accentBadge(accent).border },
           ]}
         >
-          <Text style={[styles.countBadgeText, { color: badgeColor }]}>
+          <Text style={[styles.countBadgeText, { color: accentBadge(accent).text }]}>
             {badgeCount}
           </Text>
         </View>
         <Ionicons
           name={isExpanded ? "chevron-up" : "chevron-down"}
           size={18}
-          color="#9CA3AF"
+          color={COLORS.textSecondary}
         />
       </View>
     </TouchableOpacity>
@@ -181,17 +185,17 @@ const UnassignedCard = React.memo(({ teacher, onAssign }) => {
       activeOpacity={0.7}
     >
       <Text style={styles.assignNowText}>{t("assignList.assign")}</Text>
-      <Ionicons name="arrow-forward" size={14} color="#4F46E5" />
+      <Ionicons name="arrow-forward" size={14} color={ACCENT.violet.deep} />
     </TouchableOpacity>
   </View>
 );
                                   });
 
 const EmptyState = React.memo(
-  ({ icon, title, subtitle, color = "#374151" }) => (
+  ({ icon, title, subtitle, accent = "violet" }) => (
     <View style={styles.emptyState}>
-      <Ionicons name={icon} size={48} color={color} />
-      <Text style={[styles.emptyTitle, { color }]}>{title}</Text>
+      <IconSquare icon={icon} accent={accent} size={56} radius={16} />
+      <Text style={[styles.emptyTitle, accent === "green" && { color: SEMANTIC.success.text }]}>{title}</Text>
       <Text style={styles.emptySubtitle}>{subtitle}</Text>
     </View>
   )
@@ -360,10 +364,10 @@ export default function AssignmentsIndex() {
   const statCards = useMemo(
     () => {
       return [
-      { icon: "git-branch",       color: "#4F46E5", bg: "#EEF2FF", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
-      { icon: "checkmark-circle", color: "#059669", bg: "#ECFDF5", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
-      { icon: "alert-circle",     color: "#D97706", bg: "#FEF3C7", value: stats.unassignedTeachers, labelKey: "assignList.unassigned"  },
-      { icon: "school",           color: "#7C3AED", bg: "#EDE9FE", value: stats.totalClasses,       labelKey: "assignList.classes"     },
+      { icon: "git-branch",       kind: "teachers", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
+      { icon: "checkmark-circle", kind: "teachers", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
+      { icon: "alert-circle",     kind: "teachers", value: stats.unassignedTeachers, labelKey: "assignList.unassigned", toneWhenAny: "error" },
+      { icon: "school",           kind: "classes",  value: stats.totalClasses,       labelKey: "assignList.classes"     },
     ];
     },
     [stats]
@@ -474,17 +478,17 @@ export default function AssignmentsIndex() {
         const displayList = searchQuery ? filtered : group.assignments;
 
         return (
-          <View key={teacherId} style={styles.groupContainer}>
+          <View key={teacherId} style={[styles.groupContainer, styles.groupContainerTeacher]}>
             <GroupHeader
               title={group.teacherName}
               subtitle={t("assignList.subjectsAssignedCount", { count: group.assignments.length })}
               avatarContent={
-                <Text style={[styles.groupAvatarText, { color: "#4F46E5" }]}>
+                <Text style={[styles.groupAvatarText, { color: COLORS.onPrimary }]}>
                   {group.teacherName?.charAt(0)?.toUpperCase() || "?"}
                 </Text>
               }
               badgeCount={group.assignments.length}
-              badgeColor="#4F46E5"
+              accent="violet"
               isExpanded={expanded}
               onToggle={() => toggleGroup(key)}
             />
@@ -494,15 +498,14 @@ export default function AssignmentsIndex() {
                 {displayList.map((assignment) => (
                   <View key={assignment._id} style={styles.groupItem}>
                     <View style={styles.groupItemLeft}>
-                      <Ionicons name="book-outline" size={16} color="#059669" />
+                      <Ionicons name="book-outline" size={16} color={ACCENT.slate.solid} />
                       <Text style={styles.groupItemText} numberOfLines={1}>
                         {assignment.subject?.name || "N/A"}
                       </Text>
-                      <View style={styles.classPill}>
-                        <Text style={styles.classPillText}>
-                          {assignment.class?.name || "N/A"}
-                        </Text>
-                      </View>
+                      <Badge
+                        accent={levelAccent(assignment.class?.level)}
+                        label={assignment.class?.name || "N/A"}
+                      />
                     </View>
                     <TouchableOpacity
                       onPress={() => handleRemoveAssignment(assignment)}
@@ -558,15 +561,24 @@ export default function AssignmentsIndex() {
         const displayList = searchQuery ? filtered : group.assignments;
 
         return (
-          <View key={classId} style={styles.groupContainer}>
+          <View
+            key={classId}
+            style={[
+              styles.groupContainer,
+              {
+                backgroundColor: ACCENT[levelAccent(group.class?.level)].wash,
+                borderLeftColor: ACCENT[levelAccent(group.class?.level)].base,
+              },
+            ]}
+          >
             <GroupHeader
               title={group.className}
               subtitle={t("assignList.teachersAssignedCount", { count: group.assignments.length })}
               avatarContent={
-                <Ionicons name="school" size={18} color="#7C3AED" />
+                <Ionicons name="school" size={18} color={COLORS.onPrimary} />
               }
               badgeCount={group.assignments.length}
-              badgeColor="#7C3AED"
+              accent={levelAccent(group.class?.level)}
               isExpanded={expanded}
               onToggle={() => toggleGroup(key)}
             />
@@ -576,17 +588,11 @@ export default function AssignmentsIndex() {
                 {displayList.map((assignment) => (
                   <View key={assignment._id} style={styles.groupItem}>
                     <View style={styles.groupItemLeft}>
-                      <Ionicons name="person-outline" size={16} color="#4F46E5" />
+                      <Ionicons name="person-outline" size={16} color={ACCENT.violet.solid} />
                       <Text style={styles.groupItemText} numberOfLines={1}>
                         {assignment.teacher?.name || "N/A"}
                       </Text>
-                      <View
-                        style={[styles.classPill, { backgroundColor: "#ECFDF5" }]}
-                      >
-                        <Text style={[styles.classPillText, { color: "#059669" }]}>
-                          {assignment.subject?.name || "N/A"}
-                        </Text>
-                      </View>
+                      <Badge accent="slate" label={assignment.subject?.name || "N/A"} />
                     </View>
                     <TouchableOpacity
                       onPress={() => handleRemoveAssignment(assignment)}
@@ -628,12 +634,12 @@ export default function AssignmentsIndex() {
           icon="checkmark-circle-outline"
           title={t("assignList.allAssigned")}
           subtitle={t("assignList.allAssignedSub")}
-          color="#059669"
+          accent="green"
         />
       ) : (
         <View>
           <View style={styles.unassignedBanner}>
-            <Ionicons name="information-circle" size={20} color="#D97706" />
+            <Ionicons name="information-circle" size={20} color={SEMANTIC.warning.icon} />
             <Text style={styles.unassignedBannerText}>
               {t("assignList.unassignedTeacherCount", { count: unassignedTeachers.length })}
             </Text>
@@ -690,8 +696,9 @@ export default function AssignmentsIndex() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("assignList.title")}</Text>
           <Text style={styles.headerSubtitle}>{t("assignList.blurb")}</Text>
@@ -732,11 +739,8 @@ export default function AssignmentsIndex() {
         {/* ── Stats ── */}
         <View style={styles.statsContainer}>
           {statCards.map((s) => (
-            <View key={s.label} style={[styles.statCard, { backgroundColor: s.bg }]}>
-              <Ionicons name={s.icon} size={20} color={s.color} />
-              <Text style={styles.statNumber}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
+            <StatTile key={s.labelKey} kind={s.kind} icon={s.icon} value={s.value} label={t(s.labelKey)}
+              tone={s.toneWhenAny && Number(s.value) > 0 ? s.toneWhenAny : undefined} />
           ))}
         </View>
 
@@ -834,21 +838,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12 },
-  headerTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addButton: {
     width:           40,
     height:          40,
@@ -877,16 +882,6 @@ const styles = StyleSheet.create({
     gap:               8,
     marginTop:         20,
   },
-  statCard: {
-    flex:              1,
-    borderRadius:      14,
-    paddingVertical:   14,
-    paddingHorizontal: 6,
-    alignItems:        "center",
-    gap:               4,
-  },
-  statNumber: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  statLabel:  { fontSize: 10, color: "#6B7280", fontWeight: "500", textAlign: "center" },
 
   searchContainer: {
     flexDirection:     "row",
@@ -935,54 +930,40 @@ const styles = StyleSheet.create({
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "space-between",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ACCENT.violet.wash,
     borderRadius:    12,
     padding:         14,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.violet.base,
   },
   assignmentLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
-  assignmentIconWrap: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
-    marginRight:     12,
-  },
+  assignmentIconWrap: { marginRight: 12 },
   assignmentInfo:    { flex: 1 },
-  assignmentTeacher: { fontSize: 14, fontWeight: "600", color: "#111827", marginBottom: 4 },
+  assignmentTeacher: { fontSize: 14, fontWeight: "600", color: COLORS.text, marginBottom: 4 },
   assignmentMeta:    { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  metaChip: {
-    flexDirection:     "row",
-    alignItems:        "center",
-    backgroundColor:   "#F3F4F6",
-    paddingHorizontal: 8,
-    paddingVertical:   3,
-    borderRadius:      6,
-    gap:               4,
-  },
-  metaChipText: { fontSize: 11, fontWeight: "500", color: "#374151" },
   removeButton: {
     width:           32,
     height:          32,
     borderRadius:    8,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     alignItems:      "center",
     justifyContent:  "center",
     marginLeft:      8,
   },
 
   groupContainer: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius:    14,
     marginBottom:    12,
     overflow:        "hidden",
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
   },
+  groupContainerTeacher: { backgroundColor: ACCENT.violet.wash, borderLeftColor: ACCENT.violet.base },
   groupHeader: {
     flexDirection:  "row",
     alignItems:     "center",
@@ -998,8 +979,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   groupAvatarText:  { fontSize: 16, fontWeight: "700" },
-  groupTitle:       { fontSize: 15, fontWeight: "600", color: "#111827" },
-  groupSubtitle:    { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  groupTitle:       { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  groupSubtitle:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   groupHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   countBadge: {
     borderRadius:      8,
@@ -1007,11 +988,12 @@ const styles = StyleSheet.create({
     paddingVertical:   2,
     minWidth:          24,
     alignItems:        "center",
+    borderWidth:       1,
   },
   countBadgeText: { fontSize: 12, fontWeight: "700" },
   groupContent: {
     borderTopWidth:    1,
-    borderTopColor:    "#F3F4F6",
+    borderTopColor:    COLORS.border,
     paddingHorizontal: 14,
     paddingVertical:   8,
   },
@@ -1021,38 +1003,33 @@ const styles = StyleSheet.create({
     justifyContent:    "space-between",
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
+    borderBottomColor: COLORS.border,
   },
   groupItemLeft:  { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  groupItemText:  { fontSize: 14, fontWeight: "500", color: "#374151", flex: 1 },
-  classPill: {
-    backgroundColor:   "#EEF2FF",
-    paddingHorizontal: 8,
-    paddingVertical:   2,
-    borderRadius:      6,
-  },
-  classPillText: { fontSize: 11, fontWeight: "600", color: "#4F46E5" },
+  groupItemText:  { fontSize: 14, fontWeight: "500", color: COLORS.text, flex: 1 },
 
   unassignedBanner: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: SEMANTIC.warning.bg,
+    borderWidth:     1,
+    borderColor:     SEMANTIC.warning.box,
     padding:         12,
     borderRadius:    10,
     marginBottom:    16,
     gap:             8,
   },
-  unassignedBannerText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  unassignedBannerText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
   unassignedCard: {
     flexDirection:   "row",
     alignItems:      "center",
     justifyContent:  "space-between",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ACCENT.violet.wash,
     borderRadius:    12,
     padding:         14,
     marginBottom:    8,
     borderWidth:     1,
-    borderColor:     "#FDE68A",
+    borderColor:     TONE_EDGE.warning,
     borderStyle:     "dashed",
   },
   unassignedLeft: { flexDirection: "row", alignItems: "center", flex: 1, gap: 12 },
@@ -1060,29 +1037,31 @@ const styles = StyleSheet.create({
     width:           40,
     height:          40,
     borderRadius:    10,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: ACCENT.violet.solid,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  unassignedAvatarText: { fontSize: 16, fontWeight: "700", color: "#D97706" },
-  unassignedName:       { fontSize: 14, fontWeight: "600", color: "#111827" },
-  unassignedEmail:      { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  unassignedAvatarText: { fontSize: 16, fontWeight: "700", color: COLORS.onPrimary },
+  unassignedName:       { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  unassignedEmail:      { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   assignNowButton: {
     flexDirection:     "row",
     alignItems:        "center",
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   COLORS.surface,
+    borderWidth:       1,
+    borderColor:       ACCENT.violet.base,
     paddingHorizontal: 14,
     paddingVertical:   8,
     borderRadius:      8,
     gap:               4,
   },
-  assignNowText: { fontSize: 13, fontWeight: "600", color: "#4F46E5" },
+  assignNowText: { fontSize: 13, fontWeight: "600", color: ACCENT.violet.deep },
 
   emptyState:    { alignItems: "center", paddingVertical: 40 },
-  emptyTitle:    { fontSize: 16, fontWeight: "600", color: "#374151", marginTop: 12 },
+  emptyTitle:    { fontSize: 16, fontWeight: "600", color: COLORS.text, marginTop: 12 },
   emptySubtitle: {
     fontSize:          13,
-    color:             "#9CA3AF",
+    color:             COLORS.textSecondary,
     marginTop:         4,
     textAlign:         "center",
     paddingHorizontal: 20,

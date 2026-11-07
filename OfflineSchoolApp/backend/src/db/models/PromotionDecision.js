@@ -70,6 +70,11 @@ promotionDecisionSchema.index(
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 promotionDecisionSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). A discarded draft run takes its decisions with it (promotion.routes).
+promotionDecisionSchema.plugin(require("../plugins/syncTombstones"), { entity: "promotionDecision" });
+
 module.exports =
   mongoose.models.PromotionDecision ||
   mongoose.model("PromotionDecision", promotionDecisionSchema);

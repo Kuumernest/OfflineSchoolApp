@@ -3,14 +3,15 @@
 // Locale-aware formatting. This is the half of bilingual support that gets
 // forgotten: translating the labels but leaving the numbers in en-US.
 //
-//   en-CM  1,234    ·  21 August 2026
-//   fr-CM  1 234    ·  21 août 2026
+//   en-CM  1,234    ·  27/10/2026
+//   fr-CM  1 234    ·  27/10/2026
 //
 // On a fee receipt that difference is not cosmetic — a francophone parent
 // reading "1,234" reads one point two three four.
 
 import { useTranslation } from "react-i18next";
 import { currentLocale }  from "./index";
+import { formatDay, formatDayTime, formatTime } from "../../../shared/dateFormat.js";
 
 /**
  * The school's currency.
@@ -38,12 +39,6 @@ const dateFormat = (locale: string, opts: Intl.DateTimeFormatOptions) => {
   let f = cache.get(key) as Intl.DateTimeFormat | undefined;
   if (!f) { f = new Intl.DateTimeFormat(locale, opts); cache.set(key, f); }
   return f;
-};
-
-const toDate = (value: string | number | Date | null | undefined): Date | null => {
-  if (value === null || value === undefined || value === "") return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
 };
 
 // ─── Standalone helpers, for code outside a component ────────────────────────
@@ -79,52 +74,31 @@ export const formatMoney = (
     }).format(amount)
   : "—");
 
+// Dates and times: one way everywhere, DD/MM/YYYY and HH:mm, in both
+// languages (C7) — see shared/dateFormat.js. The locale parameter is kept so
+// callers need not change; a date no longer depends on it.
+
 export const formatDate = (
   value: string | number | Date | null | undefined,
-  locale = currentLocale()
-): string => {
-  const d = toDate(value);
-  return d
-    ? dateFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(d)
-    : "—";
-};
+  _locale?: string
+): string => formatDay(value);
 
-export const formatDateShort = (
-  value: string | number | Date | null | undefined,
-  locale = currentLocale()
-): string => {
-  const d = toDate(value);
-  return d
-    ? dateFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" }).format(d)
-    : "—";
-};
+/** Kept as an alias: the short form and the long form are now one form. */
+export const formatDateShort = formatDate;
 
+/** 27/10/2026 14:05. */
 export const formatDateTime = (
   value: string | number | Date | null | undefined,
-  locale = currentLocale()
-): string => {
-  const d = toDate(value);
-  return d
-    ? dateFormat(locale, {
-        day: "numeric", month: "short", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      }).format(d)
-    : "—";
-};
+  _locale?: string
+): string => formatDayTime(value);
 
-/** A timestamp as the school writes it: 30/09/2026, 10:05. */
-export const formatDateTimeShort = (
-  value: string | number | Date | null | undefined,
-  locale = currentLocale()
-): string => {
-  const d = toDate(value);
-  return d
-    ? dateFormat(locale, {
-        day: "2-digit", month: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      }).format(d)
-    : "—";
-};
+/** Kept as an alias of formatDateTime. */
+export const formatDateTimeShort = formatDateTime;
+
+/** 14:05. */
+export const formatTimeOfDay = (
+  value: string | number | Date | null | undefined
+): string => formatTime(value);
 
 /**
  * A payroll period ("2026-03") as a month a person reads — "March 2026",
@@ -168,6 +142,7 @@ export const useFormat = () => {
     dateShort: (v: string | number | Date | null | undefined) => formatDateShort(v, locale),
     dateTime:  (v: string | number | Date | null | undefined) => formatDateTime(v, locale),
     dateTimeShort: (v: string | number | Date | null | undefined) => formatDateTimeShort(v, locale),
+    time:      (v: string | number | Date | null | undefined) => formatTimeOfDay(v),
     monthLabel: (v: string | null | undefined) => formatMonth(v, locale),
   };
 };

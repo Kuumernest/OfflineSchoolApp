@@ -12,6 +12,8 @@ import { Plus, Ban, Receipt } from "lucide-react";
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
 import { Card }             from "@/components/ui/Card";
+import { DASH_TINT }        from "@/config/dashboardTint";
+import { cn }               from "@/utils/cn";
 import { Button }           from "@/components/ui/Button";
 import { Badge }            from "@/components/ui/Badge";
 import { Modal }            from "@/components/ui/Modal";
@@ -29,11 +31,13 @@ import {
 } from "@/services/finance.service";
 import type { SpendMethod } from "@/types/finance.types";
 import { useAttemptId } from "@/hooks/useAttemptId";
+import { categoryLabel } from "@/utils/categoryLabel";
 
 const METHODS: SpendMethod[] = ["cash", "mobile_money", "bank", "cheque", "other"];
 
 export default function ExpensesPage() {
-  const { t }    = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang     = i18n.resolvedLanguage ?? i18n.language;
   const fmt      = useFormat();
   const qc       = useQueryClient();
   const { toast, confirm } = useToast();
@@ -166,14 +170,14 @@ export default function ExpensesPage() {
         }
       />
 
-      <Card className="sm:max-w-xs">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+      <div className={cn("p-5 sm:max-w-xs", DASH_TINT.teal.card)}>
+        <p className="text-sm font-medium text-ink-muted">
           {t("expenses.totalSpent")}
         </p>
-        <p className="mt-2 font-display text-[30px] leading-none text-ink tabular">
+        <p className={cn("mt-3 text-[30px] font-bold leading-none tracking-tight tabular", DASH_TINT.teal.number)}>
           {fmt.money(total)}
         </p>
-      </Card>
+      </div>
 
       <Card padding={false}>
         {rows.length === 0 ? (
@@ -208,7 +212,7 @@ export default function ExpensesPage() {
                   <Tr key={e._id}>
                     <Td className="text-ink-muted">{fmt.dateShort(e.incurredAt)}</Td>
                     <Td className="font-medium text-ink">
-                      {byId.get(e.categoryId)?.label ?? e.categoryId}
+                      {categoryLabel(byId.get(e.categoryId), lang) ?? e.categoryId}
                     </Td>
                     <Td className="text-ink-muted">{e.description ?? "—"}</Td>
                     <Td className="text-ink-muted">{e.vendor ?? "—"}</Td>
@@ -229,16 +233,16 @@ export default function ExpensesPage() {
                     </Td>
                     <Td numeric>
                       {void_ ? (
-                        <Badge variant="default">{t("expenses.voided")}</Badge>
+                        <Badge variant="danger">{t("expenses.voided")}</Badge>
                       ) : waiting ? (
                         <Badge variant="warning">{t("expenses.awaitingApproval")}</Badge>
                       ) : refused ? (
-                        <Badge variant="default">{t("expenses.rejected")}</Badge>
+                        <Badge variant="danger">{t("expenses.rejected")}</Badge>
                       ) : (
                         <button
                           type="button"
                           onClick={() => askVoid(e._id)}
-                          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
+                          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger-text"
                         >
                           <Ban className="h-3.5 w-3.5" aria-hidden="true" />
                           {t("expenses.void")}
@@ -267,7 +271,7 @@ export default function ExpensesPage() {
               value={form.categoryId}
               onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
               placeholder={t("expenses.category")}
-              options={categories.map((c) => ({ value: c._id, label: c.label }))}
+              options={categories.map((c) => ({ value: c._id, label: categoryLabel(c, lang) ?? c.label }))}
             />
           </FormField>
 

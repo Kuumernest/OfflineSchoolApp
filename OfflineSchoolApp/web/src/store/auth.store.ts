@@ -1,6 +1,6 @@
 // web/src/store/auth.store.ts
 import { create } from "zustand";
-import api, { TIMEOUTS } from "@/lib/axios";
+import api, { TIMEOUTS, getErrorMessage } from "@/lib/axios";
 import { desktop } from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +71,40 @@ export interface StudentLoginCredentials {
 
 export type LoginCredentials = StaffLoginCredentials | StudentLoginCredentials;
 
+/**
+ * How a refresh ended. Three answers, not two, because "the server said no" and
+ * "the server could not be asked" call for opposite things:
+ *
+ *   refreshed    a new token is in the store.
+ *   refused      the server answered and will not renew this session — the
+ *                refresh token expired or is invalid, the account was
+ *                deactivated, the school closed, the password changed. Only
+ *                this ends the session.
+ *   unreachable  no answer worth acting on: no connection, a timeout, a 5xx, or
+ *                a 200 that was not ours (a captive portal's page). The session
+ *                is kept; the request that needed it fails with the connection
+ *                message and the next one tries again.
+ */
+export type RefreshResult =
+  | { outcome: "refreshed" }
+  | { outcome: "refused";     error: unknown }
+  | { outcome: "unreachable"; error: unknown };
+
+/**
+ * Is this failure of /auth/refresh the server refusing the session?
+ *
+ * Every refusal routes/auth.routes.js and the door (middleware/auth.js) give a
+ * refresh is a 401 — REFRESH_EXPIRED, REFRESH_INVALID, REFRESH_STALE,
+ * SCHOOL_INACTIVE, TOKEN_EXPIRED / TOKEN_STALE in the access-token mode, a
+ * deactivated or deleted account — or a 403 (PASSWORD_CHANGE_REQUIRED,
+ * UNKNOWN_ROLE). Anything else, above all no response at all, says nothing
+ * about the session.
+ */
+export const isSessionRefusal = (err: unknown): boolean => {
+  const status = (err as { response?: { status?: number } } | null)?.response?.status;
+  return status === 401 || status === 403;
+};
+
 // Public interface exposed to axios.ts to avoid circular type issues
 export interface PublicAuthState {
   token:          string | null;
@@ -78,7 +112,7 @@ export interface PublicAuthState {
   user:           AuthUser | null;
   activeSchool:   ActiveSchool | null;
   logout:         () => void;
-  refreshSession: () => Promise<boolean>;
+  refreshSession: () => Promise<RefreshResult>;
   // Exposed for the axios interceptor: a 403 PASSWORD_CHANGE_REQUIRED marks the
   // stored user so the route guard sends them to /change-password.
   setUser:        (updates: Partial<AuthUser>) => void;
@@ -99,7 +133,7 @@ interface AuthState {
   setAuth:        (user: AuthUser, token: string, refreshToken?: string | null) => void;
   setUser:        (updates: Partial<AuthUser>) => void;
   clearError:     () => void;
-  refreshSession: () => Promise<boolean>;
+  refreshSession: () => Promise<RefreshResult>;
 
   /** super_admin only — see ActiveSchool. */
   activeSchool:   ActiveSchool | null;
@@ -124,7 +158,7 @@ export function getAuthState(): PublicAuthState {
 // All callers that arrive while a refresh is pending receive the same promise.
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _refreshPromise: Promise<boolean> | null = null;
+let _refreshPromise: Promise<RefreshResult> | null = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -320,7 +354,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         error:           null,
       });
     } catch (err) {
-      const message = extractErrorMessage(err);
+      // With no response there is no server message to show, and axios's own
+      // ("Network Error") is not a sentence for a person; getErrorMessage says
+      // "no connection" or "too slow" in their language.
+      const message = (err as { response?: unknown } | null)?.response
+        ? extractErrorMessage(err)
+        : getErrorMessage(err);
       set({ isLoading: false, error: message, isAuthenticated: false });
       throw err;
     }
@@ -484,7 +523,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // ── refreshSession ─────────────────────────────────────────────────────────
   // Deduplicated: concurrent callers share a single in-flight promise so the
   // refresh endpoint is never hit more than once per expiry cycle.
-  refreshSession: async (): Promise<boolean> => {
+  //
+  // Signs out only on a refusal (isSessionRefusal). It used to sign out on any
+  // failure, so a school whose connection dropped for a minute lost its session
+  // the first time a token expired — and on the desktop, where work carries on
+  // offline, that put a bursar in front of a sign-in screen they could not get
+  // past until the connection came back.
+  refreshSession: async (): Promise<RefreshResult> => {
     if (_refreshPromise) return _refreshPromise;
 
     _refreshPromise = (async () => {
@@ -512,11 +557,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           user,
           isAuthenticated: true,
         });
-        return true;
+        return { outcome: "refreshed" };
       } catch (err) {
-        console.warn("[auth] refreshSession failed:", extractErrorMessage(err));
-        get().logout();
-        return false;
+        if (isSessionRefusal(err)) {
+          console.warn("[auth] session refused on refresh:", extractErrorMessage(err));
+          get().logout();
+          return { outcome: "refused", error: err };
+        }
+        // Kept signed in: nothing about the session is known to be wrong, the
+        // server simply could not say. The caller fails its own request with
+        // the connection message, and the next request that needs a token
+        // tries again.
+        console.warn("[auth] refresh could not reach the server; session kept:", extractErrorMessage(err));
+        return { outcome: "unreachable", error: err };
       } finally {
         // Always release the lock so the next expiry cycle can refresh again
         _refreshPromise = null;

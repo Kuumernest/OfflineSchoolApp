@@ -6,7 +6,7 @@
  *
  * Why this exists: production connects with autoIndex off
  * (src/config/database.js), and mongoose's Model.init() then builds nothing.
- * Only three indexes are built at boot (gateToken, IdempotencyKey,
+ * Only a few indexes are built at boot (gateToken, IdempotencyKey, staffNo,
  * IntelligenceAnalysisRun); indexCheck.service only REPORTS the rest, and
  * compares key patterns alone. So the unique indexes that keep a receipt
  * number, a mark or an attendance row from being written twice exist only if

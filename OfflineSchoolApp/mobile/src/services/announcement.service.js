@@ -117,6 +117,14 @@ const getCurrentUser = () => {
 const canSync = async () =>
   (await isOnline()) && (await hasValidToken());
 
+/** Written on this device and not yet accepted by the server. */
+const isUnsentCreate = async (db, id) => {
+  const row = await db.getFirstAsync(
+    "SELECT _operation, _synced FROM announcements WHERE id = ?", [id]
+  ).catch(() => null);
+  return row?._operation === "create" && !row?._synced;
+};
+
 const safeJsonParse = (str, fallback = []) => {
   try { return JSON.parse(str) ?? fallback; }
   catch { return fallback; }
@@ -835,8 +843,14 @@ export const updateAnnouncement = async (id, updates) => {
     if (updates.isPinned !== undefined) delete updates.isPinned;
   }
 
+  // An announcement written offline and not yet sent stays a CREATE, now
+  // carrying the edited fields. Overwriting 'create' with 'update' made the
+  // sync PUT /announcements/<id> for an id the server had never seen: a 404,
+  // and the announcement never existed upstream at all.
+  const unsentCreate = await isUnsentCreate(db, id);
+
   const now      = new Date().toISOString();
-  const setParts = ["updated_at = ?", "_synced = 0", "_operation = 'update'"];
+  const setParts = ["updated_at = ?", "_synced = 0", `_operation = '${unsentCreate ? "create" : "update"}'`];
   const params   = [now];
 
   if (updates.title         !== undefined) { setParts.push("title = ?");          params.push(updates.title.trim()); }
@@ -854,7 +868,8 @@ export const updateAnnouncement = async (id, updates) => {
     params
   );
 
-  if (await canSync()) {
+  // Nothing upstream to PUT to yet; the queued create carries the edit.
+  if (!unsentCreate && await canSync()) {
     try {
       const endpoint = getPushEndpoint(user);
       if (endpoint) {
@@ -894,6 +909,40 @@ export const deleteAnnouncement = async (id) => {
   }
 
   const now = new Date().toISOString();
+
+  // Written offline and never sent: there is nothing upstream to delete. The
+  // row (and any create still queued for it) simply goes, and nothing is
+  // sent. This used to overwrite 'create' with 'delete', so the sync sent
+  // DELETE /announcements/<id> for an id the server never had.
+  if (await isUnsentCreate(db, id)) {
+    const { MutationQueue } = require("./mutationQueue.service");
+    const state = await MutationQueue.createState(`announcement:${id}`);
+    if (state === "unsent" || state === "none") {
+      await MutationQueue.cancelUnsent(`announcement:${id}`);
+      await db.runAsync("DELETE FROM announcements WHERE id = ?", [id]);
+      return true;
+    }
+    // The create went out and no answer came back: it may have landed.
+    // The delete is queued behind it, explicitly — the create's reconciler
+    // would otherwise mark this row clean when it lands, hiding the delete.
+    await db.runAsync(
+      `UPDATE announcements
+       SET deleted_at = ?, is_active = 0, _synced = 0, _operation = 'delete', updated_at = ?
+       WHERE id = ?`,
+      [now, now, id]
+    );
+    await MutationQueue.enqueue({
+      entityKey: `announcement-delete:${id}`,
+      method:    "DELETE",
+      endpoint:  `/announcements/${id}`,
+      payload:   {
+        __local:     { table: "announcements", ids: [id] },
+        __reconcile: { kind: "announcement", localId: id, table: "announcements" },
+      },
+    });
+    return true;
+  }
+
   await db.runAsync(
     `UPDATE announcements
      SET deleted_at = ?, is_active = 0, _synced = 0,
@@ -1084,15 +1133,17 @@ export const togglePin = async (id) => {
   );
   const newVal = row?.is_pinned ? 0 : 1;
   const now    = new Date().toISOString();
+  // As in updateAnnouncement: an unsent create stays a create, pinned.
+  const unsentCreate = await isUnsentCreate(db, id);
 
   await db.runAsync(
     `UPDATE announcements
-     SET is_pinned = ?, _synced = 0, _operation = 'update', updated_at = ?
+     SET is_pinned = ?, _synced = 0, _operation = ?, updated_at = ?
      WHERE id = ?`,
-    [newVal, now, id]
+    [newVal, unsentCreate ? "create" : "update", now, id]
   );
 
-  if (await canSync()) {
+  if (!unsentCreate && await canSync()) {
     api.post(`/announcements/${id}/pin`).catch((err) =>
       console.warn("[togglePin] sync failed:", err.message)
     );

@@ -51,6 +51,7 @@ const {
   DELEGABLE_KEYS,
   ADJUSTABLE_ROLES,
   isPermission,
+  isRetiredPermission,
 } = require("../config/permissions");
 
 const School = require("../db/models/School");
@@ -226,7 +227,13 @@ const setRolePermissions = async ({ schoolId, role, desired }) => {
     throw err;
   }
 
-  const asked = Array.isArray(desired) ? desired.map((k) => String(k ?? "").trim()) : [];
+  // A key we removed on purpose (config/permissions.js RETIRED_KEYS) is not the
+  // administrator's mistake — a screen opened on an older build may still send
+  // it. Dropped before anything else looks at it, so it is neither refused nor
+  // stored.
+  const asked = Array.isArray(desired)
+    ? desired.map((k) => String(k ?? "").trim()).filter((k) => !isRetiredPermission(k))
+    : [];
 
   // Reported rather than silently dropped: a screen that sends a key it cannot
   // change is a bug in the screen, and the administrator should be told the

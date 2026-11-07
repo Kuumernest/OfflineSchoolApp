@@ -34,6 +34,8 @@ import type { AttendanceSummary } from "@/types/attendance.types";
 import { useUser } from "@/store/auth.store";
 import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
+import { DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 const QK = {
@@ -83,12 +85,12 @@ export default function AttendanceReportsPage() {
     return (
       <Card>
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">
+            <h3 className="text-sm font-semibold text-ink">
               {t("attendance.figuresFailed")}
             </h3>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-muted mt-0.5">
               {getErrorMessage(overviewQ.error)}
             </p>
           </div>
@@ -105,16 +107,19 @@ export default function AttendanceReportsPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{t("attendance.reportsTitle")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {t("attendance.reportBlurb")}
-          </p>
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{t("attendance.reportsTitle")}</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              {t("attendance.reportBlurb")}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-end gap-2">
           <label className="block">
-            <span className="block text-xs font-medium text-gray-500 mb-1.5">{t("common.date")}</span>
+            <span className="block text-xs font-medium text-ink-muted mb-1.5">{t("common.date")}</span>
             <input
               type="date"
               value={date}
@@ -160,26 +165,28 @@ export default function AttendanceReportsPage() {
       {/* ── Trend ───────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
+          icon={TrendingUp}
+          accent="green"
           title={t("attendance.last7d")}
           subtitle={t("attendance.shareMarked")}
           action={
             movement && (
               <div className="flex items-center gap-1.5">
                 {movement.delta > 1 ? (
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <TrendingUp className="w-4 h-4 text-success-text" />
                 ) : movement.delta < -1 ? (
-                  <TrendingDown className="w-4 h-4 text-red-600" />
+                  <TrendingDown className="w-4 h-4 text-danger-text" />
                 ) : (
-                  <Minus className="w-4 h-4 text-gray-400" />
+                  <Minus className="w-4 h-4 text-ink-muted" />
                 )}
                 <span
                   className={cn(
                     "text-sm font-medium",
                     movement.delta > 1
-                      ? "text-emerald-600"
+                      ? "text-success-text"
                       : movement.delta < -1
-                        ? "text-red-600"
-                        : "text-gray-500",
+                        ? "text-danger-text"
+                        : "text-ink-muted",
                   )}
                 >
                   {t("attendance.ptsVsWeek", { delta: `${movement.delta > 0 ? "+" : ""}${movement.delta}` })}
@@ -191,12 +198,12 @@ export default function AttendanceReportsPage() {
 
         {weeklyQ.isLoading ? (
           <div className="h-48 flex items-center justify-center">
-            <span className="text-sm text-gray-400">{t("attendance.loadingTrend")}</span>
+            <span className="text-sm text-ink-muted">{t("attendance.loadingTrend")}</span>
           </div>
         ) : trend.length === 0 ? (
           <div className="h-48 flex flex-col items-center justify-center gap-2">
-            <BarChart3 className="w-7 h-7 text-gray-300" />
-            <p className="text-sm text-gray-500">
+            <BarChart3 className={cn("w-7 h-7", DASH_TINT.green.glyph)} />
+            <p className="text-sm text-ink-muted">
               {t("attendance.noneLastWeek")}
             </p>
           </div>
@@ -204,7 +211,7 @@ export default function AttendanceReportsPage() {
           <TrendChart
             points={trend.map((t) => ({
               date: t.date,
-              rate: t.students?.rate ?? 0,
+              rate: t.students?.rate ?? null,
             }))}
           />
         )}
@@ -231,34 +238,36 @@ function SummaryPanel({
   const { t } = useTranslation();
   const total   = summary?.total ?? 0;
   const marked  = summary?.marked ?? 0;
-  const rate    = summary?.rate ?? 0;
+  const rate    = summary?.rate ?? null;
   const unmarked = summary?.unmarked ?? Math.max(0, total - marked);
 
+  // Attendance is green (config/dashboardTint.ts): tinted card, solid icon
+  // square, the rate in the deep shade, ink-muted labels on the wash.
   return (
-    <Card>
+    <Card className={DASH_TINT.green.card}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center">
-            <Icon className="w-4 h-4 text-primary-600" />
+          <div className={cn("w-9 h-9 rounded-control flex items-center justify-center", DASH_TINT.green.box)}>
+            <Icon className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
-            <p className="text-xs text-gray-500">{t("attendance.onRoster", { count: total })}</p>
+            <h3 className="text-sm font-semibold text-ink">{title}</h3>
+            <p className="text-xs text-ink-muted">{t("attendance.onRoster", { count: total })}</p>
           </div>
         </div>
 
         <div className="text-right">
-          <p className="text-2xl font-semibold text-gray-900 leading-none tabular-nums">
-            {rate}%
+          <p className={cn("text-2xl font-semibold leading-none tabular-nums", DASH_TINT.green.number)}>
+            {rate == null ? "–" : `${rate}%`}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">present</p>
+          <p className="text-xs text-ink-muted mt-0.5">present</p>
         </div>
       </div>
 
       {/* Stacked bar. Unmarked is shown as its own segment rather than folded
           into "absent" — not knowing where someone is, is different from
           knowing they are away. */}
-      <div className="mt-4 h-2 rounded-full overflow-hidden bg-gray-100 flex">
+      <div className="mt-4 h-2 rounded-full overflow-hidden bg-surface flex">
         {statuses.map((s) => {
           const n = Number(summary?.[s.key] ?? 0);
           if (!n || !total) return null;
@@ -277,16 +286,17 @@ function SummaryPanel({
         {statuses.map((s) => (
           <div key={String(s.key)} className="flex items-center gap-1.5">
             <span className={cn("w-2 h-2 rounded-full", s.tone)} />
-            <span className="text-xs text-gray-500">{s.label}</span>
-            <span className="text-xs font-semibold text-gray-800 tabular-nums">
+            <span className="text-xs text-ink-muted">{s.label}</span>
+            <span className="text-xs font-semibold text-ink tabular-nums">
               {Number(summary?.[s.key] ?? 0)}
             </span>
           </div>
         ))}
         {unmarked > 0 && (
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-gray-200" />
-            <span className="text-xs text-gray-500">{t("attendance.unmarked")}</span>
+            {/* Unmarked is the bar's empty track, so its dot is the track's colour. */}
+            <span className="w-2 h-2 rounded-full bg-surface ring-1 ring-line-strong" />
+            <span className="text-xs text-ink-muted">{t("attendance.unmarked")}</span>
             <Badge label={String(unmarked)} variant="warning" />
           </div>
         )}
@@ -299,7 +309,7 @@ function SummaryPanel({
 // TREND CHART
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
+function TrendChart({ points }: { points: { date: string; rate: number | null }[] }) {
   const { t } = useTranslation();
   const W = 100;   // viewBox units — the SVG scales to its container
   const H = 40;
@@ -313,11 +323,12 @@ function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
     // auto-scaled axis makes a drop from 98% to 95% look like a collapse.
     const toY = (rate: number) => H - PAD - (Math.max(0, Math.min(100, rate)) / 100) * (H - PAD * 2);
 
-    const coords = points.map((p, i) => ({
-      x: PAD + i * stepX,
-      y: toY(p.rate),
-      ...p,
-    }));
+    // A day nobody marked has no point (C3): the line joins the days that
+    // were, and the day's label says "–" rather than drawing a fall to 0%.
+    const coords = points
+      .map((p, i) => ({ x: PAD + i * stepX, y: toY(p.rate ?? 0), ...p }))
+      .filter((c) => c.rate != null);
+    if (coords.length === 0) return { line: "", area: "", dots: [] };
 
     return {
       line: coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" "),
@@ -345,7 +356,8 @@ function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
             <line
               key={pct}
               x1={PAD} y1={y} x2={W - PAD} y2={y}
-              stroke="#f3f4f6"
+              stroke="currentColor"
+              className="text-line"
               strokeWidth="0.3"
               vectorEffect="non-scaling-stroke"
             />
@@ -377,9 +389,9 @@ function TrendChart({ points }: { points: { date: string; rate: number }[] }) {
       <div className="flex justify-between mt-1">
         {points.map((p) => (
           <div key={p.date} className="text-center flex-1 min-w-0">
-            <p className="text-[11px] text-gray-400">{weekdayOf(p.date)}</p>
-            <p className="text-xs font-medium text-gray-700 tabular-nums">
-              {p.rate}%
+            <p className="text-[11px] text-ink-muted">{weekdayOf(p.date)}</p>
+            <p className="text-xs font-medium text-ink tabular-nums">
+              {p.rate == null ? "–" : `${p.rate}%`}
             </p>
           </div>
         ))}

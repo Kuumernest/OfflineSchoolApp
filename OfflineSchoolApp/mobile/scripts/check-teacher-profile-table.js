@@ -137,6 +137,9 @@ const loadModule = (rel, stubs) => {
   const TeacherProfile = loadModule("src/services/teacherProfile.service.js", {
     "../db/database":  { getDatabase: async () => db },
     "../db/dbHelpers": loadModule("src/db/dbHelpers.js", {}),
+    // The outbox (profile uploads) is not what this checks; see
+    // check-teacher-profile-sync.js for that.
+    "./mutationQueue.service": { MutationQueue: { enqueue: async () => null } },
   });
 
   const TABLE = TeacherProfile.TABLE;
@@ -239,13 +242,16 @@ const loadModule = (rel, stubs) => {
   if (updated?.phone === "+237622222222") ok("carrying the new value");
   else bad("the update lands", JSON.stringify(updated?.phone));
 
-  // A field absent from the second save must not silently survive from the
-  // first: the form always sends the whole profile, and a half-updated record
-  // would show a teacher stale data they thought they had changed.
-  await TeacherProfile.saveLocal("t-1", { firstName: "Bern", profileCompleted: true });
+  // A field absent from (or blank in) a later save keeps its value. This was
+  // the other way round — "cleared, not stale" — and that is how a profile
+  // vanished: a form opened before the profile loaded showed blanks, and
+  // saving it cleared every column of the only copy there was. A blank never
+  // wipes a stored value now, here or on the server (see
+  // check-teacher-profile-sync.js and backend check-teacher-profile.js).
+  await TeacherProfile.saveLocal("t-1", { firstName: "Bern", bio: "", profileCompleted: true });
   const sparse = await TeacherProfile.getLocal("t-1");
-  if (sparse?.bio === "") ok("and a field left out of a later save is cleared, not stale");
-  else bad("an omitted field is cleared", JSON.stringify(sparse?.bio));
+  if (sparse?.bio === "Teaches mathematics.") ok("and a field left out of, or blank in, a later save keeps its value");
+  else bad("a blank or omitted field keeps its value", JSON.stringify(sparse?.bio));
 
   console.log("--- two teachers on one device do not collide ---");
 

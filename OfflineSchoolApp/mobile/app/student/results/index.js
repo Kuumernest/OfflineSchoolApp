@@ -10,6 +10,9 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import ExamService      from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS as THEME, TILE, SEMANTIC, ACCENT, TONE_EDGE, accentBadge, statusBadge, termAccent } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+import { tileShell } from "../../../src/components/Tiles";
 
 const COLORS = {
   primary:   "#2563EB",
@@ -71,8 +74,12 @@ const fetchMyResults = async (userId, schoolId) => {
 const ResultPreviewCard = ({ item, onPress }) => {
   const { t } = useTranslation();
   const isPassing = item.isPassing ?? (item.percentage >= 50);
-  const passColor = isPassing ? COLORS.success : COLORS.error;
-  const passBg    = isPassing ? COLORS.successBg : COLORS.errorBg;
+  const passTone  = isPassing ? "success" : "error";
+  const passColor = TONE_EDGE[passTone];
+  const passBadge = statusBadge(passTone);
+  const classBadge = accentBadge("indigo");
+  const yearBadge  = accentBadge("slate");
+  const termBadge  = accentBadge(termAccent(item.term));
   const pct       = typeof item.percentage === "number" ? item.percentage : 0;
 
   return (
@@ -87,36 +94,36 @@ const ResultPreviewCard = ({ item, onPress }) => {
         {/* Meta chips */}
         <View style={rc.metaRow}>
           {!!item.className && (
-            <View style={rc.metaChip}>
-              <Ionicons name="school-outline" size={11} color={COLORS.gray500} />
-              <Text style={rc.metaText}>{item.className}</Text>
+            <View style={[rc.metaChip, { backgroundColor: classBadge.bg, borderColor: classBadge.border }]}>
+              <Ionicons name="school-outline" size={11} color={classBadge.text} />
+              <Text style={[rc.metaText, { color: classBadge.text }]}>{item.className}</Text>
             </View>
           )}
           {!!item.academicYear && (
-            <View style={rc.metaChip}>
-              <Ionicons name="calendar-outline" size={11} color={COLORS.gray500} />
-              <Text style={rc.metaText}>{item.academicYear}</Text>
+            <View style={[rc.metaChip, { backgroundColor: yearBadge.bg, borderColor: yearBadge.border }]}>
+              <Ionicons name="calendar-outline" size={11} color={yearBadge.text} />
+              <Text style={[rc.metaText, { color: yearBadge.text }]}>{item.academicYear}</Text>
             </View>
           )}
           {!!item.term && (
-            <View style={rc.metaChip}>
-              <Ionicons name="layers-outline" size={11} color={COLORS.gray500} />
-              <Text style={rc.metaText}>{item.term}</Text>
+            <View style={[rc.metaChip, { backgroundColor: termBadge.bg, borderColor: termBadge.border }]}>
+              <Ionicons name="layers-outline" size={11} color={termBadge.text} />
+              <Text style={[rc.metaText, { color: termBadge.text }]}>{item.term}</Text>
             </View>
           )}
         </View>
 
         {/* Stats */}
-        <View style={rc.statsRow}>
+        <View style={[rc.statsRow, tileShell("results")]}>
           <View style={rc.statItem}>
-            <Text style={[rc.statVal, { color: passColor }]}>
+            <Text style={[rc.statVal, { color: isPassing ? SEMANTIC.success.text : SEMANTIC.error.text }]}>
               {pct.toFixed(1)}%
             </Text>
             <Text style={rc.statLbl}>{t("results.my.scoreStat")}</Text>
           </View>
 
           <View style={rc.statItem}>
-            <Text style={[rc.statVal, { color: COLORS.primary }]}>
+            <Text style={rc.statVal}>
               {item.overallGrade || "—"}
             </Text>
             <Text style={rc.statLbl}>{t("results.my.gradeStat")}</Text>
@@ -124,7 +131,7 @@ const ResultPreviewCard = ({ item, onPress }) => {
 
           {item.classPosition != null && (
             <View style={rc.statItem}>
-              <Text style={[rc.statVal, { color: COLORS.warning }]}>
+              <Text style={rc.statVal}>
                 #{item.classPosition}
                 {item.totalInClass ? `/${item.totalInClass}` : ""}
               </Text>
@@ -132,15 +139,15 @@ const ResultPreviewCard = ({ item, onPress }) => {
             </View>
           )}
 
-          <View style={[rc.passPill, { backgroundColor: passBg }]}>
-            <Text style={[rc.passText, { color: passColor }]}>
+          <View style={[rc.passPill, { backgroundColor: passBadge.bg, borderColor: passBadge.border }]}>
+            <Text style={[rc.passText, { color: passBadge.text }]}>
               {isPassing ? t("results.my.passPill") : t("results.my.failPill")}
             </Text>
           </View>
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
+      <Ionicons name="chevron-forward" size={18} color={THEME.textSecondary} />
     </TouchableOpacity>
   );
 };
@@ -149,23 +156,23 @@ const rc = StyleSheet.create({
   card: {
     flexDirection:  "row",
     alignItems:     "center",
-    backgroundColor: COLORS.white,
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:   14,
     marginBottom:   10,
     borderWidth:    1,
-    borderColor:    COLORS.gray200,
+    borderColor:    THEME.border,
     overflow:       "hidden",
     shadowColor:    "#000",
     shadowOpacity:  0.04,
     shadowRadius:   6,
     elevation:      2,
   },
-  accent:   { width: 4, alignSelf: "stretch" },
+  accent:   { width: 3, alignSelf: "stretch" },
   body:     { flex: 1, padding: 14 },
   examName: {
     fontSize:     15,
     fontWeight:   "700",
-    color:        COLORS.gray900,
+    color:        THEME.text,
     marginBottom: 6,
   },
   metaRow: {
@@ -178,29 +185,35 @@ const rc = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               4,
-    backgroundColor:   COLORS.gray50,
     borderRadius:      6,
+    borderWidth:       1,
     paddingHorizontal: 8,
     paddingVertical:   3,
   },
-  metaText: { fontSize: 11, color: COLORS.gray500 },
+  metaText: { fontSize: 11, fontWeight: "600" },
   statsRow: {
     flexDirection: "row",
     alignItems:    "center",
     gap:           14,
     flexWrap:      "wrap",
+    backgroundColor: TILE.results.wash,
+    borderWidth:   1,
+    borderColor:   THEME.border,
+    borderRadius:  10,
+    padding:       10,
   },
   statItem: { alignItems: "center" },
-  statVal:  { fontSize: 16, fontWeight: "800" },
+  statVal:  { fontSize: 16, fontWeight: "800", color: TILE.results.deep },
   statLbl:  {
     fontSize:      9,
-    color:         COLORS.gray400,
+    color:         THEME.textSecondary,
     fontWeight:    "600",
     textTransform: "uppercase",
   },
   passPill: {
     marginLeft:        "auto",
     borderRadius:      8,
+    borderWidth:       1,
     paddingHorizontal: 10,
     paddingVertical:   4,
   },
@@ -277,8 +290,9 @@ export default function StudentResultsListScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("results.my.myResults")}</Text>
           <Text style={styles.headerSub}>
@@ -294,7 +308,7 @@ export default function StudentResultsListScreen() {
       {/* Error */}
       {!!error && (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
+          <Ionicons name="alert-circle-outline" size={16} color={SEMANTIC.error.icon} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => load()}>
             <Text style={styles.retryText}>{t("common.retry")}</Text>
@@ -318,13 +332,13 @@ export default function StudentResultsListScreen() {
         }
         ListEmptyComponent={
           !error ? (
-            <View style={styles.empty}>
-              <Ionicons name="document-text-outline" size={56} color={COLORS.gray200} />
-              <Text style={styles.emptyTitle}>{t("results.noneCompleted")}</Text>
-              <Text style={styles.emptySub}>
-                {t("results.my.noPublished")}
-              </Text>
-            </View>
+            <EmptyState
+              icon="document-text-outline"
+              accent="slate"
+              style={styles.empty}
+              title={t("results.noneCompleted")}
+              message={t("results.my.noPublished")}
+            />
           ) : null
         }
         renderItem={({ item }) => (
@@ -351,9 +365,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        56,
     paddingBottom:     14,
-    backgroundColor:   COLORS.white,
+    backgroundColor:   THEME.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: THEME.border,
     gap:               10,
   },
   backBtn: {
@@ -365,31 +379,26 @@ const styles = StyleSheet.create({
     justifyContent:  "center",
   },
   headerCenter: { flex: 1 },
-  headerTitle:  { fontSize: 20, fontWeight: "700", color: COLORS.gray900 },
-  headerSub:    { fontSize: 12, color: COLORS.gray500, marginTop: 2 },
+  headerTitle:  { fontSize: 20, fontWeight: "700", color: THEME.text },
+  headerSub:    { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
   errorBox: {
     flexDirection:   "row",
     alignItems:      "center",
     gap:             8,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: SEMANTIC.error.bg,
+    borderWidth:     1,
+    borderColor:     statusBadge("error").border,
     margin:          16,
     borderRadius:    10,
     padding:         12,
   },
-  errorText: { flex: 1, fontSize: 13, color: COLORS.error },
-  retryText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text },
+  retryText: { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
   list:  { padding: 16, paddingBottom: 40 },
   empty: {
     alignItems:      "center",
     paddingTop:      60,
     gap:             10,
     paddingHorizontal: 24,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: COLORS.gray700 },
-  emptySub: {
-    fontSize:   13,
-    color:      COLORS.gray400,
-    textAlign:  "center",
-    lineHeight: 20,
   },
 });

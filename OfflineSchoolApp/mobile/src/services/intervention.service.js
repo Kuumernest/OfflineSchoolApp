@@ -150,7 +150,7 @@ export const InterventionService = {
       entityKey: `intervention-update:${id}`,
       method:    "PATCH",
       endpoint:  `/interventions/${id}`,
-      payload:   { ...patch, version: row.version, __local: { table: TABLE, id } },
+      payload:   { ...patch, version: row.version, __local: { table: TABLE, ids: [id] } },
     });
 
     return next;

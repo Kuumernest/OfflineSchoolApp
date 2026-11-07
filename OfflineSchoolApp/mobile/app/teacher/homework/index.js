@@ -30,6 +30,8 @@ import {
 import { fetchTeacherScope, allTeacherSubjects } from "../../../src/services/teacherScope.service";
 import { SyncManager }     from "../../../src/services/syncManager";
 import { errorText }       from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -49,6 +51,14 @@ export const formatDue = (iso, locale) => {
 
 const isOverdue = (iso) => Boolean(iso) && new Date(iso).getTime() < Date.now();
 
+/** Due within the next two days (colour only). */
+const DUE_SOON_MS = 2 * 24 * 60 * 60 * 1000;
+const isDueSoon = (iso) => {
+  if (!iso) return false;
+  const left = new Date(iso).getTime() - Date.now();
+  return left >= 0 && left <= DUE_SOON_MS;
+};
+
 // ─────────────────────────────────────────────────────────────
 // PIECES
 // ─────────────────────────────────────────────────────────────
@@ -61,12 +71,12 @@ const Chip = memo(({ label, active, onPress }) => (
 
 const EmptyState = memo(({ icon, title, subtitle, actionLabel, onAction }) => (
   <View style={styles.emptyState}>
-    <Ionicons name={icon} size={48} color="#D1D5DB" />
+    <IconSquare icon={icon} accent="indigo" size={56} radius={16} />
     <Text style={styles.emptyTitle}>{title}</Text>
     {subtitle ? <Text style={styles.emptySub}>{subtitle}</Text> : null}
     {actionLabel && onAction ? (
       <TouchableOpacity style={styles.emptyBtn} onPress={onAction} activeOpacity={0.8}>
-        <Ionicons name="add" size={16} color="#FFF" />
+        <Ionicons name="add" size={16} color={COLORS.onPrimary} />
         <Text style={styles.emptyBtnText}>{actionLabel}</Text>
       </TouchableOpacity>
     ) : null}
@@ -76,12 +86,15 @@ const EmptyState = memo(({ icon, title, subtitle, actionLabel, onAction }) => (
 const HomeworkCard = memo(({ hw, locale, t, onOpen, onEdit, onToggle, onDelete, busy }) => {
   const due      = formatDue(hw.due_date, locale);
   const overdue  = isOverdue(hw.due_date);
+  const dueSoon  = isDueSoon(hw.due_date);
+  const dueTone  = overdue ? SEMANTIC.error : dueSoon ? SEMANTIC.warning : null;
   const isLive   = Number(hw.is_published) === 1;
   const subs     = Number(hw.submission_count ?? 0);
   const graded   = Number(hw.graded_count ?? 0);
   return (
     <TouchableOpacity style={styles.card} onPress={() => onOpen(hw)} activeOpacity={0.85}>
       <View style={styles.cardTop}>
+        <IconSquare icon="clipboard" accent="indigo" size={36} />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle} numberOfLines={2}>{hw.title}</Text>
           <Text style={styles.cardMeta} numberOfLines={1}>
@@ -96,15 +109,15 @@ const HomeworkCard = memo(({ hw, locale, t, onOpen, onEdit, onToggle, onDelete, 
       </View>
 
       <View style={styles.cardRow}>
-        <Ionicons name="calendar-outline" size={14} color={overdue ? "#DC2626" : "#6B7280"} />
-        <Text style={[styles.cardRowText, overdue && { color: "#DC2626" }]}>
+        <Ionicons name="calendar-outline" size={14} color={dueTone ? dueTone.icon : ACCENT.indigo.solid} />
+        <Text style={[styles.cardRowText, dueTone && { color: dueTone.text, fontWeight: "600" }]}>
           {due ? t("teacherHw.due", { date: due }) : t("teacherHw.noDue")}
           {overdue ? `  ·  ${t("teacherHw.overdue")}` : ""}
         </Text>
       </View>
       <View style={styles.cardRow}>
-        <Ionicons name="people-outline" size={14} color="#6B7280" />
-        <Text style={styles.cardRowText}>
+        <Ionicons name="people-outline" size={14} color={subs > 0 ? SEMANTIC.success.icon : ACCENT.indigo.solid} />
+        <Text style={[styles.cardRowText, subs > 0 && { color: SEMANTIC.success.text }]}>
           {t("teacherHw.submissions", { count: subs })}
           {subs > 0 ? `  ·  ${t("teacherHw.graded", { graded, total: subs })}` : ""}
         </Text>
@@ -112,18 +125,18 @@ const HomeworkCard = memo(({ hw, locale, t, onOpen, onEdit, onToggle, onDelete, 
 
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => onEdit(hw)} disabled={busy}>
-          <Ionicons name="create-outline" size={16} color="#4F46E5" />
+          <Ionicons name="create-outline" size={16} color={ACCENT.indigo.deep} />
           <Text style={styles.actionText}>{t("common.edit")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => onToggle(hw)} disabled={busy}>
-          <Ionicons name={isLive ? "eye-off-outline" : "send-outline"} size={16} color="#059669" />
-          <Text style={[styles.actionText, { color: "#059669" }]}>
+          <Ionicons name={isLive ? "eye-off-outline" : "send-outline"} size={16} color={ACCENT.green.deep} />
+          <Text style={[styles.actionText, { color: ACCENT.green.deep }]}>
             {t(isLive ? "teacherHw.unpublish" : "teacherHw.publish")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => onDelete(hw)} disabled={busy}>
-          <Ionicons name="trash-outline" size={16} color="#DC2626" />
-          <Text style={[styles.actionText, { color: "#DC2626" }]}>{t("common.delete")}</Text>
+          <Ionicons name="trash-outline" size={16} color={ACCENT.red.deep} />
+          <Text style={[styles.actionText, { color: ACCENT.red.deep }]}>{t("common.delete")}</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -248,7 +261,7 @@ export default function TeacherHomeworkScreen() {
     if (loading) {
       return (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#D97706" />
+          <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
           <Text style={styles.loadingText}>{t("teacherHw.loading")}</Text>
         </View>
       );
@@ -256,11 +269,11 @@ export default function TeacherHomeworkScreen() {
     if (error) {
       return (
         <View style={styles.center}>
-          <Ionicons name="cloud-offline-outline" size={48} color="#DC2626" />
+          <IconSquare icon="cloud-offline-outline" accent="red" size={56} radius={16} />
           <Text style={styles.errorTitle}>{t("teacherHw.loadFailed")}</Text>
           <Text style={styles.emptySub}>{error}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => load(false)} activeOpacity={0.8}>
-            <Ionicons name="refresh" size={16} color="#FFF" />
+            <Ionicons name="refresh" size={16} color={COLORS.onPrimary} />
             <Text style={styles.emptyBtnText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
@@ -290,32 +303,33 @@ export default function TeacherHomeworkScreen() {
           <HomeworkCard hw={item} locale={locale} t={t} busy={busyId === item.id}
             onOpen={onOpen} onEdit={onEdit} onToggle={onToggle} onDelete={onDelete} />
         )}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#D97706" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={ACCENT.indigo.solid} />}
       />
     );
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
 
       <View style={[styles.header, { paddingTop: screenPad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("teacherHw.title")}</Text>
           <Text style={styles.headerSub}>{t("teacherHw.count", { count: homework.length })}</Text>
         </View>
         <TouchableOpacity style={styles.createBtn} onPress={goCreate} activeOpacity={0.8}>
-          <Ionicons name="add" size={20} color="#FFF" />
+          <Ionicons name="add" size={20} color={COLORS.onPrimary} />
           <Text style={styles.createBtnText}>{t("teacherHw.new")}</Text>
         </TouchableOpacity>
       </View>
 
       {scope && scope.source !== "api" ? (
         <View style={styles.offlineNote}>
-          <Ionicons name="cloud-offline-outline" size={14} color="#92400E" />
+          <Ionicons name="cloud-offline-outline" size={14} color={SEMANTIC.warning.text} />
           <Text style={styles.offlineText}>{t("teacherHw.offlineNote")}</Text>
         </View>
       ) : null}
@@ -360,81 +374,83 @@ export default function TeacherHomeworkScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  container: { flex: 1, backgroundColor: COLORS.page },
   header: {
     flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 0,
-    paddingBottom: 14, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    paddingBottom: 14, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backButton: {
     width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   createBtn: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#D97706", borderRadius: 10,
+    flexDirection: "row", alignItems: "center", backgroundColor: ACCENT.indigo.solid, borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 8, gap: 4,
   },
-  createBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  createBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 
   offlineNote: {
-    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FEF3C7",
+    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: SEMANTIC.warning.bg,
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  offlineText: { fontSize: 12, color: "#92400E", flex: 1 },
+  offlineText: { fontSize: 12, color: SEMANTIC.warning.text, flex: 1 },
 
-  filters: { backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6", paddingVertical: 8, gap: 8 },
+  filters: { backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingVertical: 8, gap: 8 },
   chipRow: { paddingHorizontal: 16, gap: 8 },
   chip: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "#E5E7EB", maxWidth: 200,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border, maxWidth: 200,
   },
-  chipActive: { backgroundColor: "#FEF3C7", borderColor: "#D97706" },
-  chipText: { fontSize: 13, color: "#4B5563", fontWeight: "500" },
-  chipTextActive: { color: "#B45309", fontWeight: "700" },
+  chipActive: { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  chipText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  chipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
   statusRow: { flexDirection: "row", paddingHorizontal: 16, gap: 8 },
-  statusTab: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#F9FAFB" },
-  statusTabActive: { backgroundColor: "#111827" },
-  statusText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  statusTextActive: { color: "#FFF" },
+  statusTab: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: COLORS.page },
+  statusTabActive: { backgroundColor: ACCENT.indigo.solid },
+  statusText: { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary },
+  statusTextActive: { color: COLORS.onPrimary },
 
   listContent: { padding: 16, paddingBottom: 32, gap: 12 },
   card: {
-    backgroundColor: "#FFF", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#F3F4F6",
-    shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3, borderTopColor: ACCENT.indigo.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
-  cardMeta: { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  badgeLive: { backgroundColor: "#D1FAE5" },
-  badgeDraft: { backgroundColor: "#F3F4F6" },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  cardMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
+  badgeLive: { backgroundColor: statusBadge("success").bg, borderColor: statusBadge("success").border },
+  badgeDraft: { backgroundColor: statusBadge("warning").bg, borderColor: statusBadge("warning").border },
   badgeText: { fontSize: 11, fontWeight: "700" },
-  badgeTextLive: { color: "#047857" },
-  badgeTextDraft: { color: "#6B7280" },
+  badgeTextLive: { color: statusBadge("success").text },
+  badgeTextDraft: { color: statusBadge("warning").text },
   cardRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
-  cardRowText: { fontSize: 12, color: "#4B5563" },
+  cardRowText: { fontSize: 12, color: COLORS.textSecondary },
   cardActions: {
-    flexDirection: "row", gap: 6, marginTop: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    flexDirection: "row", gap: 6, marginTop: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   actionBtn: {
     flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 8, backgroundColor: "#F9FAFB",
+    borderRadius: 8, backgroundColor: COLORS.surface,
   },
-  actionText: { fontSize: 12, fontWeight: "600", color: "#4F46E5" },
+  actionText: { fontSize: 12, fontWeight: "600", color: ACCENT.indigo.deep },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 10 },
-  loadingText: { fontSize: 13, color: "#9CA3AF" },
-  errorTitle: { fontSize: 16, fontWeight: "700", color: "#111827", marginTop: 6 },
+  loadingText: { fontSize: 13, color: COLORS.textSecondary },
+  errorTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text, marginTop: 6 },
   retryBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#D97706",
+    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: ACCENT.indigo.solid,
     borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 8,
   },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: "#111827", marginTop: 8, textAlign: "center" },
-  emptySub: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 19 },
+  emptyTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text, marginTop: 8, textAlign: "center" },
+  emptySub: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 19 },
   emptyBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#D97706",
+    flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: ACCENT.indigo.solid,
     borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 10,
   },
-  emptyBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  emptyBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 });

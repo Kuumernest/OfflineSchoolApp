@@ -30,6 +30,10 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 
 import SlotEditorModal from "./components/SlotEditorModal";
 import { errorText } from "../../../src/utils/appError";
+import {
+  COLORS, ACCENT, SEMANTIC, TONE_EDGE, levelAccent, categoryAccent,
+} from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -65,6 +69,9 @@ const resolveName = (slot, { objectKey, nameKey, idKey, altIdKey }, lookupMap) =
   }
   return "";
 };
+
+/** A slot's accent: its subject's colour, teal (timetable) with no subject. */
+const slotAccent = (slot) => ACCENT[slot?.subjectName ? categoryAccent(slot.subjectName) : "teal"];
 
 const getPeriodTime = (period) => ({
   start: period.startTime || period.starttime || "",
@@ -578,7 +585,7 @@ export default function AdminTimetableBuilder() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.teal.solid} />
         <Text style={styles.loadingText}>{t("ttAdmin.initializing")}</Text>
       </View>
     );
@@ -595,9 +602,10 @@ export default function AdminTimetableBuilder() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("ttAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>{t("ttAdmin.subtitle")}</Text>
@@ -610,13 +618,13 @@ export default function AdminTimetableBuilder() {
           disabled={syncing}
         >
           {syncing ? (
-            <ActivityIndicator size="small" color="#4F46E5" />
+            <ActivityIndicator size="small" color={ACCENT.teal.solid} />
           ) : (
             <>
               <Ionicons
                 name="cloud-upload-outline"
                 size={20}
-                color={unsyncedCount > 0 ? "#D97706" : "#4F46E5"}
+                color={unsyncedCount > 0 ? SEMANTIC.warning.text : ACCENT.teal.solid}
               />
               {unsyncedCount > 0 && (
                 <View style={styles.syncBadge}>
@@ -638,15 +646,15 @@ export default function AdminTimetableBuilder() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.teal.solid}
+            colors={[ACCENT.teal.solid]}
           />
         }
       >
         {/* ── Error banner ── */}
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadInitialData()}
@@ -664,18 +672,18 @@ export default function AdminTimetableBuilder() {
             onPress={handleManualSync}
             activeOpacity={0.8}
           >
-            <Ionicons name="warning-outline" size={18} color="#D97706" />
+            <Ionicons name="warning-outline" size={18} color={SEMANTIC.warning.icon} />
             <Text style={styles.unsyncedText}>
               {t("ttAdmin.unsyncedSlots", { count: unsyncedCount })}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color="#D97706" />
+            <Ionicons name="chevron-forward" size={16} color={SEMANTIC.warning.text} />
           </TouchableOpacity>
         )}
 
         {/* ── Syncing banner ── */}
         {syncing && (
           <View style={styles.syncingBanner}>
-            <ActivityIndicator size="small" color="#4F46E5" />
+            <ActivityIndicator size="small" color={SEMANTIC.info.icon} />
             <Text style={styles.syncingText}>{t("ttAdmin.syncing")}</Text>
           </View>
         )}
@@ -685,7 +693,7 @@ export default function AdminTimetableBuilder() {
 
         {classes.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="school-outline" size={28} color="#9CA3AF" />
+            <IconSquare icon="school-outline" accent="indigo" size={40} />
             <Text style={styles.emptyText}>{t("ttAdmin.noActiveClasses")}</Text>
           </View>
         ) : (
@@ -697,14 +705,18 @@ export default function AdminTimetableBuilder() {
           >
             {classes.map((cls) => {
               const isSelected = selectedClassId === cls.id;
+              const level      = ACCENT[levelAccent(cls.level)];
               return (
                 <TouchableOpacity
                   key={cls.id}
-                  style={[styles.classChip, isSelected && styles.classChipActive]}
+                  style={[
+                    styles.classChip,
+                    isSelected && { backgroundColor: level.wash, borderColor: level.base },
+                  ]}
                   onPress={() => setSelectedClassId(cls.id)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.classChipText, isSelected && styles.classChipTextActive]}>
+                  <Text style={[styles.classChipText, isSelected && { color: level.deep }]}>
                     {cls.name}
                   </Text>
                 </TouchableOpacity>
@@ -715,7 +727,7 @@ export default function AdminTimetableBuilder() {
 
         {/* ── Period config hint ── */}
         <View style={styles.configBanner}>
-          <Ionicons name="time-outline" size={18} color="#4F46E5" />
+          <Ionicons name="time-outline" size={18} color={ACCENT.teal.solid} />
           <Text style={styles.configBannerText}>
             {t("ttAdmin.periodsFromServer")}
           </Text>
@@ -727,12 +739,12 @@ export default function AdminTimetableBuilder() {
         {/* ── Grid ── */}
         {!selectedClassId ? (
           <View style={styles.emptyState}>
-            <Ionicons name="school-outline" size={32} color="#9CA3AF" />
+            <IconSquare icon="school-outline" accent="indigo" size={48} />
             <Text style={styles.emptyText}>{t("ttAdmin.selectClassAbove")}</Text>
           </View>
         ) : periods.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="hourglass-outline" size={32} color="#D97706" />
+            <IconSquare icon="hourglass-outline" accent="amber" size={48} />
             <Text style={styles.emptyText}>
               {t("ttAdmin.noActivePeriods")}
             </Text>
@@ -792,6 +804,7 @@ export default function AdminTimetableBuilder() {
                             }
                           : getSlot(day.key, period.id);
                         const pending = slot && slot._synced === 0;
+                        const tint    = slot ? slotAccent(slot) : null;
 
                         return (
                           <TouchableOpacity
@@ -801,6 +814,8 @@ export default function AdminTimetableBuilder() {
                               slot
                                 ? pending ? styles.pendingSlot : styles.filledSlot
                                 : styles.emptySlot,
+                              tint && { backgroundColor: tint.wash, borderTopColor: tint.base },
+                              // A slot in a listed conflict, outlined over its subject tint.
                               highlighted && styles.highlightSlot,
                             ]}
                             onPress={() =>
@@ -815,7 +830,7 @@ export default function AdminTimetableBuilder() {
                                 <Text style={styles.subjectText} numberOfLines={2}>
                                   {slot.subjectName}
                                 </Text>
-                                <Text style={styles.teacherText} numberOfLines={1}>
+                                <Text style={[styles.teacherText, { color: tint.deep }]} numberOfLines={1}>
                                   {slot.teacherName}
                                 </Text>
                                 {!!slot.room && (
@@ -828,13 +843,13 @@ export default function AdminTimetableBuilder() {
                                     <Ionicons
                                       name="cloud-offline-outline"
                                       size={10}
-                                      color="#D97706"
+                                      color={SEMANTIC.warning.text}
                                     />
                                   </View>
                                 )}
                               </View>
                             ) : (
-                              <Ionicons name="add" size={20} color="#D1D5DB" />
+                              <Ionicons name="add" size={20} color={COLORS.textMuted} />
                             )}
                           </TouchableOpacity>
                         );
@@ -874,7 +889,7 @@ const styles = StyleSheet.create({
     flex: 1, justifyContent: "center", alignItems: "center",
     backgroundColor: "#F9FAFB", gap: 12,
   },
-  loadingText: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   bottomSpacer:  { height: 40 },
@@ -882,116 +897,118 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12 },
-  headerTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
 
   syncButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.teal.wash,
     alignItems: "center", justifyContent: "center", marginLeft: 8,
   },
-  syncButtonPending: { backgroundColor: "#FEF3C7" },
+  syncButtonPending: { backgroundColor: SEMANTIC.warning.box },
   syncBadge: {
     position: "absolute", top: 4, right: 4,
-    backgroundColor: "#D97706", borderRadius: 6,
+    backgroundColor: ACCENT.amber.solid, borderRadius: 6,
     minWidth: 12, height: 12,
     alignItems: "center", justifyContent: "center", paddingHorizontal: 2,
   },
-  syncBadgeText: { fontSize: 8, color: "#FFFFFF", fontWeight: "700" },
+  syncBadgeText: { fontSize: 8, color: COLORS.onPrimary, fontWeight: "700" },
 
   errorBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEE2E2", padding: 12, borderRadius: 10,
+    backgroundColor: SEMANTIC.error.box, padding: 12, borderRadius: 10,
     marginBottom: 12, gap: 8,
   },
-  errorText:  { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText:  { fontSize: 13, fontWeight: "700", color: "#DC2626" },
+  errorText:  { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText:  { fontSize: 13, fontWeight: "700", color: SEMANTIC.error.text },
 
   unsyncedBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEF3C7", padding: 12, borderRadius: 10,
+    backgroundColor: SEMANTIC.warning.box, padding: 12, borderRadius: 10,
     marginBottom: 12, gap: 8,
   },
-  unsyncedText: { flex: 1, fontSize: 13, color: "#92400E", fontWeight: "500" },
+  unsyncedText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text, fontWeight: "500" },
 
   syncingBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF", padding: 12, borderRadius: 10,
+    backgroundColor: SEMANTIC.info.bg, padding: 12, borderRadius: 10,
     marginBottom: 12, gap: 8,
   },
-  syncingText: { flex: 1, fontSize: 13, color: "#4F46E5", fontWeight: "500" },
+  syncingText: { flex: 1, fontSize: 13, color: SEMANTIC.info.text, fontWeight: "500" },
 
   configBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF", padding: 12, borderRadius: 12,
+    backgroundColor: ACCENT.teal.wash, padding: 12, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base,
     marginBottom: 20, gap: 8,
   },
-  configBannerText: { flex: 1, fontSize: 12, color: "#4F46E5", fontWeight: "500" },
-  configAction:     { fontSize: 12, fontWeight: "700", color: "#4F46E5" },
+  configBannerText: { flex: 1, fontSize: 12, color: ACCENT.teal.deep, fontWeight: "500" },
+  configAction:     { fontSize: 12, fontWeight: "700", color: ACCENT.teal.deep },
 
-  sectionLabel:  { fontSize: 14, fontWeight: "700", color: "#374151", marginBottom: 8 },
-  gridMetaTitle: { fontSize: 14, fontWeight: "600", color: "#6B7280", marginBottom: 12 },
-  highlightText: { color: "#111827", fontWeight: "700" },
+  sectionLabel:  { fontSize: 14, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
+  gridMetaTitle: { fontSize: 14, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 12 },
+  highlightText: { color: COLORS.text, fontWeight: "700" },
 
   classChipsScroll:  { marginBottom: 16, marginHorizontal: -20 },
   classChipsContent: { paddingHorizontal: 20 },
   classChip: {
-    backgroundColor: "#FFFFFF", paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: COLORS.border,
   },
-  classChipActive:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  classChipText:       { fontSize: 13, fontWeight: "600", color: "#374151" },
-  classChipTextActive: { color: "#FFFFFF" },
+  classChipText:       { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
 
   gridHeader:       { flexDirection: "row", marginBottom: 6 },
   periodHeaderCell: { width: 110, padding: 8 },
   dayHeaderCell:    { width: 110, padding: 8, alignItems: "center" },
-  gridHeaderText:   { fontWeight: "700", color: "#374151", fontSize: 13 },
+  gridHeaderText:   { fontWeight: "700", color: ACCENT.teal.deep, fontSize: 13 },
 
   gridRow: { flexDirection: "row", marginBottom: 6 },
   periodCell: {
     width: 110, minHeight: 82,
-    backgroundColor: "#FFFFFF", borderRadius: 12, padding: 10,
+    backgroundColor: ACCENT.teal.wash, borderRadius: 12, padding: 10,
     justifyContent: "center", marginRight: 4,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.teal.base,
   },
-  periodName: { fontWeight: "700", color: "#111827", fontSize: 13 },
-  periodTime: { fontSize: 11, color: "#6B7280", marginTop: 3 },
+  periodName: { fontWeight: "700", color: COLORS.text, fontSize: 13 },
+  periodTime: { fontSize: 11, color: ACCENT.teal.deep, marginTop: 3 },
 
   slotCell: {
     width: 110, minHeight: 82, borderRadius: 12,
     marginHorizontal: 2, padding: 6,
     alignItems: "center", justifyContent: "center", borderWidth: 1.5,
   },
-  emptySlot:   { backgroundColor: "#FFFFFF", borderColor: "#E5E7EB", borderStyle: "dashed" },
-  filledSlot:  { backgroundColor: "#ECFDF5", borderColor: "#059669" },
-  highlightSlot: { borderColor: "#DC2626", borderWidth: 3, borderStyle: "solid" },
-  pendingSlot: { backgroundColor: "#FFFBEB", borderColor: "#D97706", borderStyle: "dashed" },
+  emptySlot:   { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderStyle: "dashed" },
+  filledSlot:  { borderColor: COLORS.border, borderTopWidth: 3 },
+  highlightSlot: { borderColor: TONE_EDGE.error, borderWidth: 3, borderStyle: "solid" },
+  pendingSlot: { borderColor: TONE_EDGE.warning, borderStyle: "dashed", borderTopWidth: 3 },
 
   slotInner:   { alignItems: "center", justifyContent: "center", width: "100%" },
-  subjectText: { fontSize: 12, fontWeight: "700", color: "#111827", textAlign: "center" },
-  teacherText: { fontSize: 11, color: "#059669", marginTop: 3, textAlign: "center", fontWeight: "500" },
-  roomText:    { fontSize: 10, color: "#6B7280", marginTop: 2, textAlign: "center" },
+  subjectText: { fontSize: 12, fontWeight: "700", color: COLORS.text, textAlign: "center" },
+  teacherText: { fontSize: 11, marginTop: 3, textAlign: "center", fontWeight: "500" },
+  roomText:    { fontSize: 10, color: COLORS.textSecondary, marginTop: 2, textAlign: "center" },
   pendingDot:  { marginTop: 4 },
 
   emptyState: {
-    backgroundColor: "#FFFFFF", borderRadius: 14, padding: 24,
+    backgroundColor: COLORS.surface, borderRadius: 14, padding: 24,
     alignItems: "center", marginTop: 10,
-    borderWidth: 1, borderColor: "#E5E7EB", gap: 8,
+    borderWidth: 1, borderColor: COLORS.border, gap: 8,
   },
   emptyBox: {
-    backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16,
-    alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 16,
+    alignItems: "center", borderWidth: 1, borderColor: COLORS.border,
     marginBottom: 16, gap: 6,
   },
-  emptyText: { color: "#6B7280", fontSize: 13, textAlign: "center" },
+  emptyText: { color: COLORS.textSecondary, fontSize: 13, textAlign: "center" },
 });

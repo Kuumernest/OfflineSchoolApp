@@ -175,4 +175,11 @@ resultSummarySchema.index({ examId: 1, academicYear: 1, term: 1 });
 // idle poll, examining N documents to return none (docs/37). The mobile pull
 // (updatedAt >= since) is served by the same prefix.
 resultSummarySchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
+// Hard deletes leave a tombstone so the desktop mirror (GET /sync/changes,
+// syncTombstone) removes its copy, and a deleted id cannot be recreated
+// (db/plugins/syncTombstones.js). A run removes the rows of pupils it no longer ranks (examProcess.service).
+// Unpublishing writes one too (reason "unpublished"): non-admins mirror
+// published results only, and the published copy on their machine must go.
+resultSummarySchema.plugin(require("../plugins/syncTombstones"), { entity: "resultSummary", unpublishable: true });
+
 module.exports = mongoose.model("ResultSummary", resultSummarySchema);

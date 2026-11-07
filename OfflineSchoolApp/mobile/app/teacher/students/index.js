@@ -21,6 +21,9 @@ import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, TILE, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
+import { tileShell } from "../../../src/components/Tiles";
 
 /**
  * One-argument wrapper — preserves the existing call signature.
@@ -41,22 +44,21 @@ const tableExists = async (tableName) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const C = {
-  primary:   "#4F46E5", primaryBg: "#EEF2FF",
-  success:   "#059669", successBg: "#ECFDF5",
-  warning:   "#D97706", warningBg: "#FEF3C7",
-  error:     "#DC2626", errorBg:   "#FEF2F2",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
-  gray300:   "#D1D5DB", gray400: "#9CA3AF", gray500: "#6B7280",
-  gray600:   "#4B5563", gray700: "#374151", gray900: "#111827",
+  primary:   COLORS.primary, primaryBg: COLORS.primaryLight,
+  success:   COLORS.success, successBg: SEMANTIC.success.bg,
+  warning:   COLORS.warning, warningBg: SEMANTIC.warning.bg,
+  error:     SEMANTIC.error.text, errorBg: SEMANTIC.error.bg,
+  white:     COLORS.surface,
+  gray50:    COLORS.page, gray100: ACCENT.slate.wash, gray200: COLORS.border,
+  gray300:   COLORS.textMuted, gray400: COLORS.textMuted, gray500: COLORS.textSecondary,
+  gray600:   COLORS.textSecondary, gray700: COLORS.text, gray900: COLORS.text,
 };
 
+// Students are blue everywhere: a solid blue avatar with white initials.
 const AVATAR_COLORS = [
-  { bg: "#EEF2FF", text: "#4F46E5" }, { bg: "#ECFDF5", text: "#059669" },
-  { bg: "#FEF3C7", text: "#D97706" }, { bg: "#FEF2F2", text: "#DC2626" },
-  { bg: "#F0F9FF", text: "#0284C7" }, { bg: "#FDF4FF", text: "#A855F7" },
-  { bg: "#FFF7ED", text: "#EA580C" }, { bg: "#F0FDF4", text: "#16A34A" },
+  { bg: ACCENT.blue.solid, text: COLORS.onPrimary },
 ];
+const STUDENT_BADGE = accentBadge("blue");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 2 — LOCAL DB HELPERS
@@ -328,7 +330,7 @@ const getAvatarColor = (id) => {
 
 const genderIcon = (g) => {
   const val = String(g || "").toLowerCase();
-  if (val.startsWith("m")) return { icon: "male",   color: "#0284C7" };
+  if (val.startsWith("m")) return { icon: "male",   color: ACCENT.sky.solid };
   if (val.startsWith("f")) return { icon: "female", color: "#DB2777" };
   return null;
 };
@@ -433,9 +435,9 @@ export default function TeacherStudentsScreen() {
       {/* ── Stats Bar ── */}
       {students.length > 0 && (
         <View style={styles.statsBar}>
-                    <StatChip label={t("teacher.students.total")} value={stats.total}  color={C.primary} />
-          <StatChip label={t("teacher.students.male")} value={stats.male}   color="#0284C7" />
-          <StatChip label={t("teacher.students.female")} value={stats.female} color="#DB2777" />
+                    <StatChip label={t("teacher.students.total")} value={stats.total} />
+          <StatChip label={t("teacher.students.male")} value={stats.male} />
+          <StatChip label={t("teacher.students.female")} value={stats.female} />
         </View>
       )}
 
@@ -511,6 +513,7 @@ function Header({ title, count }) {
       >
         <Ionicons name="arrow-back" size={24} color={C.gray900} />
       </TouchableOpacity>
+      <HeaderIcon />
       <View style={styles.headerCenter}>
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
         {count != null && (
@@ -523,10 +526,10 @@ function Header({ title, count }) {
   );
 }
 
-function StatChip({ label, value, color }) {
+function StatChip({ label, value }) {
   return (
-    <View style={styles.statChip}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
+    <View style={[styles.statChip, tileShell("students")]}>
+      <Text style={[styles.statValue, { color: TILE.students.deep }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -559,12 +562,12 @@ function StudentRow({ student }) {
         </View>
         <View style={styles.rowBottom}>
           <View style={styles.metaChip}>
-            <Ionicons name="id-card-outline" size={11} color={C.gray500} />
+            <Ionicons name="id-card-outline" size={11} color={STUDENT_BADGE.text} />
             <Text style={styles.metaText}>{student.admissionNumber}</Text>
           </View>
           {student.email && (
             <View style={styles.metaChip}>
-              <Ionicons name="mail-outline" size={11} color={C.gray500} />
+              <Ionicons name="mail-outline" size={11} color={STUDENT_BADGE.text} />
               <Text style={styles.metaText} numberOfLines={1}>
                 {student.email}
               </Text>
@@ -589,7 +592,7 @@ function EmptyState({ hasSearch, onClear }) {
         <Ionicons
           name={hasSearch ? "search-outline" : "people-outline"}
           size={44}
-          color={C.gray300}
+          color={COLORS.onPrimary}
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -628,7 +631,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 56,
     paddingBottom: 14, backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
     gap: 10,
   },
   backBtn: {
@@ -645,17 +648,17 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 8,
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   statChip: {
     flex: 1, alignItems: "center",
     paddingVertical: 10, borderRadius: 10,
-    backgroundColor: C.gray50,
-    borderWidth: 1, borderColor: C.gray100,
+    backgroundColor: TILE.students.wash,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   statValue: { fontSize: 18, fontWeight: "800" },
   statLabel: {
-    fontSize: 10, color: C.gray500,
+    fontSize: 10, color: COLORS.textSecondary,
     fontWeight: "600", marginTop: 2,
     textTransform: "uppercase", letterSpacing: 0.5,
   },
@@ -664,7 +667,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     paddingHorizontal: 16, paddingVertical: 10,
     backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   searchBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -691,9 +694,10 @@ const styles = StyleSheet.create({
   // ── Row ─────────────────────────────────────────────────
   row: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: C.white, borderRadius: 12,
-    padding: 12, borderWidth: 1, borderColor: C.gray100,
-    shadowColor: "#000", shadowOpacity: 0.03,
+    backgroundColor: ACCENT.blue.wash, borderRadius: 12,
+    padding: 12, borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: ACCENT.blue.base,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.03,
     shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
@@ -716,11 +720,12 @@ const styles = StyleSheet.create({
   metaChip: {
     flexDirection: "row", alignItems: "center", gap: 3,
     paddingHorizontal: 7, paddingVertical: 2,
-    borderRadius: 5, backgroundColor: C.gray50,
+    borderRadius: 5, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: STUDENT_BADGE.border,
     maxWidth: "60%",
   },
   metaText: {
-    fontSize: 11, color: C.gray500,
+    fontSize: 11, color: STUDENT_BADGE.text,
     fontWeight: "600",
   },
 
@@ -731,7 +736,7 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     width: 80, height: 80, borderRadius: 40,
-    backgroundColor: C.gray100,
+    backgroundColor: ACCENT.blue.solid,
     alignItems: "center", justifyContent: "center",
     marginBottom: 4,
   },

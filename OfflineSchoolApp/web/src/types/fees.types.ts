@@ -77,6 +77,9 @@ export interface FeePayment {
   method:         PaymentMethod;
   reference?:     string | null;
   receiptNo?:     string | null;
+  /** A device-issued number the server refused and replaced; the official
+   *  receipt says it replaces this provisional one. Never changes once set. */
+  claimedReceiptNo?: string | null;
   note?:          string | null;
   receivedAt?:    string;
   /** Set on a correcting row: the payment it cancels. */
@@ -84,7 +87,7 @@ export interface FeePayment {
   /** Set on the original once a reversal exists. */
   reversedById?:  string | null;
   reversalReason?: string | null;
-  source?:        "web" | "mobile" | "import";
+  source?:        "web" | "mobile" | "desktop" | "import";
 }
 
 /** Never stored — always computed from the ledger. */
@@ -143,6 +146,8 @@ export interface PlanStatus {
 }
 
 export interface StudentFeeAccount {
+  /** Whose account this is (C1). Null when the pupil is no longer on record. */
+  student?: { _id: string; name: string | null; admissionNo: string | null; className: string | null } | null;
   charges:  FeeCharge[];
   payments: FeePayment[];
   totals:   FeeTotals;
@@ -156,10 +161,18 @@ export interface OutstandingRow extends FeeTotals {
   name:         string;
   enrollmentNo: string | null;
   classId:      string | null;
+  /** The part of `balance` past its due date (shared/arrears). */
+  overdue:      number;
+  isOverdue:    boolean;
 }
 
 export interface OutstandingReport {
   count:            number;
+  /** Everything owed this year, due or not. */
   totalOutstanding: number;
+  /** The part of it past its due date — the bell's figure. */
+  overdueTotal:     number;
+  overdueCount:     number;
+  overdueFamilies:  number;
   rows:             OutstandingRow[];
 }

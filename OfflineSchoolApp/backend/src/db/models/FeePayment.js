@@ -66,6 +66,21 @@ const feePaymentSchema = new mongoose.Schema(
      */
     receiptNo: { type: String, default: null, index: true },
 
+    /**
+     * The device-issued number this payment arrived with, when the server
+     * refused it and issued its own (shared/receipts.js rejectedDeviceReceipt —
+     * today, a number whose academic year is not the payment's).
+     *
+     * The bursar may already have handed the parent a provisional receipt under
+     * that number, so the official receipt says which paper it replaces. Null
+     * when the claimed number was kept (it IS receiptNo then) or none was sent.
+     *
+     * Internal audit data: printed on the receipt, shown to staff, never sent
+     * to the guardian portal as a field. Immutable — written once, when the
+     * row is created, and a later update cannot rewrite what the device said.
+     */
+    claimedReceiptNo: { type: String, default: null, immutable: true },
+
     /** When the money changed hands — not when the row reached the server. */
     receivedAt: { type: Date, default: Date.now, index: true },
     receivedBy: { type: String, default: null },
@@ -85,7 +100,7 @@ const feePaymentSchema = new mongoose.Schema(
      */
     source: {
       type:    String,
-      enum:    ["web", "mobile", "import"],
+      enum:    ["web", "mobile", "desktop", "import"],
       default: "web",
     },
 

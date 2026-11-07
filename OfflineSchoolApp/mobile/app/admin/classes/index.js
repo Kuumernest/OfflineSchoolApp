@@ -22,8 +22,11 @@ import { Ionicons }                  from "@expo/vector-icons";
 import { ClassService }              from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, levelAccent } from "../../../src/theme/colors";
+import { tileShell } from "../../../src/components/Tiles";
+import { HeaderIcon, IconSquare, Badge, EmptyState as TintEmpty } from "../../../src/components/Tinted";
 
-const BRAND = "#4F46E5";
+const BRAND = ACCENT.indigo.solid;
 
 // ─────────────────────────────────────────────────────────
 // CLASS CARD
@@ -34,18 +37,22 @@ const ClassCard = React.memo(function ClassCard({
 }) {
   const { t } = useTranslation();
   const isActive = !!classItem.isActive;
+  const accent = levelAccent(classItem.level);
+  const tint = ACCENT[accent];
 
   return (
     <TouchableOpacity
-      style={[styles.classCard, !isActive && styles.classCardInactive]}
+      style={[
+        styles.classCard,
+        { backgroundColor: tint.wash, borderLeftColor: tint.base },
+        !isActive && styles.classCardInactive,
+      ]}
       activeOpacity={0.7}
       onPress={() => onPress(classItem)}
       accessibilityRole="button"
       accessibilityLabel={`${classItem.name}, ${isActive ? "active" : "inactive"}`}
     >
-      <View style={[styles.classIcon, { backgroundColor: isActive ? "#EEF2FF" : "#F3F4F6" }]}>
-        <Ionicons name="school" size={22} color={isActive ? BRAND : "#9CA3AF"} />
-      </View>
+      <IconSquare icon="school" accent={accent} size={44} radius={12} style={styles.classIcon} />
 
       <View style={styles.classInfo}>
         <Text style={[styles.className, !isActive && styles.classNameInactive]} numberOfLines={1}>
@@ -54,14 +61,14 @@ const ClassCard = React.memo(function ClassCard({
 
         <View style={styles.classMeta}>
           <View style={styles.metaItem}>
-            <Ionicons name="book-outline" size={13} color="#6B7280" />
+            <Ionicons name="book-outline" size={13} color={tint.solid} />
             <Text style={styles.metaText}>
               {classItem.subjectCount ?? 0}{" "}
               {classItem.subjectCount === 1 ? "subject" : "subjects"}
             </Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="people-outline" size={13} color="#6B7280" />
+            <Ionicons name="people-outline" size={13} color={tint.solid} />
             <Text style={styles.metaText}>
               {classItem.studentCount ?? 0}{" "}
               {classItem.studentCount === 1 ? "student" : "students"}
@@ -73,7 +80,7 @@ const ClassCard = React.memo(function ClassCard({
             missing value rather than a class without a form teacher. */}
         {classItem.classTeacherName ? (
           <View style={styles.metaItem}>
-            <Ionicons name="person-outline" size={13} color="#6B7280" />
+            <Ionicons name="person-outline" size={13} color={tint.solid} />
             <Text style={styles.metaText} numberOfLines={1}>
               {classItem.classTeacherName}
             </Text>
@@ -83,9 +90,12 @@ const ClassCard = React.memo(function ClassCard({
 
       <View style={styles.classActions}>
         {!isActive && (
-          <View style={styles.inactiveBadge}>
-            <Text style={styles.inactiveBadgeText}>{t("common.inactive")}</Text>
-          </View>
+          <Badge
+            label={t("common.inactive")}
+            tone="warning"
+            style={styles.inactiveBadge}
+            textStyle={styles.inactiveBadgeText}
+          />
         )}
 
         <TouchableOpacity
@@ -98,7 +108,7 @@ const ClassCard = React.memo(function ClassCard({
           <Ionicons
             name={isActive ? "pause-circle-outline" : "play-circle-outline"}
             size={22}
-            color={isActive ? "#D97706" : "#059669"}
+            color={isActive ? COLORS.warning : COLORS.success}
           />
         </TouchableOpacity>
 
@@ -109,10 +119,10 @@ const ClassCard = React.memo(function ClassCard({
           activeOpacity={0.7}
           accessibilityLabel={t("classesAdmin.a11yDelete")}
         >
-          <Ionicons name="trash-outline" size={20} color="#DC2626" />
+          <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
         </TouchableOpacity>
 
-        <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
       </View>
     </TouchableOpacity>
   );
@@ -121,21 +131,21 @@ const ClassCard = React.memo(function ClassCard({
 const EmptyState = React.memo(function EmptyState({ showInactive, onAdd }) {
   const { t } = useTranslation();
   return (
-    <View style={styles.emptyState}>
-      <Ionicons name="school-outline" size={48} color="#D1D5DB" />
-      <Text style={styles.emptyTitle}>
-        {showInactive ? t("classesAdmin.noneFound") : t("classesAdmin.noneActive")}
-      </Text>
-      <Text style={styles.emptySubtitle}>
-        {showInactive
-          ? t("classesAdmin.emptyFirst")
-          : t("classesAdmin.emptyInactive")}
-      </Text>
-      <TouchableOpacity style={styles.emptyButton} onPress={onAdd} activeOpacity={0.7}>
-        <Ionicons name="add-circle" size={18} color={BRAND} />
-        <Text style={styles.emptyButtonText}>{t("classesAdmin.addClass")}</Text>
-      </TouchableOpacity>
-    </View>
+    <TintEmpty
+      icon="school-outline"
+      accent="indigo"
+      style={styles.emptyState}
+      title={showInactive ? t("classesAdmin.noneFound") : t("classesAdmin.noneActive")}
+      message={showInactive
+        ? t("classesAdmin.emptyFirst")
+        : t("classesAdmin.emptyInactive")}
+      action={
+        <TouchableOpacity style={styles.emptyButton} onPress={onAdd} activeOpacity={0.7}>
+          <Ionicons name="add-circle" size={18} color={BRAND} />
+          <Text style={styles.emptyButtonText}>{t("classesAdmin.addClass")}</Text>
+        </TouchableOpacity>
+      }
+    />
   );
 });
 
@@ -149,12 +159,12 @@ const StatsBanner = React.memo(function StatsBanner({ stats }) {
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
-        <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.active}</Text>
+        <Text style={[styles.statNumber, { color: SEMANTIC.success.text }]}>{stats.active}</Text>
         <Text style={styles.statLabel}>{t("common.active")}</Text>
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
-        <Text style={[styles.statNumber, stats.inactive > 0 && { color: "#D97706" }]}>
+        <Text style={[styles.statNumber, stats.inactive > 0 && { color: SEMANTIC.warning.text }]}>
           {stats.inactive}
         </Text>
         <Text style={styles.statLabel}>{t("common.inactive")}</Text>
@@ -336,9 +346,10 @@ export default function AdminClasses() {
           activeOpacity={0.7}
           accessibilityLabel={t("common.goBack")}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("classesAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>
@@ -353,7 +364,7 @@ export default function AdminClasses() {
           activeOpacity={0.7}
           accessibilityLabel={t("classesAdmin.a11yAdd")}
         >
-          <Ionicons name="add" size={24} color="#FFFFFF" />
+          <Ionicons name="add" size={24} color={COLORS.onPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -394,7 +405,7 @@ export default function AdminClasses() {
       >
         {!!error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={SEMANTIC.error.icon} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               onPress={() => loadClasses()}
@@ -431,7 +442,7 @@ export default function AdminClasses() {
 const styles = StyleSheet.create({
   container:     { flex: 1, backgroundColor: "#F9FAFB" },
   centered:      { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F9FAFB" },
-  loadingText:   { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText:   { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   scrollContent: { paddingBottom: 40 },
 
   header: {
@@ -440,18 +451,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        Platform.OS === "ios" ? 60 : 20,
     paddingBottom:     16,
-    backgroundColor:   "#FFFFFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon:     { marginLeft: 12, marginRight: 0 },
   headerCenter:   { flex: 1, marginLeft: 12, marginRight: 8 },
-  headerTitle:    { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle:    { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   addButton: {
     width: 40, height: 40, borderRadius: 12,
     backgroundColor: BRAND,
@@ -460,12 +472,12 @@ const styles = StyleSheet.create({
 
   errorBanner: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: SEMANTIC.error.box,
     marginHorizontal: 20, marginTop: 16,
     padding: 12, borderRadius: 10, gap: 8,
   },
-  errorText: { flex: 1, fontSize: 13, color: "#991B1B", fontWeight: "500" },
-  retryText: { fontSize: 13, color: "#DC2626", fontWeight: "700" },
+  errorText: { flex: 1, fontSize: 13, color: SEMANTIC.error.text, fontWeight: "500" },
+  retryText: { fontSize: 13, color: SEMANTIC.error.text, fontWeight: "700" },
 
   filterBar: {
     flexDirection: "row",
@@ -474,54 +486,55 @@ const styles = StyleSheet.create({
   filterButton: {
     paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
   filterButtonActive: { backgroundColor: BRAND, borderColor: BRAND },
-  filterText:         { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  filterTextActive:   { color: "#FFFFFF" },
+  filterText:         { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  filterTextActive:   { color: COLORS.onPrimary },
 
   statsBanner: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#FFFFFF",
     marginHorizontal: 20, marginBottom: 12, marginTop: 4,
     borderRadius: 12, paddingVertical: 14,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1,
+    ...tileShell("classes"),
     gap: 24,
   },
   statItem:    { alignItems: "center" },
-  statNumber:  { fontSize: 20, fontWeight: "700", color: "#111827" },
-  statLabel:   { fontSize: 11, color: "#9CA3AF", fontWeight: "500", marginTop: 2 },
-  statDivider: { width: 1, height: 28, backgroundColor: "#E5E7EB" },
+  statNumber:  { fontSize: 20, fontWeight: "700", color: ACCENT.indigo.deep },
+  statLabel:   { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500", marginTop: 2 },
+  statDivider: { width: 1, height: 28, backgroundColor: COLORS.border },
 
   classCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     borderRadius: 14, padding: 14,
     marginHorizontal: 20, marginBottom: 8,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3,
   },
-  classCardInactive: { opacity: 0.65, borderColor: "#F3F4F6", borderStyle: "dashed" },
+  classCardInactive: { opacity: 0.65, borderStyle: "dashed" },
   classIcon: {
     width: 44, height: 44, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
     marginRight: 12,
   },
   classInfo:         { flex: 1, marginRight: 8 },
-  className:         { fontSize: 15, fontWeight: "700", color: "#111827" },
-  classNameInactive: { color: "#9CA3AF" },
+  className:         { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  classNameInactive: { color: COLORS.textSecondary },
   classMeta:         { flexDirection: "row", marginTop: 4, gap: 12 },
   metaItem:          { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText:          { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  metaText:          { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
   classActions:      { flexDirection: "row", alignItems: "center", gap: 4 },
   inactiveBadge: {
-    backgroundColor: "#FEF3C7",
+    alignSelf: "center",
     paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: 6, marginRight: 4,
   },
   inactiveBadgeText: {
     fontSize: 10, fontWeight: "700",
-    color: "#D97706", textTransform: "uppercase",
+    textTransform: "uppercase",
   },
   actionButton: { padding: 6 },
 
@@ -529,13 +542,12 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     paddingVertical: 60, paddingHorizontal: 40,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "600", color: "#374151", marginTop: 12 },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", marginTop: 4, textAlign: "center" },
   emptyButton: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.indigo.wash,
+    borderWidth: 1, borderColor: ACCENT.indigo.base,
     paddingHorizontal: 20, paddingVertical: 12,
     borderRadius: 10, marginTop: 20, gap: 8,
   },
-  emptyButtonText: { fontSize: 14, fontWeight: "600", color: BRAND },
+  emptyButtonText: { fontSize: 14, fontWeight: "600", color: ACCENT.indigo.deep },
 });

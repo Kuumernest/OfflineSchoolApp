@@ -11,6 +11,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore }     from "@/store/auth.store";
 import SyncOverwriteService from "@/services/sync-overwrite.service";
+import { COLORS, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
+
+const ACTION_BTN = accentBadge("amber");
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -45,12 +49,12 @@ const timeAgo = (value) => {
 
 const getActionConfig = (action) => {
   switch (action) {
-    case "suspend": return { icon: "ban-outline",             color: "#D97706", labelKey: "syncScreens.vSuspend" };
-    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", labelKey: "syncScreens.vRestore" };
-    case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.vDelete"  };
-    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.vMove"    };
+    case "suspend": return { icon: "ban-outline",             color: ACCENT.amber.solid,  deep: ACCENT.amber.deep,  labelKey: "syncScreens.vSuspend" };
+    case "restore": return { icon: "checkmark-circle-outline", color: ACCENT.green.solid,  deep: ACCENT.green.deep,  labelKey: "syncScreens.vRestore" };
+    case "delete":  return { icon: "trash-outline",            color: ACCENT.red.solid,    deep: ACCENT.red.deep,    labelKey: "syncScreens.vDelete"  };
+    case "move":    return { icon: "swap-horizontal-outline",  color: ACCENT.indigo.solid, deep: ACCENT.indigo.deep, labelKey: "syncScreens.vMove"    };
     // `raw` keeps an unrecognised action visible instead of mislabelling it.
-    default:        return { icon: "sync-outline",             color: "#6B7280", labelKey: "syncScreens.vUpdate", raw: action };
+    default:        return { icon: "sync-outline",             color: ACCENT.slate.solid,  deep: ACCENT.slate.deep,  labelKey: "syncScreens.vUpdate", raw: action };
   }
 };
 
@@ -70,7 +74,10 @@ const getEntityIcon = (entityType) => {
 function OverwriteRow({ item, onPress, onDismiss }) {
   const { t } = useTranslation();
   const action = getActionConfig(item.new_action);
-  const isUnseen = item.seen_by_loser === 0;
+  // Only a lost edit of yours is news; the note of a change you replaced is
+  // stored seen and never shows the dot.
+  const isUnseen = item.side === "lost" && item.seen_by_loser === 0;
+  const when     = formatDateTime(item.lost_edit_at);
 
   return (
     <TouchableOpacity
@@ -80,14 +87,14 @@ function OverwriteRow({ item, onPress, onDismiss }) {
     >
       {isUnseen && <View style={styles.unseenDot} />}
 
-      <View style={[styles.iconWrap, { backgroundColor: action.color + "15" }]}>
-        <Ionicons name={action.icon} size={20} color={action.color} />
+      <View style={[styles.iconWrap, { backgroundColor: action.color }]}>
+        <Ionicons name={action.icon} size={20} color={COLORS.onPrimary} />
       </View>
 
       <View style={styles.rowBody}>
         <View style={styles.rowHeader}>
           <Text style={styles.rowTitle} numberOfLines={1}>
-            {item.entity_name || `Unnamed ${item.entity_type}`}
+            {item.entity_name || t("syncScreens.unnamed", { type: item.entity_type })}
           </Text>
           <Text style={styles.rowTime}>{timeAgo(item.overwritten_at)}</Text>
         </View>
@@ -96,23 +103,21 @@ function OverwriteRow({ item, onPress, onDismiss }) {
           <Ionicons
             name={getEntityIcon(item.entity_type)}
             size={11}
-            color="#9CA3AF"
+            color={ACCENT.amber.solid}
           />
           <Text style={styles.rowMetaText}>
             {item.entity_type}
           </Text>
           <Text style={styles.rowSeparator}>•</Text>
-          <Text style={[styles.rowMetaText, { color: action.color, fontWeight: "600" }]}>
-            {action.label}
+          <Text style={[styles.rowMetaText, { color: action.deep, fontWeight: "600" }]}>
+            {action.raw || t(action.labelKey)}
           </Text>
         </View>
 
         <Text style={styles.rowDescription} numberOfLines={2}>
-          <Text style={{ fontWeight: "600", color: "#111827" }}>
-            {item.overwritten_by_name || t("syncScreens.someone")}
-          </Text>
-          {"'s edit replaced yours from "}
-          {formatDateTime(item.lost_edit_at)}
+          {item.side === "lost"
+            ? t("syncScreens.lostRow", { name: item.overwritten_by_name || t("syncScreens.someone"), when })
+            : t("syncScreens.wonRow", { name: item.lost_edit_by_name || t("syncScreens.someone"), when })}
         </Text>
       </View>
 
@@ -121,7 +126,7 @@ function OverwriteRow({ item, onPress, onDismiss }) {
         style={styles.dismissBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
-        <Ionicons name="close" size={18} color="#9CA3AF" />
+        <Ionicons name="close" size={18} color={COLORS.textSecondary} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -142,8 +147,11 @@ export default function SyncOverwritesScreen() {
 
   // ── Load overwrites ──────────────────────────────────
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ force = false } = {}) => {
     try {
+      // Your own overwritten edits live on the server; online, bring them
+      // down first. Offline, what this phone already has is shown.
+      await SyncOverwriteService.refreshFromServer({ force });
       const rows = await SyncOverwriteService.getAllOverwrites({
         schoolId,
         limit: 200,
@@ -176,7 +184,7 @@ export default function SyncOverwritesScreen() {
   // ── Dismiss all ──────────────────────────────────────
 
   const handleDismissAll = useCallback(() => {
-    const unseenCount = overwrites.filter((o) => o.seen_by_loser === 0).length;
+    const unseenCount = overwrites.filter((o) => o.side === "lost" && o.seen_by_loser === 0).length;
     if (unseenCount === 0) return;
 
     Alert.alert(
@@ -199,14 +207,14 @@ export default function SyncOverwritesScreen() {
 
   // ── Derived counts ───────────────────────────────────
 
-  const unseenCount = overwrites.filter((o) => o.seen_by_loser === 0).length;
+  const unseenCount = overwrites.filter((o) => o.side === "lost" && o.seen_by_loser === 0).length;
 
   // ── Loading ──────────────────────────────────────────
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.amber.solid} />
         <Text style={styles.loadingText}>{t("syncScreens.loading")}</Text>
       </View>
     );
@@ -220,7 +228,7 @@ export default function SyncOverwritesScreen() {
         <Header onBack={() => router.back()} />
         <View style={styles.emptyState}>
           <View style={styles.emptyIcon}>
-            <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+            <Ionicons name="checkmark-circle" size={40} color={COLORS.onPrimary} />
           </View>
           <Text style={styles.emptyTitle}>{t("syncScreens.allClear")}</Text>
           <Text style={styles.emptySubtitle}>
@@ -249,7 +257,7 @@ export default function SyncOverwritesScreen() {
 
       {/* Info banner */}
       <View style={styles.infoBanner}>
-        <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
+        <Ionicons name="information-circle-outline" size={16} color={SEMANTIC.info.text} />
         <Text style={styles.infoText}>
           {t("syncScreens.banner")}
         </Text>
@@ -260,8 +268,8 @@ export default function SyncOverwritesScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
-            tintColor="#4F46E5"
+            onRefresh={() => { setRefreshing(true); load({ force: true }); }}
+            tintColor={ACCENT.amber.solid}
           />
         }
       >
@@ -289,8 +297,9 @@ function Header({ onBack, actionLabel, onAction }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Ionicons name="chevron-back" size={22} color="#374151" />
+        <Ionicons name="chevron-back" size={22} color={COLORS.text} />
       </TouchableOpacity>
+      <HeaderIcon style={styles.headerIcon} />
       <View style={{ flex: 1 }}>
         <Text style={styles.headerTitle}>{t("syncScreens.listTitle")}</Text>
         <Text style={styles.headerSub}>{t("syncScreens.listBlurb")}</Text>
@@ -309,9 +318,9 @@ function Header({ onBack, actionLabel, onAction }) {
 // ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F9FAFB" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { color: "#6B7280", fontSize: 14 },
+  loadingText: { color: COLORS.textSecondary, fontSize: 14 },
   scroll:      { padding: 16, gap: 10 },
 
   // Header
@@ -319,60 +328,65 @@ const styles = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     gap:               12,
-    backgroundColor:   "#fff",
+    backgroundColor:   COLORS.surface,
     paddingHorizontal: 16,
     paddingTop:        50,
     paddingBottom:     14,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: COLORS.border,
   },
+  headerIcon: { marginRight: 0 },
   backBtn: {
     width:           38,
     height:          38,
     borderRadius:    10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  headerTitle: { fontSize: 17, fontWeight: "800", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  headerTitle: { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   actionBtn: {
-    backgroundColor:   "#EEF2FF",
+    backgroundColor:   ACTION_BTN.bg,
+    borderWidth:       1,
+    borderColor:       ACTION_BTN.border,
     borderRadius:      10,
     paddingHorizontal: 12,
     paddingVertical:   8,
   },
-  actionText: { fontSize: 12, fontWeight: "700", color: "#4338CA" },
+  actionText: { fontSize: 12, fontWeight: "700", color: ACTION_BTN.text },
 
   // Info banner
   infoBanner: {
     flexDirection:   "row",
     alignItems:      "flex-start",
     gap:             8,
-    backgroundColor: "#DBEAFE",
-    borderColor:     "#BFDBFE",
+    backgroundColor: SEMANTIC.info.bg,
+    borderColor:     SEMANTIC.info.box,
     borderWidth:     1,
     padding:         12,
     marginHorizontal:16,
     marginTop:       12,
     borderRadius:    10,
   },
-  infoText: { flex: 1, fontSize: 12, color: "#1E40AF", lineHeight: 17 },
+  infoText: { flex: 1, fontSize: 12, color: SEMANTIC.info.text, lineHeight: 17 },
 
   // Row
   row: {
     flexDirection:   "row",
     alignItems:      "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    14,
     borderWidth:     1,
-    borderColor:     "#E5E7EB",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.amber.base,
     padding:         14,
     gap:             12,
   },
   rowUnseen: {
-    borderColor:     "#C7D2FE",
-    backgroundColor: "#FAFBFF",
+    borderColor:     ACCENT.amber.base,
+    borderLeftColor: ACCENT.amber.base,
   },
   unseenDot: {
     position:        "absolute",
@@ -381,7 +395,7 @@ const styles = StyleSheet.create({
     width:           8,
     height:          8,
     borderRadius:    4,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.amber.solid,
   },
   iconWrap: {
     width:          40,
@@ -400,11 +414,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize:   14,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
     flex:       1,
     marginRight: 8,
   },
-  rowTime: { fontSize: 11, color: "#9CA3AF" },
+  rowTime: { fontSize: 11, color: COLORS.textSecondary },
   rowMeta: {
     flexDirection: "row",
     alignItems:    "center",
@@ -413,13 +427,13 @@ const styles = StyleSheet.create({
   },
   rowMetaText: {
     fontSize:      11,
-    color:         "#6B7280",
+    color:         COLORS.textSecondary,
     textTransform: "capitalize",
   },
-  rowSeparator: { fontSize: 11, color: "#D1D5DB" },
+  rowSeparator: { fontSize: 11, color: COLORS.textSecondary },
   rowDescription: {
     fontSize:   12,
-    color:      "#4B5563",
+    color:      COLORS.textSecondary,
     lineHeight: 17,
   },
   dismissBtn: {
@@ -428,7 +442,9 @@ const styles = StyleSheet.create({
     borderRadius:   14,
     alignItems:     "center",
     justifyContent: "center",
-    backgroundColor:"#F3F4F6",
+    backgroundColor:COLORS.surface,
+    borderWidth:    1,
+    borderColor:    COLORS.border,
   },
 
   // Empty state
@@ -442,21 +458,21 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width:           72,
     height:          72,
-    borderRadius:    36,
-    backgroundColor: "#ECFDF5",
+    borderRadius:    20,
+    backgroundColor: ACCENT.green.solid,
     alignItems:      "center",
     justifyContent:  "center",
     marginBottom:    8,
   },
-  emptyTitle:    { fontSize: 18, fontWeight: "800", color: "#111827" },
-  emptySubtitle: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 19 },
+  emptyTitle:    { fontSize: 18, fontWeight: "800", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center", lineHeight: 19 },
   emptyBtn: {
     marginTop:       16,
-    backgroundColor: "#4F46E5",
+    backgroundColor: ACCENT.amber.solid,
     borderRadius:    12,
     paddingHorizontal:20,
     paddingVertical: 10,
   },
-  emptyBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  emptyBtnText: { color: COLORS.onPrimary, fontWeight: "700", fontSize: 14 },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";

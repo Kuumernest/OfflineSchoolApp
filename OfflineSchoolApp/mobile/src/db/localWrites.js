@@ -29,10 +29,18 @@
  * times. This fires once per statement, and listeners debounce.
  */
 
+/**
+ * The owner stamp, loaded lazily: if it cannot load, writes go on exactly as
+ * before (unstamped) rather than failing.
+ */
+const loadOwnerStamp = () => {
+  try { return require("./ownerStamp").createOwnerStamp; } catch { return null; }
+};
+
 const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i;
 
 /** Tables whose writes are the sync's own machinery, never a user's change. */
-const IGNORED = /\b(mutation_outbox|sync_id_map)\b/i;
+const IGNORED = /\b(mutation_outbox|mutation_outbox_migrated|sync_id_map|local_meta)\b/i;
 
 const listeners = new Set();
 
@@ -57,13 +65,27 @@ export const noteStatement = (sql) => {
 /**
  * Wrap a database handle's write methods so each statement is reported.
  * Reported after the statement succeeds; a failed write changed nothing.
+ *
+ * Before a write, the owner stamp (ownerStamp.js) records who is signed in so
+ * a row made dirty from here on carries its author. It reads and writes only
+ * through the handle's ORIGINAL methods, and it never throws.
  */
-export const instrument = (db) => {
+export const instrument = (db, { ownerStamp = true } = {}) => {
   if (!db || db.__localWritesInstrumented) return db;
+  const raw = {
+    execAsync:   db.execAsync?.bind(db),
+    runAsync:    db.runAsync?.bind(db),
+    getAllAsync: db.getAllAsync?.bind(db),
+  };
+  const createOwnerStamp = ownerStamp ? loadOwnerStamp() : null;
+  const stamp = createOwnerStamp && raw.execAsync && raw.runAsync && raw.getAllAsync
+    ? createOwnerStamp(raw, typeof ownerStamp === "object" ? ownerStamp : undefined)
+    : null;
   for (const method of ["runAsync", "execAsync"]) {
     const original = db[method]?.bind(db);
     if (!original) continue;
     db[method] = async (sql, ...rest) => {
+      if (stamp) await stamp.beforeWrite(sql);
       const result = await original(sql, ...rest);
       noteStatement(sql);
       return result;

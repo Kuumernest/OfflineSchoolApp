@@ -30,6 +30,8 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { COLORS as THEME, ACCENT, SEMANTIC, TONE_EDGE, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // SKIP FLAG
@@ -54,20 +56,23 @@ export const hasStudentSkippedProfileSetup = async () => {
 // COLORS
 // ─────────────────────────────────────────────────────────
 
+// The form's colours, from the theme: sign-in and profile screens are blue.
 const C = {
-  primary:   "#4F46E5",
-  primaryBg: "#EEF2FF",
-  success:   "#059669",
-  error:     "#DC2626",
-  info:      "#2563EB",
-  white:     "#FFFFFF",
-  gray50:    "#F9FAFB",
-  gray100:   "#F3F4F6",
-  gray200:   "#E5E7EB",
-  gray400:   "#9CA3AF",
-  gray500:   "#6B7280",
-  gray700:   "#374151",
-  gray900:   "#111827",
+  primary:   ACCENT.blue.solid,
+  primaryBg: ACCENT.blue.wash,
+  primaryDeep: ACCENT.blue.deep,
+  success:   TONE_EDGE.success,
+  error:     SEMANTIC.error.icon,
+  errorText: SEMANTIC.error.text,
+  info:      SEMANTIC.info.icon,
+  white:     THEME.surface,
+  gray50:    THEME.page,
+  gray100:   ACCENT.slate.wash,
+  gray200:   THEME.border,
+  gray400:   THEME.textMuted,     // placeholders and decoration only
+  gray500:   THEME.textSecondary,
+  gray700:   THEME.text,
+  gray900:   THEME.text,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -141,8 +146,8 @@ const f = StyleSheet.create({
   icon:          { marginRight: 8 },
   input:         { flex: 1, fontSize: 14, color: C.gray900, paddingVertical: 12 },
   inputMulti:    { height: 80, textAlignVertical: "top", paddingTop: 12 },
-  hint:          { fontSize: 11, color: C.gray400, marginTop: 4 },
-  errorText:     { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
+  hint:          { fontSize: 11, color: C.gray500, marginTop: 4 },
+  errorText:     { fontSize: 11, color: C.errorText, marginTop: 4, fontWeight: "500" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -169,7 +174,7 @@ function SelectField({ label, value, options, onSelect, required, error }) {
         <Ionicons
           name={open ? "chevron-up" : "chevron-down"}
           size={18}
-          color={C.gray400}
+          color={C.gray500}
         />
       </TouchableOpacity>
       {open && (
@@ -205,10 +210,10 @@ const sf = StyleSheet.create({
   placeholder:      { color: C.gray400 },
   dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
   option:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.gray100 },
-  optionActive:     { backgroundColor: C.primaryBg },
+  optionActive:     { backgroundColor: C.primaryBg, borderLeftWidth: 3, borderLeftColor: ACCENT.blue.base },
   optionText:       { fontSize: 14, color: C.gray700 },
-  optionTextActive: { color: C.primary, fontWeight: "600" },
-  errorText:        { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
+  optionTextActive: { color: C.primaryDeep, fontWeight: "600" },
+  errorText:        { fontSize: 11, color: C.errorText, marginTop: 4, fontWeight: "500" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -355,8 +360,12 @@ const saveProfile = async (form, userId) => {
   };
 
   // ── API (best-effort, never blocks local save) ────────
+  // Online-only on the server side: nothing queues it. Reported back so the
+  // screen can say "saved on this phone only" instead of pretending.
+  let serverSaved = false;
   try {
     await api.put("/student/profile", payload, { timeout: 10000 });
+    serverSaved = true;
   } catch (err) {
     if (err?.response?.status !== 404) {
       console.warn("[student/setup] API save failed:", err.message);
@@ -457,6 +466,7 @@ const saveProfile = async (form, userId) => {
     console.warn("[student/setup] SQLite error:", err.message);
     throw err; // Re-throw so handleSubmit can show the error
   }
+  return { serverSaved };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -529,7 +539,7 @@ const clearDraft = async (uid) => {
 export default function StudentProfileSetup() {
   const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
-  const setUser             = useAuthStore((s) => s.setUser);
+  const updateUser          = useAuthStore((s) => s.updateUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
 
   // Stable derived value
@@ -755,7 +765,7 @@ export default function StudentProfileSetup() {
 
     try {
       setSaving(true);
-      await saveProfile(form, userId);
+      const { serverSaved } = await saveProfile(form, userId);
 
       // Clear skip flag (profile is now complete) and draft
       await clearStudentProfileSkipFlag();
@@ -766,11 +776,13 @@ export default function StudentProfileSetup() {
 
       // Update auth store — guard will not fire again
       setProfileCompleted(true);
-      setUser?.({ ...user, name: fullName, profileCompleted: true });
+      // updateUser, not setUser: setUser(user) with no token wrote an empty
+      // token, and the pupil was signed out on the next launch.
+      updateUser?.({ name: fullName, profileCompleted: true });
 
       Alert.alert(
         t("profileStudent.savedTitle"),
-        t("profileStudent.savedBody"),
+        serverSaved ? t("profileStudent.savedBody") : t("common.savedOnPhoneOnly"),
         [{ text: t("profileStudent.continueBtn"), onPress: goToDashboard }]
       );
     } catch (err) {
@@ -782,7 +794,7 @@ export default function StudentProfileSetup() {
     } finally {
       setSaving(false);
     }
-  }, [form, userId, user, setUser, setProfileCompleted, goToDashboard, t]);
+  }, [form, userId, updateUser, setProfileCompleted, goToDashboard, t]);
 
   // ─────────────────────────────────────────────────────
   // STEP CONTENT
@@ -860,8 +872,8 @@ export default function StudentProfileSetup() {
             {/* Repeating toggle */}
             <View style={ss.toggleRow}>
               <View style={ss.toggleLeft}>
-                <View style={[ss.toggleIcon, { backgroundColor: "#FEF3C7" }]}>
-                  <Ionicons name="repeat-outline" size={18} color="#D97706" />
+                <View style={[ss.toggleIcon, { backgroundColor: ACCENT.amber.solid }]}>
+                  <Ionicons name="repeat-outline" size={18} color={THEME.onPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={ss.toggleTitle}>
@@ -1042,6 +1054,7 @@ export default function StudentProfileSetup() {
           <TouchableOpacity onPress={goBack} style={ss.backBtn} hitSlop={8}>
             <Ionicons name="arrow-back" size={22} color={C.gray700} />
           </TouchableOpacity>
+          <HeaderIcon style={{ marginRight: 0 }} />
           <View style={{ flex: 1 }}>
             <Text style={ss.topTitle}>{t("profileStudent.title")}</Text>
             <Text style={ss.topSub}>
@@ -1061,7 +1074,7 @@ export default function StudentProfileSetup() {
         {/* SKIP HINT — only on step 0 */}
         {step === 0 && (
           <View style={ss.skipHint}>
-            <Ionicons name="information-circle-outline" size={14} color={C.gray400} />
+            <Ionicons name="information-circle-outline" size={14} color={SEMANTIC.info.icon} />
             <Text style={ss.skipHintText}>
               {t("profileStudent.skipHint")}
             </Text>
@@ -1095,7 +1108,7 @@ export default function StudentProfileSetup() {
                     : <Ionicons
                         name={s.icon}
                         size={14}
-                        color={isCurrent ? C.white : C.gray400}
+                        color={isCurrent ? C.white : C.gray500}
                       />
                   }
                 </View>
@@ -1112,9 +1125,12 @@ export default function StudentProfileSetup() {
         </ScrollView>
 
         {/* STEP HEADER */}
-        <View style={ss.stepHeader}>
-          <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
-          <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
+        <View style={[ss.stepHeader, ss.stepHeaderRow]}>
+          <IconSquare icon={STEPS[step].icon} accent="blue" size={28} />
+          <View style={{ flex: 1 }}>
+            <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+            <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
+          </View>
         </View>
 
         {/* FORM */}
@@ -1214,40 +1230,41 @@ const ss = StyleSheet.create({
   screen:           { flex: 1, backgroundColor: C.white },
   loadingScreen:    { flex: 1, backgroundColor: C.white, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText:      { fontSize: 14, color: C.gray500 },
-  topBar:           { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: C.white, gap: 10 },
-  backBtn:          { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  topBar:           { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: C.white, gap: 10, borderBottomWidth: 1, borderBottomColor: THEME.border },
+  backBtn:          { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray50, alignItems: "center", justifyContent: "center" },
   topTitle:         { fontSize: 17, fontWeight: "700", color: C.gray900 },
-  topSub:           { fontSize: 12, color: C.gray400, marginTop: 1 },
-  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.gray50 },
+  topSub:           { fontSize: 12, color: C.gray500, marginTop: 1 },
+  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.white },
   skipBtnText:      { fontSize: 13, fontWeight: "600", color: C.gray500 },
-  skipHint:         { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 16, marginBottom: 4, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: C.gray50, borderRadius: 8 },
-  skipHintText:     { fontSize: 11, color: C.gray400, flex: 1, lineHeight: 16 },
+  skipHint:         { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 16, marginBottom: 4, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: SEMANTIC.info.bg, borderRadius: 8, borderWidth: 1, borderColor: statusBadge("info").border },
+  skipHintText:     { fontSize: 11, color: SEMANTIC.info.text, flex: 1, lineHeight: 16 },
   progressTrack:    { height: 4, backgroundColor: C.gray100, marginHorizontal: 16 },
   progressFill:     { height: "100%", backgroundColor: C.primary, borderRadius: 2 },
   stepRow:          { maxHeight: 80, backgroundColor: C.white },
   stepRowContent:   { paddingHorizontal: 16, paddingVertical: 12, gap: 24, alignItems: "center" },
   stepItem:         { alignItems: "center", gap: 4 },
-  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
-  stepCircleActive: { backgroundColor: C.primary },
-  stepCircleDone:   { backgroundColor: C.success },
-  stepLabel:        { fontSize: 10, color: C.gray400, fontWeight: "500" },
-  stepLabelActive:  { color: C.primary, fontWeight: "700" },
-  stepLabelDone:    { color: C.success },
-  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray100, backgroundColor: C.gray50 },
+  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.white, borderWidth: 1, borderColor: C.gray200, alignItems: "center", justifyContent: "center" },
+  stepCircleActive: { backgroundColor: C.primary, borderColor: C.primary },
+  stepCircleDone:   { backgroundColor: C.success, borderColor: C.success },
+  stepLabel:        { fontSize: 10, color: C.gray500, fontWeight: "500" },
+  stepLabelActive:  { color: C.primaryDeep, fontWeight: "700" },
+  stepLabelDone:    { color: SEMANTIC.success.text },
+  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray200, backgroundColor: C.primaryBg },
+  stepHeaderRow:    { flexDirection: "row", alignItems: "center", gap: 10 },
   stepTitle:        { fontSize: 18, fontWeight: "700", color: C.gray900 },
   stepDesc:         { fontSize: 13, color: C.gray500, marginTop: 2 },
   formContent:      { paddingHorizontal: 20, paddingTop: 20 },
   row:              { flexDirection: "row", alignItems: "flex-start" },
-  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#DBEAFE", borderRadius: 12, padding: 12, marginBottom: 16 },
-  infoText:         { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 18 },
-  toggleRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.gray50, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.gray200 },
+  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: SEMANTIC.info.bg, borderRadius: 12, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: statusBadge("info").border },
+  infoText:         { flex: 1, fontSize: 13, color: SEMANTIC.info.text, lineHeight: 18 },
+  toggleRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.white, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.gray200 },
   toggleLeft:       { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   toggleIcon:       { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   toggleTitle:      { fontSize: 14, fontWeight: "600", color: C.gray900 },
-  toggleSub:        { fontSize: 11, color: C.gray400, marginTop: 1 },
+  toggleSub:        { fontSize: 11, color: C.gray500, marginTop: 1 },
   checkbox:         { width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: C.gray200, alignItems: "center", justifyContent: "center" },
   checkboxActive:   { backgroundColor: C.primary, borderColor: C.primary },
-  bottomBar:        { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.white, gap: 12, borderTopWidth: 1, borderTopColor: C.gray100 },
+  bottomBar:        { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.white, gap: 12, borderTopWidth: 1, borderTopColor: C.gray200 },
   backAction:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary },
   backActionText:   { fontSize: 14, fontWeight: "700", color: C.primary },
   nextBtn:          { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primary, paddingHorizontal: 24, paddingVertical: 13, borderRadius: 12, flex: 1, justifyContent: "center" },

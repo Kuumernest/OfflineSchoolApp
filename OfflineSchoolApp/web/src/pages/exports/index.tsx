@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Download, FileSpreadsheet } from "lucide-react";
+import { Download, FileSpreadsheet, SlidersHorizontal } from "lucide-react";
 
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
@@ -20,7 +20,10 @@ import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input, SelectField } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
 import { cn }          from "@/utils/cn";
+import { DASH_TINT, categoryAccent, type DashAccent } from "@/config/dashboardTint";
 import { getErrorMessage } from "@/lib/axios";
+import NeedsInternet       from "@/components/offline/NeedsInternet";
+import { useNeedsInternet } from "@/hooks/useNeedsInternet";
 
 import { fetchClasses } from "@/services/class.service";
 import {
@@ -29,6 +32,19 @@ import {
 } from "@/services/export.service";
 
 /** Which filters each export actually understands. */
+/** The selected kind card's ring, in its own colour (literal for Tailwind). */
+const SELECTED_RING: Record<DashAccent, string> = {
+  blue:   "ring-2 ring-accent-blue",
+  violet: "ring-2 ring-accent-violet",
+  indigo: "ring-2 ring-accent-indigo",
+  slate:  "ring-2 ring-accent-slate",
+  amber:  "ring-2 ring-accent-amber",
+  green:  "ring-2 ring-accent-green",
+  teal:   "ring-2 ring-accent-teal",
+  sky:    "ring-2 ring-accent-sky",
+  red:    "ring-2 ring-accent-red",
+};
+
 const FILTERS: Record<ExportKind, Array<keyof ExportParams>> = {
   students:    ["classId"],
   arrears:     ["academicYear"],
@@ -53,6 +69,7 @@ export default function ExportsPage() {
   const [selected, setSelected] = useState<ExportKind | null>(null);
   const [params, setParams]     = useState<ExportParams>({});
   const [busy, setBusy]         = useState(false);
+  const net                     = useNeedsInternet();
 
   const kindsQ = useQuery({
     queryKey: ["exports", "kinds"],
@@ -75,14 +92,16 @@ export default function ExportsPage() {
     if (!selected) return;
     setBusy(true);
     try {
-      const rows = await downloadExport(
+      const { rows, fileName } = await downloadExport(
         selected, schoolId, i18n.resolvedLanguage ?? "en", params
       );
       // Said explicitly, because a downloaded file that turns out to be empty
-      // is discovered only after opening it.
+      // is discovered only after opening it — and naming the file tells the
+      // reader what to look for in their downloads.
       toast(
         rows > 0
-          ? { kind: "success", title: t("exp.downloaded", { count: rows }) }
+          ? { kind: "success", title: t("exp.downloaded", { count: rows }),
+              message: t("exp.savedAs", { file: fileName }) }
           : { kind: "warning", title: t("exp.empty") }
       );
     } catch (err) {
@@ -101,13 +120,19 @@ export default function ExportsPage() {
           <Button
             icon={<Download className="h-4 w-4" />}
             loading={busy}
-            disabled={!selected}
+            disabled={!selected || net.blocked}
+            title={net.hint}
             onClick={run}
           >
-            {t("exp.download")}
+            {/* A spinner alone on an unchanged label read as nothing
+                happening while the workbook was built. */}
+            {busy ? t("exp.downloading") : t("exp.download")}
           </Button>
         }
       />
+
+      {/* The workbook is built by the server: online-only on the desktop. */}
+      <NeedsInternet />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {kinds.map((kind) => (
@@ -125,20 +150,15 @@ export default function ExportsPage() {
               );
             }}
             className={cn(
-              "rounded-card border p-4 text-left transition-colors",
-              selected === kind
-                ? "border-primary-600 bg-primary-50/60"
-                : "border-line bg-surface hover:bg-surface-muted"
+              "p-4 text-left transition-shadow hover:shadow-lift",
+              DASH_TINT[categoryAccent(kind)].card,
+              selected === kind && SELECTED_RING[categoryAccent(kind)]
             )}
           >
             <div className="flex items-center gap-2">
-              <FileSpreadsheet
-                className={cn(
-                  "h-4 w-4",
-                  selected === kind ? "text-primary-600" : "text-ink-faint"
-                )}
-                aria-hidden="true"
-              />
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(kind)].box)} aria-hidden="true">
+                <FileSpreadsheet className="h-4 w-4" />
+              </span>
               <p className="text-sm font-semibold text-ink">{t(`exp.${kind}`)}</p>
             </div>
             <p className="mt-1.5 text-xs text-ink-muted">{t(`exp.${kind}Hint`)}</p>
@@ -147,8 +167,11 @@ export default function ExportsPage() {
       </div>
 
       {active.length > 0 && (
-        <Card>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+        <Card className={DASH_TINT.slate.edge}>
+          <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+            <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-control", DASH_TINT.slate.box)} aria-hidden="true">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </span>
             {t("exp.filters")}
           </p>
 

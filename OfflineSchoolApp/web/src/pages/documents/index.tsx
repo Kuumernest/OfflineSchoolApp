@@ -21,6 +21,7 @@ import { FormField, SelectField } from "@/components/ui/FormField";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { useToast }    from "@/components/ui/Toast";
 import { cn }          from "@/utils/cn";
+import { DASH_TINT, categoryAccent, type DashAccent } from "@/config/dashboardTint";
 import { getErrorMessage } from "@/lib/axios";
 
 import { fetchClasses }  from "@/services/class.service";
@@ -29,11 +30,25 @@ import {
   fetchClassListHtml, fetchTranscriptHtml, fetchIdCardsHtml,
 } from "@/services/document.service";
 import { printHtml, previewHtml } from "@/print/document";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 /** The three sheets a roster is actually used as. */
 type ClassListVariant = "plain" | "register" | "contacts";
 
 type Tab = "classList" | "transcript" | "idCards";
+
+/** The selected option card's ring, in its own colour (literal for Tailwind). */
+const SELECTED_RING: Record<DashAccent, string> = {
+  blue:   "ring-2 ring-accent-blue",
+  violet: "ring-2 ring-accent-violet",
+  indigo: "ring-2 ring-accent-indigo",
+  slate:  "ring-2 ring-accent-slate",
+  amber:  "ring-2 ring-accent-amber",
+  green:  "ring-2 ring-accent-green",
+  teal:   "ring-2 ring-accent-teal",
+  sky:    "ring-2 ring-accent-sky",
+  red:    "ring-2 ring-accent-red",
+};
 
 export default function DocumentsPage() {
   const { t, i18n } = useTranslation();
@@ -45,7 +60,10 @@ export default function DocumentsPage() {
   const [variant, setVariant] = useState<ClassListVariant>("plain");
   const [query, setQuery]     = useState("");
   const [studentId, setStudentId] = useState("");
-  const [busy, setBusy]       = useState(false);
+  // One document at a time; the button says so until the tab or the print
+  // dialog has its content.
+  const flight = useSingleFlight();
+  const busy   = flight.busy;
 
   const classesQ = useQuery({
     queryKey: ["classes", schoolId],
@@ -71,8 +89,7 @@ export default function DocumentsPage() {
   }, [studentsQ.data, query]);
 
   /** Fetch the finished sheet, then print it or open it for a look. */
-  const run = async (mode: "print" | "preview") => {
-    setBusy(true);
+  const run = (mode: "print" | "preview") => flight.run(mode, async () => {
     try {
       // The console's language goes with the request: a head reading the app in
       // French should not get an English register.
@@ -81,16 +98,14 @@ export default function DocumentsPage() {
       const html =
         tab === "classList"  ? await fetchClassListHtml(classId, schoolId, variant, lang) :
         tab === "idCards"    ? await fetchIdCardsHtml(classId, schoolId, lang) :
-                               await fetchTranscriptHtml(studentId, schoolId, lang);
+                               await fetchTranscriptHtml(studentId, schoolId, lang, mode === "preview");
 
-      if (mode === "print") printHtml(html);
+      if (mode === "print") await printHtml(html);
       else previewHtml(html);
     } catch (err) {
       toast({ kind: "error", title: t("doc.print"), message: getErrorMessage(err) });
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   if (classesQ.isLoading) return <PageSpinner />;
 
@@ -114,17 +129,18 @@ export default function DocumentsPage() {
               variant="secondary"
               icon={<Eye className="h-4 w-4" />}
               disabled={!ready || busy}
+              loading={flight.busyKey === "preview"}
               onClick={() => run("preview")}
             >
-              {t("doc.preview")}
+              {flight.busyKey === "preview" ? t("common.preparing") : t("doc.preview")}
             </Button>
             <Button
               icon={<Printer className="h-4 w-4" />}
-              loading={busy}
-              disabled={!ready}
+              loading={flight.busyKey === "print"}
+              disabled={!ready || busy}
               onClick={() => run("print")}
             >
-              {t("doc.print")}
+              {flight.busyKey === "print" ? t("common.preparing") : t("doc.print")}
             </Button>
           </>
         }
@@ -155,7 +171,7 @@ export default function DocumentsPage() {
       </div>
 
       {tab === "classList" || tab === "idCards" ? (
-        <Card className="space-y-5">
+        <Card className={cn("space-y-5", DASH_TINT.slate.edge)}>
           <FormField label={t("cl.pick")} required>
             <SelectField
               value={classId}
@@ -166,13 +182,13 @@ export default function DocumentsPage() {
           </FormField>
 
           {tab === "idCards" && (
-            <p className="rounded-control border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">
+            <p className="rounded-control border border-info-line bg-info-soft px-3 py-2 text-xs text-info-text">
               {t("idc.hint")} {t("idc.blank")}
             </p>
           )}
 
           {tab === "classList" && <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
               {t("cl.variant")}
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -182,21 +198,25 @@ export default function DocumentsPage() {
                   type="button"
                   onClick={() => setVariant(v.key)}
                   className={cn(
-                    "rounded-card border p-3 text-left transition-colors",
-                    variant === v.key
-                      ? "border-primary-600 bg-primary-50/60"
-                      : "border-line bg-surface hover:bg-surface-muted"
+                    "flex items-start gap-3 p-3 text-left transition-shadow hover:shadow-lift",
+                    DASH_TINT[categoryAccent(v.key)].card,
+                    variant === v.key && SELECTED_RING[categoryAccent(v.key)]
                   )}
                 >
-                  <p className="text-sm font-medium text-ink">{t(`cl.${v.key}`)}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{v.hint}</p>
+                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-control", DASH_TINT[categoryAccent(v.key)].box)} aria-hidden="true">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{t(`cl.${v.key}`)}</span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">{v.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
           </div>}
         </Card>
       ) : (
-        <Card className="space-y-4">
+        <Card className={cn("space-y-4", DASH_TINT.slate.edge)}>
           <SearchInput
             value={query}
             onChange={setQuery}

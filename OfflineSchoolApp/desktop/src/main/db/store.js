@@ -266,22 +266,41 @@ const documents = (db) => {
       const id = String(doc._id ?? doc.id ?? "");
       if (!id) throw new Error(`Cannot store a ${collection} with no _id`);
 
+      // The version under a local write (migration 5): what a discard puts
+      // back. Taken from the row being replaced when that row is the server's;
+      // kept as it is when the row is already a local write (a second edit
+      // does not make the first edit the "server's version"); "none" when there
+      // was no row at all — a create. A server copy carries no base.
+      let baseJson = null, baseState = null;
+      if (pending) {
+        const prior = db.prepare(
+          "SELECT json, pending, base_json, base_state FROM docs WHERE collection = ? AND id = ?"
+        ).get(collection, id);
+        if (!prior)                   { baseState = 0; }
+        else if (prior.pending !== 1) { baseState = 1; baseJson = prior.json; }
+        else                          { baseState = prior.base_state; baseJson = prior.base_json; }
+      }
+
       db.prepare(`
-        INSERT INTO docs (collection, id, school_id, updated_at, deleted_at, json, pending)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO docs (collection, id, school_id, updated_at, deleted_at, json, pending, base_json, base_state)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(collection, id) DO UPDATE SET
           school_id  = excluded.school_id,
           updated_at = excluded.updated_at,
           deleted_at = excluded.deleted_at,
           json       = excluded.json,
-          pending    = excluded.pending
+          pending    = excluded.pending,
+          base_json  = excluded.base_json,
+          base_state = excluded.base_state
       `).run(
         collection, id,
         doc.schoolId ?? null,
         doc.updatedAt ?? null,
         doc.deletedAt ?? null,
         JSON.stringify(doc),
-        pending ? 1 : 0
+        pending ? 1 : 0,
+        baseJson,
+        baseState
       );
       return id;
     },
@@ -388,8 +407,46 @@ const documents = (db) => {
 
     /** Mark a locally-written row as confirmed by the server. */
     settle(collection, id) {
-      db.prepare("UPDATE docs SET pending = 0 WHERE collection = ? AND id = ?")
-        .run(collection, id);
+      db.prepare(
+        "UPDATE docs SET pending = 0, base_json = NULL, base_state = NULL WHERE collection = ? AND id = ?"
+      ).run(collection, id);
+    },
+
+    /**
+     * The server accepted a write to this row, but another write to it is
+     * still queued: record the server's answer as the version under the local
+     * one, and leave the row as it is — pending, showing the latest local
+     * change. A discard of the later write then restores this.
+     */
+    rebase(collection, id, serverDoc) {
+      const row = db.prepare("SELECT pending FROM docs WHERE collection = ? AND id = ?").get(collection, id);
+      if (!row) return;
+      if (row.pending !== 1) { this.put(collection, serverDoc); return; }
+      db.prepare(
+        "UPDATE docs SET base_json = ?, base_state = 1 WHERE collection = ? AND id = ?"
+      ).run(JSON.stringify(serverDoc), collection, id);
+    },
+
+    /**
+     * Undo the local write(s) on a row: put back the server's version under
+     * it, or remove the row if it was created here.
+     *
+     * @returns "restored" | "removed" | "unknown" (a row written before
+     *          migration 5, whose server version was never kept — left
+     *          untouched for the caller to decide) | "absent"
+     */
+    restore(collection, id) {
+      const row = db.prepare(
+        "SELECT pending, base_json, base_state FROM docs WHERE collection = ? AND id = ?"
+      ).get(collection, id);
+      if (!row) return "absent";
+      if (row.pending !== 1) return "restored";        // nothing local on it
+      if (row.base_state === 0) { this.forget(collection, id); return "removed"; }
+      if (row.base_state === 1 && row.base_json) {
+        this.put(collection, JSON.parse(row.base_json));
+        return "restored";
+      }
+      return "unknown";
     },
 
     /**
@@ -489,6 +546,14 @@ const state = (db) => ({
 
   all() {
     return db.prepare("SELECT * FROM sync_state ORDER BY collection").all();
+  },
+
+  /**
+   * Forget one collection's position, so the next pull offers all of it again.
+   * The way back to the server's copy of a row whose own copy was never kept.
+   */
+  resetCursor(collection) {
+    db.prepare("DELETE FROM sync_state WHERE collection = ?").run(collection);
   },
 
   /**

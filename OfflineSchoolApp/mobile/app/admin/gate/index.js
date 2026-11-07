@@ -26,22 +26,24 @@ import GateService        from "../../../src/services/gate.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 const C = {
-  primary:   "#3B4996",
-  in:        "#12683A",
-  inBg:      "#EEF7F1",
-  out:       "#96570B",
-  outBg:     "#FDF6EC",
-  danger:    "#9F2318",
-  dangerBg:  "#FDF2F1",
-  ink:       "#0D1220",
-  inkBody:   "#343D4F",
-  inkMuted:  "#4F5A70",
-  inkFaint:  "#666F84",
-  line:      "#E9EBF0",
-  surface:   "#FFFFFF",
-  canvas:    "#F4F5F8",
+  primary:   ACCENT.green.solid,
+  in:        SEMANTIC.success.text,
+  inBg:      SEMANTIC.success.bg,
+  out:       SEMANTIC.warning.text,
+  outBg:     SEMANTIC.warning.bg,
+  danger:    SEMANTIC.error.text,
+  dangerBg:  SEMANTIC.error.bg,
+  ink:       COLORS.text,
+  inkBody:   COLORS.text,
+  inkMuted:  COLORS.textSecondary,
+  inkFaint:  COLORS.textSubtle,
+  line:      COLORS.border,
+  surface:   COLORS.surface,
+  canvas:    COLORS.page,
 };
 
 /** How long the result banner stays before the scanner is armed again. */
@@ -137,7 +139,7 @@ export default function GateScannerScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.centre}>
-        <Ionicons name="camera-outline" size={44} color={C.inkFaint} />
+        <IconSquare icon="camera-outline" accent="green" size={56} radius={16} />
         <Text style={styles.permTitle}>{t("gate.cameraNeeded")}</Text>
         <Text style={styles.permBody}>{t("gate.cameraWhy")}</Text>
         <TouchableOpacity style={styles.permBtn} onPress={requestPermission} activeOpacity={0.85}>
@@ -159,12 +161,13 @@ export default function GateScannerScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
+          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.title}>{t("gate.title")}</Text>
           <Text style={styles.subtitle}>
@@ -174,8 +177,8 @@ export default function GateScannerScreen() {
         </View>
         <TouchableOpacity onPress={pullRoster} hitSlop={10} disabled={syncing}>
           {syncing
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Ionicons name="refresh" size={20} color="#fff" />}
+            ? <ActivityIndicator color={C.primary} size="small" />
+            : <Ionicons name="refresh" size={20} color={C.primary} />}
         </TouchableOpacity>
       </View>
 
@@ -198,7 +201,7 @@ export default function GateScannerScreen() {
         )}
 
         {banner && (
-          <View style={[styles.result, { backgroundColor: banner.bg }]}>
+          <View style={[styles.result, { backgroundColor: banner.bg, borderTopColor: banner.fg }]}>
             <Text style={[styles.resultLabel, { color: banner.fg }]}>{banner.label}</Text>
             {result.name ? (
               <Text style={styles.resultName} numberOfLines={2}>{result.name}</Text>
@@ -227,10 +230,19 @@ export default function GateScannerScreen() {
         ) : (
           <ScrollView>
             {log.events.slice(0, 30).map((e) => (
-              <View key={e.id} style={styles.row}>
+              <View
+                key={e.id}
+                style={[
+                  styles.row,
+                  { borderLeftColor: e.direction === "in" ? ACCENT.green.base : ACCENT.amber.base },
+                ]}
+              >
                 <View style={[
                   styles.pill,
-                  { backgroundColor: e.direction === "in" ? C.inBg : C.outBg },
+                  {
+                    backgroundColor: e.direction === "in" ? C.inBg : C.outBg,
+                    borderColor: e.direction === "in" ? SEMANTIC.success.box : SEMANTIC.warning.box,
+                  },
                 ]}>
                   <Text style={[
                     styles.pillText,
@@ -262,10 +274,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
-    backgroundColor: C.primary,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  title:    { fontSize: 16, fontWeight: "700", color: "#fff" },
-  subtitle: { marginTop: 1, fontSize: 11, color: "#ffffffc0" },
+  headerIcon: { marginRight: 0 },
+  title:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  subtitle: { marginTop: 1, fontSize: 11, color: COLORS.textSecondary },
 
   cameraWrap: { flex: 1, position: "relative", overflow: "hidden" },
 
@@ -279,6 +293,7 @@ const styles = StyleSheet.create({
   result: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center", justifyContent: "center", padding: 24,
+    borderTopWidth: 6,
   },
   resultLabel: {
     fontSize: 13, fontWeight: "800", textTransform: "uppercase",
@@ -292,14 +307,15 @@ const styles = StyleSheet.create({
     height: 210, backgroundColor: C.surface,
     borderTopWidth: 1, borderTopColor: C.line, padding: 14,
   },
-  logTitle: { fontSize: 12, fontWeight: "700", color: C.inkFaint, textTransform: "uppercase", letterSpacing: 0.6 },
-  empty:    { marginTop: 12, fontSize: 13, color: C.inkFaint },
+  logTitle: { fontSize: 12, fontWeight: "700", color: ACCENT.green.deep, textTransform: "uppercase", letterSpacing: 0.6 },
+  empty:    { marginTop: 12, fontSize: 13, color: COLORS.textSecondary },
 
   row: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
+    borderLeftWidth: 3, paddingLeft: 8,
   },
-  pill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 42, alignItems: "center" },
+  pill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, minWidth: 42, alignItems: "center", borderWidth: 1 },
   pillText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
   rowName:  { flex: 1, fontSize: 14, color: C.inkBody, fontWeight: "500" },
   rowTime:  { fontSize: 13, color: C.inkMuted, fontVariant: ["tabular-nums"] },
@@ -307,6 +323,6 @@ const styles = StyleSheet.create({
   permTitle:   { marginTop: 14, fontSize: 17, fontWeight: "700", color: C.ink, textAlign: "center" },
   permBody:    { marginTop: 6, fontSize: 14, color: C.inkMuted, textAlign: "center", lineHeight: 20 },
   permBtn:     { marginTop: 18, height: 46, paddingHorizontal: 22, borderRadius: 10, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
-  permBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  permBtnText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "600" },
   link:        { color: C.primary, fontSize: 14, fontWeight: "600" },
 });

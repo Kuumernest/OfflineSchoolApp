@@ -40,16 +40,16 @@ export default function SchoolContextBar() {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warning-line bg-warning-soft px-4 py-2 text-sm text-ink lg:px-6"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-context-line bg-context-bg px-4 py-2 text-sm text-context-text lg:px-6"
     >
-      <Building2 className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-      <span className="text-ink-muted">{t("platform.context.operatingIn")}</span>
+      <Building2 className="h-4 w-4 shrink-0 text-context-icon" aria-hidden="true" />
+      <span>{t("platform.context.operatingIn")}</span>
       <span className="font-semibold">
         {activeSchool.name}
-        {activeSchool.code ? <span className="ml-1 font-normal text-ink-muted">({activeSchool.code})</span> : null}
+        {activeSchool.code ? <span className="ml-1 font-normal">({activeSchool.code})</span> : null}
       </span>
       {activeSchool.academicYear ? (
-        <span className="text-ink-muted">
+        <span>
           · {activeSchool.academicYear}{activeSchool.currentTerm ? ` · ${activeSchool.currentTerm}` : ""}
         </span>
       ) : null}

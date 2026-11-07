@@ -112,6 +112,11 @@ const loadModule = (rel, stubs) => {
   app.use("/api/insights", auth.authenticate, require(path.join(BSRC, "routes/insights.routes")));
   app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, message: err.message }));
   const server = app.listen(0);
+  // Outlive the client's idle sockets: Node closes an idle keep-alive socket
+  // after 5 s, and on a loaded machine axios reuses one just as it closes
+  // (ECONNRESET, "Harness error") — as in check-staff-number.js.
+  server.keepAliveTimeout = 120_000;
+  server.headersTimeout   = 121_000;
   const API = `http://127.0.0.1:${server.address().port}/api`;
   const tokenOf = (id, role) => jwt.sign({ id, role, schoolId: A }, process.env.JWT_SECRET, { expiresIn: "1h" });
   const clientOf = (token) => axios.create({ baseURL: API, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });

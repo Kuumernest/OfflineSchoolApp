@@ -6,16 +6,20 @@ import {
   AlertTriangle, Megaphone, GraduationCap,
   ClipboardCheck, Settings, Clock,
   AlertCircle, ShieldAlert, MessageSquare,
+  ListTodo, ChevronRight,
 }                                                   from "lucide-react";
 import { cn }                                       from "@/utils/cn";
 import { useAuthStore }                             from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 import { timeAgo }        from "@/i18n";
+import { useFormat }      from "@/i18n/format";
 import {
   fetchNotifications,
+  fetchActionItems,
   markAsRead,
   markAllAsRead,
   type Notification,
+  type ActionItem,
 }                                                   from "@/services/notification.service";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -43,7 +47,7 @@ const TYPE_CONFIG: Record<
   },
   message: {
     icon:  <MessageSquare  className="w-4 h-4" />,
-    color: "bg-indigo-100 text-indigo-600",
+    color: "bg-primary-100 text-primary-600",
   },
   alert: {
     icon:  <ShieldAlert    className="w-4 h-4" />,
@@ -84,6 +88,8 @@ export default function NotificationPanel() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount,   setUnreadCount]   = useState(0);
   const [isLoading,     setIsLoading]     = useState(false);
+  const [actions,       setActions]       = useState<ActionItem[]>([]);
+  const fmt = useFormat();
   const [filter,        setFilter]        = useState<"all" | "unread" | "alerts">("all");
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -104,9 +110,13 @@ export default function NotificationPanel() {
     if (!schoolId) return;
     setIsLoading(true);
     try {
-      const data = await fetchNotifications(schoolId, 20, t);
+      const [data, todo] = await Promise.all([
+        fetchNotifications(schoolId, 20, t),
+        fetchActionItems(schoolId),
+      ]);
       setNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
+      setActions(todo);
     } catch (err) {
       console.warn("[NotificationPanel] Load failed:", err);
     } finally {
@@ -185,6 +195,11 @@ export default function NotificationPanel() {
       {/* ── Bell Button ────────────────────────────────────────────────────── */}
       <button
         onClick={() => setIsOpen((o) => !o)}
+        aria-label={
+          unreadCount > 0
+            ? `${t("notifications.title")} · ${t("portal.unreadCount", { count: unreadCount })}`
+            : t("notifications.title")
+        }
         className={cn(
           "relative p-2 rounded-lg transition-colors",
           isOpen
@@ -194,7 +209,11 @@ export default function NotificationPanel() {
       >
         <Bell className="w-5 h-5" />
 
-        {/* Unread badge */}
+        {/* Unread notifications only: the same count the panel's header
+            reads, so the badge is gone exactly when the panel says "All
+            read". It used to add the to-do items (C11), which reading cannot
+            clear — a bell showing "1" over a panel that said all read. The
+            to-dos are still listed at the top of the panel. */}
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -204,7 +223,9 @@ export default function NotificationPanel() {
 
       {/* ── Dropdown Panel ─────────────────────────────────────────────────── */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+        // On a phone the 384px panel, hung from the bell, started off the
+        // left edge of a 390px screen; there it spans the viewport instead.
+        <div className="fixed inset-x-2 top-14 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
 
           {/* Header */}
           {/* gap and min-w-0: the panel is a fixed w-96 with overflow-hidden, so
@@ -244,6 +265,35 @@ export default function NotificationPanel() {
               </button>
             </div>
           </div>
+
+          {/* To do (C11): live counts, gone once the work is done */}
+          {actions.length > 0 && (
+            <div className="border-b border-gray-100 bg-amber-50/40 px-4 py-2">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                <ListTodo className="h-3.5 w-3.5" aria-hidden />
+                {t("notifications.todo")}
+              </p>
+              <ul>
+                {actions.map((a) => (
+                  <li key={a.key}>
+                    <button
+                      onClick={() => { navigate(a.link); setIsOpen(false); }}
+                      className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left text-sm text-gray-700 hover:bg-amber-50"
+                    >
+                      <span>
+                        {t(`notifications.action.${a.key}`, {
+                          count: a.count,
+                          amount: a.amount != null ? fmt.money(a.amount) : "",
+                          families: t("notifications.families", { count: a.families ?? a.count }),
+                        })}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Filter tabs */}
           <div className="px-4 py-2 border-b border-gray-100 flex gap-2">

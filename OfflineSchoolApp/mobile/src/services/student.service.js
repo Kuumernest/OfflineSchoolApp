@@ -3,6 +3,11 @@
 import { getDatabase } from "../db/database";
 import api from "./api";
 import SyncOverwriteService from "./sync-overwrite.service";
+import {
+  MutationQueue, outboxRowsForTable, localIdsOf, registerReconciler, registerFailureHandler,
+} from "./mutationQueue.service";
+import { ensureStudentColumns } from "./studentEnroll.service";
+import { ensurePupilSyncColumns, queuedPupilIds } from "../db/pupilSync";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -53,16 +58,6 @@ const safeAddColumn = async (db, table, col, def) => {
       console.warn(`safeAddColumn ${col} on ${table}:`, err.message);
     }
   }
-};
-
-// ─────────────────────────────────────────────────────────────
-// LWW HELPER — appends baseUpdatedAt query param safely
-// ─────────────────────────────────────────────────────────────
-
-const appendBaseTimestamp = (url, baseTs) => {
-  if (!baseTs) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}baseUpdatedAt=${encodeURIComponent(baseTs)}`;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -336,11 +331,22 @@ export const dropAndRecreateStudentTable = async () => {
               row.admissionNumber,
               normaliseStatus(row.status),
               row.is_active ?? 1,
-              0,
+              // The row's own flag, not 0: a blanket 0 made every pupil read
+              // as unsent (db/pupilSync), and the markers below say which
+              // ones really are.
+              row._synced ?? 0,
               row.updated_at,
               row.created_at,
             ]
           );
+          if (row._operation || row._local_decision) {
+            await ensureStudentColumns(db).catch(() => {});
+            await ensurePupilSyncColumns(db).catch(() => {});
+            await db.runAsync(
+              "UPDATE students SET _operation = ?, _local_decision = ? WHERE id = ?",
+              [row._operation ?? null, row._local_decision ?? null, row.id]
+            ).catch(() => {});
+          }
           restored++;
         } catch (restoreErr) {
           failed++;
@@ -607,11 +613,23 @@ const cacheStudentsLocally = async (
   let   cached = 0;
   let   failed = 0;
 
+  // A pupil with a change still in the outbox (made offline, or refused and
+  // waiting on the pending-changes screen) keeps the phone's copy: this list
+  // may have left the server before the change was made, and writing it over
+  // the row would undo the change on screen. The change goes first; the next
+  // fetch after it refreshes the row.
+  // Every pupil the outbox has work for — the enrolment and an admission
+  // decision name theirs only in __reconcile — and, below, any row whose own
+  // flag says it holds an unsent change (an offline decision not queued yet).
+  await ensurePupilSyncColumns(db).catch(() => {});
+  const busy = await queuedPupilIds(db).catch(() => new Set());
+
   try {
     await db.execAsync("PRAGMA foreign_keys = OFF;");
 
     for (const s of students) {
       if (!s.id) continue;
+      if (busy.has(String(s.id))) continue;
 
       const fromParts = [s.firstName, s.lastName]
         .filter(Boolean)
@@ -736,7 +754,8 @@ const cacheStudentsLocally = async (
              status          = excluded.status,
              is_active       = excluded.is_active,
              _synced         = 1,
-             updated_at      = excluded.updated_at`,
+             updated_at      = excluded.updated_at
+           WHERE students._synced = 1`,
           [
             String(s.id),
             userId,
@@ -758,7 +777,9 @@ const cacheStudentsLocally = async (
             admNo,
             statusToWrite,
             isActiveToWrite,
-            now,
+            // The server's version stamp, not the time of caching: an offline
+            // change is sent with it as baseUpdatedAt.
+            s.updatedAt     || now,
           ]
         );
         cached++;
@@ -1315,6 +1336,216 @@ export const getStudentById = async (studentId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// OFFLINE CHANGES — the phone's copy first, the outbox sends them
+// ─────────────────────────────────────────────────────────────
+
+const CHANGE_KIND    = "studentChange";
+const CHANGE_ACTIONS = ["edit", "suspend", "restore", "move", "delete"];
+const changeKey      = (action, id) => `student-${action}:${id}`;
+
+/**
+ * Editable field → the local columns that hold it. The table carries both
+ * spellings for some (the pull writes guardian_name, enrolment guardianName);
+ * a correction writes every one that exists, so no screen reads a stale copy.
+ */
+const EDIT_COLUMNS = {
+  firstName:      ["firstName", "first_name"],
+  lastName:       ["lastName", "last_name"],
+  dateOfBirth:    ["dateOfBirth", "date_of_birth"],
+  gender:         ["gender"],
+  email:          ["email"],
+  phone:          ["phone"],
+  alternatePhone: ["alternatePhone"],
+  address:        ["address"],
+  city:           ["city"],
+  guardianName:   ["guardianName", "guardian_name"],
+  guardianPhone:  ["guardianPhone", "guardian_phone"],
+  guardianEmail:  ["guardianEmail", "guardian_email"],
+};
+
+/** The columns the offline writes need; returns the table's column list. */
+const ensureChangeColumns = async (db) => {
+  await ensureStudentSchema(db);
+  await ensureStudentColumns(db).catch(() => {});
+  await ensurePupilSyncColumns(db).catch(() => {});
+  const cols = await getColumns(db, "students");
+  for (const col of ["alternatePhone", "city", "className", "class_name", "deleted_at"]) {
+    if (!cols.includes(col)) await safeAddColumn(db, "students", col, "TEXT");
+  }
+  return getColumns(db, "students");
+};
+
+/** Outbox entries (not yet synced) that carry this pupil, the create included. */
+const pendingChangesFor = async (studentId) => {
+  const rows = await outboxRowsForTable("students").catch(() => []);
+  return rows.filter((r) => localIdsOf(r.payload?.__local).map(String).includes(String(studentId)));
+};
+
+/**
+ * The server version a change is made against: the one the first change
+ * still queued for this pupil was made against (the phone's copy has moved
+ * on since, under its own clock), else the caller's, else the row's.
+ */
+const baseFor = (pending, given, row) => {
+  const queued = pending.find((p) => p.payload?.__reconcile?.kind === CHANGE_KIND && p.payload?.baseUpdatedAt);
+  return queued?.payload?.baseUpdatedAt ?? given ?? row?.updated_at ?? row?.updatedAt ?? null;
+};
+
+/** A pupil enrolled on this phone whose create the server cannot have. */
+const neverSent = async (row, id) => {
+  const state = await MutationQueue.createState(`student-create:${id}`);
+  if (state === "unsent") return true;
+  if (state !== "none") return false;
+  return row?._operation === "create" && !(Number(row?._synced) === 1);
+};
+
+/**
+ * Writes the named columns that exist, plus updated_at. A change made here
+ * (`now` given) also marks the row unsent, so a pull cannot write over it
+ * before it is sent (syncStudents); the send's success marks it clean again
+ * (the outbox clears `_synced` for the `__local` row). A put-back after a
+ * refusal (`now` null) leaves the flag alone.
+ */
+const writeLocal = async (db, id, fields, now) => {
+  const cols = await getColumns(db, "students");
+  const sets = [];
+  const values = [];
+  for (const [col, value] of Object.entries(fields)) {
+    if (!cols.includes(col)) continue;
+    sets.push(`${col} = ?`);
+    values.push(value ?? null);
+  }
+  if (now) { sets.push("updated_at = ?"); values.push(now); }
+  if (now && sets.length && cols.includes("_synced")) sets.push("_synced = 0");
+  if (!sets.length) return;
+  await db.runAsync(`UPDATE students SET ${sets.join(", ")} WHERE id = ?`, [...values, id]);
+};
+
+const queueChange = async ({ id, action, method, endpoint, body = {}, resolve, base, since, before, merge = false }) => {
+  await MutationQueue.enqueue({
+    entityKey: changeKey(action, id),
+    method,
+    endpoint,
+    merge,
+    payload: {
+      ...body,
+      // In the body, not the query string: the id map rewrites path segments,
+      // and "<id>?baseUpdatedAt=…" would not be recognised as one.
+      ...(base ? { baseUpdatedAt: base } : {}),
+      ...(resolve ? { __resolve: resolve } : {}),
+      // Names the row, so the backfill's student sweeps leave it alone while
+      // this waits (coveredIds) and a success marks it clean.
+      __local:     { table: "students", ids: [id] },
+      __reconcile: { kind: CHANGE_KIND, action, localId: id, since, before },
+    },
+  });
+};
+
+const STATUS_FIELDS = {
+  suspend: { status: "suspended", is_active: 0 },
+  restore: { status: "approved",  is_active: 1 },
+};
+
+/** Suspend or restore; the opposite one still unsent is cancelled instead. */
+const setStatus = async (studentId, action, { baseUpdatedAt } = {}) => {
+  if (!studentId) throw new Error("studentId is required");
+  const db  = await getDatabase();
+  await ensureChangeColumns(db);
+  const id  = String(studentId);
+  const row = await db.getFirstAsync(`SELECT * FROM students WHERE id = ?`, [id]).catch(() => null);
+  const opposite = action === "suspend" ? "restore" : "suspend";
+  const pending  = await pendingChangesFor(id);
+  const now = new Date().toISOString();
+
+  await writeLocal(db, id, STATUS_FIELDS[action], now);
+
+  // Suspended then restored before anything was sent: the server never needs
+  // to hear about either (and would answer the restore "already active").
+  if ((await MutationQueue.createState(changeKey(opposite, id))) === "unsent") {
+    await MutationQueue.cancelUnsent(changeKey(opposite, id));
+    return { queued: false, cancelled: true };
+  }
+
+  await queueChange({
+    id, action, method: "PATCH", endpoint: `/students/${id}/${action}`,
+    base: baseFor(pending, baseUpdatedAt, row), since: now,
+    before: { status: row?.status ?? null, is_active: row?.is_active ?? null },
+  });
+  return { queued: true };
+};
+
+/** The correction form's fields from the phone's copy. */
+const readLocalEditable = async (id, pending) => {
+  const db   = await getDatabase();
+  const cols = await ensureChangeColumns(db);
+  const row  = await db.getFirstAsync(`SELECT * FROM students WHERE id = ?`, [id]).catch(() => null);
+  if (!row) return null;
+  const out = { _id: row.id };
+  for (const [field, candidates] of Object.entries(EDIT_COLUMNS)) {
+    const col = candidates.find((c) => cols.includes(c) && row[c] != null && row[c] !== "");
+    out[field] = col ? row[col] : null;
+  }
+  return {
+    ...out,
+    updatedAt:    baseFor(pending, null, row),
+    studentName:  row.studentName ?? row.name ?? null,
+    enrollmentNo: row.enrollmentNo ?? row.enrollment_no ?? row.admissionNo ?? null,
+    className:    row.className ?? row.class_name ?? null,
+    status:       row.status ?? null,
+  };
+};
+
+/**
+ * What a sent change settles, and what a refused one puts back. Registered
+ * from syncBackfill.registerReconcilers so a drain finds them even when no
+ * student screen has been opened since the app started.
+ */
+let _changeHandlersRegistered = false;
+export const registerStudentReconcilers = () => {
+  if (_changeHandlersRegistered) return;
+  _changeHandlersRegistered = true;
+
+  registerReconciler(CHANGE_KIND, async ({ response, args }) => {
+    const db = await getDatabase();
+    const id = args.localId;
+    if (!id) return;
+    if (args.action === "delete") {
+      // Done upstream (or already gone: 404/410) — the tombstone can go.
+      await db.runAsync(`DELETE FROM students WHERE id = ?`, [id]).catch(() => {});
+    } else {
+      // The server's version stamp, so the next change is made against it —
+      // unless the phone's copy moved on while this was in flight.
+      const stamp = response?.data?.data?.updatedAt;
+      if (stamp) {
+        await db.runAsync(
+          `UPDATE students SET updated_at = ? WHERE id = ? AND COALESCE(updated_at, '') = COALESCE(?, '')`,
+          [String(stamp), id, args.since ?? null]
+        ).catch(() => {});
+      }
+    }
+    const overwrote = response?.data?.overwrote;
+    if (overwrote?.id) {
+      await SyncOverwriteService.saveOverwrite(overwrote, {
+        entityType: "student",
+        entityId:   id,
+        entityName: response?.data?.data?.studentName || response?.data?.data?.name || null,
+        schoolId:   getSchoolId(),
+        action:     args.action,
+      });
+    }
+  });
+
+  // Refused (403, 400, 404 on a PATCH…): the phone shows what the school
+  // holds again; the refusal waits, with the server's reason, on the
+  // pending-changes screen.
+  registerFailureHandler(CHANGE_KIND, async ({ args }) => {
+    const db = await getDatabase();
+    if (!args?.localId || !args.before) return;
+    await writeLocal(db, args.localId, args.before, null).catch(() => {});
+  });
+};
+
+// ─────────────────────────────────────────────────────────────
 // SERVICE (admin-facing)
 // ─────────────────────────────────────────────────────────────
 
@@ -1583,7 +1814,7 @@ export const StudentService = {
     await db
       .runAsync(
         `UPDATE students
-         SET status = 'approved', is_active = 1, updated_at = ?, _synced = 0
+         SET status = 'approved', is_active = 1, updated_at = ?, _synced = 1
          WHERE id = ?`,
         [now, studentId]
       )
@@ -1601,7 +1832,7 @@ export const StudentService = {
     await db
       .runAsync(
         `UPDATE students
-         SET status = 'rejected', is_active = 0, updated_at = ?, _synced = 0
+         SET status = 'rejected', is_active = 0, updated_at = ?, _synced = 1
          WHERE id = ?`,
         [now, studentId]
       )
@@ -1609,156 +1840,106 @@ export const StudentService = {
     return response.data;
   },
 
-  // ── SUSPEND (LWW-aware) ─────────────────────────────────────────────────
+  // ── SUSPEND / RESTORE / MOVE / DELETE / CORRECT — written here, sent later ──
+  //
+  // Each of these used to call the API and only then touch SQLite, so offline
+  // they failed and the screen disabled them. Now the phone's copy changes at
+  // once and the request waits in the outbox (Idempotency-Key, retry, the
+  // pending-changes screen), sent once when there is a connection. The version
+  // the change was made against goes with it as baseUpdatedAt, so the server
+  // still records an overwrite when somebody else edited the pupil meanwhile
+  // (last write wins, and the loser can see what happened).
+  //
+  // Each returns { queued: true, ... } as soon as the phone holds the change.
+
+  /** Suspend. A restore of the same pupil still unsent is cancelled instead. */
+  async suspend(studentId, { baseUpdatedAt } = {}) {
+    return setStatus(studentId, "suspend", { baseUpdatedAt });
+  },
+
+  /** Restore. A suspension of the same pupil still unsent is cancelled instead. */
+  async restore(studentId, { baseUpdatedAt } = {}) {
+    return setStatus(studentId, "restore", { baseUpdatedAt });
+  },
+
   /**
-   * @param {string} studentId
-   * @param {object} [opts]
-   * @param {string} [opts.baseUpdatedAt] - ISO timestamp of the version the client
-   *   loaded, used by the server for LWW overwrite detection.
-   * @returns {Promise<object>} Server response (may include `overwrote` field).
+   * Remove a pupil.
+   *
+   * One created on this phone and never sent is simply dropped, with every
+   * change queued for it: the server has never heard of it, so nothing goes
+   * on the wire. Otherwise the row is hidden here and DELETE is queued; a
+   * 404/410 counts as done (the pupil is already gone).
    */
-    async suspend(studentId, { baseUpdatedAt } = {}) {
+  async delete(studentId, { baseUpdatedAt } = {}) {
     if (!studentId) throw new Error("studentId is required");
-    const db = await getDatabase();
-    await ensureStudentSchema(db);
+    const db  = await getDatabase();
+    await ensureChangeColumns(db);
+    const id  = String(studentId);
+    const row = await db.getFirstAsync(`SELECT * FROM students WHERE id = ?`, [id]).catch(() => null);
 
-    const url = appendBaseTimestamp(
-      `/students/${studentId}/suspend`,
-      baseUpdatedAt
-    );
-    const response = await api.patch(url);
-    const data     = response.data || {};
+    if (await neverSent(row, id)) {
+      for (const key of [`student-create:${id}`, ...CHANGE_ACTIONS.map((a) => changeKey(a, id))]) {
+        await MutationQueue.cancelUnsent(key);
+      }
+      await db.runAsync(`DELETE FROM students WHERE id = ?`, [id]).catch(() => {});
+      return { queued: false, dropped: true };
+    }
 
-    // Persist LWW overwrite record if the server reported one
-    if (data.overwrote) {
-      await SyncOverwriteService.saveOverwrite(data.overwrote, {
-        entityType: "student",
-        entityId:   studentId,
-        entityName: data.data?.name || data.data?.studentName || null,
-        schoolId:   getSchoolId(),
-        action:     "suspend",
-      });
+    // Anything else still waiting for this pupil is moot once it is removed.
+    const pending = await pendingChangesFor(id);
+    const base = baseFor(pending, baseUpdatedAt, row);
+    for (const action of ["edit", "suspend", "restore", "move"]) {
+      await MutationQueue.cancelUnsent(changeKey(action, id));
     }
 
     const now = new Date().toISOString();
-    await db
-      .runAsync(
-        `UPDATE students
-         SET status = 'suspended', is_active = 0, updated_at = ?, _synced = 0
-         WHERE id = ?`,
-        [now, studentId]
-      )
-      .catch(() => {});
-
-    return data;
+    await writeLocal(db, id, { deleted_at: now, is_active: 0 }, now);
+    await queueChange({
+      id, action: "delete", method: "DELETE", endpoint: `/students/${id}`,
+      base, since: now, before: { deleted_at: null, is_active: row?.is_active ?? 1 },
+    });
+    return { queued: true };
   },
 
-  // ── RESTORE (LWW-aware) ─────────────────────────────────────────────────
-    async restore(studentId, { baseUpdatedAt } = {}) {
-    if (!studentId) throw new Error("studentId is required");
-    const db = await getDatabase();
-    await ensureStudentSchema(db);
-
-    const url = appendBaseTimestamp(
-      `/students/${studentId}/restore`,
-      baseUpdatedAt
-    );
-    const response = await api.patch(url);
-    const data     = response.data || {};
-
-    if (data.overwrote) {
-      await SyncOverwriteService.saveOverwrite(data.overwrote, {
-        entityType: "student",
-        entityId:   studentId,
-        entityName: data.data?.name || data.data?.studentName || null,
-        schoolId:   getSchoolId(),
-        action:     "restore",
-      });
-    }
-
-    const now = new Date().toISOString();
-    await db
-      .runAsync(
-        `UPDATE students
-         SET status = 'approved', is_active = 1, updated_at = ?, _synced = 0
-         WHERE id = ?`,
-        [now, studentId]
-      )
-      .catch(() => {});
-
-    return data;
-  },
-
-  // ── DELETE (LWW-aware) ──────────────────────────────────────────────────
-    async delete(studentId, { baseUpdatedAt } = {}) {
-    if (!studentId) throw new Error("studentId is required");
-    const db = await getDatabase();
-    await ensureStudentSchema(db);
-
-    const url = appendBaseTimestamp(`/students/${studentId}`, baseUpdatedAt);
-
-    let data = {};
-    try {
-      const response = await api.delete(url);
-      data = response.data || {};
-    } catch (err) {
-      if (err?.response?.status !== 404) throw err;
-    }
-
-    if (data.overwrote) {
-      await SyncOverwriteService.saveOverwrite(data.overwrote, {
-        entityType: "student",
-        entityId:   studentId,
-        entityName: null,   // record is gone, can't look up name
-        schoolId:   getSchoolId(),
-        action:     "delete",
-      });
-    }
-
-    await db
-      .runAsync(`DELETE FROM students WHERE id = ?`, [studentId])
-      .catch(() => {});
-
-    return data;
-  },
-
-  // ── MOVE TO CLASS (LWW-aware) ───────────────────────────────────────────
-    async moveToClass(studentId, classId, { baseUpdatedAt } = {}) {
+  /** Move to another class. Moving back before the first move is sent cancels it. */
+  async moveToClass(studentId, classId, { baseUpdatedAt } = {}) {
     if (!studentId) throw new Error("studentId is required");
     if (!classId)   throw new Error("classId is required");
-    const db = await getDatabase();
-    await ensureStudentSchema(db);
+    const db  = await getDatabase();
+    await ensureChangeColumns(db);
+    const id  = String(studentId);
+    const cid = String(classId);
+    const row = await db.getFirstAsync(`SELECT * FROM students WHERE id = ?`, [id]).catch(() => null);
+    const cls = await db.getFirstAsync(`SELECT name FROM classes WHERE id = ?`, [cid]).catch(() => null);
 
-    const url = appendBaseTimestamp(
-      `/students/${studentId}/move`,
-      baseUpdatedAt
-    );
-    const response = await api.patch(url, { classId });
-    const data     = response.data || {};
+    const pending  = await pendingChangesFor(id);
+    const queued   = pending.find((p) => p.payload?.__reconcile?.action === "move" && p.status === "pending");
+    const original = queued?.payload?.__reconcile?.before ?? {
+      class_id:   row?.class_id  ?? row?.classId    ?? null,
+      classId:    row?.classId   ?? row?.class_id   ?? null,
+      className:  row?.className ?? row?.class_name ?? null,
+      class_name: row?.class_name ?? row?.className ?? null,
+    };
+    const now = new Date().toISOString();
+    await writeLocal(db, id, {
+      class_id: cid, classId: cid,
+      ...(cls?.name ? { className: cls.name, class_name: cls.name } : {}),
+    }, now);
 
-    if (data.overwrote) {
-      await SyncOverwriteService.saveOverwrite(data.overwrote, {
-        entityType: "student",
-        entityId:   studentId,
-        entityName: data.data?.name || data.data?.studentName || null,
-        schoolId:   getSchoolId(),
-        action:     "move",
-      });
+    if (queued && String(original.class_id ?? original.classId ?? "") === cid
+        && (await MutationQueue.createState(changeKey("move", id))) === "unsent") {
+      await MutationQueue.cancelUnsent(changeKey("move", id));
+      return { queued: false, cancelled: true };
     }
 
-    const now = new Date().toISOString();
-    await db
-      .runAsync(
-        `UPDATE students
-         SET class_id = ?, classId = ?, updated_at = ?, _synced = 0
-         WHERE id = ?`,
-        [classId, classId, now, studentId]
-      )
-      .catch(() => {});
-
-    return data;
+    await queueChange({
+      id, action: "move", method: "PATCH", endpoint: `/students/${id}/move`,
+      body: { classId: cid }, resolve: ["classId"],
+      base: baseFor(pending, baseUpdatedAt, row), since: now, before: original,
+    });
+    return { queued: true, data: { classId: cid, className: cls?.name ?? null } };
   },
-  // ── CORRECT A RECORD (LWW-aware) ────────────────────────────────────────
+
   /**
    * Fix details that were mistyped when the pupil was admitted.
    *
@@ -1769,98 +1950,97 @@ export const StudentService = {
    * it: twenty server collections carry a studentId, so a fresh record detaches
    * their marks, register, fees and every card already issued.
    *
-   * Online-only, deliberately, because that is what every other student write in
-   * this file is. moveToClass, suspend, restore and remove all call the API and
-   * mirror the result into SQLite; none of them queue. Routing only this one
-   * through the outbox would give one screen two different failure modes
-   * depending on which button was pressed. Offline correction is worth having
-   * and is its own piece of work.
+   * Written to the phone's copy and queued as PATCH /students/:id carrying only
+   * the fields that moved. A second correction before the first is sent is
+   * merged into it. The server writes only what differs from what it holds, so
+   * a replay changes nothing twice. Sibling rule (CLAUDE.md): an email or
+   * phone shared with another pupil is never a reason to refuse.
    */
   async updateStudent(studentId, patch, { baseUpdatedAt, changeReason } = {}) {
     if (!studentId) throw new Error("studentId is required");
     if (!patch || Object.keys(patch).length === 0) throw new Error("nothing to update");
 
-    const db = await getDatabase();
-    await ensureStudentSchema(db);
+    const db   = await getDatabase();
+    const cols = await ensureChangeColumns(db);
+    const id   = String(studentId);
+    const row  = await db.getFirstAsync(`SELECT * FROM students WHERE id = ?`, [id]).catch(() => null);
 
-    const url  = appendBaseTimestamp(`/students/${studentId}`, baseUpdatedAt);
-    const body = { ...patch };
-    if (changeReason) body.changeReason = changeReason;
+    const fields = {};
+    for (const [field, value] of Object.entries(patch)) {
+      if (!EDIT_COLUMNS[field]) continue;
+      fields[field] = value === undefined ? null : value;
+    }
+    if (Object.keys(fields).length === 0) throw new Error("nothing to update");
 
-    const response = await api.patch(url, body);
-    const data     = response.data || {};
-
-    if (data.overwrote) {
-      await SyncOverwriteService.saveOverwrite(data.overwrote, {
-        entityType: "student",
-        entityId:   studentId,
-        entityName: data.data?.studentName || null,
-        schoolId:   getSchoolId(),
-        action:     "edit",
-      });
+    // What the phone held before, column by column, so a refusal can put it back.
+    const pending = await pendingChangesFor(id);
+    const earlier = pending.find((p) => p.payload?.__reconcile?.action === "edit")?.payload?.__reconcile?.before ?? {};
+    const local  = {};
+    const before = {};
+    for (const [field, value] of Object.entries(fields)) {
+      for (const col of EDIT_COLUMNS[field]) {
+        if (!cols.includes(col)) continue;
+        local[col]  = value;
+        before[col] = row ? row[col] ?? null : null;
+      }
+    }
+    if (fields.firstName !== undefined || fields.lastName !== undefined) {
+      const first = fields.firstName !== undefined ? fields.firstName : (row?.firstName ?? row?.first_name ?? "");
+      const last  = fields.lastName  !== undefined ? fields.lastName  : (row?.lastName  ?? row?.last_name  ?? "");
+      const full  = `${first ?? ""} ${last ?? ""}`.trim();
+      if (full) {
+        local.name = full; local.studentName = full;
+        before.name = row?.name ?? null; before.studentName = row?.studentName ?? null;
+      }
     }
 
-    /*
-     * Mirror the corrected fields locally.
-     *
-     * Only the ones this table holds, by their snake_case column names — the
-     * mirror does not carry every server field. _synced stays 0 so the next pull
-     * re-reads the row from the server rather than trusting this copy, which is
-     * what moveToClass does as well.
-     */
-    const COLUMN = {
-      firstName:     "first_name",
-      lastName:      "last_name",
-      studentName:   "student_name",
-      dateOfBirth:   "date_of_birth",
-      gender:        "gender",
-      email:         "email",
-      phone:         "phone",
-      address:       "address",
-      guardianName:  "guardian_name",
-      guardianPhone: "guardian_phone",
-      guardianEmail: "guardian_email",
-    };
+    const now = new Date().toISOString();
+    await writeLocal(db, id, local, now);
+    await queueChange({
+      id, action: "edit", method: "PATCH", endpoint: `/students/${id}`,
+      body: { ...fields, ...(changeReason ? { changeReason } : {}) },
+      base: baseFor(pending, baseUpdatedAt, row), since: now,
+      before: { ...before, ...earlier }, merge: true,
+    });
 
-    const saved  = data.data || {};
-    const sets   = [];
-    const values = [];
-    for (const [field, column] of Object.entries(COLUMN)) {
-      if (saved[field] === undefined) continue;
-      sets.push(`${column} = ?`);
-      values.push(saved[field] ?? null);
-    }
-
-    if (sets.length) {
-      const now = new Date().toISOString();
-      await db
-        .runAsync(
-          `UPDATE students SET ${sets.join(", ")}, updated_at = ?, _synced = 0 WHERE id = ?`,
-          [...values, now, studentId]
-        )
-        .catch(() => {});
-    }
-
-    return data;
+    return { queued: true, changed: Object.keys(fields), data: { id, ...fields } };
   },
 
   /**
    * The record as the correction form needs it.
    *
-   * Not getStudentById: that reads the local SQLite mirror and passes it through
-   * normaliseStudent, and neither carries every editable field — the mirror has
-   * its own column subset and the normaliser is a display projection. The edit
-   * form built on it showed empty name boxes for a pupil whose name the school
-   * holds, which invites somebody to retype it.
-   *
-   * Server-read, like the save itself: correcting a record is online-only in
-   * this app, so there is nothing to gain from a local copy that is narrower.
+   * From the server when it can answer and nothing is waiting to be sent for
+   * this pupil — GET /students/:id/editable carries every editable field and
+   * the version stamp. Otherwise (offline, or a change of ours still queued)
+   * from the phone's copy, which is where that queued change already is.
    */
   async getStudentForEdit(studentId) {
     if (!studentId) throw new Error("studentId is required");
-    const response = await api.get(`/students/${studentId}/editable`);
-    const body = response.data || {};
-    return body.data ?? body;
+    const id      = String(studentId);
+    const pending = await pendingChangesFor(id);
+    const local   = await readLocalEditable(id, pending);
+    if (pending.length && local) return local;
+    try {
+      const response = await api.get(`/students/${id}/editable`);
+      const body = response.data || {};
+      return body.data ?? body;
+    } catch (err) {
+      if (!err?.response && local) return local;
+      throw err;
+    }
+  },
+
+  /**
+   * Where this pupil's queued changes stand: "failed" when the server refused
+   * one (it waits on the pending-changes screen), "pending" while any is still
+   * to be sent, otherwise null.
+   */
+  async getPendingState(studentId) {
+    if (!studentId) return null;
+    const rows = await pendingChangesFor(String(studentId));
+    const failed = rows.find((r) => r.status === "failed" || r.status === "conflict");
+    if (failed) return { state: "failed", error: failed.error ?? null };
+    return rows.length ? { state: "pending", error: null } : null;
   },
 
   /** A pupil's correction history, newest first. Needs students.viewFull. */

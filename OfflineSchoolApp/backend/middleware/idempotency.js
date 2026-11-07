@@ -9,7 +9,7 @@ const IdempotencyKey = require("../src/db/models/IdempotencyKey");
  * A record stays "processing" when its request never completed through
  * res.json: the process died mid-handler, or the handler answered with
  * res.send/res.end/a stream. Before this it stayed so for the key's whole
- * 14-day life, and every retry of that queued change — mobile and desktop
+ * 45-day life, and every retry of that queued change — mobile and desktop
  * outboxes reuse one key per change — was told "in progress" until the TTL.
  *
  * Longer than the longest a request may run (server.timeout, 10 minutes in
@@ -20,7 +20,7 @@ const STALE_PROCESSING_MS = 11 * 60 * 1000;
 
 /*
  * Fields never kept in a stored response. The body is replayed to the same
- * user for 14 days, and is readable by anyone with database access for as
+ * user for 45 days, and is readable by anyone with database access for as
  * long: a temporary password (staff creation, approvals) is a credential.
  * A replay answers without it; the admin resets the password if the first
  * answer was lost.
@@ -30,6 +30,16 @@ const NOT_STORED = new Set(["tempPassword"]);
 function withoutSecrets(value) {
   if (Array.isArray(value)) return value.map(withoutSecrets);
   if (!value || typeof value !== "object" || value instanceof Date) return value;
+  // A live mongoose document (the quiz routes answer with Question.create's
+  // result, not a lean object) is a graph with cycles: walking its own keys
+  // recursed until the stack overflowed, AFTER the write had committed. The
+  // request answered 500, the key stayed "processing", and every retry from
+  // the phone's outbox was told IDEMPOTENCY_IN_PROGRESS for eleven minutes.
+  // Stored as what res.json sends — its toJSON() — like an ObjectId.
+  if (typeof value.toJSON === "function") {
+    const plain = value.toJSON();
+    if (plain !== value) return withoutSecrets(plain);
+  }
   const out = {};
   for (const [k, v] of Object.entries(value)) {
     if (!NOT_STORED.has(k)) out[k] = withoutSecrets(v);

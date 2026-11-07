@@ -62,6 +62,23 @@ export async function remapPayload({ endpoint, payload, lookup }) {
   // knows which of its fields hold an id — guessing by name would rewrite a
   // note that happens to contain one.
   for (const field of fields) {
+    // "list[].key" names an id inside each element of an array field — a
+    // quiz's questions[].question_id, hydrated while those questions still
+    // had the ids this device gave them.
+    if (field.includes("[].")) {
+      const [list, key] = field.split("[].");
+      if (!Array.isArray(next[list])) continue;
+      const items = [];
+      for (const item of next[list]) {
+        const current = item?.[key];
+        const mapped  = typeof current === "string" && current ? await lookup(current) : current;
+        if (mapped && mapped !== current) rewrote.push(`${list}.${key}`);
+        items.push(mapped && mapped !== current ? { ...item, [key]: mapped } : item);
+      }
+      next[list] = items;
+      continue;
+    }
+
     const current = next[field];
     if (typeof current !== "string" || !current) continue;
 

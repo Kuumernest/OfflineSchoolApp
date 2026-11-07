@@ -10,6 +10,8 @@ import { ClassService } from "../../../src/services/class.service";
 import { getTeachersList } from "../../../src/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, levelAccent } from "../../../src/theme/colors";
+import { HeaderIcon } from "../../../src/components/Tinted";
 
 // Matches Class.js maxlength (100) on the server. Was 50, which rejected
 // names the web/desktop console and the server both accept.
@@ -208,8 +210,9 @@ export default function EditClass() {
 
       <View style={styles.header}>
         <TouchableOpacity onPress={handleDiscard} style={styles.backButton} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={styles.headerIcon} />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("classesAdmin.editTitle")}</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
@@ -246,7 +249,7 @@ export default function EditClass() {
           </View>
         ) : null}
 
-        <View style={styles.formCard}>
+        <View style={[styles.formCard, { borderTopColor: ACCENT[levelAccent(level)].base }]}>
           <View style={styles.formGroup}>
             <Text style={styles.label}>
               {t("classesAdmin.nameLabel")} <Text style={styles.required}>*</Text>
@@ -454,7 +457,7 @@ export default function EditClass() {
                 onPress={() => setPickerOpen(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={22} color="#6B7280" />
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -482,7 +485,7 @@ export default function EditClass() {
                     <Ionicons
                       name={item.id ? "person-circle-outline" : "remove-circle-outline"}
                       size={20}
-                      color={selected ? "#4F46E5" : "#9CA3AF"}
+                      color={selected ? ACCENT.indigo.solid : COLORS.textSubtle}
                     />
                     <Text
                       style={[styles.pickerRowText, selected && styles.pickerRowTextOn]}
@@ -491,7 +494,7 @@ export default function EditClass() {
                       {item.name}
                     </Text>
                     {selected && (
-                      <Ionicons name="checkmark" size={18} color="#4F46E5" />
+                      <Ionicons name="checkmark" size={18} color={ACCENT.indigo.solid} />
                     )}
                   </TouchableOpacity>
                 );
@@ -531,7 +534,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  pickerTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  pickerTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text },
   pickerRow: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -541,8 +544,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F9FAFB",
   },
-  pickerRowText:   { flex: 1, fontSize: 15, color: "#374151" },
-  pickerRowTextOn: { color: "#4F46E5", fontWeight: "700" },
+  pickerRowText:   { flex: 1, fontSize: 15, color: COLORS.text },
+  pickerRowTextOn: { color: ACCENT.indigo.deep, fontWeight: "700" },
   pickerEmpty: {
     padding:   24,
     textAlign: "center",
@@ -555,27 +558,29 @@ const styles = StyleSheet.create({
     flex: 1, justifyContent: "center", alignItems: "center",
     backgroundColor: "#F9FAFB",
   },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems: "center", justifyContent: "center",
   },
+  headerIcon: { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSubtitle: { fontSize: 13, color: "#6B7280", marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   headerSaveBtn: {
     paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: "#EEF2FF", borderRadius: 10,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 10,
+    borderWidth: 1, borderColor: ACCENT.indigo.base,
     minWidth: 52, alignItems: "center",
   },
-  headerSaveText: { fontSize: 14, fontWeight: "700", color: "#4F46E5" },
+  headerSaveText: { fontSize: 14, fontWeight: "700", color: ACCENT.indigo.deep },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   originalBanner: {
     flexDirection: "row", alignItems: "center",
@@ -585,8 +590,9 @@ const styles = StyleSheet.create({
   originalBannerText: { fontSize: 13, color: "#1E40AF", fontWeight: "500" },
   originalBannerName: { fontWeight: "700" },
   formCard: {
-    backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20,
-    borderWidth: 1, borderColor: "#E5E7EB",
+    backgroundColor: COLORS.surface, borderRadius: 16, padding: 20,
+    borderWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 3,
   },
   formGroup: { marginBottom: 0 },
   label: { fontSize: 14, fontWeight: "600", color: "#374151", marginBottom: 8 },
@@ -608,13 +614,13 @@ const styles = StyleSheet.create({
   fieldErrorText: { fontSize: 12, color: "#DC2626", fontWeight: "500", flex: 1 },
   hint: { fontSize: 12, color: "#9CA3AF", flex: 1 },
   noChangeHint: { fontSize: 12, color: "#9CA3AF", fontStyle: "italic", flex: 1 },
-  changedHint: { fontSize: 12, color: "#4F46E5", fontWeight: "600", flex: 1 },
+  changedHint: { fontSize: 12, color: ACCENT.indigo.deep, fontWeight: "600", flex: 1 },
   charCount: { fontSize: 11, color: "#9CA3AF", marginLeft: 8 },
   charCountWarning: { color: "#D97706", fontWeight: "600" },
   charCountError: { color: "#DC2626", fontWeight: "700" },
   submitButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#4F46E5", borderRadius: 12,
+    backgroundColor: ACCENT.indigo.solid, borderRadius: 12,
     paddingVertical: 16, marginTop: 20, gap: 8,
   },
   submitButtonDisabled: { backgroundColor: "#9CA3AF" },

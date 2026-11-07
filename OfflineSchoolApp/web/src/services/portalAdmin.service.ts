@@ -27,6 +27,10 @@ export interface GuardianAccessRow {
   revokedAt:  string | null;
   lastSeenAt: string | null;
   children:   AccessChild[];
+  /** The children's recorded guardian(s), for codes issued with no label. */
+  guardianNames?:     string[];
+  /** Every child it opened has left the roster, or it never opened any (C8). */
+  linkedToNoStudent?: boolean;
 }
 
 export async function fetchGuardianAccess(schoolId: string): Promise<GuardianAccessRow[]> {

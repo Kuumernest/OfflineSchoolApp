@@ -14,6 +14,8 @@
  * only when the template does.
  */
 
+const { RECEIPT_LABELS } = require("../../../shared/receiptHtml");
+
 const LABELS = {
   en: {
     // ── Shared ──
@@ -57,31 +59,21 @@ const LABELS = {
     emptyRecord:    "Nothing on record for this student yet",
     disclaimer:
       "This is a record of results published by the school. It is not a certificate.",
+    // Words for the stored values, so the record reads "Female", "Approved",
+    // "1st Term · Sequence 1" rather than female / approved / "Term 1" twice.
+    termNames:     ["1st Term", "2nd Term", "3rd Term"],
+    sequenceWord:  "Sequence",
+    outOf20:       "/20",
+    statusValues:  { pending: "Pending", approved: "Approved", rejected: "Rejected",
+                     suspended: "Suspended", graduated: "Graduated" },
+    outcomeValues: { promoted: "Promoted", repeated: "Repeated", graduated: "Graduated",
+                     transferred: "Transferred", withdrawn: "Withdrawn" },
 
     // ── Receipt ──
-    receipt:         "Fee receipt",
-    receiptReversal: "Receipt — payment reversed",
-    feePayment:      "School fees",
-    reversalOf:      "Reversal of a fee payment",
-    accountAfter:    "Account after this payment",
-    charged:         "Total charged",
-    waived:          "Less waivers",
-    paidToDate:      "Paid to date",
-    balance:         "Balance remaining",
-    receivedBy:      "Received by",
-    bursar:          "Bursar",
-    receiptNo:       "Receipt no.",
-    amount:          "Amount",
-    description:     "Description",
-    receiptNote:
-      "Keep this receipt. It is the school's record that this payment was made.",
-
-    // Payment methods. The stored values are codes ("mobile_money"); a receipt
-    // a parent keeps should not show an underscore.
-    methods: {
-      cash: "Cash", mobile_money: "Mobile money", bank: "Bank transfer",
-      cheque: "Cheque", waiver: "Waiver", other: "Other",
-    },
+    // shared/receiptHtml.js: the desktop and the phone print a provisional
+    // receipt from the same template and wording when this server is out of
+    // reach, so the words live beside the template.
+    ...RECEIPT_LABELS.en,
 
     // ── Verification ──
     verifyTitle: "Verify this document",
@@ -95,6 +87,8 @@ const LABELS = {
     studentSignature: "Student's signature",
     emergencyContact: "Emergency contact",
     sexValues:   { male: "Male", female: "Female", other: "Other" },
+    // A gender not given: the same phrase on every screen and document.
+    sexUnspecified: "Not specified",
   },
 
   fr: {
@@ -136,28 +130,15 @@ const LABELS = {
     emptyRecord:    "Aucun élément enregistré pour cet élève",
     disclaimer:
       "Ceci est un relevé des résultats publiés par l'établissement. Ce n'est pas un diplôme.",
+    termNames:     ["1er trimestre", "2e trimestre", "3e trimestre"],
+    sequenceWord:  "Séquence",
+    outOf20:       "/20",
+    statusValues:  { pending: "En attente", approved: "Admis(e)", rejected: "Refusé(e)",
+                     suspended: "Suspendu(e)", graduated: "Diplômé(e)" },
+    outcomeValues: { promoted: "Admis(e) en classe supérieure", repeated: "Redouble",
+                     graduated: "Diplômé(e)", transferred: "Transféré(e)", withdrawn: "Retiré(e)" },
 
-    receipt:         "Reçu de frais",
-    receiptReversal: "Reçu — paiement annulé",
-    feePayment:      "Frais de scolarité",
-    reversalOf:      "Annulation d'un paiement",
-    accountAfter:    "Situation après ce paiement",
-    charged:         "Total facturé",
-    waived:          "Moins les remises",
-    paidToDate:      "Payé à ce jour",
-    balance:         "Solde restant",
-    receivedBy:      "Reçu par",
-    bursar:          "Économe",
-    receiptNo:       "N° de reçu",
-    amount:          "Montant",
-    description:     "Description",
-    receiptNote:
-      "Conservez ce reçu. Il atteste que ce paiement a bien été effectué.",
-
-    methods: {
-      cash: "Espèces", mobile_money: "Mobile money", bank: "Virement bancaire",
-      cheque: "Chèque", waiver: "Remise", other: "Autre",
-    },
+    ...RECEIPT_LABELS.fr,
 
     verifyTitle: "Vérifier ce document",
     verifyHint:  "Scannez le code, ou saisissez",
@@ -169,21 +150,15 @@ const LABELS = {
     studentSignature: "Signature de l'élève",
     emergencyContact: "Contact d'urgence",
     sexValues:   { male: "Masculin", female: "Féminin", other: "Autre" },
+    sexUnspecified: "Non précisé",
   },
 };
 
 /** Falls back to English for anything not offered, never to a blank sheet. */
 const labelsFor = (lang) => LABELS[String(lang || "").toLowerCase().slice(0, 2)] ?? LABELS.en;
 
-/** Dates in the reader's language — the one place the locale genuinely matters. */
-const formatPrintDate = (date, lang) => {
-  try {
-    return new Intl.DateTimeFormat(lang === "fr" ? "fr-CM" : "en-CM", {
-      day: "numeric", month: "long", year: "numeric",
-    }).format(date);
-  } catch {
-    return date.toISOString().slice(0, 10);
-  }
-};
+// Dates in the reader's language — shared, so a receipt printed on the desktop
+// with no connection carries its date in the same words as the server's.
+const { formatPrintDate } = require("../../../shared/printDocument");
 
 module.exports = { LABELS, labelsFor, formatPrintDate };

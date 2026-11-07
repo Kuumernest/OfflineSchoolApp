@@ -347,3 +347,42 @@ the way payments do.
 - Replaying the exact HTTP request rather than a mutation format.
 - One request per row rather than batches.
 - Mobile continues past a refused row; desktop stops.
+
+## 10. Supported offline period: 30 days
+
+Owner decision (2026-11): a phone or desktop may work offline for up to **30
+days** and still have its queued changes accepted safely.
+
+**Idempotency keys live 45 days.** A replay is deduplicated only while the key
+from its first attempt exists, so `models/IdempotencyKey.js` declares
+`TTL_DAYS = 45` (30 days + a 15-day margin; was 14). Mongo keeps the TTL an
+index was built with, so `ensureIdempotencyTtl()` in
+`db/ensureStudentIndexes.js` runs at every boot before the index build: an old
+TTL is changed in place with `collMod`; a `createdAt` index that cannot be
+modified is dropped and rebuilt (only that index — the unique `(key, userId)`
+index is never touched); a correct one is left alone. The boot then logs
+`idempotencykeys TTL is 45 days` or the one-line `collMod` fix. Pinned by
+`backend/scripts/check-idempotency-ttl.js` (new database, old 14-day database,
+plain index, second boot).
+
+Unchanged: access tokens 30 days, refresh tokens 90 days.
+
+**Telling the person (one rule, never blocking).** Counted from the last
+*successful* sync with the server: from **day 21** a gentle notice ("Connect
+to the internet soon — this device last synced N days ago; changes older than
+30 days may not be accepted safely"), from **day 30** a stronger warning
+("Connect now: …"). An unknown time (never synced, epoch cursor) shows
+nothing. Nothing is disabled.
+
+- Phone: `mobile/src/config/offlinePeriod.js` (21/30 + `offlineAge()`);
+  `useSyncStatus` reads `SyncManager.getLastSync()` (the server time of the
+  last completed pull, read only) and re-reads it when a run ends;
+  `SyncStatusBar` shows it below sign-in and blocked changes.
+  `mobile/scripts/check-offline-period.js`.
+- Desktop: the engine (`desktop/src/main/sync/engine.js`) publishes
+  `lastSyncedAt` — the last pull the server answered, per server and school,
+  kept in `meta` across restarts (a failed cycle sets `lastCycleAt`, not this)
+  — over the existing `sync:status` bridge. `web/src/config/offlinePeriod.ts`
+  holds 21/30; `InitialSyncBanner`, once the first sync is done, shows the
+  notice/warning and re-evaluates hourly. `desktop/scripts/check-initial-sync.js`,
+  `web/scripts/check-offline-period.mjs`.

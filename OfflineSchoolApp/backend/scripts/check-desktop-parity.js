@@ -269,6 +269,20 @@ const main = async () => {
     schoolId: SCHOOL, isActive: true, password: "x",
   });
 
+  // The desktop side of a default request is the same person as the server
+  // side: the head, signed in, carrying the permissions sign-in hands the
+  // desktop (desktop/src/main/main.js builds the session from the login
+  // user). Local reads now check them the way the server routes do, so a call
+  // with no session at all would be declined where the real app answers. A
+  // check that means "no identity" still passes `session: null` explicitly.
+  const headSession = {
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+    permissions: require("../src/services/permissions.service").defaultsFor(ROLES.SCHOOL_ADMIN),
+  };
+  const rawHandle = api.handle.bind(api);
+  api.handle = (req, ctx = {}) =>
+    rawHandle(req, "session" in ctx ? ctx : { ...ctx, session: headSession });
+
   const { authenticate } = require("../middleware/auth");
   const app = express();
   app.use(express.json());
@@ -324,7 +338,7 @@ const main = async () => {
 
     const local = api.handle(
       { method: "GET", path: pathname, query },
-      { docs, meta: store.meta(db), queue: outbox(db), session: as?.session ?? null }
+      { docs, meta: store.meta(db), queue: outbox(db), session: as?.session ?? headSession }
     );
 
     if (!local) {
@@ -510,7 +524,7 @@ const main = async () => {
   //
   //   sub-1  a subject under `classId`, with a teacher who exists
   //   sub-2  a subject under `class` instead — both spellings are in the data
-  //   sub-3  two assignments; the FIRST one read wins and the second is ignored
+  //   sub-3  two assignments; both are named, sorted (A8)
   //   sub-4  an assignment recorded under teacherId, which the endpoint does
   //          not read, so no teacher is attached
   //   sub-5  a teacher id resolving to no user at all — populate leaves the id
@@ -583,8 +597,10 @@ const main = async () => {
   check("the joined class is projected, not sent whole",
     Object.keys(bySub.get("sub-1").classObj).sort(),
     ["_id", "level", "name", "section"]);
-  check("two assignments on one subject shows the first",
-    bySub.get("sub-3").teacher._id, "t1");
+  // A8: the class-subject assignment is read one way on every screen — both
+  // active teachers, sorted by name, the first of them as the row's teacher.
+  check("two assignments on one subject shows both, sorted by name",
+    [bySub.get("sub-3").teacher._id, bySub.get("sub-3").teacherName], ["t2", "M. Etoa, Mme Fomba"]);
   check("an assignment under teacherId attaches no teacher",
     bySub.get("sub-4").teacher, null);
   // populate sets the field to null when it finds nothing, so the subject comes
@@ -1299,8 +1315,11 @@ const main = async () => {
    * request can, so there is now a request.
    */
   const cardRes = await fetch(
+    // ?issue=1: a print. A preview of a card never printed carries no
+    // verification strip (a preview issues no code, 2026-10-30), and the
+    // order checked below is the printed card's.
     `http://127.0.0.1:${port}/api/results/exam-0/student/stu-1/reportcard/html` +
-    `?schoolId=${SCHOOL}&lang=en`,
+    `?schoolId=${SCHOOL}&lang=en&issue=1`,
     { headers: { authorization: `Bearer ${token}` } }
   );
   check("the sequence card route answers 200", cardRes.status, 200);
@@ -1806,7 +1825,7 @@ const main = async () => {
    *   would write back values nobody touched, reverting whatever another machine
    *   had changed in between.
    */
-  const examSession = { userId: "admin-1", schoolId: SCHOOL, permissions: [] };
+  const examSession = { userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL, permissions: [] };
   const examCtx     = { docs, meta, queue, session: examSession };
 
   const created = api.handle({
@@ -2117,7 +2136,7 @@ const main = async () => {
   await mirrorSubjects();
 
   const marksSession = {
-    userId: "admin-1", schoolId: SCHOOL, permissions: ["exams.manage", "results.view"],
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL, permissions: ["exams.manage", "results.view"],
   };
   const marksCtx = { docs, meta, queue, session: marksSession };
 
@@ -2395,9 +2414,27 @@ const main = async () => {
     rejected.data.subject.rejectReason, "Two students are missing");
   check("and the status says so", rejected.data.subject.submissionStatus, "rejected");
 
+  // Émile (p2) has no mark yet. Approving is refused on the server (409
+  // MARKS_INCOMPLETE, 2026-10-30), so the desk declines it rather than
+  // queueing a write the server would refuse and stop the outbox on.
+  const approvePath = "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/approve";
+  check("approving with a pupil unmarked is not queued",
+    api.handle({ method: "PATCH", path: approvePath, query: {}, body: { schoolId: SCHOOL } }, marksCtx),
+    null);
+  const incompleteRefused = await (await fetch("http://127.0.0.1:" + port + approvePath, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", authorization: "Bearer " + token },
+    body: JSON.stringify({ schoolId: SCHOOL }),
+  })).json().then((b) => b.code);
+  check("and the server really would have refused it", incompleteRefused, "MARKS_INCOMPLETE");
+
+  // Émile marked absent: every pupil now has a mark or a reason not to.
+  await StudentScore.collection.updateOne({ _id: "sc-2" }, { $set: { isAbsent: true, updatedAt: new Date() } });
+  await marksEngine.cycle();
+
   const approved = api.handle({
     method: "PATCH",
-    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/approve",
+    path: approvePath,
     query: {}, body: { schoolId: SCHOOL },
   }, marksCtx);
   check("approving after a rejection works", approved?.status, 200);
@@ -2434,7 +2471,7 @@ const main = async () => {
    * to know a decline is a judgement about the server rather than a guess.
    */
   const feesSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.manage", "fees.plan", "fees.view"],
   };
   const feesCtx = { docs, meta, queue, session: feesSession };
@@ -2662,7 +2699,7 @@ const main = async () => {
   const { DEVICE_RECEIPT } = require("../../shared/receipts");
 
   const reverseSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.manage", "fees.view"],
   };
   const reverseCtx = { docs, meta, queue, session: reverseSession };
@@ -2880,7 +2917,7 @@ const main = async () => {
   const REGISTER_DAY = "2025-10-06";
 
   const teachSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["attendance.mark", "attendance.view", "students.view"],
   };
   const teachCtx = { docs, meta, queue, session: teachSession };
@@ -2900,7 +2937,7 @@ const main = async () => {
   }, teachCtx).data.students;
   check("the roster carries only the fields the endpoint selects",
     Object.keys(roster[0]).sort().join(),
-    ["_id", "admissionNo", "className", "classId", "email", "firstName",
+    ["_id", "admissionNo", "className", "classId", "email", "enrollmentNo", "firstName",
      "grade", "lastName", "studentName"].sort().join());
   check("and nothing from the rest of the record",
     roster.some((s) => "guardianPhone" in s), false);
@@ -3101,7 +3138,7 @@ const main = async () => {
   const STAFF_DAY = "2025-10-07";
 
   const staffSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["attendance.markStaff", "attendance.view"],
   };
   const staffCtx = { docs, meta, queue, session: staffSession };
@@ -3483,13 +3520,21 @@ const main = async () => {
       method: "GET", path: "/api/attendance/report/weekly",
       query: { schoolId: SCHOOL },
     }, teachCtx).data;
-    check("seven days, oldest first", weekly.days.length, 7);
-    check("ending today", weekly.days[6], week[6]);
-    check("with a row per day", weekly.trend.length, 7);
-    check("today's present count", weekly.trend[6].students.present, 1);
-    check("and a day in the middle", weekly.trend[4].students.late, 1);
-    check("a day with nothing shows zeroes, not gaps",
-      weekly.trend[0].students.present, 0);
+    // C3: the last seven days, the school's open days only (Monday to
+    // Friday by default) — so which days are listed depends on today.
+    const { schoolDaysOnly } = require("../../shared/attendance");
+    const open = schoolDaysOnly(week, null);
+    const on = (day) => weekly.trend.find((r) => r.date === day);
+    check("the week's school days, oldest first", weekly.days, open);
+    check("no Saturday or Sunday", weekly.days.every((d) => ![0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay())), true);
+    check("with a row per day", weekly.trend.length, open.length);
+    if (open.includes(week[6])) check("today's present count", on(week[6]).students.present, 1);
+    if (open.includes(week[4])) check("and a day in the middle", on(week[4]).students.late, 1);
+    const quiet = open.find((d) => d !== week[6] && d !== week[4]);
+    if (quiet) {
+      check("a day with nothing shows zeroes, not gaps", on(quiet).students.present, 0);
+      check("and no rate — the register was not taken", on(quiet).students.rate, null);
+    }
   }
 
   // ── One class, pupil by pupil ──────────────────────────────────────────
@@ -6020,12 +6065,17 @@ const main = async () => {
   check("creating an assignment is answered locally", asProbe?.status, 201);
   check("and the row is in the mirror under the client's id",
     Boolean(docs.get("teacherAssignment", "client-as-probe")), true);
-  // The same id again: already in the mirror, so the handler declines rather
-  // than writing a second row — on either path.
-  check("the same id twice is not a second row",
-    api.handle({ method: "POST", path: "/api/admin/teacher-assignments", query: {},
-      body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx),
-    null);
+  // The same id again (a retry of the same submission): answered with the row
+  // already made, as the server answers a replay (deduplicated) — never a
+  // second row, on either path.
+  {
+    const again = api.handle({ method: "POST", path: "/api/admin/teacher-assignments", query: {},
+      body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx);
+    check("the same id twice is a replay, not a second row",
+      [again?.status, again?.data?.deduplicated, again?.data?.assignment?._id,
+       docs.find("teacherAssignment", {}).filter((a) => a._id === "client-as-probe").length],
+      [200, true, "client-as-probe", 1]);
+  }
   // Out of the mirror AND out of the queue again. The direct create below files
   // the same teacher/class/subject triple, so leaving this queued would have the
   // server answer 409 "Assignment already exists" and block the outbox — which
@@ -6575,13 +6625,13 @@ const main = async () => {
    */
   await FinSalaryPayment.collection.insertMany([
     { _id: "fin-slip-rev-orig", schoolId: SCHOOL, userId: "t1", runId: "fin-run-2",
-      periodMonth: "2026-11", gross: 120000, totalDeductions: 20000, net: 100000,
-      status: "reversed", paidAt: new Date("2026-11-05T00:00:00.000Z"),
+      periodMonth: "2025-11", gross: 120000, totalDeductions: 20000, net: 100000,
+      status: "reversed", paidAt: new Date("2025-11-05T00:00:00.000Z"),
       deletedAt: null, updatedAt: new Date() },
     { _id: "fin-slip-rev", schoolId: SCHOOL, userId: "t1", runId: null,
-      periodMonth: "2026-11", gross: -120000, totalDeductions: -20000, net: -100000,
+      periodMonth: "2025-11", gross: -120000, totalDeductions: -20000, net: -100000,
       status: "paid", reversesId: "fin-slip-rev-orig",
-      paidAt: new Date("2026-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
+      paidAt: new Date("2025-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
   ]);
   await finMirror();
 
@@ -6592,7 +6642,12 @@ const main = async () => {
 
   // The reversal pair IS in the monthly series, on both sides, at zero. A
   // handler that dropped either half would report a month that never happened.
-  const finNov = finReport().months.find((m) => m.month === "2026-11");
+  //
+  // In a month that is never "now". This was 2026-11, which was the future
+  // when it was written; from 1 November 2026 it is the current month, and the
+  // expenses this run records through the write routes (stamped now) land in
+  // it too, so the month summed to their 121,999 instead of 0.
+  const finNov = finReport().months.find((m) => m.month === "2025-11");
   check("november exists in the series and cancels", finNov && finNov.expenditure, 0);
 
   // The endpoint's $ifNull, which is not the same as leaving the label out.
@@ -6618,8 +6673,17 @@ const main = async () => {
     false);
   check("and leaves the position exactly where it was",
     finArrears("from=2026-09-01&to=2026-09-30"), finArrears());
-  check("the academic year DOES narrow it",
-    finArrears(`academicYear=${YEAR}`).charged < finArrears().charged, true);
+  // No year asked for is the school's current year (its setting, else the
+  // calendar's) — the one Fees > Outstanding and the platform dashboard use —
+  // not every year at once.
+  {
+    const { currentAcademicYearOf } = require("../../shared/academicYear");
+    const current = currentAcademicYearOf(docs.get("school", SCHOOL));
+    check("no academic year is the school's current year",
+      finArrears(), { ...finArrears(`academicYear=${current}`), academicYear: current });
+    check("another academic year DOES narrow it",
+      finArrears("academicYear=1999-2000").charged < finArrears(`academicYear=${YEAR}`).charged, true);
+  }
   check("outstanding is billed less paid, with waivers already off the bill",
     (() => {
       const a = finArrears();
@@ -7105,8 +7169,11 @@ const main = async () => {
   app.use("/api/students", require("../src/routes/students.routes"));
 
   const pupilSession = {
-    userId: "admin-1", schoolId: SCHOOL,
-    permissions: ["students.view", "students.manage", "students.admit"],
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+    // dashboard.view and students.viewFull too: the head holds both, and the
+    // local admin stats and pupil-by-id reads now check them the way
+    // GET /admin/students/stats and /admin/students/:id do on the server.
+    permissions: ["students.view", "students.manage", "students.admit", "dashboard.view", "students.viewFull"],
   };
   const pupilCtx = { docs, meta, queue, session: pupilSession };
   const asPupilOffice = { token, session: pupilSession };
@@ -7234,7 +7301,7 @@ const main = async () => {
    * would be a hostage to whatever ran first.
    */
   const planSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["fees.plan", "fees.view", "fees.manage"],
   };
   const planCtx = { docs, meta, queue, session: planSession };
@@ -7406,7 +7473,7 @@ const main = async () => {
   app.use("/api/promotion", authenticate, require("../src/routes/promotion.routes"));
 
   const promoSession = {
-    userId: "admin-1", schoolId: SCHOOL,
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
     permissions: ["promotion.run", "promotion.view", "classes.view"],
   };
   const promoCtx = { docs, meta, queue, session: promoSession };

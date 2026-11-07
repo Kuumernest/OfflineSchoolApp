@@ -5,7 +5,7 @@
  * A change the server refused can be sent again and be looked at again.
  *
  * The idempotency middleware stores a 4xx answer against its key and replays
- * it for 14 days. The desktop and phone outboxes reused one key per change,
+ * it for the key's life (45 days). The desktop and phone outboxes reused one key per change,
  * so after a refusal — a permission later granted, data later fixed — Try
  * again got the stored refusal back and the change never landed. Now a retry
  * of a REFUSED entry goes out under a new key (desktop outbox.unblock, mobile

@@ -5,6 +5,8 @@ import {
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
   ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
   KeyRound, Calendar, Calculator, LayoutTemplate,
+  Settings, Image as ImageIcon, Phone, MapPin, Lock, Users, IdCard, DoorOpen, Cake,
+  type LucideIcon,
 } from "lucide-react";
 
 import PermissionsSection from "@/pages/settings/PermissionsSection";
@@ -12,13 +14,21 @@ import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
 import AcademicStructureSection from "@/pages/settings/AcademicStructureSection";
 import CalculationRulesSection  from "@/pages/settings/CalculationRulesSection";
 import ReportLayoutSection      from "@/pages/settings/ReportLayoutSection";
+import NeedsInternet            from "@/components/offline/NeedsInternet";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
+import { PageIcon }              from "@/components/ui/PageHeader";
+import { DASH_TINT, ACCENT_BADGE, roleAccent, type DashAccent } from "@/config/dashboardTint";
 import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
 import { roleLabel }             from "@/utils/roleLabel";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useStudentAgeRanges }   from "@/hooks/useSchoolYear";
+import { defaultAgeRange }       from "@/utils/studentValidation";
+import { fetchPeriods }          from "@/services/period.service";
+import { SchoolHoursWarning }    from "@/components/settings/SchoolHoursWarning";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -132,14 +142,24 @@ const SECTIONS = [
 
 type SectionId = typeof SECTIONS[number]["id"];
 
+// Cameroon's school types (C9): Collège and Lycée, each general or technical.
 const SCHOOL_TYPES = [
-  { value: "primary",    labelKey: "settings.typePrimary"    },
+  { value: "primary",           labelKey: "settings.typePrimary"          },
+  { value: "college_general",   labelKey: "settings.typeCollegeGeneral"   },
+  { value: "college_technical", labelKey: "settings.typeCollegeTechnical" },
+  { value: "lycee_general",     labelKey: "settings.typeLyceeGeneral"     },
+  { value: "lycee_technical",   labelKey: "settings.typeLyceeTechnical"   },
+  { value: "combined",          labelKey: "settings.typeCombined"         },
+  { value: "other",             labelKey: "settings.typeOther"            },
+];
+
+// Types a school may have saved before C9. Not offered, but shown (selected)
+// when it is the school's current value, so the screen never hides it.
+const LEGACY_SCHOOL_TYPES = [
   { value: "jhs",        labelKey: "settings.typeJhs"        },
   { value: "shs",        labelKey: "settings.typeShs"        },
-  { value: "combined",   labelKey: "settings.typeCombined"   },
   { value: "vocational", labelKey: "settings.typeVocational" },
   { value: "university", labelKey: "settings.typeUniversity" },
-  { value: "other",      labelKey: "settings.typeOther"      },
 ];
 
 const TERM_SYSTEMS = [
@@ -162,13 +182,6 @@ const DAYS_OF_WEEK = [
 // role the API will store — see backend/src/config/roles.js — but a school
 // whose database predates the enum could still hold a row saying it, and a
 // badge reading "admin" is better than one reading nothing.
-const ROLE_COLORS: Record<string, string> = {
-  super_admin:  "bg-red-100 text-red-700",
-  school_admin: "bg-purple-100 text-purple-700",
-  bursar:       "bg-amber-100 text-amber-700",
-  admin:        "bg-indigo-100 text-indigo-700",
-  teacher:      "bg-emerald-100 text-emerald-700",
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -192,14 +205,18 @@ const extractMessage = (err: unknown, t: TFunction): string =>
 function Card({
   children,
   className,
+  accent = "slate",
 }: {
   children:  React.ReactNode;
   className?: string;
+  /** The panel's 3px top edge — the colour of what the panel is about. */
+  accent?:   DashAccent;
 }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm",
+        "rounded-2xl border border-line bg-surface p-6 shadow-card",
+        DASH_TINT[accent].edge,
         className
       )}
     >
@@ -208,9 +225,32 @@ function Card({
   );
 }
 
-function CardTitle({ children }: { children: React.ReactNode }) {
+/** A small solid icon square for a panel or section heading. */
+function HeadingSquare({ icon: Icon, accent }: { icon: LucideIcon; accent: DashAccent }) {
   return (
-    <h3 className="mb-5 text-base font-bold text-gray-900">{children}</h3>
+    <span
+      aria-hidden="true"
+      className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT[accent].box)}
+    >
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
+
+function CardTitle({
+  children,
+  icon = Settings,
+  accent = "slate",
+}: {
+  children: React.ReactNode;
+  icon?:    LucideIcon;
+  accent?:  DashAccent;
+}) {
+  return (
+    <h3 className="mb-5 flex items-center gap-2.5 text-base font-bold text-ink">
+      <HeadingSquare icon={icon} accent={accent} />
+      {children}
+    </h3>
   );
 }
 
@@ -256,7 +296,7 @@ function Input({
       className={cn(
         "w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5",
         "text-sm text-gray-900 outline-none transition",
-        "focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100",
+        "focus:border-primary-400 focus:ring-2 focus:ring-primary-100",
         "disabled:opacity-50",
         className
       )}
@@ -284,7 +324,7 @@ function Textarea({
       className="
         w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5
         text-sm text-gray-900 outline-none transition resize-none
-        focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+        focus:border-primary-400 focus:ring-2 focus:ring-primary-100
       "
     />
   );
@@ -305,9 +345,9 @@ function SaveButton({
       onClick={onClick}
       disabled={loading}
       className="
-        mt-6 flex items-center gap-2 rounded-xl bg-indigo-600
+        mt-6 flex items-center gap-2 rounded-xl bg-primary-600
         px-6 py-3 text-sm font-semibold text-white
-        hover:bg-indigo-700 disabled:opacity-50 transition
+        hover:bg-primary-700 disabled:opacity-50 transition
       "
     >
       {loading
@@ -347,14 +387,24 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo]   = useState(false);
+  // The saved logo's address did not load (file missing on the server).
+  const [logoBroken, setLogoBroken]   = useState(false);
 
   const set = <K extends keyof SchoolSettings>(key: K, val: SchoolSettings[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
 
+  const periodsQ = useQuery({
+    queryKey: ["periods", schoolId, false],
+    queryFn:  () => fetchPeriods(schoolId),
+    enabled:  !!schoolId,
+  });
+
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/admin/school-info", { params: { schoolId } });
+        // includeLogo: without it a logo still stored inline comes back null
+        // and this screen said "No logo" for a school that has one (C9).
+        const { data } = await api.get("/admin/school-info", { params: { schoolId, includeLogo: 1 } });
         const s = data?.school || data;
         if (s) {
           setForm({
@@ -406,7 +456,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     setLogoFile(file);
     setRemoveLogo(false);
     const reader = new FileReader();
-    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.onload = () => { setLogoPreview(reader.result as string); setLogoBroken(false); };
     reader.readAsDataURL(file);
   };
 
@@ -461,7 +511,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
       </div>
     );
   }
@@ -478,17 +528,20 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     <div className="space-y-5">
 
       {/* ── Logo ── */}
-      <Card>
-        <CardTitle>{t("settings.schoolLogo")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={ImageIcon} accent="indigo">{t("settings.schoolLogo")}</CardTitle>
         <div className="flex items-start gap-6">
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
             {logoPreview
-              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover" />
+              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover"
+                  onError={() => { setLogoPreview(null); setLogoBroken(true); }} />
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                  <Building2 className="h-8 w-8 text-gray-300" />
-                  <span className="text-[10px] text-gray-400">{t("settings.noLogo")}</span>
+                  <Building2 className={cn("h-8 w-8", DASH_TINT.indigo.glyph)} />
+                  <span className="text-[10px] text-ink-muted">
+                    {logoBroken ? t("settings.logoBroken") : t("settings.noLogo")}
+                  </span>
                 </div>
               )
             }
@@ -499,7 +552,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <label className="
               flex cursor-pointer items-center gap-2 rounded-xl border
               border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-semibold
-              text-indigo-600 hover:bg-indigo-50 transition
+              text-primary-600 hover:bg-primary-50 transition
             ">
               <Upload className="h-4 w-4" />
               {logoPreview ? t("settings.changeLogo") : t("settings.uploadLogo")}
@@ -533,8 +586,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Basic info ── */}
-      <Card>
-        <CardTitle>{t("settings.basicInfo")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={Building2} accent="indigo">{t("settings.basicInfo")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FieldLabel>{t("settings.schoolName")} *</FieldLabel>
@@ -550,15 +603,16 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <FieldLabel>{t("settings.schoolType")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {/* Named `opt`, not `t` — `t` here is the translator. */}
-              {SCHOOL_TYPES.map((opt) => (
+              {[...SCHOOL_TYPES,
+                ...LEGACY_SCHOOL_TYPES.filter((o) => o.value === form.schoolType)].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => set("schoolType", opt.value)}
                   className={cn(
                     "rounded-full border px-4 py-1.5 text-sm font-medium transition",
                     form.schoolType === opt.value
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                      : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300"
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
+                      : "border-gray-200 bg-white text-gray-500 hover:border-primary-300"
                   )}
                 >
                   {t(opt.labelKey)}
@@ -601,8 +655,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Contact ── */}
-      <Card>
-        <CardTitle>{t("settings.contactDetails")}</CardTitle>
+      <Card accent="sky">
+        <CardTitle icon={Phone} accent="sky">{t("settings.contactDetails")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>{t("settings.schoolEmail")}</FieldLabel>
@@ -620,8 +674,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Location ── */}
-      <Card>
-        <CardTitle>{t("common.location")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={MapPin} accent="indigo">{t("common.location")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FieldLabel>{t("common.streetAddress")}</FieldLabel>
@@ -647,8 +701,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {/* ── Academic calendar ── */}
-      <Card>
-        <CardTitle>{t("settings.academicCalendar")}</CardTitle>
+      <Card accent="teal">
+        <CardTitle icon={Calendar} accent="teal">{t("settings.academicCalendar")}</CardTitle>
         <div className="space-y-4">
 
           {/* Term system */}
@@ -703,7 +757,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <select
                 value={form.defaultLanguage}
                 onChange={(e) => set("defaultLanguage", e.target.value === "fr" ? "fr" : "en")}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400"
               >
                 {/* Each language named in itself. */}
                 <option value="en">English</option>
@@ -724,7 +778,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
                   className={cn(
                     "rounded-xl border px-4 py-1.5 text-sm font-medium transition",
                     form.schoolDays.includes(day.value)
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
                       : "border-gray-200 bg-white text-gray-400 hover:border-gray-300"
                   )}
                 >
@@ -734,7 +788,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             </div>
           </div>
 
-          {/* Hours */}
+          {/* Hours — and where the period grid disagrees with them (B2) */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>{t("settings.startTime")}</FieldLabel>
@@ -745,11 +799,84 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               <Input value={form.schoolEndTime} onChange={(v) => set("schoolEndTime", v)} type="time" />
             </div>
           </div>
+          <SchoolHoursWarning
+            schoolStart={form.schoolStartTime}
+            schoolEnd={form.schoolEndTime}
+            periods={periodsQ.data ?? []}
+            fixLink={{ to: "/periods", label: t("schoolHours.editPeriods") }}
+          />
         </div>
       </Card>
 
       <SaveButton onClick={handleSave} loading={saving} label={t("settings.saveSchool")} />
+
+      <StudentAgeRangesCard schoolId={schoolId} />
     </div>
+  );
+}
+
+/**
+ * The usual age per class level (B3): only ever a warning on the student
+ * form. Blank keeps the default — Form 1 9–14, each level up the minimum +1
+ * and the maximum +2. Saved on its own, apart from the school form above.
+ */
+const LEVEL_NAMES = ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5", "Lower Sixth", "Upper Sixth"];
+
+function StudentAgeRangesCard({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const saved = useStudentAgeRanges();
+  const [edits, setEdits] = useState<Record<string, { min: string; max: string }>>({});
+  const [saving, setSaving] = useState(false);
+
+  const valueOf = (level: number, key: "min" | "max") =>
+    edits[level]?.[key] ?? String(saved?.[String(level)]?.[key] ?? "");
+  const setValue = (level: number, key: "min" | "max", v: string) =>
+    setEdits((e) => ({ ...e, [level]: { min: valueOf(level, "min"), max: valueOf(level, "max"), [key]: v } }));
+
+  const save = async () => {
+    const ranges: Record<string, { min: number; max: number }> = {};
+    for (let level = 1; level <= 7; level += 1) {
+      const min = valueOf(level, "min"), max = valueOf(level, "max");
+      if (min === "" && max === "") continue;
+      const def = defaultAgeRange(level);
+      ranges[level] = { min: min === "" ? def.min : Number(min), max: max === "" ? def.max : Number(max) };
+    }
+    setSaving(true);
+    try {
+      await api.put("/admin/school-info", { schoolId, studentAgeRanges: Object.keys(ranges).length ? ranges : null });
+      await qc.invalidateQueries({ queryKey: ["school-basics"] });
+      setEdits({});
+      toast({ title: t("ageRanges.saved"), kind: "success" });
+    } catch (err) {
+      toast({ title: t("ageRanges.errSave"), message: extractMessage(err, t), kind: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card accent="blue">
+      <CardTitle icon={Cake} accent="blue">{t("ageRanges.title")}</CardTitle>
+      <p className="-mt-3 mb-4 text-sm text-gray-500">{t("ageRanges.hint")}</p>
+      <div className="grid gap-2">
+        {LEVEL_NAMES.map((name, i) => {
+          const level = i + 1;
+          const def = defaultAgeRange(level);
+          return (
+            <div key={level} className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2">
+              <span className="text-sm text-gray-700">{name}</span>
+              <Input type="number" value={valueOf(level, "min")} placeholder={String(def.min)}
+                     onChange={(v) => setValue(level, "min", v)} />
+              <Input type="number" value={valueOf(level, "max")} placeholder={String(def.max)}
+                     onChange={(v) => setValue(level, "max", v)} />
+            </div>
+          );
+        })}
+      </div>
+      <SaveButton onClick={save} loading={saving} label={t("ageRanges.save")} />
+    </Card>
   );
 }
 
@@ -830,8 +957,8 @@ function ProfileSection() {
     <div className="space-y-5">
 
       {/* ── Personal info ── */}
-      <Card>
-        <CardTitle>{t("settings.personalInfo")}</CardTitle>
+      <Card accent={roleAccent(user?.role)}>
+        <CardTitle icon={User} accent={roleAccent(user?.role)}>{t("settings.personalInfo")}</CardTitle>
         <div className="space-y-4">
           <div>
             <FieldLabel>{t("common.fullName")}</FieldLabel>
@@ -846,7 +973,7 @@ function ProfileSection() {
             <span
               className={cn(
                 "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                ROLE_COLORS[user?.role ?? ""] || "bg-gray-100 text-gray-600"
+                "ring-1 ring-inset", ACCENT_BADGE[roleAccent(user?.role)]
               )}
             >
               {roleLabel(user?.role, t) || "—"}
@@ -857,12 +984,15 @@ function ProfileSection() {
       </Card>
 
       {/* ── Password ── */}
-      <Card>
+      <Card accent="slate">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-bold text-gray-900">{t("common.password")}</h3>
+          <h3 className="flex items-center gap-2.5 text-base font-bold text-ink">
+            <HeadingSquare icon={Lock} accent="slate" />
+            {t("common.password")}
+          </h3>
           <button
             onClick={() => setShowPwForm((v) => !v)}
-            className="text-sm font-medium text-indigo-600 hover:underline"
+            className="text-sm font-medium text-primary-600 hover:underline"
           >
             {showPwForm ? t("common.cancel") : t("settings.changePassword")}
           </button>
@@ -881,7 +1011,7 @@ function ProfileSection() {
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50
                     px-4 py-2.5 pr-11 text-sm outline-none
-                    focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                    focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                   "
                   placeholder="••••••••"
                 />
@@ -906,7 +1036,7 @@ function ProfileSection() {
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50
                     px-4 py-2.5 pr-11 text-sm outline-none
-                    focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                    focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                   "
                   placeholder={t("settings.min8")}
                 />
@@ -930,7 +1060,7 @@ function ProfileSection() {
                 className="
                   w-full rounded-xl border border-gray-200 bg-gray-50
                   px-4 py-2.5 text-sm outline-none
-                  focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                  focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                 "
                 placeholder={t("settings.reenterPassword")}
               />
@@ -943,8 +1073,8 @@ function ProfileSection() {
               onClick={handleChangePassword}
               disabled={savingPw}
               className="
-                flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5
-                text-sm font-semibold text-white hover:bg-indigo-700
+                flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5
+                text-sm font-semibold text-white hover:bg-primary-700
                 disabled:opacity-50 transition
               "
             >
@@ -1029,13 +1159,13 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
   if (!config) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.noGradingConfig")}</p>
       </div>
@@ -1044,8 +1174,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardTitle>{t("settings.gradingSettings")}</CardTitle>
+      <Card accent="amber">
+        <CardTitle icon={GraduationCap} accent="amber">{t("settings.gradingSettings")}</CardTitle>
 
         {/* Explanation */}
         <p className="text-xs text-gray-500 mb-4">{t("settings.gradingBlurb")}</p>
@@ -1060,8 +1190,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               type="checkbox"
               checked={config.showGrades !== false}
               onChange={(e) => setConfig({ ...config, showGrades: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
-                         focus:ring-2 focus:ring-indigo-200"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600
+                         focus:ring-2 focus:ring-primary-200"
             />
             <span>
               <span className="block text-sm font-semibold text-gray-800">
@@ -1085,8 +1215,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               type="checkbox"
               checked={config.caEnabled !== false}
               onChange={(e) => setConfig({ ...config, caEnabled: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
-                         focus:ring-2 focus:ring-indigo-200"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600
+                         focus:ring-2 focus:ring-primary-200"
             />
             <span>
               <span className="block text-sm font-semibold text-gray-800">
@@ -1116,8 +1246,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                       setConfig({ ...config, caWeight: Number(e.target.value) })
                     }
                     className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                               text-sm outline-none focus:border-indigo-400
-                               focus:ring-2 focus:ring-indigo-100"
+                               text-sm outline-none focus:border-primary-400
+                               focus:ring-2 focus:ring-primary-100"
                   />
                   <span className="text-sm text-gray-500">%</span>
                 </div>
@@ -1133,8 +1263,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                       setConfig({ ...config, testWeight: Number(e.target.value) })
                     }
                     className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                               text-sm outline-none focus:border-indigo-400
-                               focus:ring-2 focus:ring-indigo-100"
+                               text-sm outline-none focus:border-primary-400
+                               focus:ring-2 focus:ring-primary-100"
                   />
                   <span className="text-sm text-gray-500">%</span>
                 </div>
@@ -1147,7 +1277,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
 
           {/* Pass mark */}
           <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-            <FieldLabel>{t("settings.passMarkPct")}</FieldLabel>
+            <FieldLabel>{t("settings.passMarkOn20")}</FieldLabel>
             <input
               type="number"
               min={0}
@@ -1159,8 +1289,8 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               }
               className="
                 w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
-                text-sm outline-none focus:border-indigo-400 focus:ring-2
-                focus:ring-indigo-100
+                text-sm outline-none focus:border-primary-400 focus:ring-2
+                focus:ring-primary-100
               "
             />
             <span className="text-sm text-gray-500">/ 20</span>
@@ -1184,7 +1314,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                   <tbody className="divide-y divide-gray-100">
                     {config.grades.map((g, i) => (
                       <tr key={i} className="bg-white">
-                        <td className="px-4 py-2.5 font-semibold text-indigo-700">
+                        <td className="px-4 py-2.5 font-semibold text-primary-700">
                           {g.grade}
                         </td>
                         <td className="px-4 py-2.5">
@@ -1199,7 +1329,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], minMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         <td className="px-4 py-2.5">
@@ -1214,7 +1344,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], maxMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         {/* Both remarks, both editable. A report card prints the
@@ -1231,7 +1361,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], remark: e.target.value };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                         <td className="px-4 py-2.5">
@@ -1244,7 +1374,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                               grades[i] = { ...grades[i], remarkFr: e.target.value };
                               setConfig({ ...config, grades });
                             }}
-                            className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                            className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-primary-400"
                           />
                         </td>
                       </tr>
@@ -1471,22 +1601,23 @@ function AdminsSection({
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
   return (
     <div className="space-y-5">
-      <Card>
+      <Card accent="indigo">
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900">
+          <h3 className="flex items-center gap-2.5 text-base font-bold text-ink">
+            <HeadingSquare icon={Users} accent="indigo" />
             {t("settings.adminUsers", { count: admins.length })}
           </h3>
           <button
             onClick={() => setShowModal(true)}
             className="
-              flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-2
-              text-sm font-semibold text-indigo-600 hover:bg-indigo-100 transition
+              flex items-center gap-1.5 rounded-xl bg-primary-50 px-3 py-2
+              text-sm font-semibold text-primary-600 hover:bg-primary-100 transition
             "
           >
             <Plus className="h-4 w-4" />
@@ -1506,7 +1637,7 @@ function AdminsSection({
             <div key={a._id} className={cn("flex items-center gap-3 py-3", removed && "opacity-60")}>
               <div className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                removed ? "bg-gray-100 text-gray-400" : "bg-indigo-50 text-indigo-600"
+                removed ? "bg-accent-slate-soft text-accent-slate-deep" : "bg-primary-50 text-primary-600"
               )}>
                 {(a.name || "?").charAt(0).toUpperCase()}
               </div>
@@ -1514,23 +1645,22 @@ function AdminsSection({
                 <p className="text-sm font-semibold text-gray-900">
                   {a.name}
                   {a._id === currentUserId && (
-                    <span className="ml-2 text-xs text-gray-400">{t("settings.you")}</span>
+                    <span className="ml-2 text-xs text-ink-muted">{t("settings.you")}</span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">{a.email}</p>
               </div>
 
               {removed && (
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
+                <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", ACCENT_BADGE.slate)}>
                   {t("settings.removed")}
                 </span>
               )}
 
               <span className={cn(
                 "rounded-full px-2.5 py-1 text-xs font-semibold",
-                removed
-                  ? "bg-gray-100 text-gray-500"
-                  : ROLE_COLORS[a.role] || "bg-gray-100 text-gray-600"
+                "ring-1 ring-inset",
+                ACCENT_BADGE[removed ? "slate" : roleAccent(a.role)]
               )}>
                 {roleLabel(a.role, t)}
               </span>
@@ -1538,7 +1668,7 @@ function AdminsSection({
               {removed ? (
                 <button
                   onClick={() => handleRestore(a)}
-                  className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                  className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
                 >
                   {t("settings.restore")}
                 </button>
@@ -1550,7 +1680,7 @@ function AdminsSection({
                   <button
                     onClick={() => handleReset(a)}
                     title={t("settings.resetPassword")}
-                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-primary-50 hover:text-primary-600"
                   >
                     <KeyRound className="h-4 w-4" />
                   </button>
@@ -1583,7 +1713,7 @@ function AdminsSection({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-bold text-ink">
                 {created
                   ? (created.restored ? t("settings.accountRestored") : t("settings.credentials"))
                   : t("settings.addAdmin")}
@@ -1697,7 +1827,7 @@ function AdminsSection({
                   </button>
                   <button
                     onClick={closeModal}
-                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                    className="flex-1 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
                   >
                     {t("common.done")}
                   </button>
@@ -1721,7 +1851,7 @@ function AdminsSection({
                   onChange={(e) => setNewRole(e.target.value)}
                   className="
                     w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5
-                    text-sm outline-none focus:border-indigo-400
+                    text-sm outline-none focus:border-primary-400
                   "
                 >
                   {/* Values are the role identifiers the API stores. */}
@@ -1755,7 +1885,7 @@ function AdminsSection({
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 transition"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 {creating ? t("settings.creating") : t("settings.createAdmin")}
@@ -1796,13 +1926,13 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
   if (!analytics) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.analyticsUnavailable")}</p>
       </div>
@@ -1812,21 +1942,21 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
   // `id` is the React key — a translated label would remount every tile on a
   // language switch.
   const stats = [
-    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-indigo-50",   text: "text-indigo-700"  },
-    { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-emerald-50",  text: "text-emerald-700" },
-    { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-purple-50",   text: "text-purple-700"  },
-    { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-amber-50",    text: "text-amber-700"   },
+    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-accent-violet-soft", text: DASH_TINT.violet.number },
+    { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-accent-blue-soft", text: DASH_TINT.blue.number },
+    { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-accent-indigo-soft", text: DASH_TINT.indigo.number },
+    { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-accent-slate-soft", text: DASH_TINT.slate.number },
   ];
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardTitle>{t("settings.schoolSummary")}</CardTitle>
+      <Card accent="indigo">
+        <CardTitle icon={BarChart3} accent="indigo">{t("settings.schoolSummary")}</CardTitle>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((s) => (
             <div key={s.id} className={cn("rounded-2xl p-5 text-center", s.bg)}>
               <p className={cn("text-3xl font-extrabold", s.text)}>{s.value ?? "—"}</p>
-              <p className="mt-1 text-sm font-medium text-gray-600">{s.label}</p>
+              <p className="mt-1 text-sm font-medium text-ink-muted">{s.label}</p>
             </div>
           ))}
         </div>
@@ -1902,13 +2032,13 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
     </div>
   );
 
   if (!settings) return (
-    <Card>
-      <div className="flex items-center gap-2 text-amber-600">
+    <Card accent="amber">
+      <div className="flex items-center gap-2 text-warning-text">
         <AlertCircle className="h-5 w-5" />
         <p className="text-sm">{t("settings.loadFailed")}</p>
       </div>
@@ -1927,8 +2057,8 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
   return (
     <div className="space-y-5">
 
-      <Card>
-        <CardTitle>{t("settings.idCardExpiry")}</CardTitle>
+      <Card accent="blue">
+        <CardTitle icon={IdCard} accent="blue">{t("settings.idCardExpiry")}</CardTitle>
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-gray-500">
             {t("settings.idCardExpiryBlurb")}
@@ -1943,7 +2073,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                 onChange={(e) =>
                   setSettings({ ...settings, idCard: { ...idCard, validUntil: e.target.value } })
                 }
-                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
               />
               {!usingDefault && (
                 <button
@@ -1951,7 +2081,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onClick={() =>
                     setSettings({ ...settings, idCard: { ...idCard, validUntil: "" } })
                   }
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700"
                 >
                   {t("settings.useDefaultDate")}
                 </button>
@@ -1969,8 +2099,8 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         </div>
       </Card>
 
-      <Card>
-        <CardTitle>{t("settings.gateMessages")}</CardTitle>
+      <Card accent="green">
+        <CardTitle icon={DoorOpen} accent="green">{t("settings.gateMessages")}</CardTitle>
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-gray-500">
             {t("settings.gateMessagesBlurb")}
@@ -1983,14 +2113,14 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition",
                   gate.notify === choice.value
-                    ? "border-indigo-300 bg-indigo-50"
+                    ? "border-primary-300 bg-primary-50"
                     : "border-gray-100 bg-gray-50 hover:border-gray-200"
                 )}
               >
                 <input
                   type="radio"
                   name="gateNotify"
-                  className="mt-0.5 h-4 w-4 accent-indigo-600"
+                  className="mt-0.5 h-4 w-4 accent-primary-600"
                   checked={gate.notify === choice.value}
                   onChange={() =>
                     setSettings({
@@ -2019,7 +2149,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onChange={(e) =>
                     setSettings({ ...settings, gate: { ...gate, lateAfter: e.target.value } })
                   }
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">{t("settings.lateAfterHint")}</p>
               </div>
@@ -2031,7 +2161,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
                   onChange={(e) =>
                     setSettings({ ...settings, gate: { ...gate, earlyBefore: e.target.value } })
                   }
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">{t("settings.earlyBeforeHint")}</p>
               </div>
@@ -2044,7 +2174,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save")}
@@ -2057,7 +2187,11 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const user = useUser();
-  const [activeSection, setActiveSection] = useState<SectionId>("school");
+  // ?section= opens a section directly (C12: "Choose what prints" links here).
+  const [activeSection, setActiveSection] = useState<SectionId>(() => {
+    const asked = new URLSearchParams(window.location.search).get("section");
+    return (SECTIONS.find((s) => s.id === asked)?.id ?? "school") as SectionId;
+  });
 
   const schoolId     = user?.schoolId     ?? "";
   const currentUserId = user?._id ?? (user as unknown as Record<string, string>)?.id ?? "";
@@ -2066,11 +2200,16 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-0 min-h-screen bg-gray-50">
 
       {/* ── Page header ── */}
-      <div className="border-b border-gray-200 bg-white px-6 py-5">
-        <h1 className="text-2xl font-bold text-gray-900">{t("settings.title")}</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          {t("settings.blurb")}
-        </p>
+      <div className="border-b border-line bg-surface px-6 py-5">
+        <div className="flex items-center gap-3">
+          <PageIcon />
+          <div>
+            <h1 className="text-2xl font-bold text-ink">{t("settings.title")}</h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              {t("settings.blurb")}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -2089,13 +2228,13 @@ export default function SettingsPage() {
                       "flex w-full items-center gap-3 rounded-xl px-3 py-2.5",
                       "text-sm font-medium transition",
                       active
-                        ? "bg-indigo-50 text-indigo-700"
+                        ? "bg-primary-50 text-primary-700"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     )}
                   >
-                    <Icon className={cn("h-4 w-4", active ? "text-indigo-600" : "text-gray-400")} />
+                    <Icon className={cn("h-4 w-4", active ? "text-primary-600" : "text-gray-400")} />
                     {t(s.labelKey)}
-                    {active && <ChevronRight className="ml-auto h-3 w-3 text-indigo-400" />}
+                    {active && <ChevronRight className="ml-auto h-3 w-3 text-primary-400" />}
                   </button>
                 </li>
               );
@@ -2117,7 +2256,7 @@ export default function SettingsPage() {
                     "flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2",
                     "text-xs font-medium transition whitespace-nowrap",
                     active
-                      ? "bg-indigo-50 text-indigo-700"
+                      ? "bg-primary-50 text-primary-700"
                       : "text-gray-500 hover:text-gray-700"
                   )}
                 >
@@ -2133,13 +2272,16 @@ export default function SettingsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-2xl">
             {activeSection === "school"    && <SchoolSection    schoolId={schoolId} />}
-            {activeSection === "profile"   && <ProfileSection />}
+            {/* Profile (with the password), admins and permissions are
+                online-only: on a desktop that is offline they are shown
+                switched off, with the reason, rather than filled in to fail. */}
+            {activeSection === "profile"   && <NeedsInternet><ProfileSection /></NeedsInternet>}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "academicStructure" && <AcademicStructureSection schoolId={schoolId} />}
             {activeSection === "calculationRules"  && <CalculationRulesSection  schoolId={schoolId} />}
             {activeSection === "reportLayout"      && <ReportLayoutSection      schoolId={schoolId} />}
-            {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
-            {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
+            {activeSection === "admins"    && <NeedsInternet><AdminsSection schoolId={schoolId} currentUserId={currentUserId} /></NeedsInternet>}
+            {activeSection === "permissions" && <NeedsInternet><PermissionsSection schoolId={schoolId} /></NeedsInternet>}
             {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}
             {activeSection === "idcards"   && <IdCardSection    schoolId={schoolId} />}
             {activeSection === "analytics" && <AnalyticsSection schoolId={schoolId} />}

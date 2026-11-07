@@ -19,15 +19,17 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
 import { MarkInputRow }  from "../../../src/components/MarkInputRow";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
 const rateColor = (pct) => {
-  if (pct >= 70) return "#059669";
-  if (pct >= 50) return "#D97706";
-  return "#DC2626";
+  if (pct >= 70) return SEMANTIC.success.text;
+  if (pct >= 50) return SEMANTIC.warning.text;
+  return SEMANTIC.error.text;
 };
 
 // Keep a score box to digits plus at most one decimal point. Numeric
@@ -39,15 +41,18 @@ const sanitizeScore = (v) => {
   return parts.length <= 2 ? cleaned : `${parts[0]}.${parts.slice(1).join("")}`;
 };
 
+// A badge's colours ({ bg, text, border }) as a status meta's fields.
+const badgeMeta = (b) => ({ color: b.text, bg: b.bg, border: b.border });
+
 // The status/type maps hold translation KEYS, not text: they live at module
 // scope where the hook cannot run, so the component resolves them at render.
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
+  draft:     { ...badgeMeta(statusBadge("warning")), labelKey: "examStatus.draft"     },
+  scheduled: { ...badgeMeta(statusBadge("info")),    labelKey: "examStatus.scheduled" },
+  ongoing:   { ...badgeMeta(statusBadge("info")),    labelKey: "examStatus.ongoing"   },
+  completed: { ...badgeMeta(statusBadge("success")), labelKey: "examStatus.completed" },
+  published: { ...badgeMeta(statusBadge("success")), labelKey: "examStatus.published" },
+  archived:  { ...badgeMeta(accentBadge("slate")),   labelKey: "examStatus.archived"  },
 };
 
 const EXAM_TYPE_KEYS = {
@@ -355,19 +360,21 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
           />
         }
         ListEmptyComponent={
-          <View style={ex.empty}>
-            <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-            <Text style={ex.emptyTitle}>
-              {search || filter !== "all"
+          <EmptyState
+            icon="document-outline"
+            accent="amber"
+            title={
+              search || filter !== "all"
                 ? t("marksEntry.emptyFiltered")
-                : t("marksEntry.emptyNone")}
-            </Text>
-            <Text style={ex.emptySub}>
-              {search || filter !== "all"
+                : t("marksEntry.emptyNone")
+            }
+            message={
+              search || filter !== "all"
                 ? t("marksEntry.emptyFilteredSub")
-                : t("marksEntry.emptyNoneSub")}
-            </Text>
-          </View>
+                : t("marksEntry.emptyNoneSub")
+            }
+            style={ex.empty}
+          />
         }
         renderItem={({ item }) => {
           const meta         = STATUS_META[item.status] || STATUS_META.draft;
@@ -383,7 +390,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
               <View style={ex.cardBody}>
                 <View style={ex.cardTop}>
                   <Text style={ex.cardName} numberOfLines={2}>{item.name}</Text>
-                  <View style={[ex.statusBadge, { backgroundColor: meta.bg }]}>
+                  <View style={[ex.statusBadge, { backgroundColor: meta.bg, borderColor: meta.border }]}>
                     <Text style={[ex.statusText, { color: meta.color }]}>
                       {t(meta.labelKey)}
                     </Text>
@@ -391,7 +398,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
                 </View>
                 <View style={ex.cardMeta}>
                   <View style={ex.cardMetaItem}>
-                    <Ionicons name="grid-outline" size={12} color="#9CA3AF" />
+                    <Ionicons name="grid-outline" size={12} color={ACCENT.amber.solid} />
                     <Text style={ex.cardMetaText}>
                       {EXAM_TYPE_KEYS[item.type]
                         ? t(EXAM_TYPE_KEYS[item.type])
@@ -399,14 +406,14 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
                     </Text>
                   </View>
                   <View style={ex.cardMetaItem}>
-                    <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+                    <Ionicons name="calendar-outline" size={12} color={ACCENT.amber.solid} />
                     <Text style={ex.cardMetaText}>
                       {item.academicYear} · {item.term}
                     </Text>
                   </View>
                   {!!classDisplay && (
                     <View style={ex.cardMetaItem}>
-                      <Ionicons name="school-outline" size={12} color="#9CA3AF" />
+                      <Ionicons name="school-outline" size={12} color={ACCENT.indigo.solid} />
                       <Text style={ex.cardMetaText} numberOfLines={1}>
                         {classDisplay}
                       </Text>
@@ -463,28 +470,21 @@ const ex = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   7,
     borderRadius:      20,
-    backgroundColor:   "#F3F4F6",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#E5E7EB",
+    borderColor:       COLORS.border,
   },
-  filterChipActive:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-  filterChipText:       { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  filterChipTextActive: { color: "#FFF" },
+  filterChipActive:     { backgroundColor: ACCENT.amber.wash, borderColor: ACCENT.amber.base },
+  filterChipText:       { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary },
+  filterChipTextActive: { color: ACCENT.amber.deep },
   list:                 { padding: 16, paddingTop: 4, gap: 10, paddingBottom: 40 },
   empty:                { alignItems: "center", paddingVertical: 60, gap: 8 },
-  emptyTitle: {
-    fontSize:   15,
-    fontWeight: "600",
-    color:      "#374151",
-    textAlign:  "center",
-  },
-  emptySub:    { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
   card: {
     flexDirection:   "row",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.amber.wash,
     borderRadius:    14,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     overflow:        "hidden",
     shadowColor:     "#000",
     shadowOpacity:   0.04,
@@ -500,21 +500,21 @@ const ex = StyleSheet.create({
     gap:            8,
     marginBottom:   8,
   },
-  cardName:     { flex: 1, fontSize: 15, fontWeight: "700", color: "#111827", lineHeight: 20 },
-  statusBadge:  { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  cardName:     { flex: 1, fontSize: 15, fontWeight: "700", color: COLORS.text, lineHeight: 20 },
+  statusBadge:  { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   statusText:   { fontSize: 11, fontWeight: "700" },
   cardMeta:     { gap: 4, marginBottom: 10 },
   cardMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  cardMetaText: { fontSize: 12, color: "#6B7280" },
+  cardMetaText: { fontSize: 12, color: COLORS.textSecondary },
   cardFooter: {
     flexDirection:  "row",
     alignItems:     "center",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: COLORS.border,
     paddingTop:     10,
   },
-  cardFooterText: { fontSize: 11, color: "#9CA3AF" },
+  cardFooterText: { fontSize: 11, color: COLORS.textSecondary },
   enterBtn: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -538,10 +538,10 @@ const ex = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const SUB_STATUS_META = {
-  pending:   { color: "#D97706", bg: "#FEF3C7", labelKey: "results.pending",   },
-  submitted: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "results.submitted", },
-  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "results.approved",  },
-  rejected:  { color: "#DC2626", bg: "#FEF2F2", labelKey: "results.rejected",  },
+  pending:   { ...badgeMeta(statusBadge("warning")), edge: SEMANTIC.warning.icon, labelKey: "results.pending",   },
+  submitted: { ...badgeMeta(statusBadge("info")),    edge: SEMANTIC.info.icon,    labelKey: "results.submitted", },
+  approved:  { ...badgeMeta(statusBadge("success")), edge: SEMANTIC.success.icon, labelKey: "results.approved",  },
+  rejected:  { ...badgeMeta(statusBadge("error")),   edge: SEMANTIC.error.icon,   labelKey: "results.rejected",  },
 };
 
 const ClassSubjectPicker = ({
@@ -654,13 +654,13 @@ const ClassSubjectPicker = ({
 
   if (filtered.length === 0) {
     return (
-      <View style={cs.centered}>
-        <Ionicons name="school-outline" size={48} color="#D1D5DB" />
-        <Text style={cs.emptyTitle}>{t("marksEntry.noSubjectsTitle")}</Text>
-        <Text style={cs.emptyText}>
-          {t("marksEntry.noSubjectsBody")}
-        </Text>
-      </View>
+      <EmptyState
+        icon="school-outline"
+        accent="indigo"
+        title={t("marksEntry.noSubjectsTitle")}
+        message={t("marksEntry.noSubjectsBody")}
+        style={cs.centered}
+      />
     );
   }
 
@@ -704,9 +704,7 @@ const ClassSubjectPicker = ({
           <View key={sc.classId}>
             {/* Class header */}
             <View style={cs.classHeader}>
-              <View style={cs.classIconBg}>
-                <Ionicons name="school-outline" size={16} color="#4F46E5" />
-              </View>
+              <IconSquare icon="school" accent="indigo" size={28} radius={14} />
               <View style={cs.classHeaderText}>
                 <Text style={cs.className}>{sc.className}</Text>
                 <Text style={cs.classMeta}>
@@ -731,10 +729,8 @@ const ClassSubjectPicker = ({
                   activeOpacity={0.7}
                   disabled={isApproved}
                 >
-                  <View style={cs.cardAccent} />
-                  <View style={cs.cardIcon}>
-                    <Ionicons name="book" size={20} color="#4F46E5" />
-                  </View>
+                  <View style={[cs.cardAccent, { backgroundColor: meta.edge }]} />
+                  <IconSquare icon="book" accent="slate" size={38} radius={10} />
                   <View style={cs.cardInfo}>
                     <Text style={cs.cardName}>{s.subjectName}</Text>
                     <Text style={cs.cardSub}>
@@ -757,11 +753,11 @@ const ClassSubjectPicker = ({
                     )}
                   </View>
                   <View style={cs.cardRight}>
-                    <View style={[cs.statusBadge, { backgroundColor: meta.bg }]}>
+                    <View style={[cs.statusBadge, { backgroundColor: meta.bg, borderColor: meta.border }]}>
                       <Text style={[cs.statusText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
                     </View>
                     {!isApproved && (
-                      <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                      <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
                     )}
                   </View>
                 </TouchableOpacity>
@@ -786,8 +782,6 @@ const cs = StyleSheet.create({
     marginTop:         4,
   },
   retryText:   { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  emptyTitle:  { fontSize: 16, fontWeight: "700", color: "#374151", textAlign: "center" },
-  emptyText:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
   searchWrap: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#F9FAFB", borderRadius: 10, paddingHorizontal: 12, height: 40,
@@ -798,24 +792,20 @@ const cs = StyleSheet.create({
   list:        { paddingHorizontal: 16, paddingBottom: 48, gap: 4 },
   classHeader: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#F3F4F6", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: ACCENT.indigo.wash, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
     marginBottom: 6,
   },
-  classIconBg: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center",
-  },
   classHeaderText: { flex: 1 },
-  className: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  classMeta: { fontSize: 11, color: "#6B7280", marginTop: 1 },
+  className: { fontSize: 14, fontWeight: "700", color: ACCENT.indigo.deep },
+  classMeta: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
   card: {
     flexDirection:   "row",
     alignItems:      "center",
-    backgroundColor: "#FFF",
+    backgroundColor: ACCENT.slate.wash,
     borderRadius:    12,
     padding:         12,
     borderWidth:     1,
-    borderColor:     "#F3F4F6",
+    borderColor:     COLORS.border,
     gap:             10,
     marginBottom:    6,
     shadowColor:     "#000",
@@ -823,23 +813,19 @@ const cs = StyleSheet.create({
     shadowRadius:    6,
     elevation:       1,
   },
-  cardAccent: { width: 4, borderRadius: 2, alignSelf: "stretch", backgroundColor: "#EEF2FF" },
-  cardIcon: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center",
-  },
+  cardAccent: { width: 4, borderRadius: 2, alignSelf: "stretch", backgroundColor: ACCENT.slate.base },
   cardInfo:  { flex: 1 },
-  cardName:  { fontSize: 14, fontWeight: "700", color: "#111827" },
-  cardSub:   { fontSize: 11, color: "#6B7280", marginTop: 2 },
+  cardName:  { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  cardSub:   { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
   progressRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
   progressBg: {
-    height: 5, borderRadius: 3, flex: 1, backgroundColor: "#F3F4F6", overflow: "hidden",
+    height: 5, borderRadius: 3, flex: 1, backgroundColor: COLORS.border, overflow: "hidden",
   },
-  progressFill:       { height: 5, borderRadius: 3, backgroundColor: "#059669" },
-  progressText:       { fontSize: 10, color: "#6B7280", fontWeight: "600" },
-  rejectText:         { fontSize: 11, color: "#DC2626", marginTop: 2, fontWeight: "600" },
+  progressFill:       { height: 5, borderRadius: 3, backgroundColor: ACCENT.green.base },
+  progressText:       { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600" },
+  rejectText:         { fontSize: 11, color: SEMANTIC.error.text, marginTop: 2, fontWeight: "600" },
   cardRight:          { alignItems: "flex-end", gap: 4 },
-  statusBadge:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadge:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   statusText:         { fontSize: 11, fontWeight: "700" },
 });
 
@@ -1178,7 +1164,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
                 <Ionicons
                   name={failed ? "alert-circle-outline" : "cloud-upload-outline"}
                   size={14}
-                  color={failed ? "#9F2318" : "#8A5A00"}
+                  color={failed ? SEMANTIC.error.text : SEMANTIC.warning.text}
                 />
                 <Text style={[se.syncNoteText, failed && se.syncNoteTextBad]}>
                   {failed
@@ -1226,17 +1212,13 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
           }
           renderItem={renderRow}
           ListEmptyComponent={
-            <View style={se.empty}>
-              <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-              <Text style={se.emptyTitle}>
-                {search ? t("marksEntry.noStudentsMatch") : t("marksEntry.noStudentsInClass")}
-              </Text>
-              {!search && (
-                <Text style={se.emptySub}>
-                  {t("marksEntry.noStudentsHint")}
-                </Text>
-              )}
-            </View>
+            <EmptyState
+              icon="people-outline"
+              accent="blue"
+              title={search ? t("marksEntry.noStudentsMatch") : t("marksEntry.noStudentsInClass")}
+              message={!search ? t("marksEntry.noStudentsHint") : null}
+              style={se.empty}
+            />
           }
         />
       </View>
@@ -1303,10 +1285,10 @@ const se = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 6,
     marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8,
   },
-  syncNoteWait:    { backgroundColor: "#FBF4E6" },
-  syncNoteBad:     { backgroundColor: "#FBEFEE" },
-  syncNoteText:    { fontSize: 12, fontWeight: "600", color: "#8A5A00", flex: 1 },
-  syncNoteTextBad: { color: "#9F2318" },
+  syncNoteWait:    { backgroundColor: SEMANTIC.warning.bg },
+  syncNoteBad:     { backgroundColor: SEMANTIC.error.bg },
+  syncNoteText:    { fontSize: 12, fontWeight: "600", color: SEMANTIC.warning.text, flex: 1 },
+  syncNoteTextBad: { color: SEMANTIC.error.text },
 
   reasonBackdrop: {
     flex: 1, backgroundColor: "rgba(15, 18, 26, 0.55)",
@@ -1351,22 +1333,22 @@ const se = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom:   6,
   },
-  progressText:    { fontSize: 13, color: "#374151", fontWeight: "600" },
-  progressPct:     { fontSize: 13, color: "#4F46E5", fontWeight: "700" },
+  progressText:    { fontSize: 13, color: COLORS.text, fontWeight: "600" },
+  progressPct:     { fontSize: 13, color: ACCENT.amber.deep, fontWeight: "700" },
   progressBarBg: {
     height:          5,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.border,
     borderRadius:    3,
     overflow:        "hidden",
     marginBottom:    8,
   },
-  progressBarFill: { height: 5, backgroundColor: "#4F46E5", borderRadius: 3 },
+  progressBarFill: { height: 5, backgroundColor: ACCENT.amber.base, borderRadius: 3 },
   progressRow: {
     flexDirection:  "row",
     justifyContent: "space-between",
     alignItems:     "center",
   },
-  subjectLabel: { fontSize: 11, color: "#6B7280" },
+  subjectLabel: { fontSize: 11, color: COLORS.textSecondary },
   markAllText:  { fontSize: 11, color: "#4F46E5", fontWeight: "700" },
   searchBox: {
     flexDirection:     "row",
@@ -1433,8 +1415,6 @@ const se = StyleSheet.create({
   scoreInputAbsent: { backgroundColor: "#F3F4F6", color: "#9CA3AF", borderColor: "#E5E7EB" },
   scorePct:         { fontSize: 10, fontWeight: "600", marginTop: 2 },
   empty:            { alignItems: "center", paddingVertical: 60, gap: 8 },
-  emptyTitle:       { fontSize: 14, color: "#9CA3AF", textAlign: "center", fontWeight: "600" },
-  emptySub:         { fontSize: 12, color: "#D1D5DB", textAlign: "center" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -1589,9 +1569,10 @@ export default function MarkEntryScreen() {
           onPress={handleBack}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
+        <HeaderIcon icon="create" style={ms.headerIcon} />
         <View style={ms.headerCenter}>
           <Text style={ms.headerTitle} numberOfLines={1}>{headerTitle}</Text>
           <Text style={ms.headerSub}   numberOfLines={1}>{headerSub}</Text>
@@ -1629,7 +1610,7 @@ export default function MarkEntryScreen() {
             </Text>
           </TouchableOpacity>
 
-          <Ionicons name="chevron-forward" size={13} color="#D1D5DB" />
+          <Ionicons name="chevron-forward" size={13} color={COLORS.textSecondary} />
 
           <TouchableOpacity
             disabled={step <= 1 || !!paramSubjectId}
@@ -1651,7 +1632,7 @@ export default function MarkEntryScreen() {
 
           {step === 2 && (
             <>
-              <Ionicons name="chevron-forward" size={13} color="#D1D5DB" />
+              <Ionicons name="chevron-forward" size={13} color={COLORS.textSecondary} />
               <Text style={[ms.crumb, ms.crumbActive]} numberOfLines={1}>
                 {selectedSubject?.subjectName}
               </Text>
@@ -1725,21 +1706,22 @@ const ms = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop:        60,
     paddingBottom:     16,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
   },
   backBtn: {
     width:           40,
     height:          40,
     borderRadius:    12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.page,
     alignItems:      "center",
     justifyContent:  "center",
   },
+  headerIcon:   { marginLeft: 12, marginRight: 0 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle:  { fontSize: 18, fontWeight: "700", color: "#111827" },
-  headerSub:    { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  headerTitle:  { fontSize: 18, fontWeight: "700", color: COLORS.text },
+  headerSub:    { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   saveBtn: {
     backgroundColor:   "#4F46E5",
     borderRadius:      10,
@@ -1757,14 +1739,14 @@ const ms = StyleSheet.create({
     gap:               6,
     paddingHorizontal: 16,
     paddingVertical:   10,
-    backgroundColor:   "#FFF",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: COLORS.border,
     flexWrap:          "wrap",
   },
-  crumb:       { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
-  crumbLink:   { color: "#4F46E5" },
-  crumbActive: { color: "#111827", fontWeight: "700" },
+  crumb:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "600" },
+  crumbLink:   { color: ACCENT.amber.deep },
+  crumbActive: { color: COLORS.text, fontWeight: "700" },
 });
 // MarkInputRow's style contract, in this screen's colours. Module-level, so
 // the memoised rows see one object and never re-render because of it.

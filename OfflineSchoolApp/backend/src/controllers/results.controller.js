@@ -24,7 +24,7 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const resultsService = require("../services/results.service");
-const { getRankings } = resultsService;
+const { getRankings, countRankings } = resultsService;
 const { lookupGrade } = require("../services/grading.service");
 // The §5/§7/§8 rules, shared with the term and annual cards and covered by
 // scripts/check-report-card.js.
@@ -191,6 +191,7 @@ const getExamRankings = asyncHandler(async (req, res) => {
     rankBy = "class",
     classId,
     limit  = 100,
+    page   = 1,
   } = req.query;
 
   const scope = ["class", "grade", "school"].includes(rankBy)
@@ -204,13 +205,29 @@ const getExamRankings = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Exam not found" });
   }
 
-  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role), limit: Number(limit) });
-  rankings     = rankings.slice(0, Number(limit));
+  // A page of the table and the table's size, from the same filter: the
+  // analytics page prints "N students" from `total`, so it agrees with the
+  // statistics' count however many pages there are. `count` stays the rows
+  // on this page, as before.
+  const onlyPublished = !isAdmin(req.user?.role);
+  const pageNo = Math.max(1, Math.floor(Number(page)) || 1);
+  const [pageRows, total] = await Promise.all([
+    getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished, limit: Number(limit), page: pageNo }),
+    countRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished }),
+  ]);
+  let rankings = pageRows.slice(0, Number(limit));
+
+  // Each pupil's average on /20, the school's remark and pass/fail — what
+  // the analytics tables print instead of a percentage, a letter and a GPA.
+  rankings = await classStats.withAverage20(rankings, scoped.schoolId);
 
   return res.json({
     success: true,
     rankBy:  scope,
     count:   rankings.length,
+    total,
+    page:    pageNo,
+    totalPages: Number(limit) > 0 ? Math.max(1, Math.ceil(total / Number(limit))) : 1,
     data:    rankings,
   });
 });
@@ -970,51 +987,36 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // Logo, motto and the official header's delegations come from the school's
   // settings (§2) — never hard-coded, and loaded by the one function all three
   // card routes share so they cannot select different fields from each other.
-  const letterhead = await loadSchoolForCard(schoolId, req);
-  const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
-  // The school's language, whoever views or reissues the card (docs/41 §7);
-  // a ?lang= or body.lang from the viewer's interface no longer decides it.
-  const lang = letterhead.language;
-
+  //
+  // C2: the four reads below do not depend on each other, so they go out
+  // together. One after another they were most of a card's ~3s on a remote
+  // database — about twenty round trips in a row, per pupil, per print.
+  //
   // An actual print sends ?issue=1; without it this is a preview. The web
   // console fetches this same route to fill its preview, and opening one is
   // not issuing the card: it must neither archive it as the parent's copy
   // nor count as a print on its verification code.
   const issuing = req.query.issue === "1" || req.query.issue === "true";
-
-  /**
-   * The verification strip: QR + code resolving to a public page that shows
-   * what the school's records say, so a registrar elsewhere can check a paper
-   * bulletin against them.
-   *
-   * Shared with the term and annual cards, which had no strip at all until it
-   * moved out of this controller — they rendered {{qr_code}} with nothing
-   * behind it and printed the inert placeholder box.
-   */
-  const verify = await cardVerification({
-    data:        built.data,
-    schoolId,
-    studentId,
-    documentKey: examId,
-    req,
-    count:       issuing,
-  });
-
-  // Per-school template drives the layout when the school has one; the
-  // built-in layout is the fallback, including when a template fails to render.
-  const template = await loadReportTemplate(
-    schoolId,
-    req.query.templateId
-  );
-
-  /*
-   * Which sections it prints (docs/39 §10). A card already issued prints
-   * with the layout it was issued with — a school that hides a section today
-   * does not change a card a family already holds. One issued before layouts
-   * existed prints every section, as it was issued. Anything else prints
-   * with the school's current layout, and records it if this is its issue.
-   */
-  const layout = await reportLayout.layoutForSequenceCard({ schoolId, examId, studentId });
+  const [letterhead, verify, template, layout] = await Promise.all([
+    loadSchoolForCard(schoolId, req),
+    // The verification strip: QR + code resolving to a public page that shows
+    // what the school's records say, so a registrar elsewhere can check a
+    // paper bulletin against them (shared with the term and annual cards).
+    cardVerification({ data: built.data, schoolId, studentId, documentKey: examId, req, count: issuing }),
+    // Per-school template drives the layout when the school has one; the
+    // built-in layout is the fallback, including when a template fails.
+    loadReportTemplate(schoolId, req.query.templateId),
+    // Which sections it prints (docs/39 §10). A card already issued prints
+    // with the layout it was issued with — a school that hides a section today
+    // does not change a card a family already holds. One issued before layouts
+    // existed prints every section, as it was issued. Anything else prints
+    // with the school's current layout, and records it if this is its issue.
+    reportLayout.layoutForSequenceCard({ schoolId, examId, studentId }),
+  ]);
+  const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  // The school's language, whoever views or reissues the card (docs/41 §7);
+  // a ?lang= or body.lang from the viewer's interface no longer decides it.
+  const lang = letterhead.language;
 
   const rendered = renderReportCard(built.data, {
     lang,

@@ -29,6 +29,8 @@ import {
   getEnrollmentStatus,
 } from "../../../src/services/studentEnroll.service";
 import { errorText } from "../../../src/utils/appError";
+import { COLORS, ACCENT, SEMANTIC, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -48,11 +50,15 @@ const EMPTY_FORM = {
   classId:       "",
 };
 
+const syncTone = (tone) => {
+  const b = statusBadge(tone);
+  return { color: b.text, bg: b.bg, border: b.border };
+};
 const SYNC_CONFIG = {
-  pending:     { color: "#d97706", bg: "#fffbeb", border: "#fde68a", icon: "⏳", labelKey: "syncPending"               },
-  syncing:     { color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", icon: "🔄", labelKey: "syncSyncing"                   },
-  synced:      { color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", icon: "✅", labelKey: "syncSynced"                    },
-  sync_failed: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: "❌", labelKey: "syncFailed" },
+  pending:     { ...syncTone("warning"), icon: "⏳", labelKey: "syncPending" },
+  syncing:     { ...syncTone("info"),    icon: "🔄", labelKey: "syncSyncing" },
+  synced:      { ...syncTone("success"), icon: "✅", labelKey: "syncSynced"  },
+  sync_failed: { ...syncTone("error"),   icon: "❌", labelKey: "syncFailed"  },
 };
 
 // ─────────────────────────────────────────────────────────
@@ -146,9 +152,9 @@ const sel = StyleSheet.create({
     flexDirection:     "row",
     alignItems:        "center",
     justifyContent:    "space-between",
-    backgroundColor:   "#f9fafb",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#e5e7eb",
+    borderColor:       COLORS.border,
     borderRadius:      12,
     paddingHorizontal: 14,
     paddingVertical:   13,
@@ -156,20 +162,20 @@ const sel = StyleSheet.create({
     marginBottom:      4,
   },
   triggerError: {
-    borderColor:     "#f87171",
-    backgroundColor: "#fef2f2",
+    borderColor:     ACCENT.red.base,
+    backgroundColor: SEMANTIC.error.bg,
   },
   triggerText: {
     flex:     1,
     fontSize: 14,
-    color:    "#111827",
+    color:    COLORS.text,
   },
   placeholder: {
-    color: "#9ca3af",
+    color: COLORS.textMuted,
   },
   arrow: {
     fontSize:   14,
-    color:      "#6b7280",
+    color:      COLORS.textSecondary,
     marginLeft: 8,
   },
   backdrop: {
@@ -177,7 +183,7 @@ const sel = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   sheet: {
-    backgroundColor:      "#ffffff",
+    backgroundColor:      COLORS.surface,
     borderTopLeftRadius:  20,
     borderTopRightRadius: 20,
     maxHeight:            "60%",
@@ -190,16 +196,16 @@ const sel = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical:   16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: COLORS.border,
   },
   sheetTitle: {
     fontSize:   16,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   sheetClose: {
     fontSize: 18,
-    color:    "#6b7280",
+    color:    COLORS.textSecondary,
   },
   option: {
     flexDirection:     "row",
@@ -209,23 +215,23 @@ const sel = StyleSheet.create({
     paddingVertical:   14,
   },
   optionSelected: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: ACCENT.blue.wash,
   },
   optionText: {
     fontSize: 15,
-    color:    "#374151",
+    color:    COLORS.text,
   },
   optionTextSelected: {
-    color:      "#4F46E5",
+    color:      ACCENT.blue.deep,
     fontWeight: "600",
   },
   optionCheck: {
     fontSize: 16,
-    color:    "#4F46E5",
+    color:    ACCENT.blue.solid,
   },
   separator: {
     height:           1,
-    backgroundColor:  "#f9fafb",
+    backgroundColor:  COLORS.border,
     marginHorizontal: 20,
   },
 });
@@ -529,7 +535,7 @@ export default function AddStudentScreen() {
             <View
               style={[
                 s.heroIcon,
-                { backgroundColor: success.warning ? "#fffbeb" : "#ecfdf5" },
+                { backgroundColor: success.warning ? SEMANTIC.warning.box : SEMANTIC.success.box },
               ]}
             >
               <Text style={s.heroEmoji}>
@@ -673,6 +679,7 @@ export default function AddStudentScreen() {
         >
           <Text style={s.backArrow}>←</Text>
         </TouchableOpacity>
+        <HeaderIcon icon="person-add" accent="blue" style={s.headerIcon} />
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>{t("studentAdd.title")}</Text>
           <Text style={s.headerSub}>
@@ -725,11 +732,11 @@ export default function AddStudentScreen() {
               CLASS ASSIGNMENT
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="🏫" title={t("studentAdd.sectionClass")} required />
+            <SectionHeader icon="school" accent="indigo" title={t("studentAdd.sectionClass")} required />
 
             {classesLoading ? (
               <View style={s.loadingRow}>
-                <ActivityIndicator size="small" color="#6b7280" />
+                <ActivityIndicator size="small" color={COLORS.textSecondary} />
                 <Text style={s.loadingText}>{t("studentAdd.loadingClasses")}</Text>
               </View>
             ) : classes.length === 0 ? (
@@ -765,7 +772,7 @@ export default function AddStudentScreen() {
               PERSONAL INFORMATION
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="👤" title={t("studentAdd.sectionPersonal")} />
+            <SectionHeader icon="person" accent="blue" title={t("studentAdd.sectionPersonal")} />
 
             <View style={s.row}>
               <View style={{ flex: 1 }}>
@@ -824,7 +831,7 @@ export default function AddStudentScreen() {
               CONTACT INFORMATION
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="📬" title={t("studentAdd.sectionContact")} />
+            <SectionHeader icon="mail" accent="blue" title={t("studentAdd.sectionContact")} />
 
             <FormField
               label={t("studentAdd.email")}
@@ -858,7 +865,7 @@ export default function AddStudentScreen() {
               GUARDIAN / PARENT
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="👨‍👧" title={t("studentAdd.sectionGuardian")} />
+            <SectionHeader icon="people" accent="sky" title={t("studentAdd.sectionGuardian")} />
 
             <FormField
               label={t("studentAdd.guardianName")}
@@ -934,10 +941,10 @@ export default function AddStudentScreen() {
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-function SectionHeader({ emoji, title, required = false }) {
+function SectionHeader({ icon, accent, title, required = false }) {
   return (
     <View style={sh.row}>
-      <Text style={sh.emoji}>{emoji}</Text>
+      <IconSquare icon={icon} accent={accent} size={28} />
       <Text style={sh.title}>{title}</Text>
       {required && <Text style={sh.required}>*</Text>}
     </View>
@@ -948,15 +955,14 @@ const sh = StyleSheet.create({
   row: {
     flexDirection:     "row",
     alignItems:        "center",
-    gap:               6,
+    gap:               8,
     paddingBottom:     12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: COLORS.border,
     marginBottom:      14,
   },
-  emoji:    { fontSize: 16 },
-  title:    { flex: 1, fontSize: 13, fontWeight: "700", color: "#374151" },
-  required: { fontSize: 14, color: "#ef4444", fontWeight: "700" },
+  title:    { flex: 1, fontSize: 13, fontWeight: "700", color: COLORS.text },
+  required: { fontSize: 14, color: COLORS.danger, fontWeight: "700" },
 });
 
 // ── FormField ─────────────────────────────────────────────
@@ -974,7 +980,7 @@ const FormField = React.forwardRef(function FormField(
         <TextInput
           ref={ref}
           style={ff.input}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={COLORS.textMuted}
           {...inputProps}
         />
       </View>
@@ -989,20 +995,20 @@ const FormField = React.forwardRef(function FormField(
 
 const ff = StyleSheet.create({
   wrapper:  { marginBottom: 4 },
-  label:    { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
-  required: { color: "#ef4444" },
+  label:    { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 6 },
+  required: { color: COLORS.danger },
   inputBox: {
-    backgroundColor:   "#f9fafb",
+    backgroundColor:   COLORS.surface,
     borderWidth:       1,
-    borderColor:       "#e5e7eb",
+    borderColor:       COLORS.border,
     borderRadius:      12,
     paddingHorizontal: 14,
     paddingVertical:   Platform.OS === "ios" ? 13 : 10,
   },
-  inputBoxError: { borderColor: "#f87171", backgroundColor: "#fef2f2" },
-  input:         { fontSize: 14, color: "#111827", padding: 0 },
-  errorText:     { fontSize: 11, color: "#dc2626", fontWeight: "600", marginTop: 4 },
-  hint:          { fontSize: 11, color: "#9ca3af", marginTop: 4 },
+  inputBoxError: { borderColor: ACCENT.red.base, backgroundColor: SEMANTIC.error.bg },
+  input:         { fontSize: 14, color: COLORS.text, padding: 0 },
+  errorText:     { fontSize: 11, color: SEMANTIC.error.text, fontWeight: "600", marginTop: 4 },
+  hint:          { fontSize: 11, color: COLORS.textSubtle, marginTop: 4 },
 });
 
 // ── SummaryRow ────────────────────────────────────────────
@@ -1022,32 +1028,32 @@ const sr = StyleSheet.create({
     alignItems:      "center",
     paddingVertical: 4,
   },
-  label: { fontSize: 13, color: "#6b7280" },
+  label: { fontSize: 13, color: COLORS.textSecondary },
   value: {
     fontSize:   13,
     fontWeight: "700",
-    color:      "#111827",
+    color:      COLORS.text,
     flexShrink: 1,
     textAlign:  "right",
     marginLeft: 8,
   },
-  valueHighlight: { color: "#4f46e5" },
+  valueHighlight: { color: ACCENT.blue.deep },
 });
 
 // ─────────────────────────────────────────────────────────
 // STYLES
 // ─────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f9fafb" },
+  safe: { flex: 1, backgroundColor: COLORS.page },
 
   // ── header ──────────────────────────────────────────────
   header: {
     flexDirection:     "row",
     alignItems:        "center",
     gap:               12,
-    backgroundColor:   "#fff",
+    backgroundColor:   COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: COLORS.border,
     paddingHorizontal: 16,
     paddingTop:        16,
     paddingBottom:     14,
@@ -1056,106 +1062,111 @@ const s = StyleSheet.create({
     width:           36,
     height:          36,
     borderRadius:    10,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: COLORS.page,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  backArrow:   { fontSize: 20, color: "#374151" },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#6b7280", marginTop: 1 },
+  backArrow:   { fontSize: 20, color: COLORS.text },
+  headerIcon:  { marginRight: 0 },
+  headerTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   // ── form scroll ──────────────────────────────────────────
   formContent: { padding: 16, paddingBottom: 48, gap: 16 },
 
   // ── banners ──────────────────────────────────────────────
   errorBanner: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: SEMANTIC.error.bg,
     borderWidth:     1,
-    borderColor:     "#fecaca",
+    borderColor:     statusBadge("error").border,
     borderRadius:    12,
     padding:         14,
   },
-  errorBannerText: { fontSize: 13, color: "#dc2626" },
+  errorBannerText: { fontSize: 13, color: SEMANTIC.error.text },
   offlineBanner: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: SEMANTIC.warning.bg,
     borderWidth:     1,
-    borderColor:     "#fde68a",
+    borderColor:     statusBadge("warning").border,
     borderRadius:    12,
     padding:         14,
   },
-  offlineBannerText: { fontSize: 13, color: "#92400e" },
+  offlineBannerText: { fontSize: 13, color: SEMANTIC.warning.text },
   infoBanner: {
-    backgroundColor: "#ecfdf5",
+    backgroundColor: SEMANTIC.success.bg,
     borderWidth:     1,
-    borderColor:     "#a7f3d0",
+    borderColor:     statusBadge("success").border,
     borderRadius:    12,
     padding:         14,
   },
-  infoBannerText: { fontSize: 13, color: "#065f46" },
+  infoBannerText: { fontSize: 13, color: SEMANTIC.success.text },
 
   // ── card ─────────────────────────────────────────────────
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.surface,
     borderRadius:    16,
     borderWidth:     1,
-    borderColor:     "#e5e7eb",
+    borderColor:     COLORS.border,
     padding:         16,
   },
 
   // ── class picker ─────────────────────────────────────────
   loadingRow:  { flexDirection: "row", alignItems: "center", gap: 8, padding: 8 },
-  loadingText: { fontSize: 13, color: "#6b7280" },
+  loadingText: { fontSize: 13, color: COLORS.textSecondary },
   emptyClassRow: {
     flexDirection:   "row",
     alignItems:      "center",
     flexWrap:        "wrap",
-    backgroundColor: "#fffbeb",
+    backgroundColor: SEMANTIC.warning.bg,
     borderWidth:     1,
-    borderColor:     "#fde68a",
+    borderColor:     statusBadge("warning").border,
     borderRadius:    10,
     padding:         12,
   },
-  emptyClassText: { fontSize: 13, color: "#92400e" },
+  emptyClassText: { fontSize: 13, color: SEMANTIC.warning.text },
   emptyClassLink: {
     fontSize:           13,
-    color:              "#d97706",
+    color:              ACCENT.amber.deep,
     fontWeight:         "700",
     textDecorationLine: "underline",
   },
-  fieldError: { fontSize: 11, color: "#dc2626", fontWeight: "600", marginTop: 4 },
+  fieldError: { fontSize: 11, color: SEMANTIC.error.text, fontWeight: "600", marginTop: 4 },
 
   // ── field helpers ────────────────────────────────────────
   row:        { flexDirection: "row" },
   fieldWrap:  { marginBottom: 4 },
-  fieldLabel: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6 },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 6 },
 
   // ── info box ─────────────────────────────────────────────
   infoBox: {
-    backgroundColor: "#fff",
+    backgroundColor: ACCENT.blue.wash,
     borderRadius:    16,
     borderWidth:     1,
-    borderColor:     "#e5e7eb",
+    borderColor:     COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: ACCENT.blue.base,
     padding:         16,
     gap:             10,
   },
-  infoBoxTitle: { fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 4 },
+  infoBoxTitle: { fontSize: 13, fontWeight: "700", color: ACCENT.blue.deep, marginBottom: 4 },
   infoRow:      { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   infoEmoji:    { fontSize: 14 },
-  infoText:     { flex: 1, fontSize: 13, color: "#4b5563" },
+  infoText:     { flex: 1, fontSize: 13, color: COLORS.textSecondary },
 
   // ── submit / discard ─────────────────────────────────────
   submitBtn: {
-    backgroundColor: "#059669",
+    backgroundColor: ACCENT.green.solid,
     borderRadius:    14,
     paddingVertical: 16,
     alignItems:      "center",
     justifyContent:  "center",
   },
-  submitBtnDisabled: { backgroundColor: "#d1d5db" },
+  submitBtnDisabled: { backgroundColor: COLORS.textMuted },
   submitInner:       { flexDirection: "row", alignItems: "center", gap: 8 },
-  submitBtnText:     { fontSize: 15, fontWeight: "700", color: "#fff" },
+  submitBtnText:     { fontSize: 15, fontWeight: "700", color: COLORS.onPrimary },
   discardBtn:        { alignItems: "center", paddingVertical: 12 },
-  discardBtnText:    { fontSize: 14, color: "#9ca3af", fontWeight: "500" },
+  discardBtnText:    { fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   // ── success view ─────────────────────────────────────────
   successContent: { padding: 20, gap: 16, paddingBottom: 48 },
@@ -1169,10 +1180,10 @@ const s = StyleSheet.create({
     marginBottom:   14,
   },
   heroEmoji: { fontSize: 38 },
-  heroTitle: { fontSize: 22, fontWeight: "800", color: "#111827" },
+  heroTitle: { fontSize: 22, fontWeight: "800", color: COLORS.text },
   heroSub: {
     fontSize:   14,
-    color:      "#6b7280",
+    color:      COLORS.textSecondary,
     textAlign:  "center",
     marginTop:  6,
     lineHeight: 20,
@@ -1192,26 +1203,28 @@ const s = StyleSheet.create({
     flexDirection:   "row",
     gap:             8,
     alignItems:      "flex-start",
-    backgroundColor: "#fffbeb",
+    backgroundColor: SEMANTIC.warning.bg,
     borderWidth:     1,
-    borderColor:     "#fde68a",
+    borderColor:     statusBadge("warning").border,
     borderRadius:    12,
     padding:         12,
   },
   warningIcon: { fontSize: 14 },
-  warningText: { flex: 1, fontSize: 13, color: "#92400e" },
+  warningText: { flex: 1, fontSize: 13, color: SEMANTIC.warning.text },
   summaryCard: {
-    backgroundColor: "#fff",
+    backgroundColor: ACCENT.blue.wash,
     borderRadius:    16,
     borderWidth:     1,
-    borderColor:     "#e5e7eb",
+    borderColor:     COLORS.border,
+    borderTopWidth:  3,
+    borderTopColor:  ACCENT.blue.base,
     padding:         16,
     gap:             8,
   },
   credCard: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: SEMANTIC.warning.bg,
     borderWidth:     1,
-    borderColor:     "#fde68a",
+    borderColor:     statusBadge("warning").border,
     borderRadius:    16,
     padding:         16,
     gap:             12,
@@ -1219,40 +1232,42 @@ const s = StyleSheet.create({
   credTitle: {
     fontSize:      11,
     fontWeight:    "800",
-    color:         "#92400e",
+    color:         SEMANTIC.warning.text,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   credBlock: { gap: 4 },
-  credLabel: { fontSize: 11, color: "#b45309", fontWeight: "600" },
+  credLabel: { fontSize: 11, color: SEMANTIC.warning.text, fontWeight: "600" },
   credValue: {
     fontSize:   14,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-    color:      "#111827",
+    color:      COLORS.text,
   },
   credRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   copyBtn: {
     paddingHorizontal: 12,
     paddingVertical:   6,
-    backgroundColor:   "#fff",
+    backgroundColor:   COLORS.surface,
     borderRadius:      8,
     borderWidth:       1,
-    borderColor:       "#d97706",
+    borderColor:       ACCENT.amber.base,
   },
-  copyBtnText:      { fontSize: 12, fontWeight: "700", color: "#d97706" },
-  credHint:         { fontSize: 11, color: "#b45309" },
+  copyBtnText:      { fontSize: 12, fontWeight: "700", color: ACCENT.amber.deep },
+  credHint:         { fontSize: 11, color: SEMANTIC.warning.text },
   primaryBtn: {
-    backgroundColor: "#4f46e5",
+    backgroundColor: COLORS.primary,
     borderRadius:    14,
     paddingVertical: 16,
     alignItems:      "center",
   },
-  primaryBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  primaryBtnText: { color: COLORS.onPrimary, fontSize: 15, fontWeight: "700" },
   secondaryBtn: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: COLORS.surface,
+    borderWidth:     1,
+    borderColor:     COLORS.border,
     borderRadius:    14,
     paddingVertical: 16,
     alignItems:      "center",
   },
-  secondaryBtnText: { color: "#374151", fontSize: 15, fontWeight: "600" },
+  secondaryBtnText: { color: COLORS.text, fontSize: 15, fontWeight: "600" },
 });

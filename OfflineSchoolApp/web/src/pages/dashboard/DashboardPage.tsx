@@ -45,7 +45,7 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger"
+      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger-text"
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
@@ -86,7 +86,7 @@ function PendingApplications({
         className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         aria-hidden="true"
       />
-      <p className="min-w-0 flex-1 text-sm text-warning">
+      <p className="min-w-0 flex-1 text-sm text-warning-text">
         {/*
           Pluralisation goes through i18next rather than `count !== 1 ? "s" : ""`.
           French pluralises differently — 0 takes the singular — so the English
@@ -95,11 +95,11 @@ function PendingApplications({
         <span className="font-semibold">
           {t("dashboard.pendingApplications", { count })}
         </span>
-        <span className="text-warning/80">
+        <span className="text-warning-text/80">
           {" "}{t("dashboard.awaitingReview")}
         </span>
       </p>
-      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-warning">
+      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-warning-text">
         {t("dashboard.review")}
         <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </span>
@@ -277,7 +277,7 @@ export default function DashboardPage() {
 
           <PendingApplications
             count={pendingCount}
-            onClick={() => navigate("/students/applications")}
+            onClick={() => navigate("/students/admissions")}
           />
 
           {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
@@ -294,8 +294,10 @@ export default function DashboardPage() {
               ? t("dashboard.pendingCount", { count: pendingCount })
               : t("dashboard.activeCount",  { count: sd?.active ?? 0 })
           }
-          subtitleColor={pendingCount > 0 ? "text-warning font-medium" : undefined}
+          subtitleColor={pendingCount > 0 ? "w-fit max-w-full rounded-control bg-warning-soft px-1.5 font-medium text-warning-text" : undefined}
           icon={GraduationCap}
+          tone="students"
+          tinted
           href="/students"
         />
         <StatCard
@@ -303,6 +305,8 @@ export default function DashboardPage() {
           value={fmt.number(td?.total ?? 0)}
           subtitle={t("dashboard.activeCount", { count: td?.active ?? 0 })}
           icon={Users}
+          tone="teachers"
+          tinted
           href="/teachers"
         />
         <StatCard
@@ -310,6 +314,8 @@ export default function DashboardPage() {
           value={fmt.number(cd?.total ?? 0)}
           subtitle={t("dashboard.withSubjects", { count: cd?.withSubjects ?? 0 })}
           icon={School}
+          tone="classes"
+          tinted
           href="/classes"
         />
         <StatCard
@@ -317,6 +323,8 @@ export default function DashboardPage() {
           value={fmt.number(bd?.total ?? 0)}
           subtitle={t("dashboard.acrossAllClasses")}
           icon={BookOpen}
+          tone="subjects"
+          tinted
           href="/classes?tab=subjects"
         />
         <StatCard
@@ -324,13 +332,17 @@ export default function DashboardPage() {
           value={fmt.number(ed?.total ?? 0)}
           subtitle={t("dashboard.ongoingCount", { count: ed?.ongoing ?? 0 })}
           icon={FileText}
+          tone="exams"
+          tinted
           href="/exams"
         />
         <StatCard
           title={t("nav.attendance")}
-          value={`${fmt.number(ad?.rate ?? 0)}%`}
+          value={ad?.rate == null ? "–" : `${fmt.number(ad.rate)}%`}
           subtitle={t("dashboard.presentToday", { count: ad?.todayPresent ?? 0 })}
           icon={CheckSquare}
+          tone="attendance"
+          tinted
           href="/attendance"
         />
       </div>
@@ -369,19 +381,12 @@ export default function DashboardPage() {
         <AttendanceWidget
           present={ad?.todayPresent ?? 0}
           absent={ad?.todayAbsent   ?? 0}
-          rate={ad?.rate            ?? 0}
+          rate={ad?.rate            ?? null}
           marked={ad?.marked        ?? 0}
           loading={attendanceQ.isLoading}
         />
 
-        <ExamStatusChart
-          stats={{
-            ongoing:   ed?.ongoing   ?? 0,
-            completed: ed?.completed ?? 0,
-            draft:     ed?.draft     ?? 0,
-            total:     ed?.total     ?? 0,
-          }}
-        />
+        <ExamStatusChart stats={ed ?? {}} />
 
         {/* Act: what is unfinished, and where to go next. Both are grids of
             tiles, so they sit at the same width and read as a pair. */}

@@ -218,10 +218,12 @@ const check = (label, actual, expected) => {
   console.log("\n--- the class figures are the ones the statistics page shows ---");
 
   const stats = await get("/results/ex-a/stats?classId=form1");
-  check("the statistics endpoint still answers as it did",
+  // On /20 since A5 (owner, 2026-10-27): no percentages on results analytics.
+  // 50%, 70% and 30% of twenty are 10, 14 and 6.
+  check("the statistics endpoint answers on /20",
     [stats.status, stats.body.data.totalStudents, stats.body.data.average,
      stats.body.data.highest, stats.body.data.lowest],
-    [200, 3, 50, 70, 30]);
+    [200, 3, 10, 14, 6]);
 
   const card = await get("/results/ex-a/student/st1/reportcard/html");
   check("the card renders", [card.status, Boolean(card.body.data?.html)], [200, true]);
@@ -242,8 +244,9 @@ const check = (label, actual, expected) => {
     ["Class Average", "Best", "Lowest"]
       .map((l) => Number(String(cell(html, l)).split(" ")[0]))
       .every((n) => n >= 0 && n <= 20), true);
-  check("  while the statistics page keeps its own percentages",
-    [stats.body.data.average, stats.body.data.highest, stats.body.data.lowest], [50, 70, 30]);
+  check("  the same figures the statistics page shows",
+    [stats.body.data.average, stats.body.data.highest, stats.body.data.lowest].map((n) => `${Number(n).toFixed(2)} /20`),
+    [cell(html, "Class Average"), cell(html, "Best"), cell(html, "Lowest")]);
   check("  and the pupil's own rank is unchanged", cell(html, "Rank"), "1 / 3");
 
   // The class next door scored 99 and is not in these figures.

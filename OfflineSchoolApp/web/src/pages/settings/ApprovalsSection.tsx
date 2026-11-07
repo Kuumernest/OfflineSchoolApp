@@ -176,8 +176,8 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
 
       <Card>
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50">
-            <ShieldCheck className="h-4 w-4 text-primary-600" aria-hidden="true" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-slate-solid text-white">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-ink">
@@ -196,14 +196,14 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       {!anyOn && (
-        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning-text">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{t("approvalSettings.allOff")}</span>
         </div>
       )}
 
       <Card>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {t("approvalSettings.amounts")}
         </h3>
 
@@ -219,7 +219,7 @@ export default function ApprovalsSection({ schoolId }: { schoolId: string }) {
       </Card>
 
       <Card>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
           {t("approvalSettings.payroll")}
         </h3>
 

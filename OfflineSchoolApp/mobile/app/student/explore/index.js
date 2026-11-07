@@ -23,6 +23,15 @@ import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import {
   refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations, fetchProfileChanges, fetchLearningConcise, fetchMyStrengths,
 } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+
+// An exploration's status → its badge tone.
+const STATUS_TONE = { COMPLETED: "success", STOPPED: "error", DECLINED: "error", SKIPPED: "warning", SUBMITTED: "warning", REVIEW_REQUIRED: "warning" };
+const statusStyle = (status) => {
+  const b = statusBadge(STATUS_TONE[status] ?? "info");
+  return { color: b.text, backgroundColor: b.bg, borderColor: b.border };
+};
 
 const TABS = ["forYou", "inProgress", "completed"];
 const OPEN = ["DISCOVERED", "SAVED", "STARTED", "SUBMITTED", "REVIEW_REQUIRED"];
@@ -87,7 +96,7 @@ export default function ExploreScreen() {
     <TouchableOpacity style={st.card} onPress={() => openExploration(e)} activeOpacity={0.85}>
       <View style={st.rowBetween}>
         <Text style={st.cardTitle}>{e.title}</Text>
-        <Text style={st.badge}>{t(`explore.status.${e.status}`)}</Text>
+        <Text style={[st.badge, statusStyle(e.status)]}>{t(`explore.status.${e.status}`)}</Text>
       </View>
       <Text style={st.cardMeta}>{t(`explore.area.${e.area}`)} · {t(`explore.level.${e.level}`)}{e.pendingSync ? " · ⟳" : ""}</Text>
     </TouchableOpacity>
@@ -99,7 +108,8 @@ export default function ExploreScreen() {
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={COLORS.text} /></TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title}>{t("explore.subtitle")}</Text>
       </View>
       <Text style={st.sub}>{t("explore.basedOn")}{offline ? ` · ${t("explore.offline")}` : ""}</Text>
@@ -151,7 +161,7 @@ export default function ExploreScreen() {
           renderItem={tab === "forYou" ? renderSuggestion : renderExploration}
           contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); refresh(); }} />}
-          ListEmptyComponent={<Text style={st.empty}>{t(tab === "forYou" ? "explore.noSuggestions" : "explore.none")}</Text>}
+          ListEmptyComponent={<EmptyState icon="compass-outline" accent="sky" style={st.empty} message={t(tab === "forYou" ? "explore.noSuggestions" : "explore.none")} />}
         />
       )}
     </View>
@@ -161,23 +171,23 @@ export default function ExploreScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
-  title: { fontSize: 22, fontWeight: "700", color: "#111827" },
-  sub: { paddingHorizontal: 16, color: "#6B7280", fontSize: 13, marginBottom: 8 },
+  title: { fontSize: 22, fontWeight: "700", color: COLORS.text },
+  sub: { paddingHorizontal: 16, color: COLORS.textSecondary, fontSize: 13, marginBottom: 8 },
   tabs: { flexDirection: "row", paddingHorizontal: 16, gap: 8 },
-  tab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "#E5E7EB" },
-  tabOn: { backgroundColor: "#4F46E5" },
-  tabText: { color: "#374151", fontSize: 13, fontWeight: "600" },
-  tabTextOn: { color: "#FFFFFF" },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E5E7EB" },
+  tab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  tabOn: { backgroundColor: ACCENT.sky.wash, borderColor: ACCENT.sky.base },
+  tabText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: "600" },
+  tabTextOn: { color: ACCENT.sky.deep },
+  card: { backgroundColor: ACCENT.sky.wash, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.sky.base },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  cardTitle: { fontSize: 15, fontWeight: "600", color: "#111827", flexShrink: 1 },
-  cardMeta: { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  cardWhy: { fontSize: 12, color: "#4B5563", marginTop: 6 },
-  badge: { fontSize: 11, color: "#3730A3", backgroundColor: "#EEF2FF", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  empty: { textAlign: "center", color: "#6B7280", marginTop: 32 },
-  updated: { marginHorizontal: 16, marginTop: 10, backgroundColor: "#EEF2FF", borderRadius: 12, padding: 12 },
-  updatedTitle: { fontSize: 14, fontWeight: "700", color: "#3730A3", marginBottom: 4 },
-  updatedLine: { fontSize: 13, color: "#1F2937" },
-  updatedSub: { fontSize: 12, color: "#4B5563", marginLeft: 12 },
-  updatedHint: { fontSize: 11, color: "#6B7280", marginTop: 6 },
+  cardTitle: { fontSize: 15, fontWeight: "600", color: COLORS.text, flexShrink: 1 },
+  cardMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  cardWhy: { fontSize: 12, color: ACCENT.sky.deep, marginTop: 6 },
+  badge: { fontSize: 11, fontWeight: "600", borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden" },
+  empty: { marginTop: 32 },
+  updated: { marginHorizontal: 16, marginTop: 10, backgroundColor: ACCENT.sky.wash, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: ACCENT.sky.base },
+  updatedTitle: { fontSize: 14, fontWeight: "700", color: ACCENT.sky.deep, marginBottom: 4 },
+  updatedLine: { fontSize: 13, color: COLORS.text },
+  updatedSub: { fontSize: 12, color: COLORS.textSecondary, marginLeft: 12 },
+  updatedHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 6 },
 });

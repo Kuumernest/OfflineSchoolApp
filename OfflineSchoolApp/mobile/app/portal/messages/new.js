@@ -23,10 +23,13 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { participantName, recipientSubtitle } from "../../../src/utils/participantName";
 
-const C = {
-  ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
-  line: "#E9EBF0", canvas: "#F7F8FA", surface: "#FFFFFF", danger: "#DC2626",
-};
+import { C } from "../../../src/components/portal/theme";
+import { HeaderIcon, EmptyState } from "../../../src/components/Tinted";
+import { ACCENT, roleAccent } from "../../../src/theme/colors";
+
+/** A recipient's accent: a guardian sky, anyone else by role, else sky. */
+const personAccent = (p) =>
+  ACCENT[p?.kind === "guardian" ? "sky" : p?.role ? roleAccent(p.role) : "sky"];
 
 export default function PortalNewMessageScreen() {
   const { t } = useTranslation();
@@ -85,6 +88,7 @@ export default function PortalNewMessageScreen() {
     const key = `${item.kind}:${item.id}`;
     const who = participantName(item, t) || item.name;
     const sub = recipientSubtitle(item, t, true);
+    const a = personAccent(item);
     return (
       <TouchableOpacity
         style={s.row}
@@ -92,8 +96,8 @@ export default function PortalNewMessageScreen() {
         disabled={opening !== null}
         onPress={() => pick(item)}
       >
-        <View style={s.avatar}>
-          <Text style={s.avatarText}>
+        <View style={[s.avatar, { backgroundColor: a.wash }]}>
+          <Text style={[s.avatarText, { color: a.deep }]}>
             {(who || "?").slice(0, 1).toUpperCase()}
           </Text>
         </View>
@@ -110,7 +114,7 @@ export default function PortalNewMessageScreen() {
         </View>
         {opening === key
           ? <ActivityIndicator size="small" color={C.ink} />
-          : <Ionicons name="chevron-forward" size={17} color={C.inkFaint} />}
+          : <Ionicons name="chevron-forward" size={17} color={C.inkMuted} />}
       </TouchableOpacity>
     );
   };
@@ -123,7 +127,10 @@ export default function PortalNewMessageScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="close" size={23} color={C.ink} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>{t("msgMobile.newMessage")}</Text>
+        <View style={s.headerTitleRow}>
+          <HeaderIcon size={28} style={s.headerIcon} />
+          <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.newMessage")}</Text>
+        </View>
         <View style={s.iconBtn} />
       </View>
 
@@ -152,11 +159,13 @@ export default function PortalNewMessageScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             !error ? (
-              <Text style={s.empty}>
-                {query.trim()
+              <EmptyState
+                icon="people-outline"
+                accent="sky"
+                message={query.trim()
                   ? t("msgMobile.noMatch")
                   : t("msgMobile.nobodyToWrite")}
-              </Text>
+              />
             ) : null
           }
         />
@@ -175,7 +184,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
   iconBtn:     { width: 40, alignItems: "center" },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: C.ink, textAlign: "center" },
+  headerTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  headerIcon:  { marginRight: 8 },
+  headerTitle: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: C.ink, textAlign: "center" },
 
   searchWrap: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -186,7 +197,7 @@ const s = StyleSheet.create({
   search: { flex: 1, fontSize: 14, color: C.ink, padding: 0 },
 
   error: {
-    fontSize: 12, color: C.danger, backgroundColor: "#FEF2F2",
+    fontSize: 12, color: C.danger, backgroundColor: C.dangerBg,
     marginHorizontal: 12, marginBottom: 8,
     paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8,
   },
@@ -203,9 +214,4 @@ const s = StyleSheet.create({
   avatarText: { fontSize: 15, fontWeight: "700", color: C.ink },
   name:       { fontSize: 14, fontWeight: "600", color: C.ink },
   sub:        { fontSize: 12, color: C.inkMuted, marginTop: 1 },
-
-  empty: {
-    textAlign: "center", paddingTop: 50, paddingHorizontal: 40,
-    fontSize: 13, color: C.inkFaint, lineHeight: 19,
-  },
 });

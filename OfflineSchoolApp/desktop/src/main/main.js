@@ -33,9 +33,10 @@ const fs   = require("fs");
 const { app, BrowserWindow, ipcMain, shell, dialog, protocol, net } = require("electron");
 
 const store        = require("./db/store");
-const { outbox }   = require("./db/outbox");
+const { outbox, ownOutboxActions } = require("./db/outbox");
 const { client }   = require("./sync/client");
 const { engine }   = require("./sync/engine");
+const { connectivity } = require("./sync/connectivity");
 const localApi     = require("./api");
 const appProtocol  = require("./appProtocol");
 const { normaliseServerUrl, checkServer } = require("./serverAddress");
@@ -73,6 +74,7 @@ let syncState = null;
 let metaBag = null;
 let api     = null;
 let sync    = null;
+let netWatch = null;   // the connectivity monitor (sync/connectivity.js)
 
 /**
  * Who is signed in, as the window last told us.
@@ -139,12 +141,33 @@ const openDatabase = () => {
       // No collection list: the server decides what this caller may mirror, so
       // the desktop holds no copy of the feed table to drift from it.
       onChange: (status) => {
+        // A cycle that could not reach the server puts the monitor on watch;
+        // one that did takes it off.
+        netWatch?.engineStatus(status.phase);
         // Pushed rather than polled, so a window can show "3 waiting to send"
         // without asking every second.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) win.webContents.send("sync:status", status);
         }
       },
+    });
+
+    /**
+     * Noticing the connection come back, so a write that failed offline is
+     * sent then rather than when its backoff (up to ten minutes) runs out.
+     * Idle while online; while offline, net.isOnline() every few seconds (a
+     * local check, no traffic) and, once that says yes and stays yes, the
+     * server's /api/health. See sync/connectivity.js.
+     */
+    netWatch = connectivity({
+      isOnline: () => net.isOnline(),
+      probe: async () => {
+        const url = api.serverUrl();
+        if (!url) return false;
+        return (await checkServer(url, (u, init) => net.fetch(u, init), 10_000)).ok;
+      },
+      // Only for somebody signed in: there is nothing to send otherwise.
+      onReconnect: () => (session && api.hasToken() ? sync.reconnected() : null),
     });
 
     return true;
@@ -263,8 +286,15 @@ const registerHandlers = () => {
    * as it always did — so an endpoint that has no local handler yet behaves
    * today the way it behaves in a browser.
    */
-  ipcMain.handle("api:request", (_e, req) => {
-    const result = localApi.handle(req, { docs, meta: metaBag, queue, session, state: syncState });
+  ipcMain.handle("api:request", async (_e, req) => {
+    // Awaited: the messaging handlers ask the server first (handlers/messages.js).
+    // `server` and `offline` are for them — the copy they keep is scoped to
+    // this account, and answers only when the server cannot.
+    const result = await localApi.handle(req, {
+      docs, meta: metaBag, queue, session, state: syncState,
+      server:  api,
+      offline: () => sync?.status().phase === "offline",
+    });
 
     // Something was queued: try to send it immediately rather than waiting for
     // the interval. Online this makes an offline-capable write indistinguishable
@@ -298,15 +328,48 @@ const registerHandlers = () => {
   // has to agree with it and inside reach of the parity harness.
 
   // ── The state of the queue, for the UI to show ──────────────────────────
-  ipcMain.handle("outbox:summary", () => queue.summary());
+  /**
+   * The summary, plus how many of the waiting rows belong to whoever is signed
+   * in. The window needs that number in two places — "sign in again to send N"
+   * and "you have N changes not yet sent" before signing out — and in both it
+   * is this person's rows that matter: another account's queue is sent when
+   * THEY sign in (the engine sends only the signed-in account's requests).
+   */
+  const summaryForSession = () => ({
+    // userId: each stuck entry says whether it is this person's, so the panel
+    // offers its buttons only on their own (ownOutboxActions below).
+    ...queue.summary({ userId: session?.userId ?? null }),
+    mine: session?.userId
+      ? db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE user_id = ?").get(String(session.userId))?.n ?? 0
+      : 0,
+  });
+
+  ipcMain.handle("outbox:summary", () => summaryForSession());
   ipcMain.handle("outbox:list",    () => queue.all());
-  ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return queue.summary(); });
+
+  /**
+   * Try again, Save a copy, Discard: on the signed-in account's own entries
+   * only. Another account's, and an entry with no owner, are read-only — the
+   * owner's decision, enforced here and not only by the panel hiding the
+   * buttons (db/outbox.js ownOutboxActions). A refusal throws, and changes
+   * nothing.
+   */
+  const ownActions = ownOutboxActions({
+    queue, docs, state: syncState, currentUser: () => session?.userId ?? null,
+  });
+
+  ipcMain.handle("outbox:unblock", (_e, seq) => { ownActions.unblock(seq); return summaryForSession(); });
   /**
    * Save a copy of a blocked entry before it is discarded (unsentCopy.js).
    * The person chooses where; nothing is written without the dialog.
    */
   ipcMain.handle("outbox:saveCopy", async (e, seq) => {
-    const row = queue.get(seq);
+    let row;
+    try {
+      row = ownActions.entryForCopy(seq);
+    } catch (err) {
+      return { ok: false, error: err.code ?? "REFUSED", message: err.message };
+    }
     if (!row) return { ok: false, error: "NOT_FOUND" };
     const win = BrowserWindow.fromWebContents(e.sender);
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -323,14 +386,10 @@ const registerHandlers = () => {
   });
 
   ipcMain.handle("outbox:discard", (_e, seq) => {
-    const undo = queue.discard(seq);
-    // The local rows this request wrote have to go with it, or the desktop
-    // keeps showing something the server has never heard of.
-    if (undo?.collection && undo?.docId) docs.forget(undo.collection, undo.docId);
-    for (const extra of undo?.extraDocs ?? []) {
-      if (extra?.collection && extra?.docId) docs.forget(extra.collection, extra.docId);
-    }
-    return queue.summary();
+    // The local rows this request wrote are undone with it (ownOutboxActions):
+    // a created row removed, an edited one put back to the server's version.
+    ownActions.discard(seq);
+    return summaryForSession();
   });
 
   // ── Sync bookkeeping ────────────────────────────────────────────────────
@@ -396,8 +455,18 @@ const registerHandlers = () => {
   /** Is there a school server at this address? Before it is saved. */
   ipcMain.handle("server:check", (_e, url) => checkServer(url, (u, init) => net.fetch(u, init)));
 
-  /** Sync now — a button, or straight after a local write. */
-  ipcMain.handle("sync:now", () => sync.cycle());
+  /**
+   * Sync now — a button. Also brings forward requests backing off only
+   * because the network had failed: a person pressing it has a connection
+   * in mind, and waiting out a ten-minute backoff is not what they asked for.
+   */
+  ipcMain.handle("sync:now", () => sync.syncNow());
+
+  /**
+   * The window's own online / offline events (preload.js). A hint only: an
+   * "online" is confirmed against the server before anything is sent.
+   */
+  ipcMain.on("net:status", (_e, online) => netWatch?.signal(Boolean(online)));
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -410,6 +479,7 @@ app.whenReady().then(() => {
   if (!openDatabase()) { app.quit(); return; }
 
   registerHandlers();
+  netWatch.start();
 
   protocol.handle("app", appProtocol.createAppProtocolHandler({
     distDir:   WEB_DIST,
@@ -509,6 +579,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
+  try { netWatch?.stop(); } catch { /* nothing useful to do while exiting */ }
   try { sync?.stop(); } catch { /* nothing useful to do while exiting */ }
   // Give an in-progress sync cycle a moment to finish before closing the
   // database. Without this, SQL operations on the closed handle throw into

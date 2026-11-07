@@ -19,6 +19,8 @@ import {
   type Assignment,
 } from "@/services/assignment.service";
 import { cn }                   from "@/utils/cn";
+import { ACCENT_BADGE, DASH_TINT } from "@/config/dashboardTint";
+import { PageIcon }             from "@/components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,8 +60,8 @@ const DeleteDialog = ({ assignment, onConfirm, onCancel, busy }: DeleteDialogPro
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
         <Trash2 size={22} className="text-red-600" />
       </div>
-      <h3 className="text-lg font-bold text-gray-900">{t("assignments.remove")}</h3>
-      <p className="mt-2 text-sm text-gray-500">
+      <h3 className="text-lg font-bold text-ink">{t("assignments.remove")}</h3>
+      <p className="mt-2 text-sm text-ink-muted">
         {t("assignments.removeBody", {
           subject: assignment.subject?.name ?? t("assignments.thisSubject"),
           class:   assignment.class?.name   ?? t("assignments.thisClass"),
@@ -167,7 +169,7 @@ export default function TeacherAssignmentDetailPage() {
   if (assignmentsQuery.isLoading || teacherQuery.isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
         <p className="text-sm font-medium text-gray-400">{t("assignments.loading")}</p>
       </div>
     );
@@ -186,11 +188,12 @@ export default function TeacherAssignmentDetailPage() {
         >
           <ChevronLeft size={20} />
         </button>
+        <PageIcon />
         <div className="flex-1 min-w-0">
-          <h1 className="truncate text-2xl font-bold text-gray-900">
+          <h1 className="truncate text-2xl font-bold text-ink">
             {teacher?.name ?? t("academic.teacher")}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-ink-muted">
             {t("assignments.assignmentCount", { count: assignments.length })}{" "}
             · {t("subjects.classCount", { count: classCount })}
           </p>
@@ -205,7 +208,7 @@ export default function TeacherAssignmentDetailPage() {
           </button>
           <button
             onClick={handleAssignMore}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
           >
             <Plus size={16} />
             {t("assignments.assignMore")}
@@ -224,29 +227,29 @@ export default function TeacherAssignmentDetailPage() {
 
       {/* TEACHER PROFILE CARD */}
       {teacher && (
-        <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-xl font-bold text-indigo-700">
+        <div className={cn(DASH_TINT.violet.card, "flex items-center gap-4 rounded-2xl p-5")}>
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-violet-solid text-xl font-bold text-white">
             {teacher.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-bold text-gray-900">
+            <p className="truncate text-lg font-bold text-ink">
               {teacher.name}
             </p>
-            <p className="truncate text-sm text-gray-400">{teacher.email}</p>
+            <p className="truncate text-sm text-ink-muted">{teacher.email}</p>
           </div>
           <div className="flex shrink-0 items-center gap-6">
             <div className="text-center">
-              <p className="text-xl font-bold text-indigo-600">
+              <p className="text-xl font-bold text-accent-slate-deep">
                 {assignments.length}
               </p>
-              <p className="text-xs text-gray-400">{t("academic.subject_other")}</p>
+              <p className="text-xs text-ink-muted">{t("academic.subject_other")}</p>
             </div>
-            <div className="h-8 w-px bg-gray-200" />
+            <div className="h-8 w-px bg-line" />
             <div className="text-center">
-              <p className="text-xl font-bold text-purple-600">
+              <p className="text-xl font-bold text-accent-indigo-deep">
                 {classCount}
               </p>
-              <p className="text-xs text-gray-400">{t("academic.class_other")}</p>
+              <p className="text-xs text-ink-muted">{t("academic.class_other")}</p>
             </div>
           </div>
         </div>
@@ -255,16 +258,16 @@ export default function TeacherAssignmentDetailPage() {
       {/* EMPTY STATE */}
       {assignments.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
-            <BookOpen size={28} className="text-gray-300" />
+          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-violet-solid text-white">
+            <BookOpen size={28} />
           </div>
-          <p className="text-base font-bold text-gray-900">{t("assignments.none")}</p>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="text-base font-bold text-ink">{t("assignments.none")}</p>
+          <p className="mt-1 text-sm text-ink-muted">
             {t("assignments.noneForTeacher")}
           </p>
           <button
             onClick={handleAssignMore}
-            className="mt-4 flex items-center gap-2 rounded-xl bg-indigo-50 px-5 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+            className="mt-4 flex items-center gap-2 rounded-xl bg-primary-50 px-5 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
           >
             <Plus size={16} />
             {t("assignments.assignSubjects")}
@@ -276,12 +279,15 @@ export default function TeacherAssignmentDetailPage() {
       {assignments.length > 0 && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-700">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-control", DASH_TINT.indigo.box)} aria-hidden="true">
+                <School className="h-4 w-4" />
+              </span>
               {t("assignments.byClass")}
             </h2>
             <button
               onClick={handleAssignMore}
-              className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+              className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800"
             >
               <Plus size={12} />
               {t("common.addMore")}
@@ -291,16 +297,16 @@ export default function TeacherAssignmentDetailPage() {
           {groupedByClass.map((group) => (
             <div
               key={group.classId}
-              className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+              className={cn("overflow-hidden rounded-2xl border border-line bg-surface shadow-sm", DASH_TINT.indigo.edge)}
             >
-              <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100">
-                  <School size={16} className="text-purple-700" />
+              <div className="flex items-center gap-3 border-b border-line bg-accent-indigo-soft px-4 py-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-indigo-solid text-white">
+                  <School size={16} />
                 </div>
-                <span className="flex-1 truncate text-sm font-bold text-gray-900">
+                <span className="flex-1 truncate text-sm font-bold text-ink">
                   {group.className}
                 </span>
-                <span className="rounded-lg bg-purple-100 px-2 py-0.5 text-xs font-bold text-purple-700">
+                <span className={cn("rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset", ACCENT_BADGE.indigo)}>
                   {group.items.length}
                 </span>
               </div>

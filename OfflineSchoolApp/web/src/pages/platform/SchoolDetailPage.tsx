@@ -10,7 +10,7 @@ import { useTranslation }        from "react-i18next";
 import { Link, useParams }       from "react-router-dom";
 import {
   ArrowLeft, LogIn, Power, PowerOff, UserPlus, KeyRound, Save, AlertTriangle, Building2,
-  GraduationCap, Users, ShieldCheck, CalendarDays,
+  GraduationCap, Users, ShieldCheck, CalendarDays, History,
 } from "lucide-react";
 import { PageHeader }            from "@/components/ui/PageHeader";
 import { Card, CardHeader }      from "@/components/ui/Card";
@@ -215,7 +215,7 @@ export default function SchoolDetailPage() {
 
       {!school.isActive && (
         <div role="status" className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-soft px-4 py-3 text-sm text-ink">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <span>{s("inactiveBanner")}</span>
         </div>
       )}
@@ -233,7 +233,7 @@ export default function SchoolDetailPage() {
       <div className="grid gap-6 xl:grid-cols-2">
         {/* ── Identity ─────────────────────────────────────────────────── */}
         <Card>
-          <CardHeader title={s("identity")} />
+          <CardHeader title={s("identity")} icon={Building2} accent="indigo" />
           <form onSubmit={save} className="mt-3 space-y-3">
             <FormField label={s("name")} required><Input value={form.name ?? ""} onChange={setField("name")} /></FormField>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -263,6 +263,8 @@ export default function SchoolDetailPage() {
           <Card padding={false}>
             <CardHeader
               title={s("staff")}
+              icon={Users}
+              accent="violet"
               className="px-5 pt-4"
               action={
                 <Button size="sm" variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAppointing(true)}>
@@ -302,7 +304,7 @@ export default function SchoolDetailPage() {
 
           {credentials && (
             <Card>
-              <CardHeader title={s("tempPassword")} subtitle={credentials.emailSent ? s("emailSent") : s("emailNotSent")} />
+              <CardHeader title={s("tempPassword")} icon={KeyRound} accent="indigo" subtitle={credentials.emailSent ? s("emailSent") : s("emailNotSent")} />
               <dl className="mt-2 text-sm">
                 <div className="flex flex-wrap justify-between gap-x-2"><dt className="text-ink-muted">{s("email")}</dt><dd className="min-w-0 break-all font-medium">{credentials.email}</dd></div>
                 {credentials.tempPassword ? (
@@ -316,7 +318,7 @@ export default function SchoolDetailPage() {
           )}
 
           <Card padding={false}>
-            <div className="px-5 pt-4"><CardHeader title={s("recentActivity")} /></div>
+            <div className="px-5 pt-4"><CardHeader title={s("recentActivity")} icon={History} accent="blue" /></div>
             {recent.length === 0 ? (
               <EmptyTable title={s("noActivity")} />
             ) : (

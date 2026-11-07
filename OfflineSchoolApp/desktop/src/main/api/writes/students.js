@@ -26,6 +26,7 @@
  */
 
 const { normaliseStudentDoc } = require("../../../../../shared/students");
+const { normalisePhone, PHONE_FIELDS } = require("../../../../../shared/studentValidation");
 
 const nowISO = () => new Date().toISOString();
 
@@ -541,6 +542,13 @@ module.exports = [
           updates[field] = v;
           continue;
         }
+        // B3: as the server stores it — +237 and nine digits — or declined.
+        if (PHONE_FIELDS.includes(field)) {
+          const r = normalisePhone(raw, field);
+          if (r.error) return null;
+          updates[field] = r.value;
+          continue;
+        }
         if (field === "dateOfBirth") {
           const v = String(raw).trim();
           if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
@@ -563,19 +571,10 @@ module.exports = [
       }
       if (Object.keys(changed).length === 0) return null;
 
-      // An email already used by another pupil in this school. Declined so the
-      // request falls through rather than storing a duplicate the server will
-      // refuse with a 409 nobody sees until the outbox drains.
-      if (changed.email) {
-        // docs.find(collection, filter), not docs.all — `all()` belongs to
-        // state(db) and reads sync_state, so `docs.all("student")` is undefined
-        // and the guard below would have been a silent no-op.
-        const clash = (docs.find("student", { schoolId }) ?? [])
-          .find((other) => String(other._id) !== String(pupil._id)
-                        && !other.deletedAt
-                        && String(other.email ?? "").toLowerCase() === changed.email);
-        if (clash) return null;
-      }
+      // No check for "another pupil already uses this email". Siblings share
+      // their parent's address (CLAUDE.md: one guardian, many children), and
+      // the server no longer refuses it either — declining here only sent a
+      // routine correction to the network, so offline it never happened.
 
       const when = nowISO();
       const next = {

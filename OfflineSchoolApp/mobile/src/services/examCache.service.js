@@ -705,6 +705,62 @@ export const scoreSyncState = async () => {
   return classifyDirtyRows({ dirtyIds, outboxRows, table: "exam_scores" });
 };
 
+/**
+ * scoreSyncState for one mark sheet, per pupil — what the sheet shows beside
+ * each row, from the same join (classifyDirtyRows) and the same queue.
+ *
+ *   pending    saved on this phone, waiting in the queue to upload
+ *   attention  the queue stopped on it: refused (the exam approved, the sheet
+ *              locked, a published result) or conflicting — or a dirty row no
+ *              entry carries any more. It stays on the phone and on the
+ *              pending-changes screen; it is never silently dropped.
+ *
+ * reasons: the server's words for the stuck entries carrying this sheet.
+ *
+ * @returns {Promise<{byStudent: Object<string,"pending"|"attention">,
+ *                    pending: number, attention: number, reasons: string[]}>}
+ */
+export const sheetSyncState = async ({ examId, subjectId, classId } = {}) => {
+  const empty = { byStudent: {}, pending: 0, attention: 0, reasons: [] };
+  if (!examId || !subjectId) return empty;
+  await ensureExamTables();
+  const db = await getDatabase();
+
+  const where = ["_synced = 0", "examId = ?", "subjectId = ?"];
+  const params = [String(examId), String(subjectId)];
+  if (classId) { where.push("classId = ?"); params.push(String(classId)); }
+  const rows = await db.getAllAsync(
+    `SELECT id, studentId FROM exam_scores WHERE ${where.join(" AND ")}`, params
+  ).catch(() => []);
+  if (!rows?.length) return empty;
+
+  const { outboxRowsForTable } = require("./mutationQueue.service");
+  const outboxRows = await outboxRowsForTable("exam_scores").catch(() => []);
+  const state = classifyDirtyRows({
+    dirtyIds: rows.map((r) => String(r.id)), outboxRows, table: "exam_scores",
+  });
+
+  const studentOf = new Map(rows.map((r) => [String(r.id), String(r.studentId)]));
+  const byStudent = {};
+  for (const id of state.pending) byStudent[studentOf.get(id)] = "pending";
+  for (const id of [...state.failed, ...state.orphaned]) byStudent[studentOf.get(id)] = "attention";
+
+  const sheetIds = new Set(studentOf.keys());
+  const reasons = [...new Set(outboxRows
+    .filter((o) => (o.status === "failed" || o.status === "conflict") &&
+      (o.payload?.__local?.ids ?? []).some((id) => sheetIds.has(String(id))))
+    .map((o) => o.error)
+    .filter(Boolean))];
+
+  const values = Object.values(byStudent);
+  return {
+    byStudent,
+    pending:   values.filter((v) => v === "pending").length,
+    attention: values.filter((v) => v === "attention").length,
+    reasons,
+  };
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 // RESULTS (read-through cache)
 // ═════════════════════════════════════════════════════════════════════════════

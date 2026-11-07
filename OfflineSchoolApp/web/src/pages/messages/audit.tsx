@@ -34,7 +34,10 @@ import { useTranslation } from "react-i18next";
 import { roleLabel } from "@/utils/roleLabel";
 
 import { cn } from "@/utils/cn";
+import { PageIcon } from "@/components/ui/PageHeader";
 import { summariseParticipants, participantName } from "./participants";
+import { threadOrder } from "./order";
+import { formatDayTime } from "../../../../shared/dateFormat.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,9 +47,7 @@ const errorText = (err: unknown, t: (key: string) => string): string => {
 };
 
 const stamp = (iso?: string | null): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return formatDayTime(iso);
 };
 
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
@@ -101,23 +102,26 @@ export default function MessageAuditPage() {
 
   // ── A single thread, opened deliberately ──────────────────────────────────
   if (opened) {
-    const messages = [...(threadQuery.data ?? [])].sort((a, b) => a.seq - b.seq);
+    const messages = [...(threadQuery.data ?? [])].sort(threadOrder);
 
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-6 py-4">
+        <div className="flex items-center gap-3 border-b border-line bg-surface px-6 py-4">
           <button
             onClick={() => setOpened(null)}
             className="text-gray-500 hover:text-gray-800"
           >
             <ArrowLeft size={18} />
           </button>
+          <PageIcon />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-bold text-gray-900">
-              {opened.title || `${opened.kind} conversation`}
+            <h1 className="truncate font-bold text-ink">
+              {opened.title || t("messages.audit.kinds.conversationOf", {
+                kind: t(`messages.audit.kinds.${opened.kind}`, { defaultValue: opened.kind }),
+              })}
             </h1>
-            <p className="text-xs text-gray-500">
-              {opened.participants?.length ?? 0} participants · opened as an audit
+            <p className="text-xs text-ink-muted">
+              {t("messages.audit.openedAsAudit", { count: opened.participants?.length ?? 0 })}
             </p>
           </div>
         </div>
@@ -237,14 +241,17 @@ export default function MessageAuditPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
-        <h1 className="text-xl font-bold text-gray-900">{t("messages.audit.title")}</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
-          {t("messages.audit.blurb")}
-        </p>
+      <div className="flex items-center gap-3 border-b border-line bg-surface px-6 py-4">
+        <PageIcon />
+        <div>
+          <h1 className="text-xl font-bold text-ink">{t("messages.audit.title")}</h1>
+          <p className="mt-0.5 text-sm text-ink-muted">
+            {t("messages.audit.blurb")}
+          </p>
+        </div>
       </div>
 
-      <div className="border-b border-gray-100 bg-white px-6 py-3">
+      <div className="border-b border-line bg-surface px-6 py-3">
         <div className="flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-xl border-2
                           border-gray-200 bg-gray-50 px-3 py-2
@@ -260,8 +267,8 @@ export default function MessageAuditPage() {
           </div>
           <button
             onClick={submit}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold
-                       text-white transition-colors hover:bg-blue-700"
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold
+                       text-white transition-colors hover:bg-primary-700"
           >
             {t("common.search")}
           </button>
@@ -316,7 +323,9 @@ export default function MessageAuditPage() {
                       {summariseParticipants(c.participants ?? [], t)}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600">{c.kind}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-600">
+                    {t(`messages.audit.kinds.${c.kind}`, { defaultValue: c.kind })}
+                  </td>
                   <td className="px-4 py-2.5 text-xs text-gray-600">
                     {c.participants?.length ?? 0}
                   </td>

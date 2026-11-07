@@ -174,7 +174,7 @@ export default function PerformancePage() {
                   </Tr>
                 ))}
                 {perfQ.data && rows.length > 1 && (
-                  <Tr className="font-semibold">
+                  <Tr className="bg-accent-indigo-soft font-semibold text-accent-indigo-deep">
                     <Td>{t("platform.performance.allSchools")}</Td>
                     <Td numeric>{fmt.number(perfQ.data.totals.students)}</Td>
                     <Td numeric>{fmt.number(perfQ.data.totals.teachers)}</Td>

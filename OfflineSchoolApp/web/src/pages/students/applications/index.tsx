@@ -16,6 +16,7 @@ import { ErrorBanner }                   from "@/components/applications/ErrorBa
 import { Toast }                         from "@/components/applications/Toast";
 import { Spinner }                       from "@/components/applications/Spinner";
 import { useTranslation } from "react-i18next";
+import { PageIcon }       from "@/components/ui/PageHeader";
 
 import type {
   NormalisedApplication,
@@ -96,11 +97,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <SvgIcon d={PATHS.back} color="#111827" size={22} />
     </button>
 
+    <PageIcon />
+
     <div className="flex-1 min-w-0">
-      <h1 className="text-xl font-bold text-gray-900 leading-tight">
+      <h1 className="text-xl font-bold text-ink leading-tight">
         {t("admissions.applications")}
       </h1>
-      <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
+      <p className="text-sm text-ink-muted mt-0.5">{subtitle}</p>
     </div>
 
     <button
@@ -271,23 +274,22 @@ const StudentApplicationsPage: React.FC = () => {
       {/* ── Summary ── */}
       <div className="flex gap-2 px-5 pt-5 pb-2">
         <SummaryCard
-          bg="#FEF3C7"
-          icon={<SvgIcon d={PATHS.personAdd} color="#D97706" />}
-          iconColor="#D97706"
+          accent="amber"
+          status={applications.length > 0 ? "warning" : null}
+          icon={<SvgIcon d={PATHS.personAdd} color="currentColor" />}
           value={applications.length}
           label={t("common.pending")}
         />
         <SummaryCard
-          bg="#FEE2E2"
-          icon={<SvgIcon d={PATHS.alert} color="#DC2626" />}
-          iconColor="#DC2626"
+          accent="red"
+          status={staleCount > 0 ? "error" : null}
+          icon={<SvgIcon d={PATHS.alert} color="currentColor" />}
           value={staleCount}
           label={`Over ${STALE_DAYS}d`}
         />
         <SummaryCard
-          bg="#EEF2FF"
-          icon={<SvgIcon d={PATHS.school} color="#4F46E5" />}
-          iconColor="#4F46E5"
+          accent="indigo"
+          icon={<SvgIcon d={PATHS.school} color="currentColor" />}
           value={classes.length}
           label={t("academic.class_other")}
         />

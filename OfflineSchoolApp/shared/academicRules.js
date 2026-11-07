@@ -163,10 +163,15 @@ const mergeRules = (current, value) => {
 };
 
 /** The calcVersion each writer stamps under the decided rules. */
+//
+// term/4, annual/4 (2026-10-27): the average is sum(subject mark x
+// coefficient) / sum(coefficients of the subjects with a mark), over the
+// period's subject marks (shared/averages.js) — no longer the weighted mean of
+// the sequence (term) or term (annual) averages.
 const CALC_VERSION_OF = Object.freeze({
   examProcess: "exam-process/3",
-  term:        "term/3",
-  annual:      "annual/3",
+  term:        "term/4",
+  annual:      "annual/4",
 });
 
 const calcVersionFor = (writer) => {

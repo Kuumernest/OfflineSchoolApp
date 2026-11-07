@@ -305,7 +305,7 @@ through capability keys at all.
   shape, `(updatedAt, _id)` pair cursor (the header explains why a bare
   `updatedAt` cursor silently loses or loops records). Declared entirely by
   `config/syncFeed.js`.
-* **`POST /api/sync/push`** — gated on `sync.push`, `delegable: false`.
+* **`POST /api/sync/push`** — retired (410 `SYNC_PUSH_RETIRED`); the `sync.push` permission is removed.
 
 ### 6.2 `config/syncFeed.js` will refuse to boot
 

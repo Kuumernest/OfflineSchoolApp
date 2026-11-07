@@ -1,4 +1,4 @@
-import { useState, useCallback, useId, useMemo } from "react";
+import { useState, useCallback, useId, useMemo, useRef } from "react";
 import { useNavigate }                  from "react-router-dom";
 import { useQuery, useMutation }        from "@tanstack/react-query";
 import {
@@ -9,13 +9,17 @@ import {
   CheckSquare,
   Square,
   X,
+  CheckCircle, XCircle,
 } from "lucide-react";
 
 import { useUser }       from "@/store/auth.store";
 import { fetchClasses }  from "@/services/class.service";
 import { fetchTeachers } from "@/services/teacher.service";
 import { createSubject } from "@/services/subject.service";
+import { createIds }     from "@/lib/clientId";
 import { cn }            from "@/utils/cn";
+import { PageIcon }      from "@/components/ui/PageHeader";
+import { DASH_TINT }     from "@/config/dashboardTint";
 import type { Class, Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
@@ -172,7 +176,7 @@ function ResultsSummary({
       {succeeded.length > 0 && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="mb-2 text-sm font-bold text-emerald-800">
-            ✅ Created in {succeeded.length}{" "}
+            <CheckCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Created in {succeeded.length}{" "}
             {succeeded.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">
@@ -188,7 +192,7 @@ function ResultsSummary({
       {failed.length > 0 && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
           <p className="mb-2 text-sm font-bold text-red-800">
-            ❌ Failed in {failed.length}{" "}
+            <XCircle className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" aria-hidden />Failed in {failed.length}{" "}
             {failed.length === 1 ? "class" : "classes"}
           </p>
           <ul className="flex flex-col gap-1">
@@ -208,14 +212,14 @@ function ResultsSummary({
         <button
           type="button"
           onClick={onAddAnother}
-          className="w-full rounded-xl border-2 border-indigo-600 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors"
+          className="w-full rounded-xl border-2 border-primary-600 py-3 text-sm font-bold text-primary-600 hover:bg-primary-50 transition-colors"
         >
           {t("subjectsAdd.another")}
         </button>
         <button
           type="button"
           onClick={onDone}
-          className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
+          className="w-full rounded-xl bg-primary-600 py-3 text-sm font-bold text-white hover:bg-primary-700 transition-colors"
         >
           {t("common.done")}
         </button>
@@ -240,7 +244,12 @@ export default function AddSubjectPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [results,     setResults]     = useState<CreateResult[] | null>(null);
 
-  const nameId     = useId();
+  // One id per subject being created — one per selected class — kept while
+  // the same form is retried and renewed once that subject exists
+  // (lib/clientId.ts). It is what lets the desktop create them offline.
+  const subjectIds = useRef(createIds());
+
+  const nameId    = useId();
   const codeId     = useId();
   const coeffId    = useId();
   const classesId  = useId();
@@ -302,17 +311,19 @@ export default function AddSubjectPage() {
 
       for (const cid of values.classIds) {
         const cls = classes.find((c) => c._id === cid);
+        const attempt = {
+          name:        values.name.trim(),
+          code:        values.code.trim() || undefined,
+          classId:     cid,
+          teacherId:   values.teacherId || undefined,
+          coefficient: values.coefficient.trim()
+            ? Number(values.coefficient.trim())
+            : undefined,
+          schoolId,
+        };
         try {
-          await createSubject({
-            name:        values.name.trim(),
-            code:        values.code.trim() || undefined,
-            classId:     cid,
-            teacherId:   values.teacherId || undefined,
-            coefficient: values.coefficient.trim()
-              ? Number(values.coefficient.trim())
-              : undefined,
-            schoolId,
-          });
+          await createSubject({ ...attempt, id: subjectIds.current.forAttempt(attempt) });
+          subjectIds.current.created(attempt);
           outcomes.push({
             classId:   cid,
             className: cls?.name ?? cid,
@@ -407,11 +418,12 @@ export default function AddSubjectPage() {
 
   if (results) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <div className="min-h-screen bg-canvas">
+        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
+          <PageIcon />
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.created")}</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-xl font-bold text-ink">{t("subjectsAdd.created")}</h1>
+            <p className="text-sm text-ink-muted">
               "{form.name.trim()}" — results below
             </p>
           </div>
@@ -433,9 +445,9 @@ export default function AddSubjectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
 
-      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+      <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-line bg-surface px-6 py-4">
         <button
           type="button"
           onClick={handleDiscard}
@@ -445,9 +457,11 @@ export default function AddSubjectPage() {
           <ChevronLeft size={20} aria-hidden="true" />
         </button>
 
+        <PageIcon />
+
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.title")}</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-ink">{t("subjectsAdd.title")}</h1>
+          <p className="text-sm text-ink-muted">
             {t("subjectsAdd.blurb")}
           </p>
         </div>
@@ -456,7 +470,7 @@ export default function AddSubjectPage() {
       <main className="mx-auto max-w-xl px-6 py-8">
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col gap-5">
+          <div className={cn("rounded-2xl border border-line bg-surface p-6 shadow-card flex flex-col gap-5", DASH_TINT.slate.edge)}>
 
             <div className="flex items-start gap-3 rounded-xl bg-blue-50 px-4 py-3" role="note">
               <BookOpen size={16} className="mt-0.5 shrink-0 text-blue-600" aria-hidden="true" />
@@ -478,7 +492,7 @@ export default function AddSubjectPage() {
                   "flex items-center gap-2 rounded-xl border-2 bg-gray-50 px-3 transition-colors",
                   errors.name
                     ? "border-red-400 bg-red-50"
-                    : "border-gray-200 focus-within:border-indigo-500 focus-within:bg-white"
+                    : "border-gray-200 focus-within:border-primary-500 focus-within:bg-white"
                 )}
               >
                 <BookOpen
@@ -523,7 +537,7 @@ export default function AddSubjectPage() {
                     type="button"
                     onClick={() => handleChange("name", ex)}
                     aria-label={`Use example: ${ex}`}
-                    className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition-colors"
+                    className="rounded-lg bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-100 transition-colors"
                   >
                     {ex}
                   </button>
@@ -549,7 +563,7 @@ export default function AddSubjectPage() {
                 className={cn(
                   "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
                   "text-gray-900 placeholder-gray-400 outline-none transition-colors",
-                  "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                  "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               />
             </Field>
@@ -581,7 +595,7 @@ export default function AddSubjectPage() {
                   "text-gray-900 placeholder-gray-400 outline-none transition-colors",
                   errors.coefficient
                     ? "border-red-300 focus:border-red-500"
-                    : "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                    : "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               />
             </Field>
@@ -620,7 +634,7 @@ export default function AddSubjectPage() {
                       className="flex w-full items-center gap-3 border-b border-gray-200 bg-gray-100 px-4 py-2.5 text-left hover:bg-gray-200 transition-colors"
                     >
                       {allSelected
-                        ? <CheckSquare size={16} className="text-indigo-600 shrink-0" />
+                        ? <CheckSquare size={16} className="text-primary-600 shrink-0" />
                         : <Square      size={16} className="text-gray-400 shrink-0"   />
                       }
                       <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">
@@ -644,17 +658,17 @@ export default function AddSubjectPage() {
                               className={cn(
                                 "flex w-full items-center gap-3 px-4 py-3 text-left",
                                 "border-b border-gray-100 last:border-b-0",
-                                "transition-colors hover:bg-indigo-50",
-                                checked && "bg-indigo-50"
+                                "transition-colors hover:bg-primary-50",
+                                checked && "bg-primary-50"
                               )}
                             >
                               {checked
-                                ? <CheckSquare size={16} className="text-indigo-600 shrink-0" />
+                                ? <CheckSquare size={16} className="text-primary-600 shrink-0" />
                                 : <Square      size={16} className="text-gray-300 shrink-0"   />
                               }
                               <span className={cn(
                                 "text-sm",
-                                checked ? "font-semibold text-indigo-900" : "text-gray-700"
+                                checked ? "font-semibold text-primary-900" : "text-gray-700"
                               )}>
                                 {cls.name}
                               </span>
@@ -679,7 +693,7 @@ export default function AddSubjectPage() {
                     return (
                       <span
                         key={id}
-                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2.5 py-1 text-xs font-semibold text-primary-700"
                       >
                         <School size={11} aria-hidden="true" />
                         {cls?.name ?? id}
@@ -687,7 +701,7 @@ export default function AddSubjectPage() {
                           type="button"
                           onClick={() => removeClass(id)}
                           aria-label={`Remove ${cls?.name ?? id}`}
-                          className="ml-0.5 rounded text-indigo-500 hover:text-indigo-800"
+                          className="ml-0.5 rounded text-primary-500 hover:text-primary-800"
                         >
                           <X size={11} />
                         </button>
@@ -713,7 +727,7 @@ export default function AddSubjectPage() {
                 className={cn(
                   "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
                   "text-gray-900 outline-none transition-colors",
-                  "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                  "border-gray-200 focus:border-primary-500 focus:bg-white"
                 )}
               >
                 <option value="">
@@ -742,7 +756,7 @@ export default function AddSubjectPage() {
                 "text-sm font-bold text-white transition-colors",
                 isBusy
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-primary-600 hover:bg-primary-700"
               )}
             >
               {isBusy ? (

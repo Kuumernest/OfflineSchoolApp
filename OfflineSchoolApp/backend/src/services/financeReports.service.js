@@ -1,7 +1,7 @@
 // backend/src/services/financeReports.service.js
 "use strict";
 
-const FeeCharge     = require("../db/models/FeeCharge");
+const { outstandingFor } = require("./fees.service");
 const FeePayment    = require("../db/models/FeePayment");
 const Expense       = require("../db/models/Expense");
 const SalaryPayment = require("../db/models/SalaryPayment");
@@ -168,38 +168,24 @@ const summary = async ({ schoolId, from, to }) => {
  * Deliberately NOT bounded by the report period. Arrears are a position at a
  * moment, not a flow over an interval — a debt raised in October is still owed
  * in March, and clipping it to the period would report it as settled.
+ *
+ * The figure is fees.service outstandingFor — the one Fees > Outstanding and
+ * the platform dashboard show: current students, one year, positive balances
+ * only. This counted every charge in the school, departed and deleted
+ * students' included, and netted overpayments against debts, so the report
+ * said 9,820,000 where the Outstanding page said 1,900,000.
  */
 const arrears = async ({ schoolId, academicYear }) => {
-  const match = { schoolId, deletedAt: null };
-  if (academicYear) match.academicYear = academicYear;
-
-  const [charged, payments] = await Promise.all([
-    (async () => {
-      const [row] = await FeeCharge.aggregate([
-        { $match: { ...match, voidedAt: null } },
-        { $group: {
-            _id: null,
-            charged: { $sum: "$amount" },
-            waived:  { $sum: "$waivedAmount" },
-        } },
-      ]);
-      return { charged: row?.charged ?? 0, waived: row?.waived ?? 0 };
-    })(),
-    sum(FeePayment, match, "amount"),
-  ]);
-
-  const billed = charged.charged - charged.waived;
-
+  const o = await outstandingFor({ schoolId, academicYear: academicYear || null });
   return {
-    academicYear: academicYear ?? null,
-    charged: charged.charged,
-    waived:  charged.waived,
-    billed,
-    paid:    payments.total,
-    // Negative would mean the school holds more than it billed — possible after
-    // an overpayment, so it is reported rather than clamped to zero.
-    outstanding: billed - payments.total,
-    collectionRate: billed > 0 ? Math.round((payments.total / billed) * 100) : null,
+    academicYear: o.academicYear,
+    charged: o.charged,
+    waived:  o.waived,
+    billed:  o.billed,
+    paid:    o.paid,
+    outstanding: o.outstanding,
+    owing:   o.owing,
+    collectionRate: o.billed > 0 ? Math.round((o.paid / o.billed) * 100) : null,
   };
 };
 

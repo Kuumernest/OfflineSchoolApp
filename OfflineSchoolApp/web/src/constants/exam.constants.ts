@@ -8,12 +8,16 @@ export const EXAM_STATUS_META: Record<
   { labelKey: string; color: string; bg: string; dot: string }
 > = {
   draft:     { labelKey: "examStatus.draft",     color: "text-gray-600",   bg: "bg-gray-100",   dot: "bg-gray-400"   },
-  scheduled: { labelKey: "examStatus.scheduled", color: "text-indigo-600", bg: "bg-indigo-50",  dot: "bg-indigo-500" },
+  scheduled: { labelKey: "examStatus.scheduled", color: "text-primary-600", bg: "bg-primary-50",  dot: "bg-primary-500" },
   ongoing:   { labelKey: "examStatus.ongoing",   color: "text-amber-600",  bg: "bg-amber-50",   dot: "bg-amber-500"  },
   completed: { labelKey: "examStatus.completed", color: "text-green-600",  bg: "bg-green-50",   dot: "bg-green-500"  },
   published: { labelKey: "examStatus.published", color: "text-purple-600", bg: "bg-purple-50",  dot: "bg-purple-500" },
   archived:  { labelKey: "examStatus.archived",  color: "text-gray-400",   bg: "bg-gray-50",    dot: "bg-gray-300"   },
 };
+
+/** Every exam status, in lifecycle order — what the exams page and the
+ *  dashboard both count, so neither can leave one out. */
+export const EXAM_STATUSES = Object.keys(EXAM_STATUS_META) as ExamStatus[];
 
 // ── Exam Types (simplified) ─────────────────────────────────────────────────
 

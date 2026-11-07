@@ -20,7 +20,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   // Pages were hand-rolling bg-green-600 for print and confirm actions,
   // which put a colour outside the palette on the most-clicked buttons.
   success:
-    "bg-success text-white hover:brightness-95 active:brightness-90 shadow-card",
+    "bg-success-solid text-white hover:brightness-95 active:brightness-90 shadow-card",
   ghost:
     "text-ink-muted hover:bg-canvas hover:text-ink-body active:bg-line/60",
 };

@@ -14,6 +14,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyDevelopment, fetchMyGuidance, fetchMyInterventions, actOnMyIntervention } from "../../../src/services/exploration.service";
+import { COLORS, ACCENT } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare, EmptyState } from "../../../src/components/Tinted";
+
+/** A section heading with its solid icon square. */
+function SectionTitle({ icon, accent, children }) {
+  return (
+    <View style={st.sectionRow}>
+      <IconSquare icon={icon} accent={accent} size={28} />
+      <Text style={st.sectionTitle}>{children}</Text>
+    </View>
+  );
+}
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 
@@ -47,13 +59,14 @@ export default function StudentDevelopmentScreen() {
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
       <View style={[st.header, { paddingTop: pad.paddingTop }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={COLORS.text} /></TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <Text style={st.title}>{t("development.studentTitle")}</Text>
       </View>
       <Text style={st.sub}>{t("development.studentSubtitle")}</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 32 }} /> : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
-          {(!h || !h.history || h.history.observationCount === 0) && <Text style={st.empty}>{t("development.noHistory")}</Text>}
+          {(!h || !h.history || h.history.observationCount === 0) && <EmptyState icon="leaf-outline" accent="green" style={st.emptyState} message={t("development.noHistory")} />}
           {h?.history?.observationCount > 0 && <Text style={st.meta}>{t("development.observations", { n: h.history.observationCount, i: h.history.independentObservationCount })}</Text>}
           {shown.map((x) => {
             const unclear = [
@@ -76,7 +89,7 @@ export default function StudentDevelopmentScreen() {
           {h?.history?.observationCount > 0 && <Text style={st.hint}>{t("development.unavailableNote")}</Text>}
 
           {/* Things I can try: guidance informs; the pupil decides. */}
-          <Text style={st.sectionTitle}>{t("devGuidance.studentHeading")}</Text>
+          <SectionTitle icon="bulb" accent="green">{t("devGuidance.studentHeading")}</SectionTitle>
           {!(g?.items?.length) && <Text style={st.empty}>{t("devGuidance.none")}</Text>}
           {(g?.items ?? []).map((i) => (
             <View key={i.id} style={st.card}>
@@ -94,7 +107,7 @@ export default function StudentDevelopmentScreen() {
           ))}
 
           {/* My active support: proposals the pupil may accept or decline; agreed support with its observed outcome. */}
-          <Text style={st.sectionTitle}>{t("devIntervention.studentHeading")}</Text>
+          <SectionTitle icon="hand-left" accent="green">{t("devIntervention.studentHeading")}</SectionTitle>
           {!(iv?.interventions?.length) && <Text style={st.empty}>{t("devIntervention.none")}</Text>}
           {(iv?.interventions ?? []).map((x) => (
             <View key={x.interventionId} style={st.card}>
@@ -113,7 +126,7 @@ export default function StudentDevelopmentScreen() {
           ))}
 
           {/* What I want to explore: the exploration loop stays the pupil's own choice. */}
-          <TouchableOpacity style={[st.card, { alignItems: "center" }]} onPress={() => router.push("/student/explore")} activeOpacity={0.85}>
+          <TouchableOpacity style={[st.card, st.exploreCard, { alignItems: "center" }]} onPress={() => router.push("/student/explore")} activeOpacity={0.85}>
             <Text style={st.cardTitle}>{t("explore.title")}</Text>
             <Text style={st.sub2}>{t("explore.subtitle")}</Text>
           </TouchableOpacity>
@@ -126,20 +139,23 @@ export default function StudentDevelopmentScreen() {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
-  title: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  sub: { fontSize: 13, color: "#6B7280", paddingHorizontal: 16, marginBottom: 8 },
-  meta: { fontSize: 12, color: "#6B7280", marginBottom: 10 },
-  empty: { fontSize: 14, color: "#6B7280", textAlign: "center", marginTop: 24 },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: "#E5E7EB" },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#111827", marginBottom: 4 },
-  line: { fontSize: 13, color: "#1F2937" },
-  label: { fontSize: 12, fontWeight: "600", color: "#4B5563", marginTop: 8 },
-  sub2: { fontSize: 12, color: "#374151", marginLeft: 6, marginTop: 2 },
-  hint: { fontSize: 11, color: "#6B7280", marginTop: 8 },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 8 },
+  title: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  sub: { fontSize: 13, color: COLORS.textSecondary, paddingHorizontal: 16, marginBottom: 8 },
+  meta: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 10 },
+  empty: { fontSize: 14, color: COLORS.textSecondary, textAlign: "center", marginTop: 24 },
+  emptyState: { paddingVertical: 24 },
+  card: { backgroundColor: ACCENT.green.wash, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderTopColor: ACCENT.green.base },
+  exploreCard: { backgroundColor: ACCENT.sky.wash, borderTopColor: ACCENT.sky.base },
+  cardTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text, marginBottom: 4 },
+  line: { fontSize: 13, color: ACCENT.green.deep, fontWeight: "600" },
+  label: { fontSize: 12, fontWeight: "600", color: ACCENT.green.deep, marginTop: 8 },
+  sub2: { fontSize: 12, color: COLORS.textSecondary, marginLeft: 6, marginTop: 2 },
+  hint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8 },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
   row: { flexDirection: "row", gap: 8, marginTop: 8 },
-  btn: { backgroundColor: "#4F46E5", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  btnMuted: { backgroundColor: "#E5E7EB" },
-  btnText: { color: "#FFFFFF", fontWeight: "600" },
-  btnTextMuted: { color: "#374151", fontWeight: "600" },
+  btn: { backgroundColor: ACCENT.green.solid, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  btnMuted: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  btnText: { color: COLORS.onPrimary, fontWeight: "600" },
+  btnTextMuted: { color: COLORS.textSecondary, fontWeight: "600" },
 });

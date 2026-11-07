@@ -21,6 +21,9 @@ import { Ionicons }         from "@expo/vector-icons";
 import { useAuthStore }     from "../../../src/store/auth.store";
 import { getUserAttempts }  from "../../../src/services/quiz.service";
 import { useTranslation }   from "../../../src/i18n/useTranslation";
+import { StatTile } from "../../../src/components/Tiles";
+import { COLORS, ACCENT, SEMANTIC, accentBadge, statusBadge } from "../../../src/theme/colors";
+import { HeaderIcon, IconSquare } from "../../../src/components/Tinted";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -58,15 +61,15 @@ const formatDuration = (secs) => {
 };
 
 const getScoreColor = (percentage, passingScore = 70) => {
-  if (percentage >= passingScore) return "#059669";
-  if (percentage >= passingScore * 0.7) return "#D97706";
-  return "#DC2626";
+  if (percentage >= passingScore) return SEMANTIC.success.text;
+  if (percentage >= passingScore * 0.7) return SEMANTIC.warning.text;
+  return SEMANTIC.error.text;
 };
 
 const getScoreBg = (percentage, passingScore = 70) => {
-  if (percentage >= passingScore) return "#ECFDF5";
-  if (percentage >= passingScore * 0.7) return "#FEF3C7";
-  return "#FEE2E2";
+  if (percentage >= passingScore) return SEMANTIC.success.box;
+  if (percentage >= passingScore * 0.7) return SEMANTIC.warning.box;
+  return SEMANTIC.error.box;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ const AttemptCard = ({ item }) => {
   const duration       = formatDuration(item.time_taken_secs);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { borderLeftColor: item.is_passed ? SEMANTIC.success.icon : SEMANTIC.error.icon }]}>
       {/* Score circle + title */}
       <View style={styles.cardTop}>
         <View style={[styles.scoreBg, { backgroundColor: scoreBg }]}>
@@ -112,18 +115,21 @@ const AttemptCard = ({ item }) => {
             <View
               style={[
                 styles.badge,
-                { backgroundColor: item.is_passed ? "#ECFDF5" : "#FEE2E2" },
+                {
+                  backgroundColor: statusBadge(item.is_passed ? "success" : "error").bg,
+                  borderColor:     statusBadge(item.is_passed ? "success" : "error").border,
+                },
               ]}
             >
               <Ionicons
                 name={item.is_passed ? "checkmark-circle" : "close-circle"}
                 size={12}
-                color={item.is_passed ? "#059669" : "#DC2626"}
+                color={item.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text}
               />
               <Text
                 style={[
                   styles.badgeText,
-                  { color: item.is_passed ? "#059669" : "#DC2626" },
+                  { color: item.is_passed ? SEMANTIC.success.text : SEMANTIC.error.text },
                 ]}
               >
                 {item.is_passed ? t("quizHistory.passBadge") : t("quizHistory.failBadge")}
@@ -132,7 +138,7 @@ const AttemptCard = ({ item }) => {
 
             {/* Attempt number */}
             <View style={styles.badge}>
-              <Ionicons name="refresh-outline" size={12} color="#6B7280" />
+              <Ionicons name="refresh-outline" size={12} color={ACCENT.indigo.deep} />
               <Text style={styles.badgeText}>
                 {t("quizHistory.attemptBadge", { number: item.attempt_number || 1 })}
               </Text>
@@ -141,7 +147,7 @@ const AttemptCard = ({ item }) => {
             {/* Duration */}
             {duration ? (
               <View style={styles.badge}>
-                <Ionicons name="time-outline" size={12} color="#6B7280" />
+                <Ionicons name="time-outline" size={12} color={ACCENT.indigo.deep} />
                 <Text style={styles.badgeText}>{duration}</Text>
               </View>
             ) : null}
@@ -153,7 +159,7 @@ const AttemptCard = ({ item }) => {
       <View style={styles.breakdown}>
         {item.raw_score != null && item.max_score != null ? (
           <View style={styles.breakdownItem}>
-            <Ionicons name="star-outline" size={13} color="#9CA3AF" />
+            <Ionicons name="star-outline" size={13} color={ACCENT.indigo.solid} />
             <Text style={styles.breakdownText}>
               {item.raw_score} / {item.max_score} pts
             </Text>
@@ -162,7 +168,7 @@ const AttemptCard = ({ item }) => {
 
         {item.passing_score != null ? (
           <View style={styles.breakdownItem}>
-            <Ionicons name="ribbon-outline" size={13} color="#9CA3AF" />
+            <Ionicons name="ribbon-outline" size={13} color={ACCENT.indigo.solid} />
             <Text style={styles.breakdownText}>
               {t("quizHistory.passMark", { mark: item.passing_score })}
             </Text>
@@ -173,7 +179,7 @@ const AttemptCard = ({ item }) => {
       {/* Date */}
       {(item.submitted_at || item.started_at) ? (
         <View style={styles.dateRow}>
-          <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+          <Ionicons name="calendar-outline" size={12} color={ACCENT.indigo.solid} />
           <Text style={styles.dateText}>
             {formatDate(item.submitted_at || item.started_at)}
             {item.submitted_at
@@ -278,7 +284,7 @@ export default function QuizHistoryScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={ACCENT.indigo.solid} />
         <Text style={styles.loadingText}>{t("quizHistory.loading")}</Text>
       </View>
     );
@@ -294,8 +300,9 @@ export default function QuizHistoryScreen() {
           onPress={() => router.back()}
           style={styles.backBtn}
         >
-          <Ionicons name="arrow-back" size={22} color="#374151" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
+        <HeaderIcon style={{ marginRight: 0 }} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{t("quizHistory.title")}</Text>
           <Text style={styles.headerSub}>
@@ -310,20 +317,12 @@ export default function QuizHistoryScreen() {
       {attempts.length > 0 && (
         <View style={styles.statsRow}>
           {[
-            { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total,                                              color: "#4F46E5", bg: "#EEF2FF" },
-            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed,                                             color: "#059669", bg: "#ECFDF5" },
-            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed,                                             color: "#DC2626", bg: "#FEE2E2" },
-            { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—",          color: "#D97706", bg: "#FEF3C7" },
+            { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total },
+            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed, tone: "success" },
+            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed, tone: "error" },
+            { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—" },
           ].map((s) => (
-            <View
-              key={s.key}
-              style={[styles.statCard, { backgroundColor: s.bg }]}
-            >
-              <Text style={[styles.statValue, { color: s.color }]}>
-                {s.value}
-              </Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
+            <StatTile key={s.key} kind="quizzes" tone={s.tone} value={s.value} label={s.label} />
           ))}
         </View>
       )}
@@ -365,14 +364,14 @@ export default function QuizHistoryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#4F46E5"
-            colors={["#4F46E5"]}
+            tintColor={ACCENT.indigo.solid}
+            colors={[ACCENT.indigo.solid]}
           />
         }
         renderItem={({ item }) => <AttemptCard item={item} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
+            <IconSquare icon="document-text-outline" accent="indigo" size={56} radius={16} />
             <Text style={styles.emptyTitle}>
               {filter === "all"
                 ? t("quizHistory.allEmptyTitle")
@@ -395,58 +394,53 @@ export default function QuizHistoryScreen() {
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F3F4F6" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  container:   { flex: 1, backgroundColor: COLORS.page },
+  centered:    { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.page },
+  loadingText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: "500" },
 
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 10,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: ACCENT.slate.wash,
     alignItems: "center", justifyContent: "center",
   },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#111827" },
-  headerSub:   { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
 
   statsRow: {
     flexDirection: "row", gap: 8,
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  statCard: {
-    flex: 1, borderRadius: 10,
-    paddingVertical: 10, alignItems: "center", gap: 2,
-  },
-  statValue: { fontSize: 16, fontWeight: "800" },
-  statLabel: { fontSize: 9, color: "#6B7280", fontWeight: "500" },
 
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1, borderBottomColor: "#F3F4F6", gap: 8,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 8,
   },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 20, backgroundColor: "#F3F4F6",
-    borderWidth: 1, borderColor: "transparent",
+    borderRadius: 20, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  filterChipActive:     { backgroundColor: "#EEF2FF", borderColor: "#4F46E5" },
-  filterChipText:       { fontSize: 13, color: "#6B7280", fontWeight: "500" },
-  filterChipTextActive: { color: "#4F46E5", fontWeight: "700" },
+  filterChipActive:     { backgroundColor: ACCENT.indigo.wash, borderColor: ACCENT.indigo.base },
+  filterChipText:       { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  filterChipTextActive: { color: ACCENT.indigo.deep, fontWeight: "700" },
 
   listContent: { padding: 16, paddingBottom: 32 },
 
   card: {
-    backgroundColor: "#FFF", borderRadius: 16,
+    backgroundColor: COLORS.surface, borderRadius: 16,
     padding: 14, marginBottom: 12,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
+    shadowColor: COLORS.shadow, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   cardTop: {
     flexDirection: "row", alignItems: "flex-start",
@@ -459,34 +453,35 @@ const styles = StyleSheet.create({
   scoreText:  { fontSize: 16, fontWeight: "800" },
   scoreLabel: { fontSize: 10, fontWeight: "700", marginTop: 1 },
 
-  quizTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  quizMeta:  { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  quizTitle: { fontSize: 14, fontWeight: "700", color: COLORS.text },
+  quizMeta:  { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
 
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 },
   badge: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: "#F3F4F6", borderRadius: 6,
+    backgroundColor: accentBadge("indigo").bg, borderRadius: 6,
+    borderWidth: 1, borderColor: accentBadge("indigo").border,
     paddingHorizontal: 7, paddingVertical: 3,
   },
-  badgeText: { fontSize: 10, color: "#6B7280", fontWeight: "600" },
+  badgeText: { fontSize: 10, color: accentBadge("indigo").text, fontWeight: "600" },
 
   breakdown: {
     flexDirection: "row", gap: 12,
     paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: "#F3F4F6",
+    borderTopWidth: 1, borderTopColor: COLORS.border,
     marginBottom: 8,
   },
   breakdownItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  breakdownText: { fontSize: 11, color: "#6B7280" },
+  breakdownText: { fontSize: 11, color: COLORS.textSecondary },
 
   dateRow: {
     flexDirection: "row", alignItems: "center", gap: 4,
     marginBottom: 10,
   },
-  dateText: { fontSize: 11, color: "#9CA3AF" },
+  dateText: { fontSize: 11, color: COLORS.textSecondary },
 
   barBg: {
-    height: 6, backgroundColor: "#F3F4F6",
+    height: 6, backgroundColor: ACCENT.slate.wash,
     borderRadius: 3, overflow: "visible",
     position: "relative",
   },
@@ -497,7 +492,7 @@ const styles = StyleSheet.create({
   barMarker: {
     position: "absolute", top: -3,
     width: 2, height: 12,
-    backgroundColor: "#374151",
+    backgroundColor: COLORS.text,
     borderRadius: 1,
     transform: [{ translateX: -1 }],
   },
@@ -506,6 +501,6 @@ const styles = StyleSheet.create({
     alignItems: "center", paddingVertical: 60,
     paddingHorizontal: 24, gap: 8,
   },
-  emptyTitle:    { fontSize: 16, fontWeight: "700", color: "#374151" },
-  emptySubtitle: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  emptyTitle:    { fontSize: 16, fontWeight: "700", color: COLORS.text },
+  emptySubtitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: "center" },
 });
