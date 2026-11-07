@@ -1,5 +1,6 @@
 // web/src/components/dashboard/SystemHealthGrid.tsx
 import { useTranslation }         from "react-i18next";
+import { Link }                   from "react-router-dom";
 import { type SystemHealthStats } from "@/services/dashboard.service";
 import { Card, CardHeader }       from "@/components/ui/Card";
 import {
@@ -98,11 +99,10 @@ export default function SystemHealthGrid({
           const box    = tint.box;
           const number = alert ? ALERT_NUMBER[alert] : tint.number;
 
-          return (
-            <div
-              key={metric.key}
-              className={cn("p-4 transition-colors", card)}
-            >
+          const tileClass = cn("block p-4 transition-colors", card);
+
+          const body = (
+            <>
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
@@ -119,7 +119,10 @@ export default function SystemHealthGrid({
               </div>
 
               <p
-                className="mt-3 text-sm font-medium leading-snug text-ink-muted"
+                // One line: a label wrapping mid-word ("Unassigne / d") in a
+                // narrow tile reads as a typo. Long labels truncate, and the
+                // title attribute still carries the whole text.
+                className="mt-3 truncate whitespace-nowrap text-sm font-medium leading-snug text-ink-muted"
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}
               >
                 {t(`health.${metric.key}`, { defaultValue: metric.label })}
@@ -130,7 +133,21 @@ export default function SystemHealthGrid({
                   {t("health.distinctSubjects", { count: stats.distinctSubjects })}
                 </p>
               )}
-            </div>
+            </>
+          );
+
+          // A problem tile with somewhere to fix it is a link; the rest stay
+          // plain readings.
+          return alert && metric.href ? (
+            <Link
+              key={metric.key}
+              to={metric.href}
+              className={cn(tileClass, "hover:brightness-[0.98] focus:outline-none focus:ring-2 focus:ring-danger")}
+            >
+              {body}
+            </Link>
+          ) : (
+            <div key={metric.key} className={tileClass}>{body}</div>
           );
         })}
       </div>

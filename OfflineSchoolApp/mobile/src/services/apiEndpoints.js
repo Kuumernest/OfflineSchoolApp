@@ -103,6 +103,9 @@ export const API = {
       list:      "/admin/timetable",
       detail:    (id)        => `/admin/timetable/${id}`,
       byTeacher: (teacherId) => `/admin/timetable/teacher/${teacherId}`,
+      conflicts: "/admin/timetable/conflicts",
+      options:   (id)        => `/admin/timetable/conflicts/options/${id}`,
+      check:     "/admin/timetable/check",
     },
     periods: {
       list:   "/admin/periods",

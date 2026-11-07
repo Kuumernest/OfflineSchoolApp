@@ -65,6 +65,8 @@ export interface HealthMetric {
    * takes the `alert` status tint (default: error).
    */
   alertOnNonZero?: boolean;
+  /** Where tapping the tile goes while it is in the danger tone. */
+  href?:           string;
   alert?:          "warning" | "error";
   /** A count that is always shown in a status tint (notices → info). */
   semantic?:       "info";
@@ -235,7 +237,7 @@ export const HEALTH_METRIC_ROWS: HealthMetric[][] = [
   [
     { key: "totalPeriods",             label: "Teaching periods", tone: "timetable", icon: Clock },
     { key: "incompleteTimetableSlots", label: "No Timetable", tone: "timetable", icon: Calendar, alertOnNonZero: true },
-    { key: "timetableConflicts",       label: "Conflicts",    tone: "timetable", icon: FileText, alertOnNonZero: true },
+    { key: "timetableConflicts",       label: "Conflicts",    tone: "timetable", icon: FileText, alertOnNonZero: true, href: "/timetable/conflicts" },
     { key: "classesWithoutSubjects",   label: "No Subjects",  tone: "subjects",  icon: School, alertOnNonZero: true },
   ],
   [

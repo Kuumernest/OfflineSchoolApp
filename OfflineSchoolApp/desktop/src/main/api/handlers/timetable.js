@@ -20,6 +20,9 @@
  * not an admin gets their own schedule, and ?teacherId is ignored.
  */
 
+const TT = require("../../../../../shared/timetableConflicts");
+const { conflictContext } = require("../timetableConflicts");
+
 const DAYS = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
 
 const toDay = (raw) => {
@@ -33,7 +36,48 @@ const ok = (slots) => ({ status: 200, data: { success: true, slots, count: slots
 const adminRole = (session) =>
   session?.role === "school_admin" || session?.role === "super_admin";
 
+const langOf = (query) => (String(query?.lang ?? "").toLowerCase().startsWith("fr") ? "fr" : "en");
+
+const localise = (list, lang) =>
+  lang === "fr" ? list.map((c) => ({ ...c, message: TT.conflictMessage(c, "fr") })) : list;
+
+const canManage = (session) => session?.permissions?.includes("timetable.manage");
+
 module.exports = [
+  {
+    route: "GET /api/admin/timetable/conflicts",
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = session?.schoolId || (query.schoolId ? String(query.schoolId).trim() : null);
+      if (!schoolId || !canManage(session)) return null;
+      const conflicts = localise(TT.detectConflicts(conflictContext(docs, schoolId)), langOf(query));
+      return { status: 200, data: { success: true, conflicts, count: conflicts.length } };
+    },
+  },
+
+  {
+    route: "GET /api/admin/timetable/conflicts/options/:id",
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = session?.schoolId || (query.schoolId ? String(query.schoolId).trim() : null);
+      if (!schoolId || !canManage(session)) return null;
+      const ctx = conflictContext(docs, schoolId);
+      if (!ctx.slots.some((s) => s._id === String(params.id))) {
+        return { status: 404, data: { success: false, error: "Timetable slot not found" } };
+      }
+      return { status: 200, data: { success: true, ...TT.resolutionOptions(ctx, params.id) } };
+    },
+  },
+
+  {
+    // A read despite the verb: it answers, and stores nothing.
+    route: "POST /api/admin/timetable/check",
+    handler: ({ body, query }, { docs, session }) => {
+      const schoolId = session?.schoolId || (body?.schoolId ? String(body.schoolId).trim() : null);
+      if (!schoolId || !canManage(session)) return null;
+      const conflicts = localise(TT.checkSlot(conflictContext(docs, schoolId), body ?? {}), langOf(query));
+      return { status: 200, data: { success: true, conflicts, canForce: adminRole(session) } };
+    },
+  },
+
   {
     route: "GET /api/admin/timetable",
     handler: ({ query }, { docs, session }) => {

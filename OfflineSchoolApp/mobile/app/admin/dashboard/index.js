@@ -366,7 +366,7 @@ const STAT_ROWS = [
   [
     { key: "totalPeriods",             labelKey: "dashAdmin.hPeriods",      icon: "time",             kind: "timetable" },
     { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", kind: "timetable", toneWhenAny: "warning" },
-    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          kind: "timetable", toneWhenAny: "error" },
+    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          kind: "timetable", toneWhenAny: "error", route: "/admin/timetable/conflicts" },
     { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     kind: "classes", toneWhenAny: "warning" },
   ],
 ];
@@ -488,10 +488,12 @@ const sb = StyleSheet.create({
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-const StatCard = React.memo(({ item, value }) => {
+const StatCard = React.memo(({ item, value, onPress }) => {
   // Each memoised child owns its translation hook: none of these components
   // close over the screen's `t`, which does not exist at module scope.
   const { t } = useTranslation();
+  // A tile with somewhere to go (the conflicts count) opens it, so the
+  // number is never a dead end.
   return (
     <StatTile
       kind={item.kind}
@@ -499,6 +501,7 @@ const StatCard = React.memo(({ item, value }) => {
       value={value}
       label={t(item.labelKey)}
       tone={item.toneWhenAny && Number(value) > 0 ? item.toneWhenAny : undefined}
+      onPress={onPress && Number(value) > 0 ? onPress : undefined}
     />
   );
 });
@@ -756,7 +759,9 @@ export default function AdminDashboard() {
         type:    "danger",
         icon:    "warning-outline",
         message: t("dashAdmin.alertConflicts", { count: stats.timetableConflicts }),
-        route:   "/admin/timetable",
+        // The list of WHICH lessons clash and how to fix each, not the bare
+        // timetable it used to drop the admin on.
+        route:   "/admin/timetable/conflicts",
       });
     }
 
@@ -921,7 +926,12 @@ export default function AdminDashboard() {
                 style={styles.statsRow}
               >
                 {row.map((s) => (
-                  <StatCard key={s.key} item={s} value={statValue(s.key)} />
+                  <StatCard
+                    key={s.key}
+                    item={s}
+                    value={statValue(s.key)}
+                    onPress={s.route ? () => navigate(s.route, t(s.labelKey)) : undefined}
+                  />
                 ))}
               </View>
             ))}

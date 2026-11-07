@@ -45,6 +45,7 @@
     "check:feedtombstones": "node scripts/check-feed-tombstones.js",
     "check:mirrortombstones": "node scripts/check-mirror-tombstones.js",
     "check:retryrefusal": "node scripts/check-retry-after-refusal.js",
+    "check:ttconflicts": "node scripts/check-timetable-conflicts.js",
     "check:averages": "node scripts/check-averages.js",
     "check:outstanding": "node scripts/check-outstanding.js",
     "check:watchfees": "node scripts/check-watch-fees.js",

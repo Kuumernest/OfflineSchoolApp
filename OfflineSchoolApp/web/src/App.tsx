@@ -74,6 +74,7 @@ const AddSubjectPage   = lazyPage(() => import("@/pages/subjects/add/index"));
 const EditSubjectPage  = lazyPage(() => import("@/pages/subjects/edit/index"));
 
 const TimetablePage    = lazyPage(() => import("@/pages/timetable/index"));
+const TimetableConflictsPage = lazyPage(() => import("@/pages/timetable/conflicts"));
 const PeriodsPage      = lazyPage(() => import("@/pages/periods/index"));
 
 const AttendancePage   = lazyPage(() => import("@/pages/attendance/index"));
@@ -349,6 +350,7 @@ export default function App() {
             <Route path="/subjects/add"      element={page(<AddSubjectPage />)} />
             <Route path="/subjects/edit/:id" element={page(<EditSubjectPage />)} />
             <Route path="/timetable"         element={page(<TimetablePage />)} />
+            <Route path="/timetable/conflicts" element={page(<TimetableConflictsPage />)} />
 
             <Route path="/attendance"         element={page(<AttendancePage />)} />
             <Route path="/attendance/reports" element={page(<AttendanceReport />)} />
