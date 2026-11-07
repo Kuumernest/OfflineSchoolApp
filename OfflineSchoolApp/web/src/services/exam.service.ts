@@ -318,14 +318,19 @@ params: { schoolId, classId },
 return data;
 };
 
+/** Rows per page of an exam's rankings (the server's default page). */
+export const RANKINGS_PAGE_SIZE = 100;
+
 export const getRankings = async (
 examId: string,
 schoolId: string,
 rankBy: "class" | "grade" | "school" = "class",
-classId?: string
+classId?: string,
+page = 1
 ) => {
+// A page of RANKINGS_PAGE_SIZE rows, and `total` — the whole table's size.
 const { data } = await api.get(`/results/${examId}/rankings`, {
-params: { schoolId, rankBy, classId },
+params: { schoolId, rankBy, classId, page, limit: RANKINGS_PAGE_SIZE },
 });
 return data;
 };

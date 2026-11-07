@@ -1,6 +1,10 @@
 // web/src/types/announcement.types.ts
 
-export const AUDIENCES = ["all", "teachers", "students", "class"] as const;
+// "parents" is the server's own audience value: Announcement.audience accepts
+// it, POST /api/announcements expands it to audiences:["parents"], and the
+// guardian portal (portal.routes announcementsFor) reads it through
+// Announcement.audienceMatch({ audience: "parents" }).
+export const AUDIENCES = ["all", "teachers", "students", "parents", "class"] as const;
 export type Audience = (typeof AUDIENCES)[number];
 
 export const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
@@ -92,8 +96,10 @@ export const isAdminRole = (role?: string | null): boolean =>
 /** Audiences the given role is allowed to publish to. */
 export const allowedAudiences = (role?: string | null): Audience[] =>
   isAdminRole(role)
-    ? ["all", "teachers", "students", "class"]
-    // Teachers may address students, or classes they are assigned to teach.
+    ? ["all", "teachers", "students", "parents", "class"]
+    // Teachers may address students, or classes they are assigned to teach —
+    // a class notice already reaches those pupils' parents. Every parent in
+    // the school is an administrator's audience, like everyone.
     : ["students", "class"];
 
 /** Only admins can pin. */

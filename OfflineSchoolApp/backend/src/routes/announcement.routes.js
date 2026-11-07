@@ -916,8 +916,27 @@ router.put("/:id", adminOrTeacher, async (req, res) => {
 
     if (title         !== undefined) existing.title         = title.trim();
     if (body          !== undefined) existing.body          = body.trim();
-    if (audience      !== undefined) existing.audience      = audience;
     if (targetClasses !== undefined) existing.targetClasses = targetClasses;
+    if (audience !== undefined) {
+      const LEGACY_AUDIENCES = ["all", "students", "teachers", "parents", "class"];
+      if (!LEGACY_AUDIENCES.includes(audience)) {
+        return res.status(400).json({ message: `Unknown audience: ${audience}` });
+      }
+      if (audience === "class" && !(existing.targetClasses ?? []).length) {
+        return res.status(400).json({
+          message: "targetClasses required when audience is 'class'",
+        });
+      }
+      existing.audience = audience;
+      // Readers decide by `audiences` whenever it is set (audienceMatch), and
+      // POST stores both. Changing only `audience` left the old set in force:
+      // an Everyone notice edited to Parents still reached every pupil and
+      // teacher. Recomputed here the way POST computes it.
+      existing.audiences = Announcement.expandLegacyAudience(audience);
+      // Class scoping belongs to "class" alone; a notice moved off it would
+      // otherwise keep reaching only the classes it used to name.
+      if (audience !== "class") existing.targetClasses = [];
+    }
     if (priority      !== undefined) existing.priority      = priority;
     if (expiresAt     !== undefined) existing.expiresAt     = expiresAt ? new Date(expiresAt) : null;
     if (isPinned !== undefined && isAdmin) existing.isPinned = isPinned;

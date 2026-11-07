@@ -24,6 +24,7 @@ import { PageIcon } from "@/components/ui/PageHeader";
 import { cn } from "@/utils/cn";
 import { type DashAccent } from "@/config/dashboardTint";
 import { DASH_TINT } from "@/config/dashboardTint";
+import { resultsScope, type ClassOption } from "@/utils/resultsScope";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -477,25 +478,26 @@ const RankingsTable = ({
   examId,
   scope,
   classId,
+  page,
+  onPage,
 }: {
   examId:   string;
   scope:    RankScope;
   classId?: string;
+  page:     number;
+  onPage:   (page: number) => void;
 }) => {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useRankings(examId, scope, classId);
+  const { data, isLoading } = useRankings(examId, scope, classId, page);
+  const totalPages: number = data?.totalPages ?? 1;
   // Memoised: `?? []` is a new array each render, and these feed a useMemo
   // below, which then recomputes every render instead of memoising.
-  // Ranked within each class: with every class shown, one class's table
-  // follows the next instead of their positions interleaving (1, 1, 2, 2…).
-  const rankings: ResultSummary[] = useMemo(() => {
-    const rows: ResultSummary[] = data?.data ?? [];
-    if (scope !== "class" || classId) return rows;
-    return [...rows].sort((a, b) =>
-      String(a.className ?? "").localeCompare(String(b.className ?? ""), undefined, { numeric: true })
-      || ((a.classPosition ?? 0) - (b.classPosition ?? 0)));
-  }, [data, scope, classId]);
+  // In the server's order, a page at a time. With every class shown, class
+  // positions come grouped by class (Form 1's table, then Form 2's), so a
+  // page never interleaves positions (1, 1, 2, 2…) — the server sorts so
+  // that the page boundary falls inside one class's run, not across them.
+  const rankings: ResultSummary[] = useMemo(() => data?.data ?? [], [data]);
 
   const posField: keyof ResultSummary =
     scope === "school" ? "schoolPosition" :
@@ -568,7 +570,7 @@ const RankingsTable = ({
           <tbody className="divide-y divide-line">
             {filtered.map((r, idx) => {
               const pos     = (r[posField] as number | null) ?? idx + 1;
-              const total   = (r[totalField] as number | null) ?? rankings.length;
+              const total   = (r[totalField] as number | null) ?? data?.total ?? rankings.length;
               // Judged on /20 against the school's pass mark by the server.
               const passing = r.passes ?? r.isPassing;
               const color   = passing ? "text-green-600" : "text-red-600";
@@ -651,6 +653,36 @@ const RankingsTable = ({
           </div>
         )}
       </div>
+
+      {/* Pages of RANKINGS_PAGE_SIZE, as Term Results pages its list. */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t border-line px-4 py-3">
+          {search && (
+            <span className="w-full text-center text-xs text-ink-muted">
+              {t("results.searchThisPage")}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => onPage(Math.max(1, page - 1))}
+            disabled={page <= 1}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-accent-slate-soft disabled:opacity-40"
+          >
+            {t("common.previous")}
+          </button>
+          <span className="text-sm text-ink-muted">
+            {t("pagination.pageOf", { current: page, total: totalPages })}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPage(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted hover:bg-accent-slate-soft disabled:opacity-40"
+          >
+            {t("common.next")}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -756,28 +788,32 @@ export default function ExamResultsPage() {
     searchParams.get("examId") ?? null
   );
   const [rankScope, setRankScope] = useState<RankScope>("class");
-  // The class the analytics are for; "" is every class the exam was sat in,
-  // null not chosen yet (the first class is picked once the classes load).
-  const [classId, setClassId] = useState<string | null>(null);
+  // The page of the rankings table; back to 1 whenever what it ranks changes.
+  const [rankPage, setRankPage] = useState(1);
+  // The class the analytics are for; "" (the default) is every class the exam
+  // was sat in — the pupils Term Results counts. One class is only ever the
+  // user's choice, and the page then says "Showing <class> only".
+  const [classId, setClassId] = useState<string>("");
   const [activeSection, setActiveSection] = useState<
     "overview" | "rankings" | "subjects"
   >("overview");
 
   // Data fetching
   const { data: examsData, isLoading: examsLoading } = useExams();
-  // The exam's classes come from its all-classes statistics. An exam sat by
-  // several classes opens on the first, so its rankings and top 5 are never a
-  // mix of classes; "" (All classes) is still there for the overall figures.
+  // The exam's classes come from its all-classes statistics. With every class
+  // shown, rankings are still per class (grouped by class, A6) and the top 5
+  // asks for a class: Form 1 and Upper Sixth are not one list.
   const { data: allStatsData, isLoading: allStatsLoading } = useExamStats(selectedExamId ?? "");
-  const classOptions: { classId: string; className: string | null }[] =
+  const classOptions: ClassOption[] =
     (allStatsData?.data as Stats | undefined)?.classes ?? [];
-  const activeClassId = classId ?? classOptions[0]?.classId ?? "";
+  const scope = resultsScope(classId, classOptions);
+  const activeClassId = scope.classId ?? "";
   const { data: classStatsData, isLoading: classStatsLoading } = useExamStats(
     activeClassId ? selectedExamId ?? "" : "", activeClassId || undefined
   );
   const statsData    = activeClassId ? classStatsData : allStatsData;
   const statsLoading = allStatsLoading || (!!activeClassId && classStatsLoading);
-  const { data: rankingsData, isLoading: rankingsLoading } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined);
+  const { data: rankingsData, isLoading: rankingsLoading } = useRankings(selectedExamId ?? "", rankScope, activeClassId || undefined, rankPage);
 
   // A processed-but-unpublished exam is the office's to look at; the server
   // answers a teacher's statistics and rankings for published results only,
@@ -794,12 +830,16 @@ export default function ExamResultsPage() {
 
   const stats: Stats | null    = statsData?.data ?? null;
   const rankings: ResultSummary[] = rankingsData?.data ?? [];
+  // The whole table's size, not this page's: "N students" agrees with the
+  // overview however many pages the table runs to.
+  const rankingsTotal: number = rankingsData?.total ?? rankings.length;
 
   const selectedExam = completedExams.find((e) => e._id === selectedExamId);
 
   const handleSelectExam = (id: string) => {
     setSelectedExamId(id);
-    setClassId(null);
+    setClassId("");
+    setRankPage(1);
     setSearchParams({ examId: id });
     setActiveSection("overview");
   };
@@ -903,7 +943,7 @@ export default function ExamResultsPage() {
                     {classOptions.length > 1 && (
                       <select
                         value={activeClassId}
-                        onChange={(e) => setClassId(e.target.value)}
+                        onChange={(e) => { setClassId(e.target.value); setRankPage(1); }}
                         aria-label={t("academic.class")}
                         className="rounded-lg border border-line px-2 py-1.5 text-xs font-semibold text-ink"
                       >
@@ -942,6 +982,26 @@ export default function ExamResultsPage() {
                   </button>
                 ))}
               </div>
+
+              {/* One class chosen: every figure below is that class's, and
+                  the exam title above names them all — say which. */}
+              {scope.className && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+                >
+                  <span className="font-semibold">
+                    {t("results.showingClassOnly", { className: scope.className })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setClassId(""); setRankPage(1); }}
+                    className="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                  >
+                    {t("results.showAllClasses")}
+                  </button>
+                </div>
+              )}
 
               {/* ── OVERVIEW SECTION ── */}
               {activeSection === "overview" && (
@@ -1007,7 +1067,7 @@ export default function ExamResultsPage() {
                       {RANK_SCOPES.map((s) => (
                         <button
                           key={s.key}
-                          onClick={() => setRankScope(s.key)}
+                          onClick={() => { setRankScope(s.key); setRankPage(1); }}
                           className={`px-3 py-1.5 rounded-lg text-xs
                             font-semibold transition-colors
                             ${rankScope === s.key
@@ -1029,7 +1089,7 @@ export default function ExamResultsPage() {
                         <HeadBox icon={ListOrdered} />
                         {t(RANKINGS_TITLE_KEYS[rankScope])}
                         <span className="ml-2 text-xs text-ink-muted font-normal">
-                          {rankingsLoading ? "…" : t("results.studentCount", { count: rankings.length })}
+                          {rankingsLoading ? "…" : t("results.studentCount", { count: rankingsTotal })}
                         </span>
                       </h3>
                     </div>
@@ -1037,6 +1097,8 @@ export default function ExamResultsPage() {
                       examId={selectedExamId}
                       scope={rankScope}
                       classId={activeClassId || undefined}
+                      page={rankPage}
+                      onPage={setRankPage}
                     />
                   </div>
                 </div>

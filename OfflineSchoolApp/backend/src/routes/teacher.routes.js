@@ -2028,7 +2028,10 @@ router.get("/results", asyncHandler(async (req, res) => {
   const { classId, examId } = req.query;
   if (classId) filter.classId = String(classId).trim();
   if (examId)  filter.examId  = String(examId).trim();
-  const scores = (await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean())
+  // A deleted exam's marks are not class results (its scores stay live when
+  // the exam is deleted) — services/deletedExams.service.
+  const { withoutDeletedExams } = require("../services/deletedExams.service");
+  const scores = (await withoutDeletedExams(schoolId, await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean()))
     .filter((sc) => pairs.has(`${String(sc.classId)}|${String(sc.subjectId)}`));
   if (!scores.length) return res.json({ success: true, results: [] });
 

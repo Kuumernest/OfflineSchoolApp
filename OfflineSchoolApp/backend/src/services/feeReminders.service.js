@@ -310,6 +310,8 @@ async function sendReminders({
         createdBy: requestedBy,
         data: {
           balance:     r.balance,
+          /** The part of balance past its due date: the message names it. */
+          overdue:     r.overdue,
           dueDate:     r.earliestDue,
           isOverdue:   r.isOverdue,
           daysOverdue: r.daysOverdue,
@@ -578,6 +580,8 @@ module.exports = {
   sendReminders,
   penaltyPreview,
   applyPenalties,
+  DUE_SOON_DAYS_MS: DUE_SOON_DAYS * 86_400_000,
+  daysBetween,
   // Exported for the check script.
   endOfDay,
   firstUnpaid,

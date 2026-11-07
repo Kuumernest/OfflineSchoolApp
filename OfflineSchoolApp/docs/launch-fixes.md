@@ -107,6 +107,85 @@ it. Also in the repo's `CLAUDE.md`.
   - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
   - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
 
+## Bug — a deleted exam's marks still counted (2026-11-06)
+
+- [x] **P1** Deleting an exam only stamps `deletedAt` on the Exam; its `ResultSummary` rows stay live, and readers that went to the summaries directly still counted them.
+  - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
+  - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
+  - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+- [x] **P1** The remaining direct readers (2026-11-07): intelligence review (`reviewCases.liveCohort`), class analysis (`analysisRuns` evidence for the worker), transcripts (`GET /documents/transcript/:studentId`) and a teacher's class results (`GET /teacher/results`, StudentScore rows) drop a deleted exam's rows through one helper, `backend/src/services/deletedExams.service.js` (the portal's `withoutDeletedExams`, moved there). Missing exam rows are still kept.
+  - Desktop offline class insights (`handlers/intelligence.js` `historyFor`) drop summaries whose mirrored exam carries `deletedAt`, as the server does.
+  - The portal's `/results/:summaryId/report-card` already refused a deleted exam's card (above).
+  - Checks: backend `check:deletedexameverywhere` (in `check:all`); desktop `check:intel-deleted` (in `npm run check`).
+- [ ] Not changed: the staff report card `GET /results/:examId/student/:studentId/reportcard` still serves a deleted exam (its exam lookup has no `deletedAt` filter), and what deleting a PUBLISHED exam should do (retract, keep, archive) — both need a product decision.
+
+## Bug — Students to watch called the whole balance overdue (2026-11-06)
+
+- [x] **P1** The fee flag on Students to watch printed what a family owes as "(overdue)": Eunice Ashu "owes FCFA 145,000 (overdue)" while the Fees page said 145,000 owed, 50,000 overdue; Alain Onana 200,000 against 105,000.
+  - Both screens already read one calculation (`arrears.service` → `shared/arrears.js`); the watch list carried only the balance. The `fees_outstanding` signal now carries `balance` and `overdue`, and the web line reads "Owes X, of which Y is overdue" ("all of it overdue" when it is; plain "Owes X" if no overdue figure) — `web/src/utils/feeFlag.ts`.
+  - The 1/2-point weight is the overdue part over what was billed (the threshold always said "overdue only"): Eunice 1 point (was 2), Alain 2.
+  - Checks: backend `check:watchoverdue` (in `check:all`; Eunice, Alain, and a paid-up sibling on the same guardian), `check:watchfees` updated; web `check:feeflag`.
+
+## Bug — the parent portal and fee reminders called the whole balance overdue (2026-11-07)
+
+- [x] **P1** Same mistake as the watch list, on the parent's side: portal Home and Fees (web and phone) coloured the whole balance "Overdue"; `GET /portal/fees/reminders` decided "overdue" on its own — every dated charge the day after its date, even one paid in full; the fee reminder message under "Overdue school fees" quoted only the balance.
+  - One per-charge rule in `shared/arrears.js`: `chargeStatuses` (payments settle the oldest due charge first; a charge is overdue only while something is unpaid on it). `feePosition` now sums it, and the portal lists it.
+  - `/portal/home` cards carry `fees.overdue`; `/portal/fees/reminders` carries the account's `overdue`/`isOverdue` from `arrears.service` (the Fees page's figure) and each charge's `unpaid`; on an active plan no single charge is late (the plan's dates govern). Days late counted as Fee reminders counts them.
+  - Web and phone: the pill reads "of which X is overdue" when only part is late, "Overdue" when all of it is or the figure is missing (`overdueShare`, web `utils/feeFlag.ts`, phone `utils/overdueShare.js`).
+  - The reminder carries `overdue`; the message reads "…balance of 145,000, of which 50,000 is overdue" (en/fr).
+  - Checks: backend `check:portaloverdue` (in `check:all`; one guardian, three children); web `check:feeflag` (extended); mobile `scripts/check-portal-overdue.js` (in `npm run check`).
+- [ ] Desktop offline arrears count overdue FAMILIES one per child (`desktop/src/main/api/handlers/fees.js`). The server groups siblings by portal access code (`familyCount`), but `GuardianAccess` is deliberately not mirrored to the desktop (a stale copy of who may see a child must not exist), and grouping by shared guardian name/email/phone is forbidden (CLAUDE.md). Needs a decision: mirror a non-sensitive family link (e.g. a family id on Student, or a studentIds-only projection of access codes), or show no family count offline.
+
+## Bug — Students to watch did not say which exam a flag rests on (2026-11-07)
+
+- [x] **P2** "Failed the last exam (8/20, pass mark 10)", "Average fell 14 → 7" and "3 subjects failed" named no exam, so a teacher could not check them — and "the last exam" is exactly what changes when an exam is deleted or re-run.
+  - `earlyWarning.service`: `failed_exam`, `grade_drop` and `subjects_failed` carry `exam: { examId, name, date }` (one exam read for the whole list); a drop also carries `fromExam`. An exam whose row is gone is still named by id, with no name or date.
+  - Web: each such flag ends "· 2nd Sequence, 10 Oct 2026" or, for a drop, "· 1st Sequence → 2nd Sequence, 10 Oct 2026" (`web/src/utils/watchSource.ts`, `watch.source.*` en/fr).
+  - Checks: backend `check:watchsource` (in `check:all`); web `check:watchsource`.
+
+## Bug — "Failed to fetch dynamically imported module" (2026-11-06)
+
+- [x] **P2** Every web page is its own chunk, loaded on first navigation through a bare `lazy(() => import(...))`. One failed request for that chunk — a flaky connection, or a deploy that replaced the chunk names — crashed the route, and the route's error box showed the browser's raw "Failed to fetch dynamically imported module".
+  - All 65 routes in `web/src/App.tsx` load through `lazyPage`, which retries the import (`web/src/utils/lazyWithRetry.ts`, `retryImport`): 3 attempts, 400 ms then 800 ms apart.
+  - If the chunk still cannot be fetched (usually after a deploy), `RouteErrorBoundary` recognises it (`isChunkLoadError`) and shows "This page could not be loaded" with a **Reload** button, in place of the error text; the sidebar stays. Button only — no automatic reload, so no reload loop. Strings `error.chunkTitle` / `chunkBody` / `chunkReload` in en and fr. Applies to the desktop app too (it serves the built web app).
+  - Checks: web `check:chunkretry` (36 checks: fails twice then loads → resolves; always fails → rejects after 3; no bare `lazy(() => import(` left in App.tsx; the boundary and both locales). Fails 17 of 19 on the old code.
+
+## Bug — portal unread badge, section URLs, tab title (2026-11-06)
+
+- [x] **P1** The web portal's Messages tab showed an unread badge of 1 over "No conversations yet". `/portal/me` sent unread threads and unread notices as two numbers, the client added them for the badge, and the section always opened on Conversations — so one unread notice (a gate scan, an absence) was a 1 over an empty list. The thread count itself agreed with the list (both `comms.listFor`).
+  - Server: one `unreadSummary` (`backend/src/routes/portal.routes.js`) counts unread threads (`comms.listFor`, the `/messages/conversations` query, one per-thread `unreadIn`) and unread notices (`noticeFilters`, the `/notifications` filter). `/me` returns `unread: { messages, notices, total }` (`unreadMessages` / `unreadNotices` kept for the phone); `/notifications` takes its threads and counts from it and adds `unreadTotal`. Family-wide, as the section is: threads belong to the guardian, notices to every child on the code.
+  - Web: the badge is `unread.total`; Messages opens on Notices when the only unread is notices (`src/utils/portalRoutes.ts`), read once on opening so reading a notice does not switch tab.
+- [x] **P2** Portal sections were in-page state: a refresh went back to Home, no link could open a section, back left the portal. Now `/portal/results`, `/portal/attendance`, `/portal/fees`, `/portal/messages` (Home stays `/portal`); `App.tsx` mounts `/portal/*`, the page reads the section from the URL, an unknown sub-path goes to `/portal`. Sign-in and the session-expired screen still gate every path, and sign-in lands on the section in the URL; signing out goes to `/portal`. The child switcher is unchanged (state, kept across sections). Desktop `app://school/portal/...` already serves `index.html` (no change); Cloudflare Pages serves `index.html` for unknown paths while the build has no `404.html` (docs/17) — no hosting change.
+- [x] **P2** The browser tab now reads the school's name (from `/portal/me`) in the portal, and what it said before when the name is unknown or on leaving.
+  - Checks: backend `check:portalunread` (in `check:all`), web `check:portalroutes`; `check:staffgate` and `check:dashcolours` follow the route to `/portal/*`.
+
+## Feature — first-run defaults (2026-11-06)
+
+- [x] **P2** A new school's expense book was empty, so "Record expense" stayed disabled until somebody invented a category. Now it starts with **utilities, maintenance, stationery, transport, events** (`label` English + `labelFr` French: Services publics, Entretien, Fournitures de bureau, Transport, Événements), from `backend/src/services/expenseCategories.service.js`.
+  - Seeded by `POST /api/super-admin/schools` (best effort) and on `GET /api/finance/expense-categories` for a school that has **never had a category** — soft-deleted rows count, so a school that retired a default (or made its own) is never re-seeded. A school that does not exist is never seeded.
+  - Ids are a function of (school, code) (uuid v5) and `(schoolId, code)` is unique, so concurrent first reads seed once. Server-side only: the desktop does not seed its mirror (five queued POSTs would 409 and block the outbox); the rows reach it through the sync feed.
+  - Web Expenses page shows `labelFr` to a French reader (`web/src/utils/categoryLabel.ts`), falling back to `label`.
+  - Nothing to run on deploy: existing schools with no categories get them on their next read of the list.
+- [x] **P2** Announcements: **Parents** audience in the web composer (administrators; teachers keep students / their classes, which already reach those pupils' parents). The server already stored `audience: "parents"` and the guardian portal already read it (`audienceMatch({ audience: "parents" })`).
+  - `PUT /api/announcements/:id` changed `audience` but not `audiences`, which readers match on, so an Everyone notice edited to Parents still reached pupils and teachers. PUT now recomputes `audiences` like POST, clears `targetClasses` off a non-class audience, and answers 400 to an unknown audience or `class` with no classes.
+  - Not done: the phone's composer has no Parents option yet.
+- Checks: backend `check:expensedefaults`, `check:announceparents` (both in `check:all`); web `check:firstrun`.
+
+## Bug — exam analytics open on one class (2026-11-06)
+
+- [x] **P1** The exam analytics page (`/exams/results`) opened on the first class of an exam sat by several, so the student count and pass rate covered 10 pupils (Form 1) under a title naming four classes, while Term Results counted all 40.
+  - Web: the class filter starts on **All classes** (`web/src/utils/resultsScope.ts`); a chosen class shows "Showing Form 1 only" with "Show all classes" on every section. Stats, pass rate, subject figures, top/bottom 5 and rankings all read the same class. No export on the page.
+  - Server: `getRankings` applies the class to every scope — "Rank by School" with Form 1 chosen listed the whole school. Form 1's pupils keep their school positions. The desktop mirror already did this.
+  - Rankings past 100 pupils: the route pages (`?page=`, `total`, `totalPages`, still cut in the database) and the tab shows Prev/Next like Term Results; "N students" is the table's total, so it agrees with the overview. `_id` breaks position ties so no pupil repeats or drops at a page boundary; with every class, class rankings come grouped by class (Form 1 < Form 2 < Form 10). Desktop mirror pages the same way. Search covers the shown page only (the page says so).
+  - Checks: backend `check:resultsclassscope`, `check:rankingspaging` (both in `check:all`); web `check:resultsscope`; desktop `check-results.js` (paging).
+
+## Bug — flaky mobile check: offline teacher delete (2026-11-07)
+
+- [x] **P2** `mobile/scripts/check-teacher-unsent-delete.js` case 4b failed in CI on two PRs (#74, #78) and passed on rerun: "the DELETE went first" saw two DELETEs, "a DELETE is queued behind it" found an empty outbox, the teacher stayed active.
+  - Cause, in the check: the phone's own "push soon after a local change" (`SyncManager._schedulePush`, 3 s after a save) fired mid-case on a slow runner and ran its own backfill + drain beside the case's raw `MutationQueue.processPending()` — two drains sent the DELETE twice, and the backfill dropped the queued create. Forcing that push to fire at once failed 4b (and case 6) on every run.
+  - Not an app bug: the app reaches `processPending` only through the single-flight `MutationQueue.drain()`.
+  - Fix: the check holds the background push (and the one-off start-up sync) off after its first sync, so the scripted cases are the only driver; the trigger stays covered by `check-sync-triggers.js`. 8/8 runs pass under CPU load, and the forced-race variant now passes.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.

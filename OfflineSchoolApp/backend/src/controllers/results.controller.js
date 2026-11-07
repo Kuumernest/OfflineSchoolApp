@@ -24,7 +24,7 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const resultsService = require("../services/results.service");
-const { getRankings } = resultsService;
+const { getRankings, countRankings } = resultsService;
 const { lookupGrade } = require("../services/grading.service");
 // The §5/§7/§8 rules, shared with the term and annual cards and covered by
 // scripts/check-report-card.js.
@@ -191,6 +191,7 @@ const getExamRankings = asyncHandler(async (req, res) => {
     rankBy = "class",
     classId,
     limit  = 100,
+    page   = 1,
   } = req.query;
 
   const scope = ["class", "grade", "school"].includes(rankBy)
@@ -204,8 +205,17 @@ const getExamRankings = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Exam not found" });
   }
 
-  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role), limit: Number(limit) });
-  rankings     = rankings.slice(0, Number(limit));
+  // A page of the table and the table's size, from the same filter: the
+  // analytics page prints "N students" from `total`, so it agrees with the
+  // statistics' count however many pages there are. `count` stays the rows
+  // on this page, as before.
+  const onlyPublished = !isAdmin(req.user?.role);
+  const pageNo = Math.max(1, Math.floor(Number(page)) || 1);
+  const [pageRows, total] = await Promise.all([
+    getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished, limit: Number(limit), page: pageNo }),
+    countRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished }),
+  ]);
+  let rankings = pageRows.slice(0, Number(limit));
 
   // Each pupil's average on /20, the school's remark and pass/fail — what
   // the analytics tables print instead of a percentage, a letter and a GPA.
@@ -215,6 +225,9 @@ const getExamRankings = asyncHandler(async (req, res) => {
     success: true,
     rankBy:  scope,
     count:   rankings.length,
+    total,
+    page:    pageNo,
+    totalPages: Number(limit) > 0 ? Math.max(1, Math.ceil(total / Number(limit))) : 1,
     data:    rankings,
   });
 });
