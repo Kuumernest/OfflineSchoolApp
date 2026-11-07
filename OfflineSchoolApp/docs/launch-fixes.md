@@ -107,6 +107,13 @@ it. Also in the repo's `CLAUDE.md`.
   - Pupil: `placeOfBirth` (fill-only) and `isRepeating` are stored and returned by `/student/profile`.
   - Checks: backend `check:teacherprofile` (in `check:all`), mobile `scripts/check-teacher-profile-sync.js` (in `npm run check`); `check-teacher-profile-table.js` now asserts "a blank keeps its value".
 
+## Bug — "Failed to fetch dynamically imported module" (2026-11-06)
+
+- [x] **P2** Every web page is its own chunk, loaded on first navigation through a bare `lazy(() => import(...))`. One failed request for that chunk — a flaky connection, or a deploy that replaced the chunk names — crashed the route, and the route's error box showed the browser's raw "Failed to fetch dynamically imported module".
+  - All 65 routes in `web/src/App.tsx` load through `lazyPage`, which retries the import (`web/src/utils/lazyWithRetry.ts`, `retryImport`): 3 attempts, 400 ms then 800 ms apart.
+  - If the chunk still cannot be fetched (usually after a deploy), `RouteErrorBoundary` recognises it (`isChunkLoadError`) and shows "This page could not be loaded" with a **Reload** button, in place of the error text; the sidebar stays. Button only — no automatic reload, so no reload loop. Strings `error.chunkTitle` / `chunkBody` / `chunkReload` in en and fr. Applies to the desktop app too (it serves the built web app).
+  - Checks: web `check:chunkretry` (36 checks: fails twice then loads → resolves; always fails → rejects after 3; no bare `lazy(() => import(` left in App.tsx; the boundary and both locales). Fails 17 of 19 on the old code.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
