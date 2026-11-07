@@ -28,7 +28,7 @@ const check = (label, actual, expected) => {
 const { outputText } = ts.transpileModule(read("src/utils/feeFlag.ts"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 });
-const { feeFlag } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { feeFlag, overdueShare } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 
 const en = JSON.parse(read("src/i18n/locales/en.json"));
 const fr = JSON.parse(read("src/i18n/locales/fr.json"));
@@ -59,6 +59,20 @@ check("the watch list picks its line with feeFlag", /feeFlag\(s\.data\)/.test(pa
 check("no string calls the whole balance overdue",
   [en.watch.sig.fees_outstanding.includes("(overdue)"), fr.watch.sig.fees_outstanding.includes("(en retard)")],
   [false, false]);
+
+console.log("--- the parent portal (Home and Fees) ---");
+check("how much is late: part / all / unknown",
+  [overdueShare(145000, 50000), overdueShare(60000, 60000), overdueShare(145000, undefined)], ["part", "all", "unknown"]);
+const home = read("src/pages/portal/HomeScreen.tsx");
+const feesPage = read("src/pages/portal/FeesScreen.tsx");
+check("Home's pill names the overdue part",
+  /overdueShare\(child\.fees\.balance, child\.fees\.overdue\)/.test(home) && /portal\.home\.overdueOfIt/.test(home), true);
+check("Fees' pill names it too",
+  /overdueShare\(fees\.totals\.balance, status\?\.overdue\)/.test(feesPage) && /portal\.feesScreen\.overdueOfIt/.test(feesPage), true);
+check("the words, both languages",
+  [i18next.getFixedT("en")("portal.feesScreen.overdueOfIt", { amount: "FCFA 50,000" }),
+   i18next.getFixedT("fr")("portal.feesScreen.overdueOfIt", { amount: "FCFA 50 000" })],
+  ["of which FCFA 50,000 is overdue", "dont FCFA 50 000 en retard"]);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

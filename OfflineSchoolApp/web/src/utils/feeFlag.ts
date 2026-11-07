@@ -9,6 +9,15 @@
 //
 // Imports nothing, so scripts/check-fee-flag.mjs can run it as it is.
 
+/**
+ * How much of a balance is overdue, in words: some of it, all of it, or not
+ * known (a reply without the overdue figure — never guessed as "all").
+ */
+export function overdueShare(balance: number, overdue: unknown): "part" | "all" | "unknown" {
+  if (overdue == null || overdue === "" || !Number.isFinite(Number(overdue))) return "unknown";
+  return Number(overdue) >= balance ? "all" : "part";
+}
+
 export interface FeeFlag {
   /** The i18n key under watch.sig. */
   key:    "fees_outstanding" | "fees_outstanding_all" | "fees_owed";
@@ -26,14 +35,11 @@ export interface FeeFlag {
  */
 export function feeFlag(data: Record<string, number | string | null | undefined>): FeeFlag {
   const balance = Number(data.balance ?? 0);
-  const raw     = data.overdue;
-  if (raw == null || raw === "" || !Number.isFinite(Number(raw))) {
-    return { key: "fees_owed", balance, overdue: null };
-  }
-  const overdue = Number(raw);
+  const share   = overdueShare(balance, data.overdue);
+  if (share === "unknown") return { key: "fees_owed", balance, overdue: null };
   return {
-    key: overdue >= balance ? "fees_outstanding_all" : "fees_outstanding",
+    key: share === "all" ? "fees_outstanding_all" : "fees_outstanding",
     balance,
-    overdue,
+    overdue: Number(data.overdue),
   };
 }
