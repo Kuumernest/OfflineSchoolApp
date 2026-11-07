@@ -434,6 +434,10 @@ reintroduces an ungated path to guardian correspondence and pupils' photographs.
 # Is the API up?
 curl -s http://<host>/api/health
 
+# Which build is it running? (commit = Render's RENDER_GIT_COMMIT, or GIT_COMMIT
+# elsewhere; compare with `git rev-parse origin/master`)
+curl -s http://<host>/api/version
+
 # Does this commit still pass its own gates?
 cd OfflineSchoolApp/backend && npm run check:all
 cd ../mobile   && npm run check
