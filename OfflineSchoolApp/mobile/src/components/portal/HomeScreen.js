@@ -16,6 +16,7 @@ import { Card, Skeleton, EmptyState, ChildAvatar } from "./ui";
 import { C, TAP, ordinal, on20 } from "./theme";
 import { COLORS, TILE, SEMANTIC, TILE_SHAPE } from "../../theme/colors";
 import { tileShell } from "../Tiles";
+import { overdueShare } from "../../utils/overdueShare";
 
 export default function HomeScreen({ data, loading, onOpen }) {
   const { t } = useTranslation();
@@ -112,7 +113,11 @@ function ChildCard({ child, index, onOpen }) {
                 {formatMoney(fees.balance)}
               </Text>
               {fees.isOverdue ? (
-                <Text style={[s.pill, s.pillDanger]}>{t("portal.home.overdue")}</Text>
+                <Text style={[s.pill, s.pillDanger]}>
+                  {overdueShare(fees.balance, fees.overdue) === "part"
+                    ? t("portal.home.overdueOfIt", { amount: formatMoney(Number(fees.overdue)) })
+                    : t("portal.home.overdue")}
+                </Text>
               ) : fees.dueDate ? (
                 <Text style={s.body}>{t("portal.home.dueOn", { date: formatDate(fees.dueDate) })}</Text>
               ) : null}

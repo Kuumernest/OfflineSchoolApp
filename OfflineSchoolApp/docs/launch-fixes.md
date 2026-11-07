@@ -113,6 +113,28 @@ it. Also in the repo's `CLAUDE.md`.
   - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
   - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
   - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+- [x] **P1** The remaining direct readers (2026-11-07): intelligence review (`reviewCases.liveCohort`), class analysis (`analysisRuns` evidence for the worker), transcripts (`GET /documents/transcript/:studentId`) and a teacher's class results (`GET /teacher/results`, StudentScore rows) drop a deleted exam's rows through one helper, `backend/src/services/deletedExams.service.js` (the portal's `withoutDeletedExams`, moved there). Missing exam rows are still kept.
+  - Desktop offline class insights (`handlers/intelligence.js` `historyFor`) drop summaries whose mirrored exam carries `deletedAt`, as the server does.
+  - The portal's `/results/:summaryId/report-card` already refused a deleted exam's card (above).
+  - Checks: backend `check:deletedexameverywhere` (in `check:all`); desktop `check:intel-deleted` (in `npm run check`).
+- [ ] Not changed: the staff report card `GET /results/:examId/student/:studentId/reportcard` still serves a deleted exam (its exam lookup has no `deletedAt` filter), and what deleting a PUBLISHED exam should do (retract, keep, archive) — both need a product decision.
+
+## Bug — Students to watch called the whole balance overdue (2026-11-06)
+
+- [x] **P1** The fee flag on Students to watch printed what a family owes as "(overdue)": Eunice Ashu "owes FCFA 145,000 (overdue)" while the Fees page said 145,000 owed, 50,000 overdue; Alain Onana 200,000 against 105,000.
+  - Both screens already read one calculation (`arrears.service` → `shared/arrears.js`); the watch list carried only the balance. The `fees_outstanding` signal now carries `balance` and `overdue`, and the web line reads "Owes X, of which Y is overdue" ("all of it overdue" when it is; plain "Owes X" if no overdue figure) — `web/src/utils/feeFlag.ts`.
+  - The 1/2-point weight is the overdue part over what was billed (the threshold always said "overdue only"): Eunice 1 point (was 2), Alain 2.
+  - Checks: backend `check:watchoverdue` (in `check:all`; Eunice, Alain, and a paid-up sibling on the same guardian), `check:watchfees` updated; web `check:feeflag`.
+
+## Bug — the parent portal and fee reminders called the whole balance overdue (2026-11-07)
+
+- [x] **P1** Same mistake as the watch list, on the parent's side: portal Home and Fees (web and phone) coloured the whole balance "Overdue"; `GET /portal/fees/reminders` decided "overdue" on its own — every dated charge the day after its date, even one paid in full; the fee reminder message under "Overdue school fees" quoted only the balance.
+  - One per-charge rule in `shared/arrears.js`: `chargeStatuses` (payments settle the oldest due charge first; a charge is overdue only while something is unpaid on it). `feePosition` now sums it, and the portal lists it.
+  - `/portal/home` cards carry `fees.overdue`; `/portal/fees/reminders` carries the account's `overdue`/`isOverdue` from `arrears.service` (the Fees page's figure) and each charge's `unpaid`; on an active plan no single charge is late (the plan's dates govern). Days late counted as Fee reminders counts them.
+  - Web and phone: the pill reads "of which X is overdue" when only part is late, "Overdue" when all of it is or the figure is missing (`overdueShare`, web `utils/feeFlag.ts`, phone `utils/overdueShare.js`).
+  - The reminder carries `overdue`; the message reads "…balance of 145,000, of which 50,000 is overdue" (en/fr).
+  - Checks: backend `check:portaloverdue` (in `check:all`; one guardian, three children); web `check:feeflag` (extended); mobile `scripts/check-portal-overdue.js` (in `npm run check`).
+- [ ] Desktop offline arrears count overdue FAMILIES one per child (`desktop/src/main/api/handlers/fees.js`). The server groups siblings by portal access code (`familyCount`), but `GuardianAccess` is deliberately not mirrored to the desktop (a stale copy of who may see a child must not exist), and grouping by shared guardian name/email/phone is forbidden (CLAUDE.md). Needs a decision: mirror a non-sensitive family link (e.g. a family id on Student, or a studentIds-only projection of access codes), or show no family count offline.
 
 ## Bug — Students to watch did not say which exam a flag rests on (2026-11-07)
 

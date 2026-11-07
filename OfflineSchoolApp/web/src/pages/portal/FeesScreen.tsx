@@ -23,6 +23,7 @@ import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { fetchFees, fetchFeeReminders, fetchHome, fetchReceiptHtml } from "@/services/portal.service";
 import { PortalCard, Skeleton, EmptyState, SectionIcon } from "./ui";
 import { PageIcon } from "@/components/ui/PageHeader";
+import { overdueShare } from "@/utils/feeFlag";
 
 export function FeesScreen({ studentId, childName }: { studentId: string | null; childName: string | null }) {
   const { t, i18n } = useTranslation();
@@ -76,7 +77,11 @@ export function FeesScreen({ studentId, childName }: { studentId: string | null;
               <p className="text-sm font-medium text-ink-muted">{t("portal.feesScreen.balance")}</p>
               {overdue && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-danger-line bg-danger-soft px-2.5 py-0.5 text-xs font-semibold text-danger-text">
-                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />{t("portal.feesScreen.overdue")}
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                  {/* "of which Y is overdue" — never the whole balance called late */}
+                  {overdueShare(fees.totals.balance, status?.overdue) === "part"
+                    ? t("portal.feesScreen.overdueOfIt", { amount: fmt.money(Number(status?.overdue)) })
+                    : t("portal.feesScreen.overdue")}
                 </span>
               )}
             </div>
