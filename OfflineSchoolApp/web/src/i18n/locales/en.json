@@ -316,6 +316,9 @@
     "toastPublished": "Results published — students can now view their scores",
     "allClasses": "All classes",
     "chooseClassForTop": "Choose a class to see its top and bottom pupils.",
+    "showingClassOnly": "Showing {{className}} only",
+    "showAllClasses": "Show all classes",
+    "searchThisPage": "Search covers this page only.",
     "allInTop": "Every pupil in this class is already listed above."
   },
   "dashboard": {

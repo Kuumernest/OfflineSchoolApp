@@ -15,8 +15,8 @@ const resultKeys = {
     ["results", examId, classId ?? "all"] as const,
   stats:    (examId: string, classId?: string) =>
     ["exam-stats", examId, classId ?? "all"] as const,
-  rankings: (examId: string, scope: string, classId?: string) =>
-    ["rankings", examId, scope, classId ?? "all"] as const,
+  rankings: (examId: string, scope: string, classId?: string, page = 1) =>
+    ["rankings", examId, scope, classId ?? "all", page] as const,
   student:  (examId: string, studentId: string) =>
     ["student-result", examId, studentId] as const,
 };
@@ -57,12 +57,13 @@ export const useExamStats = (examId: string, classId?: string) => {
 export const useRankings = (
   examId:   string,
   rankBy:   "class" | "grade" | "school" = "class",
-  classId?: string
+  classId?: string,
+  page = 1
 ) => {
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   return useQuery({
-    queryKey: resultKeys.rankings(examId, rankBy, classId),
-    queryFn:  () => ExamService.getRankings(examId, schoolId, rankBy, classId),
+    queryKey: resultKeys.rankings(examId, rankBy, classId, page),
+    queryFn:  () => ExamService.getRankings(examId, schoolId, rankBy, classId, page),
     enabled:  !!examId && !!schoolId,
     staleTime: 2 * 60_000,
   });

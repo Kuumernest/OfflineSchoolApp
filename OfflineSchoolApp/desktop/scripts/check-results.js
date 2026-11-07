@@ -135,6 +135,12 @@ const rkBad = call("GET", "/api/results/e1/rankings", { rankBy: "bogus" });
 check("rankings unknown scope falls back to class", rkBad.data.rankBy, "class");
 const rkL = call("GET", "/api/results/e1/rankings", { limit: 1 });
 check("rankings limit slices in JS", rkL.data.data.map((r) => r.studentId), ["s1"]);
+// Paged as the server pages: `total` is the table, `count` the page.
+check("rankings report the table's size and pages",
+  [rkL.data.count, rkL.data.total, rkL.data.page, rkL.data.totalPages], [1, 2, 1, 2]);
+const rkP2 = call("GET", "/api/results/e1/rankings", { limit: 1, page: 2 });
+check("rankings page 2 is the next pupil, not page 1 again",
+  [rkP2.data.page, rkP2.data.data.map((r) => r.studentId)], [2, ["s2"]]);
 
 // ── single student result ────────────────────────────────────────────────────
 const single = call("GET", "/api/results/e1/student/s1");

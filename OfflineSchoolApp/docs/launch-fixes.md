@@ -171,6 +171,14 @@ it. Also in the repo's `CLAUDE.md`.
   - Not done: the phone's composer has no Parents option yet.
 - Checks: backend `check:expensedefaults`, `check:announceparents` (both in `check:all`); web `check:firstrun`.
 
+## Bug — exam analytics open on one class (2026-11-06)
+
+- [x] **P1** The exam analytics page (`/exams/results`) opened on the first class of an exam sat by several, so the student count and pass rate covered 10 pupils (Form 1) under a title naming four classes, while Term Results counted all 40.
+  - Web: the class filter starts on **All classes** (`web/src/utils/resultsScope.ts`); a chosen class shows "Showing Form 1 only" with "Show all classes" on every section. Stats, pass rate, subject figures, top/bottom 5 and rankings all read the same class. No export on the page.
+  - Server: `getRankings` applies the class to every scope — "Rank by School" with Form 1 chosen listed the whole school. Form 1's pupils keep their school positions. The desktop mirror already did this.
+  - Rankings past 100 pupils: the route pages (`?page=`, `total`, `totalPages`, still cut in the database) and the tab shows Prev/Next like Term Results; "N students" is the table's total, so it agrees with the overview. `_id` breaks position ties so no pupil repeats or drops at a page boundary; with every class, class rankings come grouped by class (Form 1 < Form 2 < Form 10). Desktop mirror pages the same way. Search covers the shown page only (the page says so).
+  - Checks: backend `check:resultsclassscope`, `check:rankingspaging` (both in `check:all`); web `check:resultsscope`; desktop `check-results.js` (paging).
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.

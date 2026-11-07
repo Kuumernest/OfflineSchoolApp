@@ -36,7 +36,8 @@
     "check:watchsource": "node scripts/check-watch-source.mjs",
     "check:chunkretry": "node scripts/check-chunk-retry.mjs",
     "check:portalroutes": "node scripts/check-portal-routes.mjs",
-    "check:firstrun": "node scripts/check-first-run-defaults.mjs"
+    "check:firstrun": "node scripts/check-first-run-defaults.mjs",
+    "check:resultsscope": "node scripts/check-results-scope.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
