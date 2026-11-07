@@ -3232,6 +3232,12 @@
       "fees_outstanding": "Doit {{balance}}, dont {{overdue}} en retard",
       "fees_outstanding_all": "Doit {{balance}}, entièrement en retard",
       "fees_owed": "Doit {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {

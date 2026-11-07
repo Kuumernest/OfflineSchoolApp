@@ -4,6 +4,7 @@
 const Student             = require("../db/models/Student");
 const Class               = require("../db/models/Class");
 const Homework            = require("../db/models/Homework");
+const Exam                = require("../db/models/Exam");
 const { StudentAttendance } = require("../db/models/Attendance");
 const { candidates: overdueFees } = require("./feeReminders.service");
 const academicHistory     = require("./intelligence/academicHistory.service");
@@ -140,6 +141,21 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
   const lastTwoResults = new Map();
   for (const [id, results] of history) lastTwoResults.set(id, results.slice(-2));
 
+  // The exam each mark-based flag rests on, so the flag can say which one and
+  // when ("Failed the last exam — 2nd Sequence, 10 Oct"). One read for the
+  // whole list; the history loader does not carry names.
+  const markExamIds = [...new Set([...lastTwoResults.values()].flat()
+    .map((r) => (r.examId ? String(r.examId) : null)).filter(Boolean))];
+  const examById = new Map((markExamIds.length
+    ? await Exam.find({ _id: { $in: markExamIds }, schoolId }).select("_id name startDate").lean()
+    : []).map((e) => [String(e._id), e]));
+  /** { examId, name, date } for a summary's exam; name/date null when the exam row is gone. */
+  const sourceOf = (summary) => {
+    if (!summary?.examId) return null;
+    const e = examById.get(String(summary.examId));
+    return { examId: String(summary.examId), name: e?.name ?? null, date: e?.startDate ?? null };
+  };
+
   const homeworkByClass = new Map(); // classId → [{submitted:Set}]
   for (const hw of homework) {
     const key = String(hw.classId);
@@ -185,6 +201,7 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
             average: latest20 == null ? null : Math.round(latest20 * 100) / 100,
             passMark,
           },
+          exam: sourceOf(latest),
         });
       }
       const previous = results.length === 2 ? results[0] : null;
@@ -199,12 +216,16 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS, asOf = new Date
             from: Math.round(previous20 * 100) / 100,
             to:   Math.round(latest20 * 100) / 100,
           },
+          // The drop is to the latest exam; the earlier one is named too.
+          exam: sourceOf(latest),
+          fromExam: sourceOf(previous),
         });
       }
       if ((latest.subjectsFailed ?? 0) >= THRESHOLDS.subjectsFailed) {
         signals.push({
           code: "subjects_failed", points: 1,
           data: { count: latest.subjectsFailed },
+          exam: sourceOf(latest),
         });
       }
     }

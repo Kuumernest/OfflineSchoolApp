@@ -3232,6 +3232,12 @@
       "fees_outstanding": "Owes {{balance}}, of which {{overdue}} is overdue",
       "fees_outstanding_all": "Owes {{balance}}, all of it overdue",
       "fees_owed": "Owes {{balance}}"
+    },
+    "source": {
+      "named": "{{exam}}",
+      "dated": "{{exam}}, {{date}}",
+      "drop": "{{from}} → {{exam}}",
+      "dropDated": "{{from}} → {{exam}}, {{date}}"
     }
   },
   "verif": {

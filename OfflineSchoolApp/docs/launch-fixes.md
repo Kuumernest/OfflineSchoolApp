@@ -136,6 +136,13 @@ it. Also in the repo's `CLAUDE.md`.
   - Checks: backend `check:portaloverdue` (in `check:all`; one guardian, three children); web `check:feeflag` (extended); mobile `scripts/check-portal-overdue.js` (in `npm run check`).
 - [ ] Desktop offline arrears count overdue FAMILIES one per child (`desktop/src/main/api/handlers/fees.js`). The server groups siblings by portal access code (`familyCount`), but `GuardianAccess` is deliberately not mirrored to the desktop (a stale copy of who may see a child must not exist), and grouping by shared guardian name/email/phone is forbidden (CLAUDE.md). Needs a decision: mirror a non-sensitive family link (e.g. a family id on Student, or a studentIds-only projection of access codes), or show no family count offline.
 
+## Bug — Students to watch did not say which exam a flag rests on (2026-11-07)
+
+- [x] **P2** "Failed the last exam (8/20, pass mark 10)", "Average fell 14 → 7" and "3 subjects failed" named no exam, so a teacher could not check them — and "the last exam" is exactly what changes when an exam is deleted or re-run.
+  - `earlyWarning.service`: `failed_exam`, `grade_drop` and `subjects_failed` carry `exam: { examId, name, date }` (one exam read for the whole list); a drop also carries `fromExam`. An exam whose row is gone is still named by id, with no name or date.
+  - Web: each such flag ends "· 2nd Sequence, 10 Oct 2026" or, for a drop, "· 1st Sequence → 2nd Sequence, 10 Oct 2026" (`web/src/utils/watchSource.ts`, `watch.source.*` en/fr).
+  - Checks: backend `check:watchsource` (in `check:all`); web `check:watchsource`.
+
 ## Launch order
 
 1. `cd OfflineSchoolApp/backend && npm run check:all` on a stable machine (plus the web checks) — all green.
