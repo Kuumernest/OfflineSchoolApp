@@ -54,6 +54,7 @@ const comms         = require("../services/communication/conversation.service");
 const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
 const Exam          = require("../db/models/Exam");
+const { withoutDeletedExams } = require("../services/deletedExams.service");
 
 const portal = require("../services/portal.service");
 const fees   = require("../services/fees.service");
@@ -326,21 +327,6 @@ async function examNamesFor(schoolId, rows) {
   if (!ids.length) return new Map();
   const exams = await Exam.find({ _id: { $in: ids }, schoolId }).select("name").lean();
   return new Map(exams.map((e) => [String(e._id), e.name]));
-}
-
-/**
- * Drop result rows whose exam has been deleted. Deleting an exam stamps
- * deletedAt on the Exam only; its summaries stay live and would otherwise
- * still be read as a result. A row whose exam row is missing altogether is
- * kept, as shared/intelligence/academicOrder does.
- */
-async function withoutDeletedExams(schoolId, rows) {
-  const ids = [...new Set(rows.map((r) => r.examId).filter(Boolean).map(String))];
-  if (!ids.length) return rows;
-  const deleted = await Exam.find({ _id: { $in: ids }, schoolId, deletedAt: { $ne: null } }).select("_id").lean();
-  if (!deleted.length) return rows;
-  const gone = new Set(deleted.map((e) => String(e._id)));
-  return rows.filter((r) => !gone.has(String(r.examId)));
 }
 
 const isoDay = (d) => d.toISOString().slice(0, 10);

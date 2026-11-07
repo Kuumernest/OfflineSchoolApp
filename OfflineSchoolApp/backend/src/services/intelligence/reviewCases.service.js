@@ -57,6 +57,7 @@ const path = require("path");
 const Student            = require("../../db/models/Student");
 const Exam               = require("../../db/models/Exam");
 const ResultSummary      = require("../../db/models/ResultSummary");
+const { withoutDeletedExams } = require("../deletedExams.service");
 const GradingConfig      = require("../../db/models/GradingConfig");
 const AcademicStructure  = require("../../db/models/AcademicStructure");
 const Intervention       = require("../../db/models/Intervention");
@@ -115,7 +116,7 @@ const liveCohort = async ({ schoolId, classIds, studentIds: only = null }) => {
     .select("_id classId studentName name firstName lastName enrollmentNo").lean();
   const studentIds = students.map((s) => String(s._id));
 
-  const [exams, summaries, gradingConfig, academicStructure, interventions] = await Promise.all([
+  const [exams, liveAndDeleted, gradingConfig, academicStructure, interventions] = await Promise.all([
     Exam.find({ schoolId, deletedAt: null })
       .select("_id type academicYear term sequenceNumber startDate parentExamId").lean(),
     studentIds.length
@@ -130,6 +131,9 @@ const liveCohort = async ({ schoolId, classIds, studentIds: only = null }) => {
           .select("_id studentId subjectId status createdAt startedAt").lean()
       : [],
   ]);
+  // A deleted exam's summaries stay live; without this they fall through to
+  // the "exam missing" path in the cohort and are reviewed as results.
+  const summaries = await withoutDeletedExams(schoolId, liveAndDeleted);
 
   return {
     studentIds,
