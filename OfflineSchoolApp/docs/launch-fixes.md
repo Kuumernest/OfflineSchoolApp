@@ -113,6 +113,11 @@ it. Also in the repo's `CLAUDE.md`.
   - Portal `/home`, `/results` and `/results/:id/report-card` drop results whose exam is soft-deleted, so a deleted exam is no longer a child's "latest result" or a report card.
   - `academicHistory.publishedHistory` skips deleted exams by default (`skipDeletedExams = true`), so Students to watch, the student overview, subject intelligence and intervention outcomes all ignore them. A summary whose exam row is gone altogether is still kept, as `shared/intelligence/academicOrder` does.
   - Checks: backend `check:portalhome` (extended), `check:watchdeleted`, `check:deletedexamreaders` (all in `check:all`).
+- [x] **P1** The remaining direct readers (2026-11-07): intelligence review (`reviewCases.liveCohort`), class analysis (`analysisRuns` evidence for the worker), transcripts (`GET /documents/transcript/:studentId`) and a teacher's class results (`GET /teacher/results`, StudentScore rows) drop a deleted exam's rows through one helper, `backend/src/services/deletedExams.service.js` (the portal's `withoutDeletedExams`, moved there). Missing exam rows are still kept.
+  - Desktop offline class insights (`handlers/intelligence.js` `historyFor`) drop summaries whose mirrored exam carries `deletedAt`, as the server does.
+  - The portal's `/results/:summaryId/report-card` already refused a deleted exam's card (above).
+  - Checks: backend `check:deletedexameverywhere` (in `check:all`); desktop `check:intel-deleted` (in `npm run check`).
+- [ ] Not changed: the staff report card `GET /results/:examId/student/:studentId/reportcard` still serves a deleted exam (its exam lookup has no `deletedAt` filter), and what deleting a PUBLISHED exam should do (retract, keep, archive) — both need a product decision.
 
 ## Launch order
 
