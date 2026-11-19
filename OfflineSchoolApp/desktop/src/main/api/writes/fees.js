@@ -309,10 +309,24 @@ module.exports = [
       }
 
       const totals = totalsFor(docs, { schoolId, studentId, academicYear });
-      if (totals.balance <= 0) return null;                        // NOTHING_OUTSTANDING
+      const billed = (totals.charged ?? 0) - (totals.waived ?? 0);
+      if (billed <= 0 || totals.balance <= 0) return null;          // NOTHING_OUTSTANDING
 
+      // Either basis, as agreements.service basisFor decides it: the year's
+      // whole bill (every payment counts) or what is still outstanding (what
+      // was paid before is set aside). Anything else is PLAN_TOTAL_MISMATCH.
       const planned = instalments.reduce((sum, one) => sum + one.amount, 0);
-      if (planned !== totals.balance) return null;                 // PLAN_TOTAL_MISMATCH
+      let basis, baselinePaid;
+      if (planned === billed)              { basis = "total";   baselinePaid = 0; }
+      else if (planned === totals.balance) { basis = "balance"; baselinePaid = Math.max(0, totals.paid ?? 0); }
+      else return null;
+
+      // Optional dates: a value that is not a date is the server's 400.
+      const dateOf = (v) => (v === undefined || v === null || v === "" ? null : asDueDate(v));
+      const effectiveFrom = dateOf(body.effectiveFrom);
+      const expiresAt     = dateOf(body.expiresAt);
+      if (effectiveFrom === undefined || expiresAt === undefined) return null;
+      if (effectiveFrom && expiresAt && expiresAt < effectiveFrom) return null;
 
       // The unique index: one active plan per student, year and term. Queueing
       // through it would stop the outbox on a request that can never succeed.
@@ -330,6 +344,16 @@ module.exports = [
         instalments,
         reason,
         status:          "active",
+        // Proposed, not in force: the server sends it to an administrator, and
+        // until approved it governs nothing here either (isPlanApplicable).
+        approvalStatus:  "pending",
+        basis, baselinePaid, agreedTotal: planned,
+        effectiveFrom:   effectiveFrom ? effectiveFrom.toISOString() : null,
+        expiresAt:       expiresAt ? expiresAt.toISOString() : null,
+        notes:           body.notes ? String(body.notes).trim() : null,
+        attachments:     [],
+        pendingChange:   null,
+        history:         [{ at: now, by: session?.userId ?? null, action: "created", note: reason }],
         agreedBy:        session?.userId ?? null,
         cancelledBy:     null,
         cancelledAt:     null,

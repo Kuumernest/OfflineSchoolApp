@@ -20,6 +20,12 @@ import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID }      from "../utils/idHelpers";
 import { MutationQueue }     from "./mutationQueue.service";
 import api                   from "./api";
+// Loaded when first used, not at import: it brings in expo-file-system, and
+// a service many modules import (and the Node checks load) should not.
+const photoCache = () => require("./photoCache.service");
+import {
+  findByToken as snapshotByToken, verifyLocal, canVerify,
+} from "./gateSnapshot.service";
 
 const EVENTS = "gate_events";
 
@@ -47,6 +53,13 @@ const ensureSchema = async (db) => {
     await database.execAsync(
       `CREATE INDEX IF NOT EXISTS idx_gate_events_student ON ${EVENTS}(student_id, date)`
     ).catch(() => {});
+    // How the pupil was identified (card / manual) and the fee status the
+    // operator was shown, so today's list can say both. Additive: a phone
+    // with scans from before these existed reads them as a card with no
+    // status, which is what they were.
+    await database.execAsync(`ALTER TABLE ${EVENTS} ADD COLUMN method TEXT`).catch(() => {});
+    await database.execAsync(`ALTER TABLE ${EVENTS} ADD COLUMN verification_status TEXT`).catch(() => {});
+    await database.execAsync(`ALTER TABLE ${EVENTS} ADD COLUMN verification_source TEXT`).catch(() => {});
   }, db);
 };
 
@@ -78,18 +91,25 @@ export const syncRoster = async ({ schoolId }) => {
       class_name   TEXT,
       school_id    TEXT
     )`);
+    // The photo path the roster already sends, so an operator without
+    // gate.verify (no snapshot) still sees the face. Additive.
+    await database.execAsync(`ALTER TABLE gate_roster ADD COLUMN photo_url TEXT`).catch(() => {});
   }, db);
 
   await db.runAsync(`DELETE FROM gate_roster`).catch(() => {});
   for (const r of rows) {
     await db.runAsync(
       `INSERT OR REPLACE INTO gate_roster
-         (token, student_id, student_name, admission_no, class_name, school_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (token, student_id, student_name, admission_no, class_name, school_id, photo_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [r.token, r.studentId, r.name ?? null, r.enrollmentNo ?? null,
-       r.className ?? null, schoolId]
+       r.className ?? null, schoolId, r.photoUrl ?? null]
     ).catch(() => {});
   }
+
+  // Faces for offline, in the background — never awaited by the screen.
+  const urls = rows.map((r) => r.photoUrl).filter(Boolean);
+  if (urls.length) Promise.resolve().then(() => photoCache().warmPhotos(urls)).catch(() => {});
 
   return rows.length;
 };
@@ -109,12 +129,34 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{16}$/;
 // before refilling it, so today a device only ever holds one school's
 // cards — but the column is stored and a lookup that ignores it would
 // resolve another school's card the moment that stops being true.
-const lookup = async (db, token, schoolId) =>
+const rosterLookup = async (db, token, schoolId) =>
   db.getFirstAsync(
     `SELECT * FROM gate_roster
       WHERE token = ? AND (school_id = ? OR school_id IS NULL)`,
     [token, schoolId ?? null]
   ).catch(() => null);
+
+/**
+ * A token, resolved from the card roster and the verification snapshot
+ * together. The roster is what older code paths read and stays the first
+ * answer; the snapshot (gate.verify holders only) fills in what it lacks —
+ * a photo, a class — and recognises a card the roster missed because it was
+ * pulled at a different moment. Either alone is enough to name the child.
+ */
+const lookup = async (db, token, schoolId) => {
+  const roster = await rosterLookup(db, token, schoolId);
+  const snap   = await snapshotByToken(token, schoolId).catch(() => null);
+  if (!roster && !snap) return null;
+  if (!roster) return snap;
+  if (!snap || snap.student_id !== roster.student_id) return roster;
+  return {
+    ...roster,
+    student_name: roster.student_name ?? snap.student_name,
+    admission_no: roster.admission_no ?? snap.admission_no,
+    class_name:   roster.class_name ?? snap.class_name,
+    photo_url:    roster.photo_url ?? snap.photo_url,
+  };
+};
 
 /**
  * Unknown tokens already queued this session, so an operator holding an
@@ -196,6 +238,68 @@ export const scan = async ({ schoolId, token, station = null }) => {
     return { ok: false, reason: "unknown", queued: true, token: value };
   }
 
+  return recordPassage(db, { schoolId, student: known, token: value, method: "card", station });
+};
+
+/**
+ * A pupil found by name or admission number — a forgotten card. The same
+ * passage as a scan (debounce, direction, outbox), sent with the pupil's id
+ * instead of a token; the server records it with method "manual".
+ *
+ * @param {{schoolId, student: {student_id, student_name?, admission_no?, class_name?, photo_url?}, station?, verification?}} p
+ */
+export const recordManual = async ({ schoolId, student, station = null, verification }) => {
+  if (!student?.student_id) return { ok: false, reason: "empty" };
+  const db = await getDatabase();
+  await ensureSchema(db);
+  return recordPassage(db, { schoolId, student, token: null, method: "manual", station, verification });
+};
+
+/**
+ * What recording a passage for this pupil now would do — the same rule
+ * recordPassage applies (last event today flips the direction; one inside the
+ * debounce window is the same event), read without writing, so the manual
+ * card can label its button "Record arrival" / "Record departure" truthfully.
+ *
+ * @returns {Promise<{direction: "in"|"out", duplicate: boolean}>}
+ */
+export const nextDirection = async (studentId) => {
+  try {
+    const db = await getDatabase();
+    await ensureSchema(db);
+    const last = await db.getFirstAsync(
+      `SELECT direction, at FROM ${EVENTS} WHERE student_id = ? AND date = ? ORDER BY at DESC LIMIT 1`,
+      [String(studentId), dayKey()]
+    ).catch(() => null);
+    const duplicate = Boolean(last && Math.abs(Date.now() - new Date(last.at)) < DEBOUNCE_SECONDS * 1000);
+    if (duplicate) return { direction: last.direction, duplicate: true };
+    return { direction: last?.direction === "in" ? "out" : "in", duplicate: false };
+  } catch {
+    return { direction: "in", duplicate: false };
+  }
+};
+
+/**
+ * The fee status to record with a passage: what the card will show. Computed
+ * on the device from the snapshot — the scan is queued before any network
+ * call, so the server's answer cannot be what was shown at the moment of the
+ * decision. Null without gate.verify (the operator sees no fees at all) or
+ * for a pupil the snapshot does not hold.
+ */
+const deviceVerification = async (studentId) => {
+  if (!canVerify()) return null;
+  return verifyLocal(studentId).catch(() => null);
+};
+
+/**
+ * One passage through the gate, card or manual: debounced, its direction
+ * derived from today's scans on this device, written locally, queued.
+ *
+ * `verification` may be passed by a caller that has already shown one (the
+ * manual card); otherwise it is computed here. Undefined → compute; null →
+ * none.
+ */
+const recordPassage = async (db, { schoolId, student: known, token, method, station, verification }) => {
   const now  = new Date();
   const date = dayKey(now);
 
@@ -204,10 +308,12 @@ export const scan = async ({ schoolId, token, station = null }) => {
     [known.student_id, date]
   ).catch(() => null);
 
+  const shown = verification === undefined ? await deviceVerification(known.student_id) : verification;
+
   if (last && Math.abs(now - new Date(last.at)) < DEBOUNCE_SECONDS * 1000) {
     return {
-      ok: true, duplicate: true,
-      student: known, direction: last.direction, at: last.at,
+      ok: true, duplicate: true, method,
+      student: known, direction: last.direction, at: last.at, verification: shown,
     };
   }
 
@@ -217,10 +323,11 @@ export const scan = async ({ schoolId, token, station = null }) => {
 
   await db.runAsync(
     `INSERT INTO ${EVENTS}
-       (id, school_id, student_id, student_name, token, direction, date, at, station, _synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [id, schoolId, known.student_id, known.student_name, value,
-     direction, date, at, station]
+       (id, school_id, student_id, student_name, token, direction, date, at, station, _synced,
+        method, verification_status, verification_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    [id, schoolId, known.student_id, known.student_name ?? null, token,
+     direction, date, at, station, method, shown?.status ?? null, shown ? (shown.source ?? "device") : null]
   );
 
   await MutationQueue.enqueue({
@@ -231,17 +338,27 @@ export const scan = async ({ schoolId, token, station = null }) => {
     endpoint:  "/gate/scan",
     payload: {
       _id: id,
-      schoolId, token: value, at, station,
+      schoolId, at, station,
+      // A card scan sends its token (the server resolves the card); a manual
+      // lookup sends no token, and the pupil's id is what the server finds
+      // them by. The id rides along on a card scan too: the server ignores it
+      // when a token is present, and it makes the queued row readable.
+      ...(token ? { token } : {}),
+      studentId: known.student_id,
+      method,
       // Sent so the server does not re-derive it from state this device could
       // not see while offline.
       direction,
+      // What the operator was shown, for the audit beside the server's own
+      // answer. The server keeps it only from a gate.verify holder.
+      ...(shown ? { verification: shown } : {}),
       __reconcile: { kind: "gateScan", localId: id },
     },
   });
 
   pushQueuedScans();
 
-  return { ok: true, duplicate: false, student: known, direction, at };
+  return { ok: true, duplicate: false, method, student: known, direction, at, verification: shown };
 };
 
 /**
@@ -274,6 +391,8 @@ export const todayLocal = async () => {
     direction: r.direction,
     at: r.at,
     isSynced: r._synced === 1,
+    method: r.method || "card",
+    verificationStatus: r.verification_status ?? null,
   }));
 
   // Who is on site according to this device: last event of the day was an
@@ -289,4 +408,4 @@ export const todayLocal = async () => {
   return { date: dayKey(), events, onSite, pending: events.filter((e) => !e.isSynced).length };
 };
 
-export default { syncRoster, scan, todayLocal, dayKey, pruneOldScans, DEBOUNCE_SECONDS };
+export default { syncRoster, scan, recordManual, nextDirection, todayLocal, dayKey, pruneOldScans, DEBOUNCE_SECONDS };

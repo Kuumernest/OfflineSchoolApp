@@ -151,6 +151,11 @@ export interface Student {
   // can surface "must reset" without a second request.
   mustResetPassword?: boolean;
 
+  // ── Passport photo ────────────────────────────────────
+  // As stored: "/uploads/photos/<id>-<hash>.jpg". Private — render it through
+  // <StudentPhoto> / useAuthedImage, never a bare <img src>.
+  photoUrl?: string | null;
+
   // ── Dates ─────────────────────────────────────────────
   enrolledAt?: string;
   createdAt?:  string;

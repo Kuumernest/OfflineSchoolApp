@@ -885,6 +885,16 @@ export const useAuthStore = create((set, get) => ({
       clearSchoolCache();
     } catch { /* non-critical */ }
 
+    // Pupil photos are personal data like the roster they came with; the next
+    // account on this phone downloads its own (photoCache.service.js).
+    try { require("../services/photoCache.service").clearPhotos(); }
+    catch { /* non-critical */ }
+
+    // The gate's fee snapshot likewise — before the session's database is let
+    // go, so it is this account's copy that is cleared.
+    try { await require("../services/gateSnapshot.service").clearSnapshot(); }
+    catch { /* non-critical */ }
+
     resetSyncLock();
 
     // Per-user local data: wait for the sync to let go of this account's

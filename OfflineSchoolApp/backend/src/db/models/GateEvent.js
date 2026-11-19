@@ -48,6 +48,28 @@ const gateEventSchema = new mongoose.Schema(
     /** The notification this scan raised, if any. */
     notificationId: { type: String, default: null },
 
+    /**
+     * How the pupil was identified: their card's QR, or looked up by name at
+     * the gate (a forgotten card). Older rows have none — they were all cards.
+     */
+    method: { type: String, enum: ["card", "manual", null], default: null },
+
+    /**
+     * The fee verification at the moment of the scan (shared/compliance.js).
+     *
+     *   verification        what the operator was SHOWN — computed on the
+     *                       device, possibly offline, possibly from stale or
+     *                       pending data, and saying so (stale,
+     *                       dependsOnPending, dataAsOf)
+     *   serverVerification  what the server computed when the scan arrived
+     *
+     * Both, because the interesting audit question is when they differ: a
+     * child let through on yesterday's data, or on a payment that was later
+     * refused. Additive and optional — a scan with no fee check has neither.
+     */
+    verification:       { type: mongoose.Schema.Types.Mixed, default: null },
+    serverVerification: { type: mongoose.Schema.Types.Mixed, default: null },
+
     deletedAt: { type: Date, default: null },
   },
   { _id: false, timestamps: true }

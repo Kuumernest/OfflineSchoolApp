@@ -125,6 +125,42 @@ export interface PaymentPlan {
   agreedAt?:    string;
   cancelledAt?: string | null;
   cancelledReason?: string | null;
+
+  // ── As an individual fee agreement (backend agreements.service) ──────────
+  /** "total": the year's whole bill; "balance": what was outstanding when agreed. */
+  basis?:          "total" | "balance" | null;
+  /** Paid before a "balance" agreement — set aside when ticking off its schedule. */
+  baselinePaid?:   number;
+  agreedTotal?:    number | null;
+  effectiveFrom?:  string | null;
+  expiresAt?:      string | null;
+  /** Null on plans from before approvals existed: those read as approved. */
+  approvalStatus?: "pending" | "approved" | "rejected" | null;
+  approvedBy?:     string | null;
+  approvedAt?:     string | null;
+  rejectionReason?: string | null;
+  notes?:          string | null;
+  attachments?:    Array<{ name: string; url: string }>;
+  pendingChange?:  {
+    instalments: Instalment[];
+    effectiveFrom: string | null;
+    expiresAt: string | null;
+    notes: string | null;
+    reason: string | null;
+    requestedBy: string | null;
+    requestedAt: string;
+  } | null;
+  history?: PlanHistoryEntry[];
+}
+
+export interface PlanHistoryEntry {
+  at:     string;
+  by:     string | null;
+  action: "created" | "change_proposed" | "approved" | "rejected"
+        | "change_approved" | "change_rejected" | "cancelled" | "completed";
+  note:   string | null;
+  before: { instalments?: Instalment[]; agreedTotal?: number | null } | null;
+  after:  { instalments?: Instalment[]; agreedTotal?: number | null } | null;
 }
 
 /**
@@ -154,6 +190,8 @@ export interface StudentFeeAccount {
   /** The active plan, if the family is on one. */
   plan?:       PaymentPlan | null;
   planStatus?: PlanStatus | null;
+  /** Whether the plan governs today (approved, in its dates). */
+  planApplies?: boolean;
 }
 
 export interface OutstandingRow extends FeeTotals {

@@ -14,7 +14,7 @@ const qs = (params: Record<string, string | number | undefined>): string => {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ApprovalKind   = "expense" | "refund" | "waiver" | "payroll";
+export type ApprovalKind   = "expense" | "refund" | "waiver" | "payroll" | "agreement";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface ApprovalRequest {

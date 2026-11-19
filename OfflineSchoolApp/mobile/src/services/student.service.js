@@ -422,6 +422,7 @@ const ensureStudentSchema = async (db) => {
         grade           TEXT,
         admissionNo     TEXT,
         admissionNumber TEXT,
+        photo_url       TEXT,
         status          TEXT DEFAULT 'approved',
         is_active       INTEGER DEFAULT 1,
         deleted_at      TEXT,
@@ -451,6 +452,9 @@ const ensureStudentSchema = async (db) => {
       { name: "grade",           def: "TEXT" },
       { name: "admissionNo",     def: "TEXT" },
       { name: "admissionNumber", def: "TEXT" },
+      // Additive (a phone already in use gains it here): the stored photo
+      // path, so the gate and an offline report card can show the face.
+      { name: "photo_url",       def: "TEXT" },
       { name: "status",          def: "TEXT DEFAULT 'approved'" },
       { name: "is_active",       def: "INTEGER DEFAULT 1" },
       { name: "deleted_at",      def: "TEXT" },

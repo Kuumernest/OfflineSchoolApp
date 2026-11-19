@@ -159,6 +159,13 @@ const normaliseStudentDoc = (s) => {
 
     // Documents
     documents: Array.isArray(s.documents) ? s.documents : [],
+
+    // Passport photo, as stored: "/uploads/photos/<id>-<hash>.jpg". It was
+    // missing from this list, so the profile's photo box was always empty
+    // while ID and report cards — which read Student.photoUrl directly on the
+    // server — printed it. A private upload: clients load it with the token
+    // (web useAuthedImage, mobile Image headers), never a bare <img src>.
+    photoUrl: s.photoUrl || s.photo_url || null,
   };
 };
 

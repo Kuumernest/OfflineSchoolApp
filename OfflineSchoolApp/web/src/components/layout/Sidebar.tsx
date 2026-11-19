@@ -5,7 +5,7 @@ import { Link, useLocation }           from "react-router-dom";
 import { ChevronRight, GraduationCap, X } from "lucide-react";
 import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
 import { NAV_GROUPS, groupIndexFor } from "@/config/sections";
-import { useUser, useActiveSchool }     from "@/store/auth.store";
+import { useUser, useActiveSchool, useAuthStore } from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
 import { roleLabel }                    from "@/utils/roleLabel";
 import { activeNavPath }                from "@/utils/activeNav";
@@ -24,7 +24,14 @@ import { type UserRole }                from "@/types";
  * school chosen would be the whole platform's pupils under a school heading.
  */
 const hasAccess = (item: NavItem, role: UserRole, inSchool: boolean) => {
-  if (!item.roles.includes(role)) return false;
+  // An entry tied to a capability a school can delegate follows the
+  // capability, not the role: a bursar handed gate.scan sees the gate, a
+  // teacher it was taken from does not. A session from before permissions
+  // were sent (no list) falls back to the role defaults.
+  const held = useAuthStore.getState().user?.permissions;
+  if (item.permission && role !== "super_admin" && held?.length) {
+    if (!held.includes(item.permission)) return false;
+  } else if (!item.roles.includes(role)) return false;
   if (role !== "super_admin") return true;
   return item.platform ? true : inSchool;
 };

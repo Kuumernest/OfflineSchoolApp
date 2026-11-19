@@ -549,6 +549,11 @@ const EXCLUDED = {
     "not happen.",
 
   // ── Belongs to another surface entirely ────────────────────────────────
+  GateAuthorization:
+    "An administrator's gate pass for one pupil. A gate device receives the " +
+    "passes in force inside GET /api/gate/snapshot, with the minimal fee facts " +
+    "beside them, under gate.verify — not as a mirrored collection.",
+
   GateEvent:
     "Arrival and departure scans, written by the gate device and read live. A " +
     "desktop mirror of it would be out of date the moment it was fetched.",

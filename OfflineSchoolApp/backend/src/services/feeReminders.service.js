@@ -49,7 +49,7 @@ const Student     = require("../db/models/Student");
 const Notification = require("../db/models/Notification");
 
 const { balancesFor } = require("./fees.service");
-const { endOfDay, planStatus, firstUnpaid } = require("../../../shared/arrears");
+const { endOfDay, planStatus, firstUnpaid, isPlanApplicable } = require("../../../shared/arrears");
 const { arrearsFor } = require("./arrears.service");
 const { displayName } = require("../utils/studentName");
 const notify = require("./notification");
@@ -113,7 +113,7 @@ const fail = (message, code, status = 400) => {
  * feeds, and a school with two hundred families on plans would otherwise make
  * two hundred round trips to draw it.
  */
-async function activePlans({ schoolId, studentIds, academicYear = null }) {
+async function activePlans({ schoolId, studentIds, academicYear = null, asOf = new Date() }) {
   if (!studentIds?.length) return new Map();
 
   const filter = {
@@ -124,7 +124,10 @@ async function activePlans({ schoolId, studentIds, academicYear = null }) {
   };
   if (academicYear) filter.academicYear = academicYear;
 
-  const plans = await PaymentPlan.find(filter).lean();
+  // Only an agreement that governs on asOf: one waiting for approval, or
+  // outside its dates, does not replace the structure's deadline
+  // (shared/arrears.js isPlanApplicable).
+  const plans = (await PaymentPlan.find(filter).lean()).filter((p) => isPlanApplicable(p, asOf));
   return new Map(plans.map((p) => [String(p.studentId), p]));
 }
 
@@ -440,7 +443,7 @@ async function penaltyPreview({ schoolId, academicYear = null, structureId = nul
         .select("_id studentName name firstName lastName enrollmentNo classId")
         .lean(),
       balancesFor({ schoolId, studentIds: ids, academicYear: structure.academicYear }),
-      activePlans({ schoolId, studentIds: ids, academicYear: structure.academicYear }),
+      activePlans({ schoolId, studentIds: ids, academicYear: structure.academicYear, asOf }),
     ]);
 
     const byId = new Map(students.map((s) => [String(s._id), s]));

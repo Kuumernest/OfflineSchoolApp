@@ -154,6 +154,12 @@ module.exports = [
       // Its 409: already approved, rejected or cancelled.
       if (request.status !== "pending") return null;
 
+      // A fee agreement's withdrawal also cancels the agreement (or drops its
+      // proposed change) on the server — agreements.service onWithdrawn. That
+      // second effect is not reproduced here, so it goes online, where the
+      // server does both and the mirror hears of both.
+      if (request.kind === "agreement") return null;
+
       // Its 403. The check the endpoint makes, and the only one it makes.
       if (String(request.requestedBy ?? "") !== String(session.userId)) return null;
 

@@ -67,7 +67,7 @@ export const NAV_GROUPS: Array<{
   { labelKey: "navGroup.platform", label: "Platform",
     paths: ["/platform"] },
   { labelKey: "navGroup.overview", label: "Overview",
-    paths: ["/dashboard", "/watchlist", "/approvals"] },
+    paths: ["/dashboard", "/watchlist", "/approvals", "/gate"] },
   { labelKey: "navGroup.people", label: "People",
     paths: ["/students", "/teachers"] },
   { labelKey: "navGroup.academics", label: "Academics",

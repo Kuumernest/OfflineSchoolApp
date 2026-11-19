@@ -1744,7 +1744,74 @@
     "notifyAll": "Every scan",
     "notifyAllHint": "Two messages per student per day. On a paid channel this is the largest cost.",
     "lateAfter": "Late after",
-    "earlyBefore": "Early before"
+    "earlyBefore": "Early before",
+    "status": {
+      "compliant": "Compliant",
+      "due": "Due",
+      "non_compliant": "Non-compliant",
+      "authorized": "Authorized"
+    },
+    "statusShort": {
+      "compliant": "OK",
+      "due": "Due",
+      "non_compliant": "Owes",
+      "authorized": "Pass"
+    },
+    "admissionNo": "Admission no.",
+    "className": "Class",
+    "academicYear": "Academic year",
+    "totalFees": "Total fees",
+    "expectedInstalment": "Expected instalment",
+    "totalPaid": "Total paid (confirmed)",
+    "outstandingDue": "Outstanding instalment",
+    "remainingBalance": "Remaining balance",
+    "nextDue": "Next due",
+    "nextDueValue": "{{date}} — {{amount}}",
+    "arrangement": "Payment arrangement",
+    "arrangementStandard": "Standard schedule",
+    "arrangementAgreement": "Individual agreement",
+    "agreementPending": "Agreement pending approval — not in force",
+    "agreementNotInForce": "Agreement not in force — standard schedule applies",
+    "lastPayment": "Last payment",
+    "none": "None",
+    "authorizedUntil": "Gate pass until {{date}}",
+    "authorizedReason": "Reason: {{reason}}",
+    "offlineComputed": "Offline — computed on this device from data synced {{age}}",
+    "staleData": "Data is stale (synced > 24h ago)",
+    "pendingDepends": {
+      "one": "{{count}} payment recorded on this device is not yet confirmed ({{amount}}) — would be {{status}} once confirmed",
+      "other": "{{count}} payments recorded on this device are not yet confirmed ({{amount}}) — would be {{status}} once confirmed"
+    },
+    "pendingList": {
+      "one": "{{count}} payment recorded on this device is not yet confirmed ({{amount}})",
+      "other": "{{count}} payments recorded on this device are not yet confirmed ({{amount}})"
+    },
+    "rejectedPayments": {
+      "one": "{{count}} payment was rejected by the server",
+      "other": "{{count}} payments were rejected by the server"
+    },
+    "sourceServer": "Checked with the server",
+    "sourceDevice": "Computed on this device",
+    "noFeeData": "No fee data for this student on this device yet.",
+    "feesReadOnly": "Fees are read-only here.",
+    "age": {
+      "now": "just now",
+      "minutes": "{{count}} min ago",
+      "hours": "{{count}} h ago",
+      "days": "{{count}} d ago"
+    },
+    "syncedAgo": "Fee data synced {{age}}",
+    "neverSynced": "Fee data not synced to this device yet",
+    "offline": "Offline",
+    "searchPlaceholder": "Search by name or admission no.",
+    "searchEmpty": "No student found on this device",
+    "recordIn": "Record arrival",
+    "recordOut": "Record departure",
+    "recordedRecently": "Already recorded in the last 90 seconds",
+    "methodCard": "Card",
+    "methodManual": "Manual",
+    "close": "Close",
+    "verifying": "Checking with the server…"
   },
   "selectSchool": {
     "title": "Find a School",

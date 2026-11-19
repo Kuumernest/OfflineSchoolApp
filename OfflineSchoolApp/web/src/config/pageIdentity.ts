@@ -13,7 +13,7 @@ import {
   ClipboardCheck, ClipboardList, Clock, Download, Eye, FileSpreadsheet,
   FileText, FolderOpen, Globe, GraduationCap, KeyRound, LayoutDashboard,
   Lightbulb, Megaphone, MessageSquare, Printer, Receipt, School, ScrollText,
-  Settings, ShieldCheck, TrendingUp, UserCheck, UserCog, Users, Wallet,
+  ScanLine, Settings, ShieldCheck, TrendingUp, UserCheck, UserCog, Users, Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { DashAccent } from "@/config/dashboardTint";
@@ -49,6 +49,7 @@ export const PAGE_IDENTITY: Record<string, PageIdentity> = {
   "/finance/expenses":          { accent: "teal",   icon: Receipt },
   "/finance/reports":           { accent: "teal",   icon: BarChart3 },
   "/approvals":                 { accent: "amber",  icon: ShieldCheck },
+  "/gate":                      { accent: "teal",   icon: ScanLine },
   "/watchlist":                 { accent: "red",    icon: Eye },
   "/class-intelligence":        { accent: "violet", icon: Lightbulb },
   "/intelligence-review":       { accent: "violet", icon: ClipboardCheck },

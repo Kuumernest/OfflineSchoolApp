@@ -149,6 +149,9 @@ const normaliseStudentForSync = (s) => {
     schoolId:     s.schoolId     || null,
     userId:       s.userId       || null,
     approvedAt:   s.approvedAt   || null,
+    // The stored path ("/uploads/photos/…"), never the bytes. The phone
+    // fetches the file itself, with its token (mobile photoCache.service.js).
+    photoUrl:     s.photoUrl     || null,
     createdAt:    s.createdAt    || null,
     updatedAt:    s.updatedAt    || null,
   };

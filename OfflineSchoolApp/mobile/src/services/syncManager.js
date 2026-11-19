@@ -2582,8 +2582,8 @@ class SyncManagerClass {
             `INSERT INTO students
                (id, schoolId, school_id, classId, class_id, user_id,
                 name, studentName, admissionNo, admissionNumber, enrollmentNo,
-                email, is_active, status, _synced, deleted_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?)
+                email, is_active, status, _synced, deleted_at, created_at, updated_at, photo_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                schoolId        = COALESCE(excluded.schoolId, students.schoolId),
                school_id       = COALESCE(excluded.school_id, students.school_id),
@@ -2600,7 +2600,8 @@ class SyncManagerClass {
                status          = excluded.status,
                _synced         = 1,
                deleted_at      = NULL,
-               updated_at      = excluded.updated_at
+               updated_at      = excluded.updated_at,
+               photo_url       = excluded.photo_url
              WHERE students._synced = 1`,
             [
               String(id),
@@ -2617,6 +2618,9 @@ class SyncManagerClass {
               s.status || "approved",
               s.createdAt || ts,
               s.updatedAt || ts,
+              // Null clears a deleted photo; a server too old to send the
+              // field never had the column to fill.
+              s.photoUrl || null,
             ]
           );
           ok++;

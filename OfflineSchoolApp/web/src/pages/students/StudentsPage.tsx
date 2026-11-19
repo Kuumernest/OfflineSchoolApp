@@ -24,6 +24,7 @@ import { cn }              from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import i18n from "@/i18n";
+import { StudentPhoto } from "@/components/students/StudentPhoto";
 import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
@@ -85,9 +86,6 @@ const statusLabel = (status: string | undefined): string => {
     default:          return status || i18n.t("common.unknown");
   }
 };
-
-const nameInitial = (name: string | undefined): string =>
-  name?.trim().charAt(0).toUpperCase() || "#";
 
 /**
  * Converts the UI status value to what the backend expects.
@@ -156,16 +154,7 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
       {/* Name + avatar */}
       <Td>
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-full bg-primary-100
-                       flex items-center justify-center shrink-0"
-            aria-hidden="true"
-          >
-            <span className="text-primary-700
-                             text-sm font-bold">
-              {nameInitial(student.name)}
-            </span>
-          </div>
+          <StudentPhoto photoUrl={student.photoUrl} name={student.name} size="sm" />
           <div>
             <p className="font-medium text-gray-900 text-sm">
               {student.name}

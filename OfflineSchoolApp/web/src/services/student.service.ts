@@ -241,6 +241,9 @@ function normaliseStudent(raw: Record<string, unknown>): NormalisedStudent {
     status,
     isActive:          raw.isActive !== false,
     mustResetPassword: (raw.mustResetPassword as boolean) ?? false,
+    // Dropped here (and in shared/students.js) until now, which is why the
+    // profile photo box was empty while ID and report cards printed it.
+    photoUrl:       ((raw.photoUrl ?? raw.photo_url) as string | null | undefined) || null,
     class: {
       _id:  classId  ?? undefined,
       name: className,

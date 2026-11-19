@@ -51,6 +51,7 @@ import {
 import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
 import { formatDay } from "../../../../shared/dateFormat.js";
 import { StudentOverviewCard } from "@/components/students/StudentOverviewCard";
+import { StudentPhoto } from "@/components/students/StudentPhoto";
 import { useAuthedImage } from "@/hooks/useAuthedImage";
 import { genderLabel } from "@/utils/genderLabel";
 
@@ -541,8 +542,14 @@ function PhotoCard({
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // What the server answered to the last upload or delete, shown at once
+  // rather than after the refetch lands — keyed to the photoUrl it replaced,
+  // so a refetch that brings a newer value wins over it.
+  const [local, setLocal] = useState<{ was: string | null; now: string | null } | null>(null);
+  const current = local && local.was === photoUrl ? local.now : photoUrl;
+
   // A photo needs the signed-in user's token, which an <img> cannot send.
-  const src = useAuthedImage(photoUrl);
+  const src = useAuthedImage(current);
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;
@@ -557,7 +564,8 @@ function PhotoCard({
         reader.readAsDataURL(file);
       });
 
-      await uploadStudentPhoto(studentId, schoolId, base64);
+      const saved = await uploadStudentPhoto(studentId, schoolId, base64);
+      if (saved) setLocal({ was: photoUrl, now: saved });
       toast({ kind: "success", title: t("photo.saved") });
       onChanged();
     } catch (err) {
@@ -580,6 +588,7 @@ function PhotoCard({
     setBusy(true);
     try {
       await deleteStudentPhoto(studentId, schoolId);
+      setLocal({ was: photoUrl, now: null });
       onChanged();
     } catch (err) {
       toast({ kind: "error", title: t("photo.failed"), message: getErrorMessage(err) });
@@ -613,9 +622,9 @@ function PhotoCard({
             loading={busy}
             onClick={() => inputRef.current?.click()}
           >
-            {photoUrl ? t("photo.change") : t("photo.add")}
+            {current ? t("photo.change") : t("photo.add")}
           </Button>
-          {photoUrl && !busy && (
+          {current && !busy && (
             <Button size="sm" variant="secondary" onClick={onRemove}>
               {t("common.delete")}
             </Button>
@@ -1021,7 +1030,6 @@ export default function StudentDetailPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const firstLetter       = (student.name || "?").charAt(0).toUpperCase();
   // 🔧 Backend normaliseStudent guarantees enrollmentNo (mapped from admissionNo if needed)
   const enrollmentNo      = student.enrollmentNo ?? null;
   const mustResetPassword = student.mustResetPassword ?? false;
@@ -1062,17 +1070,14 @@ export default function StudentDetailPage() {
       {/* ── Profile card ── */}
       <div className={cn(DASH_TINT.blue.card, "rounded-2xl p-6")}>
         <div className="flex items-center gap-4">
-          {/* Avatar */}
-          <div
-            className={cn(
-              "flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold",
-              isSuspended
-                ? "bg-red-100 text-red-600"
-                : "bg-primary-100 text-primary-600"
-            )}
-          >
-            {firstLetter}
-          </div>
+          {/* Avatar: the passport photo when there is one */}
+          <StudentPhoto
+            photoUrl={student.photoUrl}
+            name={student.name}
+            size="md"
+            shape="card"
+            tone={isSuspended ? "danger" : "primary"}
+          />
 
           {/* Name + badges */}
           <div className="min-w-0 flex-1">
@@ -1317,7 +1322,7 @@ export default function StudentDetailPage() {
           <PhotoCard
             studentId={student._id}
             schoolId={schoolId}
-            photoUrl={(student as { photoUrl?: string | null }).photoUrl ?? null}
+            photoUrl={student.photoUrl ?? null}
             onChanged={() => { void qc.invalidateQueries({ queryKey: QK.student(id ?? "") }); }}
           />
         </div>

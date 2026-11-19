@@ -72,6 +72,58 @@ const instalmentSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * One entry in an agreement's history. Append-only: who did what, when, and —
+ * for anything that touched the schedule — the instalments before and after,
+ * so "what did we agree with this family in March?" has an answer.
+ */
+const historySchema = new mongoose.Schema(
+  {
+    at:     { type: Date,   default: Date.now },
+    by:     { type: String, default: null },
+    action: {
+      type: String,
+      enum: [
+        "created", "change_proposed", "approved", "rejected",
+        "change_approved", "change_rejected", "cancelled", "completed",
+      ],
+      required: true,
+    },
+    note:   { type: String, default: null, trim: true, maxlength: 2000 },
+    before: { type: mongoose.Schema.Types.Mixed, default: null },
+    after:  { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
+/**
+ * A proposed change to an APPROVED agreement. Held here, not applied: the
+ * approved schedule keeps governing until an administrator approves this one
+ * (an unapproved schedule never overrides anything).
+ */
+const pendingChangeSchema = new mongoose.Schema(
+  {
+    instalments:       { type: [instalmentSchema], default: [] },
+    effectiveFrom:     { type: Date,   default: null },
+    expiresAt:         { type: Date,   default: null },
+    notes:             { type: String, default: null, trim: true, maxlength: 2000 },
+    reason:            { type: String, default: null, trim: true, maxlength: 2000 },
+    requestedBy:       { type: String, default: null },
+    requestedAt:       { type: Date,   default: Date.now },
+    approvalRequestId: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const attachmentSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 200 },
+    /** A stored upload ("/uploads/…") or an external link to the signed paper. */
+    url:  { type: String, required: true, trim: true, maxlength: 1000 },
+  },
+  { _id: false }
+);
+
 const paymentPlanSchema = new mongoose.Schema(
   {
     _id: { type: String, default: () => uuidv4() },
@@ -123,6 +175,59 @@ const paymentPlanSchema = new mongoose.Schema(
 
     /** Why the school agreed to it. Read by whoever asks about it later. */
     reason: { type: String, default: null, trim: true, maxlength: 2000 },
+
+    // ── An individual fee agreement ─────────────────────────────────────────
+    //
+    // The fields below make a plan the "individual agreement" that overrides
+    // the general fee structure for one pupil (shared/arrears.js
+    // isPlanApplicable). All additive: a plan written before them has none,
+    // and reads as an approved, open-ended plan — exactly what it was.
+
+    /**
+     *   total    the instalments are the pupil's WHOLE bill for the year
+     *            (50,000 + 50,000 + 100,000 instead of the structure's
+     *            75,000 + 75,000 + 50,000); every payment of the year counts
+     *   balance  they are what was still outstanding when agreed; payments
+     *            made before then (baselinePaid) are set aside
+     *
+     * Either way the instalments add up to what is owed — an agreement
+     * changes WHEN, never HOW MUCH (a reduction is a waiver).
+     */
+    basis:        { type: String, enum: ["total", "balance", null], default: null },
+    baselinePaid: { type: Number, default: 0, min: 0 },
+    /** Σ instalments, stored so the agreement reads without arithmetic. */
+    agreedTotal:  { type: Number, default: null, min: 0 },
+
+    /** In force from the start of this day; null = from when it is approved. */
+    effectiveFrom: { type: Date, default: null },
+    /** Not in force after the end of this day; null = no expiry. */
+    expiresAt:     { type: Date, default: null },
+
+    /**
+     *   pending   proposed by the bursar, waiting for an administrator —
+     *             does NOT override the general structure
+     *   approved  governs the pupil (while active and in its dates)
+     *   rejected  refused; the plan is also cancelled, freeing the slot
+     *
+     * Null on plans written before approvals existed (read as approved).
+     */
+    approvalStatus: {
+      type: String, enum: ["pending", "approved", "rejected", null], default: null, index: true,
+    },
+    approvalRequestId: { type: String, default: null },
+    approvedBy:        { type: String, default: null },
+    approvedAt:        { type: Date,   default: null },
+    rejectedBy:        { type: String, default: null },
+    rejectedAt:        { type: Date,   default: null },
+    rejectionReason:   { type: String, default: null, trim: true, maxlength: 2000 },
+
+    notes:       { type: String, default: null, trim: true, maxlength: 4000 },
+    attachments: { type: [attachmentSchema], default: [] },
+
+    /** A change to an approved agreement, waiting for approval. */
+    pendingChange: { type: pendingChangeSchema, default: null },
+
+    history: { type: [historySchema], default: [] },
 
     agreedBy: { type: String, default: null },
     agreedAt: { type: Date,   default: Date.now },

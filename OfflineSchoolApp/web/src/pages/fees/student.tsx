@@ -214,9 +214,11 @@ export default function StudentFeeAccountPage() {
         studentId={studentId}
         academicYear={year}
         balance={balance}
+        billed={(totals?.charged ?? 0) - (totals?.waived ?? 0)}
         paid={totals?.paid ?? 0}
         plan={account?.plan ?? null}
         status={account?.planStatus ?? null}
+        applies={account?.planApplies ?? true}
       />
 
       {/* Balance first — it is the reason anyone opens this page. */}
