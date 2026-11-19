@@ -105,6 +105,50 @@ function firstUnpaid(charges, paid, asOf = new Date()) {
 }
 
 /**
+ * Does this plan (an individual fee agreement) govern the pupil on `asOf`?
+ *
+ * Only an APPROVED agreement overrides the general fee structure — one that is
+ * waiting for a decision, rejected, cancelled, not yet in force or expired
+ * never does, and the pupil is measured against the structure's own dates.
+ *
+ * A plan agreed before approvals existed has no approvalStatus at all; it was
+ * already being enforced, and reads as approved so nothing about those
+ * families changes the day this ships.
+ *
+ * @param {object|null} plan
+ * @param {Date} [asOf]
+ */
+function isPlanApplicable(plan, asOf = new Date()) {
+  if (!plan || plan.deletedAt) return false;
+  if (plan.status !== "active") return false;
+  if (plan.approvalStatus != null && plan.approvalStatus !== "approved") return false;
+  const at = new Date(asOf).getTime();
+  // In force from the START of its first day, until the END of its last.
+  if (plan.effectiveFrom) {
+    const from = new Date(plan.effectiveFrom);
+    from.setUTCHours(0, 0, 0, 0);
+    if (from.getTime() > at) return false;
+  }
+  if (plan.expiresAt && endOfDay(plan.expiresAt).getTime() < at) return false;
+  return true;
+}
+
+/**
+ * Payments that count towards a plan's schedule.
+ *
+ * An agreement over the year's WHOLE bill (basis "total") counts every payment
+ * of the year. One over what was still OUTSTANDING when it was agreed (basis
+ * "balance", the original kind of plan) counts only what came after: its
+ * schedule starts from that balance, so the money already paid is recorded as
+ * `baselinePaid` and set aside. Without it a family who paid 50,000 and then
+ * agreed to spread the remaining 150,000 read as on track at the first date
+ * having paid nothing new. Plans written before the field existed have none,
+ * and read exactly as they always did.
+ */
+const creditedToPlan = (plan, paid) =>
+  Math.max(0, (paid ?? 0) - Math.max(0, Number(plan?.baselinePaid) || 0));
+
+/**
  * Where a family stands against an instalment plan.
  *
  * CUMULATIVE, not per instalment: by the third date a family should have paid
@@ -117,6 +161,7 @@ function firstUnpaid(charges, paid, asOf = new Date()) {
  */
 function planStatus(plan, paid, asOf = new Date()) {
   const schedule = [...(plan?.instalments ?? [])].sort((a, b) => a.seq - b.seq);
+  paid = creditedToPlan(plan, paid);
 
   let dueByNow    = 0;
   let nextDue     = null;
@@ -168,6 +213,10 @@ function planStatus(plan, paid, asOf = new Date()) {
 function feePosition({ charges = [], paid = 0, plan = null, asOf = new Date() }) {
   const billed = charges.reduce((s, c) => s + netOf(c), 0);
   const owed   = Math.max(0, billed - paid);
+
+  // An agreement that is pending, rejected, expired or not yet in force is
+  // not the schedule — the structure's own due dates are.
+  if (plan && !isPlanApplicable(plan, asOf)) plan = null;
 
   if (plan) {
     const status  = planStatus(plan, paid, asOf);
@@ -236,4 +285,7 @@ function familyCount(studentIds, accesses = []) {
   return new Set(ids.map(find)).size;
 }
 
-module.exports = { endOfDay, firstUnpaid, chargeStatuses, planStatus, feePosition, familyCount };
+module.exports = {
+  endOfDay, firstUnpaid, chargeStatuses, planStatus, feePosition, familyCount,
+  isPlanApplicable, creditedToPlan,
+};

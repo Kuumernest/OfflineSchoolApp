@@ -53,6 +53,9 @@ export const ensurePupilSyncColumns = async (db) => {
   if (!(await tableExists(db, "students"))) return false;
   await safeAddColumn(db, "students", "_synced", "INTEGER DEFAULT 0");
   await safeAddColumn(db, "students", "_operation", "TEXT");
+  // The pull writes it (syncManager syncStudents): a phone already in use
+  // gains the column before the first row that names it.
+  await safeAddColumn(db, "students", "photo_url", "TEXT");
   const added = await safeAddColumn(db, "students", "_local_decision", "TEXT");
   if (added) await adoptLegacyDecisions(db);
   return true;

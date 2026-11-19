@@ -31,6 +31,7 @@ import {
   Globe,
   Building2,
   ScrollText,
+  ScanLine,
 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { type UserRole }   from "@/types";
@@ -85,6 +86,12 @@ export interface NavItem {
   roles:     UserRole[];
   children?: NavItem[];
   badge?:    string;
+  /**
+   * A delegable capability that decides visibility instead of `roles` when the
+   * session carries a permission list (Sidebar hasAccess). `roles` stays the
+   * default holders, for sessions without one.
+   */
+  permission?: string;
   /**
    * Above any school. Shown to super_admin whether or not they are inside a
    * school; every entry WITHOUT this flag is a school's screen and appears
@@ -307,6 +314,19 @@ export const NAV_ITEMS: NavItem[] = [
         roles: ["super_admin", "school_admin", "teacher"],
       },
     ],
+  },
+
+  // ── Gate ─────────────────────────────────────────────────
+  // Shown by gate.scan (delegable — a bursar may be given it); `roles` are
+  // its default holders (backend config/permissions.js). The page checks the
+  // permission itself as well.
+  {
+    label: "Gate",
+    labelKey: "gatePage.nav",
+    path:  "/gate",
+    icon:  ScanLine,
+    roles: ["super_admin", "school_admin", "teacher"],
+    permission: "gate.scan",
   },
 
   // ── Fees ─────────────────────────────────────────────────

@@ -61,7 +61,9 @@ const { v4: uuidv4 } = require("uuid");
  */
 
 /** What can be put up for approval. */
-const KINDS = ["expense", "refund", "waiver", "payroll"];
+// agreement: an individual fee agreement (PaymentPlan), or a change to one.
+// Always needs a decision, whatever its size — it is not thresholded.
+const KINDS = ["expense", "refund", "waiver", "payroll", "agreement"];
 
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
 

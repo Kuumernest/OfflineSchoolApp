@@ -64,6 +64,48 @@ const DROP_REQUEST = ["origin", "referer", "cookie", "host", "connection", "cont
 // the length describe bytes the window will never see.
 const DROP_RESPONSE = ["content-encoding", "content-length", "transfer-encoding", "connection"];
 
+/**
+ * Pupil photos kept for offline use.
+ *
+ * A photo is otherwise loaded live from the server, so a desktop with no
+ * connection showed initials on the profile and the gate screen. The name of a
+ * photo is the pupil id plus a hash of its bytes (backend
+ * utils/photoStorage.js): a replaced photo is a new name, so a cached file can
+ * never be the wrong face, and nothing here has to expire. This is a cache of
+ * the server's file, not a second copy of record — deleting the directory
+ * loses nothing.
+ *
+ * Only an authenticated window ever reaches it: the request must carry the
+ * bearer token the server would have checked, and the cache is filled only
+ * from a response the server sent with 200 for that token.
+ */
+const PHOTO_PATH = /^\/uploads\/photos\/([A-Za-z0-9_-]+-[0-9a-f]{12}\.(?:jpe?g|png|gif|webp))$/i;
+
+const photoCache = (dir) => {
+  if (!dir) return null;
+  const fileOf = (name) => path.join(dir, name);
+  return {
+    async read(name) {
+      try {
+        const body = await fs.promises.readFile(fileOf(name));
+        const ext  = path.extname(name).toLowerCase();
+        return new Response(body, {
+          status: 200,
+          headers: { "content-type": MIME[ext] || "image/jpeg", "cache-control": "private, max-age=3600", "x-photo-cache": "hit" },
+        });
+      } catch { return null; }
+    },
+    async write(name, buf) {
+      try {
+        await fs.promises.mkdir(dir, { recursive: true });
+        const tmp = fileOf(`${name}.${process.pid}.tmp`);
+        await fs.promises.writeFile(tmp, buf);
+        await fs.promises.rename(tmp, fileOf(name));
+      } catch { /* a cache that cannot be written is only a cache */ }
+    },
+  };
+};
+
 const json = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json" },
 });
@@ -75,8 +117,9 @@ const json = (status, body) => new Response(JSON.stringify(body), {
  * @param {(url: string, init: object) => Promise<Response>} p.fetchImpl  net.fetch in Electron
  * @returns {(request: Request) => Promise<Response>}
  */
-function createAppProtocolHandler({ distDir, serverUrl, fetchImpl }) {
+function createAppProtocolHandler({ distDir, serverUrl, fetchImpl, photoCacheDir = null }) {
   const root = path.resolve(distDir);
+  const photos = photoCache(photoCacheDir);
 
   const serveStatic = async (pathname) => {
     let rel;
@@ -131,9 +174,34 @@ function createAppProtocolHandler({ distDir, serverUrl, fetchImpl }) {
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
   };
 
+  /**
+   * A photo: from the server when it answers (and kept), from the cache when
+   * it does not. The server stays the authority whenever it is reachable — a
+   * 401 or 404 from it is passed on, never papered over with a cached copy.
+   */
+  const forwardPhoto = async (request, url, name) => {
+    const authed = /^Bearer\s+\S+/i.test(request.headers.get("authorization") || "");
+    const res = await forward(request, url);
+    if (res.type === "error" || res.status >= 500) {
+      return (authed && await photos.read(name)) || res;
+    }
+    // Not the server's stand-in for a lost file (storage/placeholder.js marks
+    // it): cached under the real name it would outlive the upload that fixes it.
+    if (res.status === 200 && authed && !res.headers.get("x-upload-missing")
+        && /^image\//i.test(res.headers.get("content-type") || "")) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      await photos.write(name, buf);
+      const out = new Headers(res.headers);
+      return new Response(buf, { status: 200, statusText: res.statusText, headers: out });
+    }
+    return res;
+  };
+
   return async function handle(request) {
     const url = new URL(request.url);
     if (url.host !== HOST) return new Response("Not found", { status: 404 });
+    const photo = photos && request.method === "GET" ? PHOTO_PATH.exec(url.pathname) : null;
+    if (photo) return forwardPhoto(request, url, photo[1]);
     if (FORWARDED.some((p) => url.pathname.startsWith(p))) return forward(request, url);
     return serveStatic(url.pathname);
   };
@@ -145,4 +213,4 @@ const SCHEME = {
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true },
 };
 
-module.exports = { createAppProtocolHandler, SCHEME, ORIGIN, FORWARDED };
+module.exports = { createAppProtocolHandler, SCHEME, ORIGIN, FORWARDED, PHOTO_PATH };

@@ -28,6 +28,8 @@ const { arrearsFor } = require("../services/arrears.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
 const reminders = require("../services/feeReminders.service");
+const agreements = require("../services/agreements.service");
+const { isPlanApplicable } = require("../../../shared/arrears");
 const { getStore } = require("../storage/fileStore");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
@@ -343,13 +345,18 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
   // Where they stand against it, computed here so the browser never has to do
   // the cumulative arithmetic — and so the ledger screen and the arrears list
   // cannot disagree about whether a family is behind.
-  const planStatus = plan
+  //
+  // Only an agreement that GOVERNS today (approved, in its dates) has a
+  // status: a pending one is shown with its approval state and measured
+  // against nothing — the structure's dates still apply (planApplies false).
+  const planApplies = isPlanApplicable(plan, new Date());
+  const planStatus = plan && planApplies
     ? reminders.planStatus(plan, totals.paid, new Date())
     : null;
 
   return res.json({
     success: true,
-    data: { student, charges, payments, totals, plan, planStatus },
+    data: { student, charges, payments, totals, plan, planStatus, planApplies },
   });
 }));
 
@@ -626,133 +633,62 @@ router.get("/plans", canPlan, asyncHandler(async (req, res) => {
   return res.json({ success: true, count: rows.length, data: rows });
 }));
 
-// POST /api/fees/plans
+// POST /api/fees/plans — propose an individual fee agreement.
+//
+// Created PENDING and sent to the approvals queue: it does not govern the
+// pupil until an administrator other than the proposer approves it
+// (services/agreements.service.js). Replay-safe on _id, as before.
 router.post("/plans", canPlan, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
-  const { studentId, academicYear, term = null } = req.body;
-  if (!studentId)    return bad(res, "studentId is required");
-  if (!academicYear) return bad(res, "academicYear is required");
-
-  const reason = req.body.reason ? String(req.body.reason).trim() : null;
-  if (!reason) {
-    // Required, like a refund and a waiver. A plan is a concession the school
-    // granted, and "why" is the question asked about it a year later — by an
-    // auditor, or by the next bursar wondering whether to grant another.
-    return bad(res, "A reason is required for an instalment plan", "REASON_REQUIRED");
-  }
-
-  if (!Array.isArray(req.body.instalments) || req.body.instalments.length < 2) {
-    return bad(
-      res,
-      "A plan needs at least two instalments — one is just a due date",
-      "TOO_FEW_INSTALMENTS"
-    );
-  }
-
-  /**
-   * ── A replay, ahead of every check that a success would fail ─────────────
-   *
-   * A plan agreed on a machine with no connection carries the id it wrote into
-   * its own mirror, so the reply describes a row that machine already holds.
-   *
-   * The lookup has to come BEFORE the balance comparison below, and that is the
-   * subtle part. A plan does not change the ledger, but the unique index means a
-   * second attempt would answer 409 PLAN_EXISTS — and a replay of a request that
-   * SUCCEEDED would take that 409, which stops the offline queue and asks a
-   * person to resolve work that was already done.
-   */
-  const planId = req.body._id ? String(req.body._id).trim() : null;
-  if (planId) {
-    const already = await PaymentPlan.findById(planId).lean();
-    if (already) {
-      if (String(already.schoolId) !== String(schoolId)) {
-        return res.status(409).json({
-          success: false, code: "PLAN_ID_TAKEN",
-          message: "That plan id already belongs to another school",
-        });
-      }
-      return res.status(200).json({ success: true, replay: true, data: already });
-    }
-  }
-
-  const student = await Student.findOne({ _id: studentId, schoolId, deletedAt: null })
-    .select("_id").lean();
-  if (!student) {
-    return res.status(404).json({
-      success: false, code: "STUDENT_NOT_FOUND",
-      message: "No student with that id in this school",
+  try {
+    const { plan, replay } = await agreements.propose({
+      schoolId,
+      studentId:     req.body.studentId,
+      academicYear:  req.body.academicYear,
+      term:          req.body.term ?? null,
+      instalments:   req.body.instalments,
+      reason:        req.body.reason,
+      notes:         req.body.notes,
+      attachments:   req.body.attachments,
+      effectiveFrom: req.body.effectiveFrom,
+      expiresAt:     req.body.expiresAt,
+      planId:        req.body._id ? String(req.body._id).trim() : null,
+      userId:        req.user?._id ? String(req.user._id) : null,
     });
+    return res.status(replay ? 200 : 201).json({ success: true, ...(replay ? { replay: true } : {}), data: plan });
+  } catch (err) {
+    if (!err.status) throw err;
+    return res.status(err.status).json({ success: false, code: err.code, message: err.message });
   }
+}));
 
-  const instalments = [];
-  for (const [i, raw] of req.body.instalments.entries()) {
-    const amount = asWholeAmount(raw?.amount);
-    if (amount === null || amount <= 0) {
-      return bad(
-        res,
-        `Instalment ${i + 1} must be a whole number of XAF greater than zero`,
-        "INVALID_AMOUNT"
-      );
-    }
-
-    const dueDate = asDueDate(raw?.dueDate);
-    if (dueDate === undefined || dueDate === null) {
-      return bad(
-        res,
-        `Instalment ${i + 1} needs a date like 2026-09-15`,
-        "INVALID_DATE"
-      );
-    }
-
-    instalments.push({ seq: i + 1, amount, dueDate });
-  }
-
-  // The schedule has to add up to what is actually owed. A plan for less would
-  // quietly forgive the difference — which is a waiver, and waivers go through
-  // approval. A plan for more would have the family chased for money the
-  // ledger says they do not owe.
-  const totals = await balanceFor({ schoolId, studentId, academicYear });
-  const planned = instalments.reduce((s, i) => s + i.amount, 0);
-
-  if (totals.balance <= 0) {
-    return bad(
-      res,
-      "This family has nothing outstanding for that year",
-      "NOTHING_OUTSTANDING"
-    );
-  }
-  if (planned !== totals.balance) {
-    return bad(
-      res,
-      `The instalments add up to ${planned}, but ${totals.balance} is outstanding. ` +
-      `A plan reschedules what is owed; it cannot change the amount — use a waiver for that.`,
-      "PLAN_TOTAL_MISMATCH"
-    );
-  }
+// PATCH /api/fees/plans/:id — propose a change to an agreement.
+//
+// A pending agreement's proposal is replaced; an approved one keeps governing
+// while the change waits for approval. Either way the history records who
+// changed what, with the instalments before and after.
+router.patch("/plans/:id", canPlan, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
 
   try {
-    const plan = await PaymentPlan.create({
-      // A supplied _id is kept, so a plan agreed with no connection can be
-      // replayed without becoming a second plan. The replay guard is above,
-      // ahead of the balance check — see the note there.
-      _id: planId || undefined,
-      schoolId, studentId, academicYear, term,
-      instalments, reason,
-      agreedBy: req.user?._id ? String(req.user._id) : null,
+    const plan = await agreements.proposeChange({
+      schoolId,
+      planId:        req.params.id,
+      instalments:   req.body.instalments,
+      effectiveFrom: req.body.effectiveFrom,
+      expiresAt:     req.body.expiresAt,
+      notes:         req.body.notes,
+      attachments:   req.body.attachments,
+      reason:        req.body.reason,
+      userId:        req.user?._id ? String(req.user._id) : null,
     });
-    return res.status(201).json({ success: true, data: plan });
+    return res.json({ success: true, data: plan });
   } catch (err) {
-    if (err?.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        code:    "PLAN_EXISTS",
-        message: "This family already has an active plan for that year and term. " +
-                 "Cancel it before agreeing a new one.",
-      });
-    }
-    throw err;
+    if (!err.status) throw err;
+    return res.status(err.status).json({ success: false, code: err.code, message: err.message });
   }
 }));
 
@@ -785,7 +721,10 @@ router.post("/plans/:id/cancel", canPlan, asyncHandler(async (req, res) => {
   plan.cancelledBy     = req.user?._id ? String(req.user._id) : null;
   plan.cancelledAt     = new Date();
   plan.cancelledReason = reason;
+  plan.history.push({ by: plan.cancelledBy, action: "cancelled", note: reason });
   await plan.save();
+  // Nothing left in the approvals queue for an agreement that no longer exists.
+  await agreements.closeOpenRequests(plan, { by: plan.cancelledBy });
 
   return res.json({ success: true, data: plan });
 }));

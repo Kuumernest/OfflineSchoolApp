@@ -174,6 +174,14 @@ async function raise({
 
 const appliers = {
   /**
+   * An individual fee agreement, or a change to one (agreements.service).
+   * Approving makes it govern the pupil; rejecting leaves what was in force.
+   */
+  async agreement(request, { approve }) {
+    return require("./agreements.service").applyDecision(request, { approve });
+  },
+
+  /**
    * An expense already exists and is pending. Approving lets it count.
    */
   async expense(request, { approve }) {
@@ -414,6 +422,12 @@ async function cancel({ schoolId, requestId, userId }) {
       { _id: request.targetId, schoolId, status: "pending" },
       { $set: { status: "rejected" } }
     );
+  }
+
+  // A withdrawn agreement must not keep the pupil's slot, nor a withdrawn
+  // change sit on the agreement for ever.
+  if (request.kind === "agreement" && request.targetId) {
+    await require("./agreements.service").onWithdrawn(request);
   }
 
   return request;

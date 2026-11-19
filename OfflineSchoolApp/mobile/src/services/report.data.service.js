@@ -5,6 +5,9 @@ import { DB }                                         from "../db/dbService";
 import api                                            from "./api";
 import { resolveColumns, resolveColumnOptional, COL } from "../db/schemaUtils";
 import { appError }                                   from "../utils/appError";
+// Loaded when first used, not at import: it brings in expo-file-system, and
+// a service many modules import (and the Node checks load) should not.
+const photoCache = () => require("./photoCache.service");
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -830,9 +833,11 @@ export async function assembleReportData({
     dateOfBirth:     student.dateOfBirth      ||
                      student.date_of_birth    || "",
     gender:          student.gender           || "",
-    photoUrl:        student.photoBase64      ||
-                     student.photo_url        ||
-                     student.photoUrl         || "",
+    // As a data: URI: this card is printed from the phone, where a server
+    // path or a file:// link is a blank box (photoCache.service.js). Before
+    // photo_url was synced this was always "", the photo box always empty.
+    photoUrl:        student.photoBase64 ||
+                     await photoCache().photoDataUri(student.photo_url || student.photoUrl || ""),
 
     className: classRow?.name || meta.className || "",
     classId:   classId        || "",

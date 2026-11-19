@@ -474,9 +474,13 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
   const now = new Date();
 
   // Check for an active payment plan
-  const plan = await PaymentPlan.findOne({
+  //
+  // Only an agreement that governs today: a family is not shown — or
+  // measured against — one still waiting for approval, or expired.
+  const found = await PaymentPlan.findOne({
     schoolId, studentId, status: "active", deletedAt: null,
   }).lean();
+  const plan = require("../../../shared/arrears").isPlanApplicable(found, new Date()) ? found : null;
 
   // How much of the account is late, by the one rule every screen reads
   // (arrears.service → shared/arrears): the Fees page's owed and overdue,

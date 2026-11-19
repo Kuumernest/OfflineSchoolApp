@@ -166,8 +166,28 @@ export async function createPlan(payload: {
   term?:        string | null;
   reason:       string;
   instalments:  Array<{ amount: number; dueDate: string }>;
+  effectiveFrom?: string | null;
+  expiresAt?:     string | null;
+  notes?:         string | null;
 }): Promise<PaymentPlan> {
   const { data } = await api.post(`${BASE}/plans`, payload);
+  return unwrap<PaymentPlan>(data);
+}
+
+/**
+ * Propose a change to an agreement. One still waiting for approval is simply
+ * replaced; an approved one keeps governing until an administrator approves
+ * the change (it goes to the approvals queue).
+ */
+export async function updatePlan(id: string, payload: {
+  schoolId:     string;
+  reason:       string;
+  instalments?: Array<{ amount: number; dueDate: string }>;
+  effectiveFrom?: string | null;
+  expiresAt?:     string | null;
+  notes?:         string | null;
+}): Promise<PaymentPlan> {
+  const { data } = await api.patch(`${BASE}/plans/${id}`, payload);
   return unwrap<PaymentPlan>(data);
 }
 

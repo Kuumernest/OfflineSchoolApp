@@ -114,6 +114,7 @@ const ExportsPage      = lazyPage(() => import("@/pages/exports/index"));
 const PortalCodesPage  = lazyPage(() => import("@/pages/portal/codes"));
 const ParentPortalPage = lazyPage(() => import("@/pages/portal/index"));
 const VerifyPage       = lazyPage(() => import("@/pages/verify/index"));
+const GatePage         = lazyPage(() => import("@/pages/gate/GatePage"));
 const NotFoundPage     = lazyPage(() => import("@/pages/NotFoundPage"));
 
 // The platform: above any school. super_admin only — see navigation.ts.
@@ -278,6 +279,11 @@ export default function App() {
                 and reading someone else's are separate rights, and the API
                 draws the same line. */}
             <Route path="/messages"  element={page(<MessagesPage />)} />
+
+            {/* The gate. Not a role: gate.scan is delegable (a bursar who also
+                runs the gate), so the staff group lets everyone in and the page
+                itself turns away whoever lacks gate.scan, as the API does. */}
+            <Route path="/gate"      element={page(<GatePage />)} />
           </Route>
 
           {/* ── The office: parents and money ──────────────────────────── */}

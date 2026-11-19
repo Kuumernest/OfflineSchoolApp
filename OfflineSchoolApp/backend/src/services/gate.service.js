@@ -6,6 +6,8 @@ const crypto = require("crypto");
 const Student   = require("../db/models/Student");
 const School    = require("../db/models/School");
 const GateEvent = require("../db/models/GateEvent");
+const GateAuthorization = require("../db/models/GateAuthorization");
+const Class     = require("../db/models/Class");
 const notify    = require("./notification");
 const { displayName } = require("../utils/studentName");
 
@@ -130,9 +132,54 @@ const shouldNotify = ({ school, direction, at }) => {
  * @param {Date}   [opts.at]       when the device recorded it — may be in the past
  * @returns {Promise<{event, student, direction, duplicate, notification}>}
  */
+/**
+ * The parts of a compliance result worth keeping on a gate event — the
+ * figures and flags the operator acted on, not the whole schedule.
+ */
+const verificationSummary = (v, { computedOn }) => {
+  if (!v || typeof v !== "object") return null;
+  const num = (x) => (Number.isFinite(Number(x)) ? Math.round(Number(x)) : null);
+  const status = ["compliant", "due", "non_compliant", "authorized"].includes(v.status) ? v.status : null;
+  if (!status) return null;
+  return {
+    status,
+    computedOn,
+    amountDue:        num(v.amountDue),
+    totalPaid:        num(v.totalPaid),
+    outstandingDue:   num(v.outstandingDue),
+    remainingBalance: num(v.remainingBalance),
+    arrangement:      v.arrangement === "agreement" ? "agreement" : "standard",
+    agreementState:   typeof v.agreementState === "string" ? v.agreementState.slice(0, 40) : null,
+    dependsOnPending: Boolean(v.dependsOnPending),
+    pendingAmount:    num(v.pending?.amount ?? v.pendingAmount) ?? 0,
+    stale:            Boolean(v.stale),
+    dataAsOf:         v.dataAsOf ? new Date(v.dataAsOf) : null,
+    authorizationId:  v.authorization?._id ? String(v.authorization._id) : null,
+  };
+};
+
+const STUDENT_FIELDS = "studentName name firstName lastName enrollmentNo classId status photoUrl";
+
+/** What the gate screen shows of a pupil, besides the fees. */
+const studentCard = async (student) => {
+  if (!student) return null;
+  const cls = student.classId
+    ? await Class.findOne({ _id: student.classId }).select("name").lean().catch(() => null)
+    : null;
+  return {
+    _id:          String(student._id),
+    name:         displayName(student) || null,
+    enrollmentNo: student.enrollmentNo ?? null,
+    classId:      student.classId ? String(student.classId) : null,
+    className:    cls?.name ?? null,
+    photoUrl:     student.photoUrl ?? null,
+  };
+};
+
 const scan = async ({
-  schoolId, id = null, token, at, scannedBy, station,
+  schoolId, id = null, token, studentId: givenStudentId = null, at, scannedBy, station,
   direction: given, notifyGuardian = true,
+  verification: deviceVerification = null, verify = false,
 }) => {
   // ── A replay is the event it already made ──────────────────────────────
   //
@@ -152,23 +199,26 @@ const scan = async ({
         throw err;
       }
       const student = await Student.findOne({ _id: prior.studentId, schoolId })
-        .select("_id studentName firstName lastName enrollmentNo classId")
+        .select(STUDENT_FIELDS)
         .lean();
       return { replay: true, duplicate: true, event: prior, student: student ?? { _id: prior.studentId }, direction: prior.direction, notification: null, notifyPolicy: null };
     }
   }
 
-  const value = String(token ?? "").trim();
-  if (!value) {
+  // A card, or — for a pupil who forgot theirs — the pupil the operator
+  // found by name (method "manual"). Either way the same checks follow.
+  const value  = String(token ?? "").trim();
+  const manual = !value && givenStudentId ? String(givenStudentId).trim() : null;
+  if (!value && !manual) {
     const err = new Error("No code was scanned");
     err.status = 400;
     err.code = "NO_TOKEN";
     throw err;
   }
 
-  const student = await Student.findOne({
-    gateToken: value, schoolId, deletedAt: null,
-  }).select("studentName name firstName lastName enrollmentNo classId status").lean();
+  const student = await Student.findOne(
+    manual ? { _id: manual, schoolId, deletedAt: null } : { gateToken: value, schoolId, deletedAt: null }
+  ).select(STUDENT_FIELDS).lean();
 
   if (!student) {
     const err = new Error("That card is not recognised");
@@ -219,6 +269,18 @@ const scan = async ({
       ? given
       : (last?.direction === "in" ? "out" : "in");
 
+  // The server's own verification, computed now — beside whatever the device
+  // showed (which may have been offline, stale, or counting a payment that
+  // was never confirmed). Never allowed to stop the scan being recorded.
+  let compliance = null;
+  if (verify) {
+    try {
+      compliance = await require("./compliance.service").complianceFor({ schoolId, studentId: String(student._id) });
+    } catch (err) {
+      console.error(`[gate] compliance for ${student._id} failed: ${err.message}`);
+    }
+  }
+
   const event = await GateEvent.create({
     ...(id ? { _id: id } : {}),
     schoolId,
@@ -228,6 +290,9 @@ const scan = async ({
     at: when,
     scannedBy: scannedBy ?? null,
     station: station ?? null,
+    method: manual ? "manual" : "card",
+    verification:       verificationSummary(deviceVerification, { computedOn: "device" }),
+    serverVerification: verificationSummary(compliance, { computedOn: "server" }),
   });
 
   const school = await School.findById(schoolId).lean().catch(() => null);
@@ -270,7 +335,158 @@ const scan = async ({
     // Returned so the gate screen can say "not notified — on time" rather than
     // leaving the operator wondering whether the message failed.
     notifyPolicy: policy,
+    compliance,
   };
+};
+
+/**
+ * What a gate device holds to verify pupils with no connection: every pupil on
+ * the register (with or without a card — a forgotten card is looked up by
+ * name), their photo path, class, and the minimal fee facts the compliance
+ * engine reads. Amounts and dates only: no receipt numbers, methods,
+ * references, cashiers, notes or agreement reasons.
+ *
+ * Replaced whole on each pull, and stamped with when it was made, so the
+ * device can say how old its answer is.
+ */
+const snapshot = async ({ schoolId, asOf = new Date() }) => {
+  const rows = await Student.find({ schoolId, status: "approved", deletedAt: null })
+    .select("studentName name firstName lastName enrollmentNo classId gateToken photoUrl").lean();
+  const classes = await Class.find({ schoolId, deletedAt: null }).select("name").lean();
+  const className = new Map(classes.map((c) => [String(c._id), c.name]));
+
+  const { factsFor } = require("./compliance.service");
+  const { academicYear, facts } = await factsFor({ schoolId, studentIds: rows.map((s) => String(s._id)), asOf });
+
+  return {
+    generatedAt: new Date(),
+    academicYear,
+    students: rows.map((s) => {
+      const id = String(s._id);
+      return {
+        studentId:    id,
+        token:        s.gateToken ?? null,
+        name:         displayName(s) || null,
+        enrollmentNo: s.enrollmentNo ?? null,
+        classId:      s.classId ? String(s.classId) : null,
+        className:    s.classId ? (className.get(String(s.classId)) ?? null) : null,
+        photoUrl:     s.photoUrl ?? null,
+        ...facts.get(id),
+      };
+    }),
+  };
+};
+
+/** One pupil, for a manual lookup at the gate: the card and the compliance. */
+const verifyStudent = async ({ schoolId, studentId }) => {
+  const student = await Student.findOne({ _id: studentId, schoolId, deletedAt: null })
+    .select(STUDENT_FIELDS).lean();
+  if (!student) {
+    const err = new Error("Student not found");
+    err.status = 404;
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+  const { complianceFor } = require("./compliance.service");
+  return {
+    student: { ...(await studentCard(student)), status: student.status },
+    compliance: await complianceFor({ schoolId, studentId: String(student._id) }),
+  };
+};
+
+/** Name / admission-number search for the gate's manual lookup. */
+const search = async ({ schoolId, q, limit = 20 }) => {
+  const text = String(q ?? "").trim();
+  if (text.length < 2) return [];
+  const rx = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const rows = await Student.find({
+    schoolId, status: "approved", deletedAt: null,
+    $or: [{ studentName: rx }, { name: rx }, { firstName: rx }, { lastName: rx }, { enrollmentNo: rx }, { admissionNo: rx }],
+  }).select(STUDENT_FIELDS).limit(Math.min(50, Math.max(1, Number(limit) || 20))).lean();
+  return Promise.all(rows.map(studentCard));
+};
+
+/**
+ * Recent verifications: the gate events with the fee status each one showed.
+ * Newest first; one pupil's when studentId is given.
+ */
+const history = async ({ schoolId, studentId = null, limit = 50 }) => {
+  const filter = { schoolId, deletedAt: null };
+  if (studentId) filter.studentId = String(studentId);
+  const events = await GateEvent.find(filter).sort({ at: -1 })
+    .limit(Math.min(200, Math.max(1, Number(limit) || 50))).lean();
+  const ids = [...new Set(events.map((e) => e.studentId))];
+  const students = await Student.find({ _id: { $in: ids } })
+    .select("studentName name firstName lastName enrollmentNo").lean();
+  const byId = new Map(students.map((s) => [String(s._id), s]));
+  return events.map((e) => ({
+    _id: e._id,
+    studentId: e.studentId,
+    studentName: displayName(byId.get(e.studentId)) || null,
+    enrollmentNo: byId.get(e.studentId)?.enrollmentNo ?? null,
+    direction: e.direction,
+    method: e.method ?? "card",
+    at: e.at,
+    receivedAt: e.receivedAt,
+    scannedBy: e.scannedBy,
+    station: e.station,
+    voided: Boolean(e.voidedAt),
+    verification: e.verification ?? null,
+    serverVerification: e.serverVerification ?? null,
+  }));
+};
+
+// ── Gate authorizations (shared/compliance.js "Authorized") ────────────────
+
+const authFail = (message, code, status = 400) => {
+  const err = new Error(message);
+  err.status = status;
+  err.code = code;
+  return err;
+};
+
+const authorize = async ({ schoolId, studentId, validFrom, validUntil, reason, grantedBy }) => {
+  const { asDueDate } = require("../../../shared/feeStructures");
+  const why = String(reason ?? "").trim();
+  if (!why) throw authFail("A reason is required", "REASON_REQUIRED");
+  const until = asDueDate(validUntil);
+  if (!until) throw authFail("An authorization needs an end date like 2026-12-15", "INVALID_DATE");
+  const from = validFrom ? asDueDate(validFrom) : new Date(new Date().toISOString().slice(0, 10));
+  if (!from) throw authFail("The start date needs to look like 2026-12-01", "INVALID_DATE");
+  if (until < from) throw authFail("The authorization ends before it starts", "INVALID_DATE");
+  // A pass is a short decision, not a standing exemption.
+  if (until - from > 366 * 86_400_000) throw authFail("An authorization can last at most a year", "TOO_LONG");
+
+  const exists = await Student.exists({ _id: studentId, schoolId, deletedAt: null });
+  if (!exists) throw authFail("Student not found", "NOT_FOUND", 404);
+
+  return (await GateAuthorization.create({
+    schoolId, studentId: String(studentId), validFrom: from, validUntil: until,
+    reason: why, grantedBy: grantedBy ?? null,
+  })).toObject();
+};
+
+const revokeAuthorization = async ({ schoolId, id, revokedBy, reason }) => {
+  const why = String(reason ?? "").trim();
+  if (!why) throw authFail("A reason is required", "REASON_REQUIRED");
+  const a = await GateAuthorization.findOne({ _id: id, schoolId, deletedAt: null });
+  if (!a) throw authFail("Authorization not found", "NOT_FOUND", 404);
+  if (a.revokedAt) throw authFail("This authorization was already revoked", "ALREADY_REVOKED", 409);
+  a.revokedAt = new Date();
+  a.revokedBy = revokedBy ?? null;
+  a.revokeReason = why;
+  await a.save();
+  return a.toObject();
+};
+
+const listAuthorizations = async ({ schoolId, studentId = null, current = false }) => {
+  const filter = { schoolId, deletedAt: null };
+  if (studentId) filter.studentId = String(studentId);
+  if (current) {
+    filter.revokedAt = null;
+    filter.validUntil = { $gte: new Date(Date.now() - 86_400_000) };
+  }
+  return GateAuthorization.find(filter).sort({ validUntil: -1 }).limit(500).lean();
 };
 
 /** Everyone scanned today, newest first — what the gate screen shows. */
@@ -308,4 +524,6 @@ const today = async ({ schoolId, date }) => {
 module.exports = {
   issueToken, tokenFor, scan, today, dayKey,
   shouldNotify, DEBOUNCE_SECONDS,
+  snapshot, verifyStudent, search, history, studentCard, verificationSummary,
+  authorize, revokeAuthorization, listAuthorizations,
 };

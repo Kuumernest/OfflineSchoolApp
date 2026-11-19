@@ -24,6 +24,7 @@ import { errorText } from "../../../src/utils/appError";
 import { COLORS, TILE, ACCENT, SEMANTIC, accentBadge } from "../../../src/theme/colors";
 import { HeaderIcon } from "../../../src/components/Tinted";
 import { tileShell } from "../../../src/components/Tiles";
+import StudentPhoto from "../../../src/components/StudentPhoto";
 
 /**
  * One-argument wrapper — preserves the existing call signature.
@@ -176,6 +177,7 @@ const loadStudentsFromSQLite = async (classId) => {
       ? "COALESCE(NULLIF(TRIM(s.email),''), NULLIF(TRIM(u.email),''))"
       : sCols.has("email") ? "NULLIF(TRIM(s.email), '')" : "NULL";
     const statExpr   = sCols.has("status") ? "s.status" : "NULL";
+    const photoExpr  = sCols.has("photo_url") ? "s.photo_url" : "NULL";
     const joinClause = hasUserJoin ? "LEFT JOIN users u ON u.id = s.user_id" : "";
 
     const rows = await dbQuery(
@@ -184,7 +186,8 @@ const loadStudentsFromSQLite = async (classId) => {
          ${admExpr}   AS admissionNumber,
          ${genExpr}   AS gender,
          ${emailExpr} AS email,
-         ${statExpr}  AS status
+         ${statExpr}  AS status,
+         ${photoExpr} AS photoUrl
        FROM students s ${joinClause}
        WHERE ${classWhere} ${delFilter}
        GROUP BY s.id
@@ -233,6 +236,7 @@ const loadStudentsFromAPI = async (classId, schoolId) => {
             gender:          s.gender || s.sex || null,
             email:           s.email  || null,
             status:          s.status || null,
+            photoUrl:        s.photoUrl || null,
           }, classId)
         );
         return deduplicateStudents(sanitised);
@@ -268,6 +272,7 @@ const sanitiseStudent = (raw, classId) => {
     email:           raw.email  != null ? String(raw.email).trim()  : null,
     status:          raw.status != null ? String(raw.status).trim() : null,
     classId:         String(raw.classId ?? classId ?? "").trim(),
+    photoUrl:        raw.photoUrl || null,
   };
 };
 
@@ -545,11 +550,15 @@ function StudentRow({ student }) {
     // handset (the office's student detail is the console's), and a row that
     // opened "Unmatched Route" was worse than one that opens nothing.
     <View style={styles.row}>
-      <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-        <Text style={[styles.avatarText, { color: avatar.text }]}>
-          {initials}
-        </Text>
-      </View>
+      {student.photoUrl
+        ? <StudentPhoto photoUrl={student.photoUrl} name={student.name} size="sm" style={styles.avatar} />
+        : (
+          <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
+            <Text style={[styles.avatarText, { color: avatar.text }]}>
+              {initials}
+            </Text>
+          </View>
+        )}
 
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>

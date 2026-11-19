@@ -260,6 +260,13 @@ const PERMISSION_DEFS = [
     "The person on the gate in the morning is usually a teacher on duty."),
   p("gate.manage",      "gate", ADMIN_ROLES, true,
     "Reissue a card, flush the notification queue."),
+  p("gate.verify",      "gate", TEACHING_ROLES, true,
+    "See a pupil's fee compliance at the gate: status, amounts due and paid, " +
+    "next due date, arrangement. Read-only — no payment, structure, agreement " +
+    "or waiver is reachable through it, and no receipt, method or cashier."),
+  p("gate.authorize",   "gate", ADMIN_ROLES, false,
+    "Authorize a pupil to pass the gate until a date whatever their fees " +
+    "say. Not delegable: it is a decision about money owed to the school."),
 
   // ── Talking ───────────────────────────────────────────────────────────────
   //

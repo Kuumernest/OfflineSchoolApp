@@ -34,7 +34,7 @@
 
 const { displayName } = require("../../../../../shared/studentName");
 const { currentAcademicYearOf, yearKey } = require("../../../../../shared/academicYear");
-const { feePosition } = require("../../../../../shared/arrears");
+const { feePosition, planStatus: sharedPlanStatus, isPlanApplicable } = require("../../../../../shared/arrears");
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
@@ -376,7 +376,10 @@ module.exports = [
       // planStatus rather than a simplification of it, and the arrears list and
       // the reminders preview in this same file already depend on it. Computing
       // it here too is what makes those three agree.
-      const planStatus = plan
+      // Only an agreement that governs today (approved, within its dates) is
+      // measured — as the server's ledger read does (planApplies).
+      const planApplies = isPlanApplicable(plan, new Date());
+      const planStatus = plan && planApplies
         ? planStatusLocal(plan, totals.paid, Date.now())
         : null;
 
@@ -389,7 +392,7 @@ module.exports = [
         className:   (pupil.classId && docs.get("class", pupil.classId)?.name) || pupil.className || null,
       } : null;
 
-      return ok({ data: { student, charges, payments, totals, plan, planStatus } });
+      return ok({ data: { student, charges, payments, totals, plan, planStatus, planApplies } });
     },
   },
 ];
@@ -483,43 +486,12 @@ const DAY_MS = 86_400_000;
  * Dates are returned exactly as the instalment holds them, as the server does —
  * not re-serialised — so a JSON comparison of the two answers matches.
  */
-const planStatusLocal = (plan, paid, asOf) => {
-  const schedule = [...(plan?.instalments ?? [])].sort((a, b) => a.seq - b.seq);
+const planStatusLocal = (plan, paid, asOf) =>
+  // The server's own function now (shared/arrears.js), so the two cannot
+  // drift — it also sets aside what was paid before a "balance" agreement
+  // (creditedToPlan), which a mirror would have had to copy by hand.
+  sharedPlanStatus(plan, paid, new Date(asOf));
 
-  let dueByNow    = 0;
-  let nextDue     = null;
-  let nextAmount  = 0;
-  let missedSince = null;
-  let running     = 0;
-
-  for (const inst of schedule) {
-    running += inst.amount;
-
-    // Due once its day has ended: an instalment due on the 15th is not late
-    // on the 15th.
-    if (endOfDay(inst.dueDate) < asOf) {
-      dueByNow = running;
-      // The FIRST shortfall wins — that is the date a reminder should quote.
-      if (missedSince === null && paid < running) missedSince = inst.dueDate;
-    } else if (nextDue === null) {
-      nextDue    = inst.dueDate;
-      nextAmount = inst.amount;
-    }
-  }
-
-  const behindBy = Math.max(0, dueByNow - paid);
-
-  return {
-    dueByNow,
-    behindBy,
-    isBehind: behindBy > 0,
-    nextDue,
-    nextAmount,
-    missedSince,
-    /** Every instalment covered, whether or not the dates have passed. */
-    settled: paid >= running,
-  };
-};
 
 /**
  * Whether the school's notification channel has a valid address for a student.
@@ -614,7 +586,9 @@ module.exports.push(
           schoolId, status: "active", deletedAt: null,
           ...(academicYear ? { academicYear } : {}),
         });
-        const plansByStudent = new Map(plans.map((p) => [String(p.studentId), p]));
+        const plansByStudent = new Map(
+          plans.filter((p) => isPlanApplicable(p, new Date(now))).map((p) => [String(p.studentId), p]),
+        );
 
         for (const { studentId } of billedStudentIds) {
           const sid = String(studentId);

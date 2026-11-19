@@ -487,6 +487,9 @@ app.whenReady().then(() => {
     // Chromium's network stack: the machine's proxy and certificate settings,
     // as a browser on it would use.
     fetchImpl: (url, init) => net.fetch(url, { ...init, bypassCustomProtocolHandlers: true }),
+    // Pupil photos for offline use (appProtocol.js photoCache) — beside the
+    // mirror database, which already holds the same pupils' records.
+    photoCacheDir: path.join(app.getPath("userData"), "data", "photos"),
   }));
 
   createWindow();

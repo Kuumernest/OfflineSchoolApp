@@ -51,6 +51,8 @@ const KIND_ICON: Record<ApprovalKind, typeof Receipt> = {
   refund:  HandCoins,
   waiver:  Banknote,
   payroll: CalendarClock,
+  // An individual fee agreement, or a change to one (fees.routes /plans).
+  agreement: CalendarClock,
 };
 
 const STATUS_STYLE: Record<ApprovalStatus, string> = {

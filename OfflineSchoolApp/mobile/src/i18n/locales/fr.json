@@ -1744,7 +1744,74 @@
     "notifyAll": "Chaque scan",
     "notifyAllHint": "Deux messages par élève et par jour. Sur un canal payant, c'est le coût principal.",
     "lateAfter": "En retard après",
-    "earlyBefore": "Départ anticipé avant"
+    "earlyBefore": "Départ anticipé avant",
+    "status": {
+      "compliant": "En règle",
+      "due": "Échéance proche",
+      "non_compliant": "Non en règle",
+      "authorized": "Autorisé"
+    },
+    "statusShort": {
+      "compliant": "OK",
+      "due": "Échéance",
+      "non_compliant": "Doit",
+      "authorized": "Laissez-passer"
+    },
+    "admissionNo": "N° matricule",
+    "className": "Classe",
+    "academicYear": "Année scolaire",
+    "totalFees": "Total des frais",
+    "expectedInstalment": "Versement attendu",
+    "totalPaid": "Total payé (confirmé)",
+    "outstandingDue": "Versement en retard",
+    "remainingBalance": "Solde restant",
+    "nextDue": "Prochaine échéance",
+    "nextDueValue": "{{date}} — {{amount}}",
+    "arrangement": "Modalité de paiement",
+    "arrangementStandard": "Échéancier standard",
+    "arrangementAgreement": "Accord individuel",
+    "agreementPending": "Accord en attente d'approbation — non en vigueur",
+    "agreementNotInForce": "Accord non en vigueur — l'échéancier standard s'applique",
+    "lastPayment": "Dernier paiement",
+    "none": "Aucun",
+    "authorizedUntil": "Laissez-passer jusqu'au {{date}}",
+    "authorizedReason": "Motif : {{reason}}",
+    "offlineComputed": "Hors ligne — calculé sur cet appareil à partir des données synchronisées {{age}}",
+    "staleData": "Données anciennes (synchronisées il y a plus de 24 h)",
+    "pendingDepends": {
+      "one": "{{count}} paiement enregistré sur cet appareil n'est pas encore confirmé ({{amount}}) — serait « {{status}} » une fois confirmé",
+      "other": "{{count}} paiements enregistrés sur cet appareil ne sont pas encore confirmés ({{amount}}) — serait « {{status}} » une fois confirmés"
+    },
+    "pendingList": {
+      "one": "{{count}} paiement enregistré sur cet appareil n'est pas encore confirmé ({{amount}})",
+      "other": "{{count}} paiements enregistrés sur cet appareil ne sont pas encore confirmés ({{amount}})"
+    },
+    "rejectedPayments": {
+      "one": "{{count}} paiement a été refusé par le serveur",
+      "other": "{{count}} paiements ont été refusés par le serveur"
+    },
+    "sourceServer": "Vérifié auprès du serveur",
+    "sourceDevice": "Calculé sur cet appareil",
+    "noFeeData": "Pas encore de données de frais pour cet élève sur cet appareil.",
+    "feesReadOnly": "Les frais sont en lecture seule ici.",
+    "age": {
+      "now": "à l'instant",
+      "minutes": "il y a {{count}} min",
+      "hours": "il y a {{count}} h",
+      "days": "il y a {{count}} j"
+    },
+    "syncedAgo": "Données de frais synchronisées {{age}}",
+    "neverSynced": "Données de frais pas encore synchronisées sur cet appareil",
+    "offline": "Hors ligne",
+    "searchPlaceholder": "Rechercher par nom ou matricule",
+    "searchEmpty": "Aucun élève trouvé sur cet appareil",
+    "recordIn": "Enregistrer l'arrivée",
+    "recordOut": "Enregistrer le départ",
+    "recordedRecently": "Déjà enregistré dans les 90 dernières secondes",
+    "methodCard": "Carte",
+    "methodManual": "Manuel",
+    "close": "Fermer",
+    "verifying": "Vérification auprès du serveur…"
   },
   "selectSchool": {
     "title": "Trouver une école",

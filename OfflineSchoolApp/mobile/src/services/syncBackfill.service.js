@@ -247,10 +247,15 @@ const SPECS = [
     payload: (row, { schoolId }) => ({
       _id:       row.id,
       schoolId:  row.school_id || schoolId,
-      token:     row.token,
+      // A passage recorded by name (forgotten card) has no token: the pupil
+      // goes instead, or the server would refuse it as NO_TOKEN.
+      ...(row.token ? { token: row.token } : { studentId: row.student_id }),
       at:        row.at,
       direction: row.direction,
       station:   row.station || null,
+      // The status the operator was shown is kept on the row; the full
+      // result is not, so a re-queued scan carries what is known.
+      ...(row.verification_status ? { verification: { status: row.verification_status, computedOn: "device" } } : {}),
     }),
   },
 

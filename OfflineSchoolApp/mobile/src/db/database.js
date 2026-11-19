@@ -256,6 +256,7 @@ const _openDatabase = async (DB_NAME) => {
         enrollmentNo    TEXT,
         email           TEXT,
         gender          TEXT,
+        photo_url       TEXT,
         is_active       INTEGER DEFAULT 1,
         status          TEXT DEFAULT 'approved',
         deleted_at      TEXT,
