@@ -85,8 +85,17 @@ export interface GateResult {
   duplicate:  boolean;
   replay:     boolean;
   notified:   boolean;
-  /** The server's answer when there is one, else this device's. Null without gate.verify. */
+  /** The server's answer when there is one, else this device's. */
   compliance: WireCompliance | null;
+  /**
+   * Why there is no compliance, when there is none — so the card can SAY it
+   * rather than leave the fee section out:
+   *   not_permitted    the server sent none and this account lacks gate.verify
+   *   no_offline_data  no answer from the server, and the pupil is not in the
+   *                    fee data saved on this device (or none is saved)
+   *   server_missing   the server answered but could not include the fees
+   */
+  feeUnavailable: "not_permitted" | "no_offline_data" | "server_missing" | null;
   /** Computed here from the snapshot, not by the server. */
   computedLocally: boolean;
   /** This device's pending payments, kept when the server's answer is shown (it cannot know them). */

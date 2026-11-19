@@ -5954,7 +5954,6 @@
     "duplicate": "Scanné de nouveau à quelques instants d'intervalle — compté une seule fois.",
     "replay": "Ce scan était déjà enregistré.",
     "queued": "Pas encore envoyé — il le sera au retour de la connexion.",
-    "noFeeData": "Situation des frais indisponible : cet élève ne figure pas dans les données de frais enregistrées sur cet appareil.",
     "none": "Aucun",
     "nextDueValue": "{{date}} ({{amount}})",
     "authorizedUntil": "Laissez-passer jusqu'au {{date}}",
@@ -6036,6 +6035,12 @@
       "revokeBlurb": "Révoquer le laissez-passer de {{name}} ({{from}} – {{until}}) ? Sa situation de frais s'applique de nouveau dès maintenant.",
       "revoked": "Laissez-passer révoqué",
       "revokeFailed": "Impossible de révoquer le laissez-passer"
+    },
+    "feeUnavailable": {
+      "title": "Situation des frais non affichée.",
+      "not_permitted": "Votre compte ne peut pas voir la situation des frais au portail (la capacité « Voir la situation des frais au portail »). Demandez à un administrateur, puis rouvrez cette page.",
+      "no_offline_data": "Pas de connexion, et cet élève ne figure pas dans les données de frais enregistrées sur cet appareil. Reconnectez-vous une fois pour les télécharger.",
+      "server_missing": "Le serveur a enregistré le passage mais n'a pas pu charger les frais de cet élève. Rescannez ; si cela persiste, vérifiez le compte de frais de l'élève."
     }
   }
 }

@@ -106,5 +106,32 @@ const forbidden = [
 check("no payment, agreement, waiver or structure action on the gate screen",
   forbidden.filter((f) => gateSources.includes(f)), []);
 
+console.log("\n--- the fee card always shows after a scan (bug: a stale session hid it) ---");
+// A browser signed in before gate.verify existed kept a permission list
+// without it for up to 30 days, and the card left the fee section out with
+// no word of why — while the server had sent the full compliance.
+const card = read("src/pages/gate/VerificationCard.tsx");
+check("the fee section is not gated on the browser's permission list",
+  /\{canVerify && s && \(\s*result\.compliance/.test(card), false);
+check("…it renders the card, or the reason there is none",
+  /result\.compliance\s*\?\s*<FeePanel/.test(card) && /gatePage\.feeUnavailable\./.test(card), true);
+check("the server's compliance is shown whatever the browser's list says",
+  /const shown = res\.compliance \?\? \(canVerify \? local : null\);/.test(page), true);
+check("every result records why fees are missing, when they are",
+  (page.match(/feeUnavailable:/g) ?? []).length >= 2, true);
+const en = JSON.parse(read("src/i18n/locales/en.json")).gatePage?.feeUnavailable ?? {};
+const fr = JSON.parse(read("src/i18n/locales/fr.json")).gatePage?.feeUnavailable ?? {};
+const reasons = ["title", "not_permitted", "no_offline_data", "server_missing"];
+check("each reason is worded in both languages",
+  reasons.filter((k) => !en[k] || !fr[k]), []);
+const store = read("src/store/auth.store.ts");
+check("a restored session re-reads its permissions (GET /auth/me) at start-up",
+  /revalidateUser: async/.test(store) && /"\/auth\/me"/.test(store) &&
+  /setTimeout\(\(\) => \{ void get\(\)\.revalidateUser\(\); \}/.test(store), true);
+check("…keeping the school a super_admin is inside, not resetting it like setAuth",
+  /withActiveSchool\(normaliseAuthUser\(raw\), get\(\)\.activeSchool\)/.test(store), true);
+check("the gate page re-reads them on opening",
+  /useEffect\(\(\) => \{ void useAuthStore\.getState\(\)\.revalidateUser\(\); \}, \[\]\)/.test(page), true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

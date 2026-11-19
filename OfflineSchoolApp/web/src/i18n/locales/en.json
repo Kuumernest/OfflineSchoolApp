@@ -5954,7 +5954,6 @@
     "duplicate": "Scanned again within moments — counted once.",
     "replay": "This scan was already recorded.",
     "queued": "Not uploaded yet — it will be sent when the connection returns.",
-    "noFeeData": "Fee status unavailable: this pupil is not in the fee data saved on this device.",
     "none": "None",
     "nextDueValue": "{{date}} ({{amount}})",
     "authorizedUntil": "Gate pass until {{date}}",
@@ -6036,6 +6035,12 @@
       "revokeBlurb": "Revoke {{name}}'s gate pass ({{from}} – {{until}})? Their fee status applies again from now.",
       "revoked": "Gate pass revoked",
       "revokeFailed": "Could not revoke the gate pass"
+    },
+    "feeUnavailable": {
+      "title": "Fee status not shown.",
+      "not_permitted": "Your account cannot see fee status at the gate (the “See fee compliance at the gate” capability). Ask an administrator, then reopen this page.",
+      "no_offline_data": "No connection, and this pupil is not in the fee data saved on this device. Reconnect once to download it.",
+      "server_missing": "The server recorded the passage but could not load this pupil's fees. Try the scan again; if it persists, check the pupil's fee account."
     }
   }
 }

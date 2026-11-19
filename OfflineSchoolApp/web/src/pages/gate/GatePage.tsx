@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { StudentPhoto } from "@/components/students/StudentPhoto";
-import { useUser } from "@/store/auth.store";
+import { useUser, useAuthStore } from "@/store/auth.store";
 import { usePermission } from "@/lib/permissions";
 import { getErrorMessage } from "@/lib/axios";
 import { isDesktop } from "@/lib/offline/bridge";
@@ -68,6 +68,12 @@ type DirectionChoice = "auto" | GateDirection;
  */
 export default function GatePage() {
   const canScan = usePermission("gate.scan");
+
+  // gate.verify is the newest capability a session can hold, and the one this
+  // page turns on: re-read the account's permissions on opening it, so a
+  // browser signed in before it existed (or before an administrator granted
+  // it) is not left showing passages without fees.
+  useEffect(() => { void useAuthStore.getState().revalidateUser(); }, []);
   return canScan ? <GateScreen /> : <NoGateAccess />;
 }
 
@@ -195,7 +201,11 @@ function GateScreen() {
     try {
       const res = await postGateScan(schoolId, body, { timeout: SCAN_TIMEOUT_MS });
       if (seq !== latest.current) return;
-      const shown = canVerify ? (res.compliance ?? local) : null;
+      // The server's answer whenever it sent one. It decides gate.verify from
+      // the account's CURRENT permissions; this browser's list may be older
+      // (it was, for up to 30 days, before revalidateUser) and must not hide
+      // fees the server already chose to show.
+      const shown = res.compliance ?? (canVerify ? local : null);
       setResult({
         id,
         student:   { ...(fallbackCard ?? {}), ...res.student } as GateStudentCard,
@@ -207,6 +217,7 @@ function GateScreen() {
         replay:    Boolean(res.replay),
         notified:  Boolean(res.notified),
         compliance: shown,
+        feeUnavailable: shown ? null : (canVerify ? "server_missing" : "not_permitted"),
         computedLocally: canVerify && !res.compliance && Boolean(local),
         localPending: local?.pending ?? null,
         queued: false,
@@ -238,6 +249,7 @@ function GateScreen() {
           replay: false,
           notified: false,
           compliance: local,
+          feeUnavailable: local ? null : (canVerify ? "no_offline_data" : "not_permitted"),
           computedLocally: Boolean(local),
           localPending: local?.pending ?? null,
           queued: true,
@@ -315,7 +327,12 @@ function GateScreen() {
     try {
       const v = await fetchGateVerification(schoolId, studentId);
       setResult((prev) => (prev && prev.student?._id === studentId
-        ? { ...prev, compliance: v.compliance ?? prev.compliance, computedLocally: !v.compliance && prev.computedLocally }
+        ? {
+            ...prev,
+            compliance: v.compliance ?? prev.compliance,
+            feeUnavailable: (v.compliance ?? prev.compliance) ? null : prev.feeUnavailable,
+            computedLocally: !v.compliance && prev.computedLocally,
+          }
         : prev));
     } catch {
       // The pass is saved; the card catches up on the next scan.
