@@ -49,6 +49,11 @@ const day = (offset) => new Date(Date.now() + offset * DAY).toISOString().slice(
   await mongoose.connect(mongo.getUri());
   require(path.join(SRC, "db/models"));
   const M = (n) => mongoose.model(n);
+  // "One agreement per pupil, year and term" and "one pending request per
+  // target" are unique indexes. On a fresh database they are built in the
+  // background after the models load, so a request can beat them (it did in
+  // CI): wait for them, as check-approvals does.
+  await Promise.all(["PaymentPlan", "ApprovalRequest", "FeeCharge", "FeePayment"].map((n) => M(n).syncIndexes()));
 
   const S = "68c0000000000000000000c1";
   const YEAR = "2026/2027";
