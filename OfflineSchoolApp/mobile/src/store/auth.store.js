@@ -449,6 +449,9 @@ export const useAuthStore = create((set, get) => ({
         localDataPhase: preparing ? "preparing" : "idle",
       });
       if (preparing) get()._prepareLocalData(user);
+      // Bring the stored permissions up to date in the background — see
+      // revalidateUser. Never delays start-up, and skipped offline.
+      if (online) setTimeout(() => { get().revalidateUser(); }, 0);
       return true;
 
     } catch (error) {
@@ -808,11 +811,56 @@ export const useAuthStore = create((set, get) => ({
         needsSignIn:       false,
         needsSignInReason: null,
       });
+      // The refresh answer carries the account as the server sees it now —
+      // permissions included. It used to be dropped, so the phone kept the
+      // list from sign-in for the life of the session.
+      await get()._applyServerUser(data.user);
       return true;
     } catch (err) {
       console.error("refreshToken error:", err.message);
       return false;
     }
+  },
+
+  // ── REVALIDATE USER ───────────────────────────────────────────────────────
+  //
+  // The stored user — and with it the permission list every screen gates on
+  // (hasPermission) — was only ever written at sign-in. A capability added by
+  // an update, or granted or revoked by an administrator, never reached a
+  // phone already signed in: the gate read gate.verify as missing and showed
+  // passages with no fees to a teacher who holds it. Called at start-up when
+  // online and by screens that depend on a recent capability.
+  //
+  // Skipped for the offline sign-in sentinel (no real token to send). Never
+  // throws, never signs out: a failure leaves the stored user exactly as it
+  // was, which is what the app did before this existed.
+  revalidateUser: async () => {
+    const { token } = get();
+    if (!token || token === OFFLINE_TOKEN) return false;
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}`, ...appBuildHeaders() },
+      });
+      if (!res.ok) return false;
+      const data = await res.json().catch(() => null);
+      // Signed out, or signed in as someone else, while the request was out.
+      if (get().token !== token) return false;
+      return await get()._applyServerUser(data?.user ?? null);
+    } catch {
+      return false;
+    }
+  },
+
+  // The server's copy of the signed-in account, merged into the stored one —
+  // only when it IS the signed-in account (never another's after a switch).
+  // updateUser keeps the school a super_admin is inside.
+  _applyServerUser: async (fresh) => {
+    const current = get().user;
+    const freshId = fresh ? String(fresh._id ?? fresh.id ?? "") : "";
+    const currentId = current ? String(current._id ?? current.id ?? "") : "";
+    if (!freshId || !currentId || freshId !== currentId) return false;
+    await get().updateUser(fresh);
+    return true;
   },
 
   // ── UPGRADE OFFLINE SESSION ───────────────────────────────────────────────

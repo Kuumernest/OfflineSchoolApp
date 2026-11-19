@@ -66,7 +66,9 @@ function Note({ icon, tone, text }) {
  * @param {object}  p
  * @param {{student_name?, admission_no?, class_name?, photo_url?}} p.student
  * @param {object|null} p.verification  compliance() result + `source` ("device" | "server")
- * @param {boolean} p.canVerify          false → no fee panel at all
+ * @param {boolean} p.canVerify          this phone's own reading of gate.verify (the default reason when there are no fees)
+ * @param {"not_permitted"|"no_offline_data"|"server_missing"|null} [p.feeUnavailable]
+ *                                       why there is no verification, when there is none
  * @param {boolean} p.isOnline
  * @param {string|null} p.academicYear
  * @param {string|null} p.dataAsOf       the snapshot's generatedAt, for the freshness line
@@ -80,7 +82,7 @@ function Note({ icon, tone, text }) {
  * @param {string}  [p.recordNote]
  */
 export default function GateVerificationCard({
-  student, verification, canVerify, isOnline, academicYear, dataAsOf, method,
+  student, verification, canVerify, feeUnavailable = null, isOnline, academicYear, dataAsOf, method,
   passage, verifying, onClose, onRecord, recordLabel, recordDisabled, recordNote, recording,
 }) {
   const { t, language } = useTranslation();
@@ -92,7 +94,7 @@ export default function GateVerificationCard({
   const age = ageText(t, v?.dataAsOf ?? dataAsOf);
 
   const notes = [];
-  if (canVerify && v) {
+  if (v) {
     if (fromDevice) {
       notes.push(!isOnline
         ? { icon: "cloud-offline-outline", tone: "info", text: t("gate.offlineComputed", { age: age ?? "—" }) }
@@ -155,7 +157,11 @@ export default function GateVerificationCard({
           </TouchableOpacity>
         </View>
 
-        {canVerify ? (
+        {/* Always a fee section after a scan: the figures, "checking…", or a
+            sentence saying why there are none. It used to be left out
+            whenever this phone's (possibly stale) list lacked gate.verify,
+            which read as a card with no fees rather than as a problem. */}
+        {(
           v ? (
             <>
               <GateStatusPill status={v.status} size="lg" style={{ marginTop: 14 }} />
@@ -208,9 +214,13 @@ export default function GateVerificationCard({
               <Text style={styles.verifyingText}>{t("gate.verifying")}</Text>
             </View>
           ) : (
-            <Note icon="information-circle-outline" tone="info" text={t("gate.noFeeData")} />
+            <Note
+              icon="alert-circle-outline"
+              tone="warning"
+              text={`${t("gate.feeUnavailable.title")} ${t(`gate.feeUnavailable.${feeUnavailable ?? (canVerify ? "no_offline_data" : "not_permitted")}`)}`}
+            />
           )
-        ) : null}
+        )}
 
         {onRecord ? (
           <View style={{ marginTop: 14 }}>

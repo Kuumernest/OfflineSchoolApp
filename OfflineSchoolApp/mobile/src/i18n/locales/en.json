@@ -1792,7 +1792,6 @@
     },
     "sourceServer": "Checked with the server",
     "sourceDevice": "Computed on this device",
-    "noFeeData": "No fee data for this student on this device yet.",
     "feesReadOnly": "Fees are read-only here.",
     "age": {
       "now": "just now",
@@ -1811,7 +1810,13 @@
     "methodCard": "Card",
     "methodManual": "Manual",
     "close": "Close",
-    "verifying": "Checking with the server…"
+    "verifying": "Checking with the server…",
+    "feeUnavailable": {
+      "title": "Fee status not shown.",
+      "not_permitted": "Your account cannot see fee status at the gate. Ask an administrator, then reopen this screen.",
+      "no_offline_data": "No connection, and this pupil is not in the fee data saved on this phone. Reconnect once to download it.",
+      "server_missing": "The server could not load this pupil's fees. Try again; if it persists, check the pupil's fee account."
+    }
   },
   "selectSchool": {
     "title": "Find a School",

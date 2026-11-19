@@ -1792,7 +1792,6 @@
     },
     "sourceServer": "Vérifié auprès du serveur",
     "sourceDevice": "Calculé sur cet appareil",
-    "noFeeData": "Pas encore de données de frais pour cet élève sur cet appareil.",
     "feesReadOnly": "Les frais sont en lecture seule ici.",
     "age": {
       "now": "à l'instant",
@@ -1811,7 +1810,13 @@
     "methodCard": "Carte",
     "methodManual": "Manuel",
     "close": "Fermer",
-    "verifying": "Vérification auprès du serveur…"
+    "verifying": "Vérification auprès du serveur…",
+    "feeUnavailable": {
+      "title": "Situation des frais non affichée.",
+      "not_permitted": "Votre compte ne peut pas voir la situation des frais au portail. Demandez à un administrateur, puis rouvrez cet écran.",
+      "no_offline_data": "Pas de connexion, et cet élève ne figure pas dans les données de frais enregistrées sur ce téléphone. Reconnectez-vous une fois pour les télécharger.",
+      "server_missing": "Le serveur n'a pas pu charger les frais de cet élève. Réessayez ; si cela persiste, vérifiez le compte de frais de l'élève."
+    }
   },
   "selectSchool": {
     "title": "Trouver une école",
