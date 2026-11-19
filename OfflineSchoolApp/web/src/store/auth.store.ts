@@ -134,6 +134,8 @@ interface AuthState {
   setUser:        (updates: Partial<AuthUser>) => void;
   clearError:     () => void;
   refreshSession: () => Promise<RefreshResult>;
+  /** Re-read the signed-in user (role, permissions) from GET /auth/me. Never throws. */
+  revalidateUser: () => Promise<void>;
 
   /** super_admin only — see ActiveSchool. */
   activeSchool:   ActiveSchool | null;
@@ -434,6 +436,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // none until it is told again. Without this a reopened desktop showed
         // the signed-in screens over a mirror that never synced.
         tellDesktop(token, user);
+        // Bring the stored permissions up to date in the background — see
+        // revalidateUser. Deferred so it never delays the first render.
+        setTimeout(() => { void get().revalidateUser(); }, 0);
         return true;
       }
 
@@ -577,6 +582,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })();
 
     return _refreshPromise;
+  },
+
+  // ── revalidateUser ─────────────────────────────────────────────────────────
+  // The stored user — and with it the permission list every screen gates on —
+  // was only ever replaced at sign-in or when the access token expired, which
+  // is 30 days by default. So a capability added by a deploy, or granted or
+  // revoked by an administrator, did not reach a browser that was already
+  // signed in: the gate page read gate.verify as missing and hid every fee
+  // figure from a head teacher who holds it. Called at start-up and by pages
+  // that depend on a recent capability. Keeps the token, and the school a
+  // super_admin is inside (withActiveSchool). A failure changes nothing — the
+  // stored user stands, as it did before this existed.
+  revalidateUser: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const { data } = await api.get<Record<string, unknown>>("/auth/me");
+      const raw = (data?.user as Record<string, unknown> | undefined) ?? data;
+      if (!raw || (!raw._id && !raw.id)) return;
+      // Signed out, or signed in as someone else, while the request was out.
+      if (get().token !== token) return;
+      const user = withActiveSchool(normaliseAuthUser(raw), get().activeSchool);
+      persistAuth(user, get().token ?? token, get().refreshToken);
+      set({ user });
+    } catch {
+      // Offline, or the server could not say: keep what is stored.
+    }
   },
 
   // ── clearError ─────────────────────────────────────────────────────────────

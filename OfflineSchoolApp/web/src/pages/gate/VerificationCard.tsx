@@ -269,12 +269,25 @@ export function VerificationCard({
         </div>
       </div>
 
-      {canVerify && s && (
+      {/* Always a fee section after a scan: the full card, or a sentence
+          saying why there is none. It used to be left out silently whenever
+          this browser's (possibly stale) permission list lacked gate.verify,
+          which read as a card with no fees rather than as a problem. */}
+      {s && (
         result.compliance
           ? <FeePanel c={result.compliance} computedLocally={result.computedLocally} localPending={result.localPending} />
-          : <p className="rounded-control border border-line bg-canvas px-3 py-2 text-sm text-ink-muted">
-              {t("gatePage.noFeeData")}
-            </p>
+          : (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-control border border-warning-line bg-warning-soft px-3 py-2 text-sm text-warning-text"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                <span className="font-medium">{t("gatePage.feeUnavailable.title")}</span>{" "}
+                {t(`gatePage.feeUnavailable.${result.feeUnavailable ?? "server_missing"}`)}
+              </span>
+            </div>
+          )
       )}
 
       {canVerify && canAuthorize && s && (
