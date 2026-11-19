@@ -142,6 +142,7 @@ check("every gate.* key used exists in en and fr", () => {
         // A templated key: every value it can take.
         const base = m[1].replace(/\.$/, "");
         const fam = base.endsWith("age") ? ["now", "minutes", "hours", "days"]
+          : base.endsWith("feeUnavailable") ? ["not_permitted", "no_offline_data", "server_missing"]
           : ["compliant", "due", "non_compliant", "authorized"];
         for (const v of fam) keys.add(`${base}.${v}`);
       } else {
@@ -156,6 +157,48 @@ check("every gate.* key used exists in en and fr", () => {
       assert.ok(v != null, `${lang}: missing ${k}`);
     }
   }
+});
+
+// ── The fee section always shows after a scan (bug: a stale session hid it) ──
+//
+// The phone kept the permission list from sign-in for the life of the
+// session, the gate screen read it once per mount, and the card left the fee
+// section out — no word of why — whenever that list lacked gate.verify. A
+// teacher signed in before the capability existed never saw fees.
+const src = (rel) => fs.readFileSync(path.join(MOBILE, rel), "utf8");
+const store  = src("src/store/auth.store.js");
+const screen = src("app/admin/gate/index.js");
+const card   = src("src/components/GateVerificationCard.js");
+const snap   = src("src/services/gateSnapshot.service.js");
+
+check("store: revalidateUser re-reads GET /auth/me, never with the offline sentinel", () => {
+  assert.match(store, /revalidateUser: async \(\) =>/);
+  assert.match(store, /`\$\{API_URL\}\/auth\/me`/);
+  assert.match(store, /if \(!token \|\| token === OFFLINE_TOKEN\) return false;/);
+});
+check("store: only the signed-in account is applied, through updateUser (keeps a super_admin's school)", () => {
+  assert.match(store, /freshId !== currentId\) return false;/);
+  assert.match(store, /await get\(\)\.updateUser\(fresh\);/);
+});
+check("store: start-up revalidates when online; a token refresh applies the server's user", () => {
+  assert.match(store, /if \(online\) setTimeout\(\(\) => \{ get\(\)\.revalidateUser\(\); \}, 0\);/);
+  assert.match(store, /await get\(\)\._applyServerUser\(data\.user\);/);
+});
+check("screen: gate.verify follows the stored list, and is re-read on opening", () => {
+  assert.doesNotMatch(screen, /const \[verify\]\s*=\s*useState/);
+  assert.match(screen, /const verify = useAuthStore\(\(\) => GateSnapshot\.canVerify\(\)\);/);
+  assert.match(screen, /useEffect\(\(\) => \{ useAuthStore\.getState\(\)\.revalidateUser\(\); \}, \[\]\)/);
+});
+check("screen: the server is asked whatever the phone's list says, and a refusal is named", () => {
+  assert.doesNotMatch(screen, /if \(!verify \|\| !isOnline \|\| !studentId\) return;/);
+  assert.doesNotMatch(snap, /if \(!studentId \|\| !canVerify\(\)\) return null;\s*\n\s*try \{\s*\n\s*const \{ data \} = await api\.get\(`\/gate\/verify/);
+  assert.match(snap, /status === 403\) return \{ forbidden: true \}/);
+  assert.match(screen, /r\?\.forbidden \? "not_permitted"/);
+  assert.match(screen, /verification=\{card\.verification\}/);
+});
+check("card: a fee section is always rendered — figures, checking, or the reason", () => {
+  assert.doesNotMatch(card, /\{canVerify \? \(\s*v \? \(/);
+  assert.match(card, /gate\.feeUnavailable\.\$\{feeUnavailable \?\?/);
 });
 
 console.log(`\n${passed} checks passed.`);

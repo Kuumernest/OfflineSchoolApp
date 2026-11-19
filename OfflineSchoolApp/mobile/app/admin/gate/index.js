@@ -79,9 +79,13 @@ export default function GateScannerScreen() {
   const [syncing, setSyncing] = useState(false);
 
   const isOnline  = useIsOnline();
-  // Read once per mount: the permission list changes only on sign-in, and
-  // this screen is left and re-entered across one.
-  const [verify]  = useState(() => GateSnapshot.canVerify());
+  // Follows the stored permission list, which revalidateUser (below, and at
+  // start-up) brings up to date. It was read once per mount on the belief the
+  // list changed only at sign-in — it did, and that was the bug: a phone
+  // signed in before gate.verify existed never saw fees here.
+  // A selector, so the screen re-renders when the list changes.
+  const verify = useAuthStore(() => GateSnapshot.canVerify());
+  useEffect(() => { useAuthStore.getState().revalidateUser(); }, []);
   const [meta, setMeta]       = useState(null);
   // The verification card: stays until closed or replaced by the next scan.
   const [card, setCard]       = useState(null);
@@ -152,18 +156,35 @@ export default function GateScannerScreen() {
    * In the background: the device's answer is already on screen, and the
    * next child must not wait on a round trip.
    */
+  //
+  // Asked even when this phone's list says no gate.verify: the server decides
+  // from the account's current permissions, and says so (forbidden) if not.
   const upgradeFromServer = useCallback((seq, studentId) => {
-    if (!verify || !isOnline || !studentId) return;
+    if (!isOnline || !studentId) return;
     setCard((c) => (c && cardSeq.current === seq ? { ...c, verifying: true } : c));
     GateSnapshot.verifyRemote({ studentId, schoolId }).then((r) => {
       if (cardSeq.current !== seq) return;
-      setCard((c) => (c ? {
-        ...c,
-        verifying: false,
-        verification: r?.compliance ?? c.verification,
-      } : c));
+      setCard((c) => {
+        if (!c) return c;
+        const verification = r?.compliance ?? c.verification;
+        return {
+          ...c,
+          verifying: false,
+          verification,
+          feeUnavailable: verification ? null
+            : r?.forbidden ? "not_permitted"
+            : "server_missing",
+        };
+      });
     });
-  }, [verify, isOnline, schoolId]);
+  }, [isOnline, schoolId]);
+
+  /** Why a new card has no fees yet — null while the server is being asked. */
+  const initialFeeReason = useCallback((verification) => {
+    if (verification) return null;
+    if (isOnline) return null;                       // upgradeFromServer will say
+    return verify ? "no_offline_data" : "not_permitted";
+  }, [isOnline, verify]);
 
   const closeCard = useCallback(() => {
     cardSeq.current += 1;
@@ -206,10 +227,10 @@ export default function GateScannerScreen() {
     if (cardSeq.current !== seq) return;
     setCard({
       seq, student: known, verification, method: "manual", manual: true, next,
-      passage: null, verifying: false,
+      passage: null, verifying: false, feeUnavailable: initialFeeReason(verification),
     });
     upgradeFromServer(seq, known.student_id);
-  }, [verify, upgradeFromServer]);
+  }, [verify, upgradeFromServer, initialFeeReason]);
 
   const recordManual = useCallback(async () => {
     if (!card?.manual || recording) return;
@@ -220,7 +241,8 @@ export default function GateScannerScreen() {
         student: card.student,
         // What the operator is looking at right now — the server's answer if
         // it has arrived, the device's otherwise.
-        verification: verify ? (card.verification ?? null) : null,
+        // (The server keeps it only from an account that may see fees.)
+        verification: card.verification ?? null,
       });
       if (!r.ok) return;
       Haptics.notificationAsync(
@@ -245,7 +267,7 @@ export default function GateScannerScreen() {
     } finally {
       setRecording(false);
     }
-  }, [card, recording, schoolId, verify, refreshLog, t]);
+  }, [card, recording, schoolId, refreshLog, t]);
 
   const onScan = useCallback(async ({ data }) => {
     if (busy.current) return;
@@ -269,6 +291,7 @@ export default function GateScannerScreen() {
           manual: false,
           passage: `${r.direction === "in" ? t("gate.signedIn") : t("gate.signedOut")} ${formatTime(r.at)}`,
           verifying: false,
+          feeUnavailable: initialFeeReason(r.verification ?? null),
         });
         upgradeFromServer(seq, r.student?.student_id);
       } else if (r.reason !== "not_a_card") {
@@ -300,7 +323,7 @@ export default function GateScannerScreen() {
       // result before the next child's card replaces it.
       setTimeout(() => { busy.current = false; setResult(null); }, RESULT_MS);
     }
-  }, [schoolId, refreshLog, t, upgradeFromServer]);
+  }, [schoolId, refreshLog, t, upgradeFromServer, initialFeeReason]);
 
   if (!permission) {
     return <View style={styles.centre}><ActivityIndicator color={C.primary} /></View>;
@@ -424,7 +447,8 @@ export default function GateScannerScreen() {
           <View style={styles.cardWrap}>
             <GateVerificationCard
               student={card.student}
-              verification={verify ? card.verification : null}
+              verification={card.verification}
+              feeUnavailable={card.feeUnavailable}
               canVerify={verify}
               isOnline={isOnline}
               academicYear={meta?.academicYear ?? null}

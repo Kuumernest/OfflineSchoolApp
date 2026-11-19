@@ -317,9 +317,14 @@ export const verifyLocal = async (studentId, { asOf = new Date() } = {}) => {
  * The server's answer for one pupil, when there is signal. Short timeout: the
  * card already shows the device's answer, this only upgrades it, and a gate
  * must never wait on it.
+ *
+ * Asked whatever this phone's permission list says: the server decides
+ * gate.verify from the account's CURRENT permissions, and a list stored at
+ * sign-in may be older. A refusal comes back as { forbidden: true } so the
+ * card can say why there are no fees; any other failure is null.
  */
 export const verifyRemote = async ({ studentId, schoolId, timeout = 4000 }) => {
-  if (!studentId || !canVerify()) return null;
+  if (!studentId) return null;
   try {
     const { data } = await api.get(`/gate/verify/${encodeURIComponent(studentId)}`, {
       params: { schoolId }, timeout,
@@ -327,7 +332,8 @@ export const verifyRemote = async ({ studentId, schoolId, timeout = 4000 }) => {
     const d = data?.data;
     if (!d?.compliance) return null;
     return { student: d.student ?? null, compliance: { ...d.compliance, source: "server" } };
-  } catch {
+  } catch (err) {
+    if (err?.response?.status === 403) return { forbidden: true };
     return null;
   }
 };
