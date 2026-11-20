@@ -1,6 +1,6 @@
 {
   "name": "school-desktop",
-  "version": "0.1.0",
+  "version": "0.3.3",
   "private": true,
   "description": "The school console as an offline-first desktop application",
   "main": "src/main/main.js",
